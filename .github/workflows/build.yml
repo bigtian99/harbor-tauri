@@ -69,7 +69,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tauriScript: pnpm tauri
+          # tauri-action appends `build`; use the CLI directly instead of
+          # the package `tauri` script, which is reserved for `tauri dev`.
+          tauriScript: pnpm exec tauri
           args: --target ${{ matrix.target }}
 
       - name: Upload artifacts
