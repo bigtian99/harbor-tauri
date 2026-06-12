@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    jar_to_harbor_lib::run()
+    jarporter_lib::run()
 }

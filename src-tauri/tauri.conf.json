@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "jar-to-harbor",
+  "productName": "JarPorter",
   "version": "0.1.0",
-  "identifier": "com.daijunxiong.jar-to-harbor",
+  "identifier": "com.daijunxiong.jarporter",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "JAR to Harbor",
+        "title": "JarPorter",
         "width": 800,
         "height": 650,
         "minHeight": 500,

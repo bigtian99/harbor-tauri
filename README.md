@@ -1,6 +1,6 @@
-# Tauri + React + Typescript
+# JarPorter
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+JarPorter is a Tauri desktop app for turning a local JAR package into a Docker image and pushing it to a Harbor registry.
 
 ## Recommended IDE Setup
 

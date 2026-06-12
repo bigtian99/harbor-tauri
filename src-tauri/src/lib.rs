@@ -5,6 +5,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::Emitter;
 
+const APP_CONFIG_DIR: &str = "jarporter";
+const LEGACY_CONFIG_DIR: &str = "jar-to-harbor";
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HarborConfig {
     pub harbor_url: String,
@@ -28,9 +31,14 @@ impl Default for HarborConfig {
     }
 }
 
+fn config_path_for(dir_name: &str) -> PathBuf {
+    let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    config_dir.join(dir_name).join("config.json")
+}
+
 fn get_config_path() -> PathBuf {
     let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-    let app_dir = config_dir.join("jar-to-harbor");
+    let app_dir = config_dir.join(APP_CONFIG_DIR);
     fs::create_dir_all(&app_dir).ok();
     app_dir.join("config.json")
 }
@@ -38,12 +46,21 @@ fn get_config_path() -> PathBuf {
 #[tauri::command]
 fn load_config() -> Result<HarborConfig, String> {
     let path = get_config_path();
-    if path.exists() {
-        let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&content).map_err(|e| e.to_string())
+    let legacy_path = config_path_for(LEGACY_CONFIG_DIR);
+    let readable_path = if path.exists() {
+        Some(path)
+    } else if legacy_path.exists() {
+        Some(legacy_path)
     } else {
-        Ok(HarborConfig::default())
-    }
+        None
+    };
+
+    let Some(readable_path) = readable_path else {
+        return Ok(HarborConfig::default());
+    };
+
+    let content = fs::read_to_string(&readable_path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

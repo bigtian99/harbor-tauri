@@ -239,8 +239,8 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1><Container className="header-icon" />JAR to Harbor</h1>
-        <p className="subtitle">拖拽JAR包，一键推送到Harbor镜像仓库</p>
+        <h1><Container className="header-icon" />JarPorter</h1>
+        <p className="subtitle">拖拽 JAR 包，一键构建并推送到 Harbor 镜像仓库</p>
       </header>
 
       <nav className="tabs">
