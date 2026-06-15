@@ -2,8 +2,48 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Container, Upload, Settings, Rocket, Package, FileText, CheckCircle, Copy, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { Container, Upload, Settings, Rocket, Package, FileText, CheckCircle, Copy, AlertCircle, Loader2, Eye, EyeOff, GitBranch, FolderOpen } from "lucide-react";
+import { SearchableDropdown } from "./components/SearchableDropdown";
 import "./App.css";
+
+const DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE = `FROM {{BASE_IMAGE}}
+COPY nginx.conf {{NGINX_CONF_PATH}}
+COPY {{DIST_DIR}}/ /usr/share/nginx/html/
+EXPOSE {{EXPOSE_PORT}}
+CMD ["nginx", "-g", "daemon off;"]
+`;
+
+const DEFAULT_FRONTEND_NGINX_TEMPLATE = `server {
+    listen       {{EXPOSE_PORT}};
+    server_name  _;
+
+    root   /usr/share/nginx/html;
+    index  index.html;
+
+    gzip on;
+    gzip_min_length 1k;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/javascript application/javascript application/json image/svg+xml;
+    gzip_vary on;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~* \\.(?:js|css|woff2?|eot|ttf|otf|svg|png|jpg|jpeg|gif|webp|ico)$ {
+        expires 30d;
+        access_log off;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+}
+`;
+
+type ArtifactType = "jar" | "frontend_dist";
+type BranchProjectType = "maven" | "npm";
 
 interface HarborConfig {
   harbor_url: string;
@@ -12,9 +52,36 @@ interface HarborConfig {
   project: string;
   base_image: string;
   expose_port: string;
+  frontend_base_image: string;
+  frontend_expose_port: string;
+  frontend_dockerfile_template: string;
+  frontend_nginx_template: string;
+  // 分支打包记忆配置
+  remember_branch_settings: boolean;
+  last_repo_path: string;
+  last_branch: string;
+  last_frontend_dir: string;
+  last_build_script: string;
+  last_project_type: string;
 }
 
-type TabType = "upload" | "config";
+interface PackageFromBranchResult {
+  artifact_path: string;
+  worktree_path: string;
+  build_script: string;
+  log: string;
+}
+
+interface GitBranchOption {
+  name: string;
+}
+
+type TabType = "upload" | "branch" | "config";
+
+function isTauriRuntime() {
+  return typeof window !== "undefined"
+    && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>("upload");
@@ -25,12 +92,33 @@ function App() {
     project: "tksy-admin",
     base_image: "eclipse-temurin:21-jre-alpine",
     expose_port: "8181",
+    frontend_base_image: "nginx:alpine",
+    frontend_expose_port: "80",
+    frontend_dockerfile_template: DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE,
+    frontend_nginx_template: DEFAULT_FRONTEND_NGINX_TEMPLATE,
+    remember_branch_settings: false,
+    last_repo_path: "",
+    last_branch: "",
+    last_frontend_dir: "",
+    last_build_script: "",
+    last_project_type: "maven",
   });
-  const [jarPath, setJarPath] = useState<string>("");
+  const [artifactType, setArtifactType] = useState<ArtifactType>("jar");
+  const [artifactPath, setArtifactPath] = useState<string>("");
   const [imageName, setImageName] = useState<string>("");
   const [imageTag, setImageTag] = useState<string>("latest");
+  const [repoPath, setRepoPath] = useState<string>("");
+  const [frontendDir, setFrontendDir] = useState<string>("");
+  const [npmScripts, setNpmScripts] = useState<string[]>([]);
+  const [selectedBuildScript, setSelectedBuildScript] = useState<string>("");
+  const [isLoadingScripts, setIsLoadingScripts] = useState(false);
+  const [branchName, setBranchName] = useState<string>("");
+  const [branchOptions, setBranchOptions] = useState<GitBranchOption[]>([]);
+  const [branchProjectType, setBranchProjectType] = useState<BranchProjectType>("maven");
   const [log, setLog] = useState<string>("");
+  const [worktreePath, setWorktreePath] = useState<string>("");
   const [isBuilding, setIsBuilding] = useState(false);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -39,8 +127,43 @@ function App() {
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
   const [progressMessage, setProgressMessage] = useState("");
 
+  function getPathName(path: string) {
+    return path.split(/[/\\]/).filter(Boolean).pop() || path;
+  }
+
+  function inferImageName(path: string, type: ArtifactType) {
+    const parts = path.split(/[/\\]/).filter(Boolean);
+    const lastName = parts.length > 0 ? parts[parts.length - 1] : "";
+
+    if (type === "jar") {
+      const nameWithoutExt = lastName.replace(/\.jar$/i, "");
+      return nameWithoutExt.replace(/-\d.*/, "").toLowerCase();
+    }
+
+    const directoryName = lastName.toLowerCase() === "dist" && parts.length > 1
+      ? parts[parts.length - 2]
+      : lastName;
+    return directoryName.toLowerCase();
+  }
+
+  function handleArtifactPathSelected(path: string, type = artifactType) {
+    setArtifactPath(path);
+    if (!imageName) {
+      setImageName(inferImageName(path, type));
+    }
+  }
+
+  function handleArtifactTypeChange(type: ArtifactType) {
+    setArtifactType(type);
+    setArtifactPath("");
+    setLog("");
+  }
+
   useEffect(() => {
     loadConfig();
+    if (!isTauriRuntime()) {
+      return;
+    }
 
     // 监听构建进度事件
     const appWindow = getCurrentWindow();
@@ -59,17 +182,24 @@ function App() {
       } else if (event.payload.type === "drop") {
         setIsDragOver(false);
         const paths = event.payload.paths;
-        const jarFile = paths.find((p) => p.endsWith(".jar"));
-        if (jarFile) {
-          setJarPath(jarFile);
-          const fileName = jarFile.split("/").pop() || "";
-          const nameWithoutExt = fileName.replace(".jar", "");
-          // 参考脚本逻辑: basename .jar | sed 's/-[0-9].*//'  去掉版本后缀
-          const baseName = nameWithoutExt.replace(/-\d.*/, "").toLowerCase();
-          // 拖拽新文件时自动填充镜像名称（如果之前没有手动输入过）
-          setImageName(baseName);
+        if (activeTab === "branch") {
+          if (paths[0]) {
+            setRepoPath(paths[0]);
+            loadGitBranches(paths[0]);
+          } else {
+            setLog("⚠️ 请拖入 Git 仓库目录");
+          }
+        } else if (artifactType === "jar") {
+          const jarFile = paths.find((p) => p.toLowerCase().endsWith(".jar"));
+          if (jarFile) {
+            handleArtifactPathSelected(jarFile, "jar");
+          } else {
+            setLog("⚠️ 请拖入 .jar 文件");
+          }
+        } else if (paths[0]) {
+          handleArtifactPathSelected(paths[0], "frontend_dist");
         } else {
-          setLog("⚠️ 请拖入 .jar 文件");
+          setLog("⚠️ 请拖入前端 dist 目录");
         }
       } else {
         setIsDragOver(false);
@@ -80,18 +210,44 @@ function App() {
       unlistenProgress.then((fn) => fn());
       unlistenDrag.then((fn) => fn());
     };
-  }, [imageName]);
+  }, [activeTab, artifactType, imageName]);
 
   async function loadConfig() {
+    if (!isTauriRuntime()) {
+      return;
+    }
     try {
       const savedConfig = await invoke<HarborConfig>("load_config");
       setConfig(savedConfig);
+      // 加载记忆的分支打包设置
+      if (savedConfig.remember_branch_settings) {
+        if (savedConfig.last_repo_path) {
+          setRepoPath(savedConfig.last_repo_path);
+        }
+        if (savedConfig.last_branch) {
+          setBranchName(savedConfig.last_branch);
+        }
+        if (savedConfig.last_frontend_dir) {
+          setFrontendDir(savedConfig.last_frontend_dir);
+        }
+        if (savedConfig.last_build_script) {
+          setSelectedBuildScript(savedConfig.last_build_script);
+        }
+        if (savedConfig.last_project_type) {
+          setBranchProjectType(savedConfig.last_project_type as BranchProjectType);
+        }
+      }
     } catch (e) {
       console.error("加载配置失败:", e);
     }
   }
 
   async function handleSaveConfig() {
+    if (!isTauriRuntime()) {
+      setLog("❌ 当前是浏览器预览环境，保存配置请在 Tauri 桌面窗口中操作");
+      setActiveTab("config");
+      return;
+    }
     try {
       await invoke("save_config", { config });
       setConfigSaved(true);
@@ -122,29 +278,132 @@ function App() {
   }, []);
 
   async function handleSelectFile() {
+    if (!isTauriRuntime()) {
+      setLog("⚠️ 当前是浏览器预览环境，无法打开系统文件选择器；请在 Tauri 桌面窗口中操作");
+      return;
+    }
     try {
-      const selected = await open({
-        multiple: false,
-        filters: [{ name: "JAR Files", extensions: ["jar"] }],
-      });
+      const selected = artifactType === "jar"
+        ? await open({
+            multiple: false,
+            filters: [{ name: "JAR Files", extensions: ["jar"] }],
+          })
+        : await open({
+            multiple: false,
+            directory: true,
+            recursive: true,
+            title: "选择前端 dist 目录",
+          });
       if (selected) {
-        setJarPath(selected as string);
-        const fileName = (selected as string).split("/").pop() || "";
-        const nameWithoutExt = fileName.replace(".jar", "");
-        // 参考脚本逻辑: basename .jar | sed 's/-[0-9].*//'  去掉版本后缀
-        const baseName = nameWithoutExt.replace(/-\d.*/, "").toLowerCase();
-        if (!imageName) {
-          setImageName(baseName);
+        handleArtifactPathSelected(selected as string);
+      }
+    } catch (e) {
+      console.error("选择产物失败:", e);
+    }
+  }
+
+  async function loadGitBranches(path: string) {
+    const nextRepoPath = path.trim();
+    setBranchOptions([]);
+    setBranchName("");
+    if (!nextRepoPath) {
+      return;
+    }
+    if (!isTauriRuntime()) {
+      setLog("⚠️ 当前是浏览器预览环境，无法读取本机 Git 分支；请在 Tauri 桌面窗口中操作");
+      return;
+    }
+
+    setIsLoadingBranches(true);
+    setLog("");
+    try {
+      const branches = await invoke<GitBranchOption[]>("list_git_branches", {
+        repoPath: nextRepoPath,
+      });
+      setBranchOptions(branches);
+      setBranchName(branches[0]?.name ?? "");
+      if (branches.length === 0) {
+        setLog("⚠️ 没有读取到可用分支");
+      }
+      // 如果是 npm 项目，自动检测前端目录并加载 scripts
+      if (branchProjectType === "npm") {
+        try {
+          const detectedDir = await invoke<string | null>("detect_frontend_dir", {
+            repoPath: nextRepoPath,
+          });
+          if (detectedDir) {
+            setFrontendDir(detectedDir);
+            loadNpmScripts(nextRepoPath, detectedDir);
+          } else {
+            setFrontendDir("");
+            loadNpmScripts(nextRepoPath, "");
+          }
+        } catch {
+          loadNpmScripts(nextRepoPath, frontendDir);
         }
       }
     } catch (e) {
-      console.error("选择文件失败:", e);
+      setLog(`❌ 读取分支失败:\n${e}`);
+    } finally {
+      setIsLoadingBranches(false);
+    }
+  }
+
+  async function loadNpmScripts(repoPath: string, frontendDir: string) {
+    if (!repoPath.trim() || !isTauriRuntime()) {
+      setNpmScripts([]);
+      setSelectedBuildScript("");
+      return;
+    }
+
+    setIsLoadingScripts(true);
+    try {
+      const scripts = await invoke<string[]>("list_npm_scripts", {
+        repoPath: repoPath.trim(),
+        frontendDir: frontendDir.trim() || null,
+      });
+      setNpmScripts(scripts);
+      // 自动选择推荐的构建脚本
+      const preferred = ["build", "build:prod", "build:production", "compile", "dist"];
+      const autoSelected = preferred.find(s => scripts.includes(s)) || scripts[0] || "";
+      setSelectedBuildScript(autoSelected);
+    } catch (e) {
+      setNpmScripts([]);
+      setSelectedBuildScript("");
+    } finally {
+      setIsLoadingScripts(false);
+    }
+  }
+
+  async function handleSelectRepo() {
+    if (!isTauriRuntime()) {
+      setLog("⚠️ 当前是浏览器预览环境，无法打开系统目录选择器；请在 Tauri 桌面窗口中操作");
+      return;
+    }
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: true,
+        recursive: false,
+        title: "选择 Git 仓库目录",
+      });
+      if (selected) {
+        const selectedPath = selected as string;
+        setRepoPath(selectedPath);
+        await loadGitBranches(selectedPath);
+      }
+    } catch (e) {
+      setLog(`❌ 选择仓库目录失败:\n${e}`);
     }
   }
 
   async function handleBuildAndPush() {
-    if (!jarPath) {
-      setLog("⚠️ 请先选择JAR文件");
+    if (!isTauriRuntime()) {
+      setLog("❌ 当前是浏览器预览环境，构建推送请在 Tauri 桌面窗口中操作");
+      return;
+    }
+    if (!artifactPath) {
+      setLog(artifactType === "jar" ? "⚠️ 请先选择JAR文件" : "⚠️ 请先选择前端 dist 目录");
       return;
     }
     if (!imageName) {
@@ -165,18 +424,92 @@ function App() {
 
     try {
       const result = await invoke<string>("build_and_push", {
-        jarPath,
+        jarPath: artifactPath,
         imageName,
         imageTag,
+        artifactType,
       });
       setLog(result);
-      // 推送成功后重置状态，方便用户拖拽下一个文件
-      setJarPath("");
+      // 推送成功后重置状态，方便用户拖拽下一个产物
+      setArtifactPath("");
       setImageTag("latest");
     } catch (e) {
       setLog(`❌ 推送失败:\n${e}`);
     } finally {
       setIsBuilding(false);
+    }
+  }
+
+  async function handlePackageFromBranch() {
+    if (!isTauriRuntime()) {
+      setLog("❌ 当前是浏览器预览环境，分支打包请在 Tauri 桌面窗口中操作");
+      return;
+    }
+    if (!repoPath) {
+      setLog("⚠️ 请先选择 Git 仓库目录");
+      return;
+    }
+    if (!branchName.trim()) {
+      setLog("⚠️ 请输入目标分支或引用");
+      return;
+    }
+
+    setIsBuilding(true);
+    setCopied(false);
+    setProgress(0);
+    setProgressMessage("⬇️ 开始更新分支代码...");
+    setLog("");
+    setArtifactPath("");
+    setWorktreePath("");
+
+    try {
+      const result = await invoke<PackageFromBranchResult>("package_from_branch", {
+        repoPath,
+        branch: branchName.trim(),
+        projectType: branchProjectType,
+        frontendDir: frontendDir.trim() || null,
+        buildScript: branchProjectType === "npm" ? selectedBuildScript : null,
+      });
+      setArtifactPath(result.artifact_path);
+      setWorktreePath(result.worktree_path);
+      // 打包成功后保存设置
+      await saveBranchSettings();
+    } catch (e) {
+      setLog(`❌ 打包失败:\n${e}`);
+    } finally {
+      setIsBuilding(false);
+    }
+  }
+
+  async function saveBranchSettings() {
+    if (!isTauriRuntime() || !config.remember_branch_settings) {
+      return;
+    }
+    try {
+      const updatedConfig = {
+        ...config,
+        last_repo_path: repoPath,
+        last_branch: branchName.trim(),
+        last_frontend_dir: frontendDir.trim(),
+        last_build_script: selectedBuildScript,
+        last_project_type: branchProjectType,
+      };
+      await invoke("save_config", { config: updatedConfig });
+      setConfig(updatedConfig);
+    } catch (e) {
+      console.error("保存分支设置失败:", e);
+    }
+  }
+
+  async function handleOpenDirectory(path: string) {
+    if (!isTauriRuntime()) {
+      setToast({ show: true, message: "浏览器环境下无法打开目录" });
+      return;
+    }
+    try {
+      await invoke("open_directory", { path });
+    } catch (e) {
+      setToast({ show: true, message: `打开目录失败: ${e}` });
     }
   }
 
@@ -240,7 +573,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1><Container className="header-icon" />JarPorter</h1>
-        <p className="subtitle">拖拽 JAR 包，一键构建并推送到 Harbor 镜像仓库</p>
+        <p className="subtitle">拖拽产物推送 Harbor，或从指定 Git 分支隔离打包</p>
       </header>
 
       <nav className="tabs">
@@ -249,6 +582,12 @@ function App() {
           onClick={() => setActiveTab("upload")}
         >
           <Upload size={16} /> 上传推送
+        </button>
+        <button
+          className={`tab ${activeTab === "branch" ? "active" : ""}`}
+          onClick={() => setActiveTab("branch")}
+        >
+          <GitBranch size={16} /> 分支打包
         </button>
         <button
           className={`tab ${activeTab === "config" ? "active" : ""}`}
@@ -261,26 +600,47 @@ function App() {
       <main className="content">
         {activeTab === "upload" ? (
           <div className="upload-panel">
+            <div className="artifact-type-selector">
+              <button
+                type="button"
+                className={`artifact-type ${artifactType === "jar" ? "active" : ""}`}
+                onClick={() => handleArtifactTypeChange("jar")}
+              >
+                <FileText size={16} /> JAR 应用
+              </button>
+              <button
+                type="button"
+                className={`artifact-type ${artifactType === "frontend_dist" ? "active" : ""}`}
+                onClick={() => handleArtifactTypeChange("frontend_dist")}
+              >
+                <Package size={16} /> 前端 dist
+              </button>
+            </div>
+
             <div
-              className={`drop-zone ${isDragOver ? "drag-over" : ""} ${jarPath ? "has-file" : ""}`}
+              className={`drop-zone ${isDragOver ? "drag-over" : ""} ${artifactPath ? "has-file" : ""}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={handleSelectFile}
             >
-              {jarPath ? (
+              {artifactPath ? (
                 <div className="file-info">
-                  <FileText size={40} strokeWidth={1.5} className="file-icon" />
+                  {artifactType === "jar" ? (
+                    <FileText size={40} strokeWidth={1.5} className="file-icon" />
+                  ) : (
+                    <Package size={40} strokeWidth={1.5} className="file-icon" />
+                  )}
                   <span className="file-name">
-                    {jarPath.split("/").pop()}
+                    {getPathName(artifactPath)}
                   </span>
-                  <span className="file-path">{jarPath}</span>
+                  <span className="file-path">{artifactPath}</span>
                 </div>
               ) : (
                 <div className="drop-hint">
                   <Package size={64} strokeWidth={1.5} className="drop-icon" />
-                  <p>拖拽JAR文件到这里</p>
-                  <p className="drop-sub">或点击选择文件</p>
+                  <p>{artifactType === "jar" ? "拖拽JAR文件到这里" : "拖拽前端 dist 目录到这里"}</p>
+                  <p className="drop-sub">{artifactType === "jar" ? "或点击选择文件" : "或点击选择目录"}</p>
                 </div>
               )}
             </div>
@@ -309,7 +669,7 @@ function App() {
             <button
               className="build-btn"
               onClick={handleBuildAndPush}
-              disabled={isBuilding || !jarPath}
+              disabled={isBuilding || !artifactPath}
             >
               {isBuilding ? (
                 <>
@@ -334,6 +694,229 @@ function App() {
                     style={{ width: `${progress}%` }}
                   />
                 </div>
+              </div>
+            )}
+
+            {log && (
+              <div className={`log-panel ${log.includes("✅") ? "success" : ""}`}>
+                {renderLog(log)}
+              </div>
+            )}
+          </div>
+        ) : activeTab === "branch" ? (
+          <div className="branch-panel">
+            <div className="artifact-type-selector">
+              <button
+                type="button"
+                className={`artifact-type ${branchProjectType === "maven" ? "active" : ""}`}
+                onClick={() => {
+                  setBranchProjectType("maven");
+                  setNpmScripts([]);
+                  setSelectedBuildScript("");
+                }}
+              >
+                <FileText size={16} /> Maven 项目
+              </button>
+              <button
+                type="button"
+                className={`artifact-type ${branchProjectType === "npm" ? "active" : ""}`}
+                onClick={async () => {
+                  setBranchProjectType("npm");
+                  if (repoPath) {
+                    try {
+                      const detectedDir = await invoke<string | null>("detect_frontend_dir", {
+                        repoPath,
+                      });
+                      if (detectedDir) {
+                        setFrontendDir(detectedDir);
+                        loadNpmScripts(repoPath, detectedDir);
+                      } else {
+                        setFrontendDir("");
+                        loadNpmScripts(repoPath, "");
+                      }
+                    } catch {
+                      loadNpmScripts(repoPath, frontendDir);
+                    }
+                  }
+                }}
+              >
+                <Package size={16} /> npm 前端
+              </button>
+            </div>
+
+            <div className="branch-card">
+              <div className="form-group">
+                <label>Git 仓库目录</label>
+                <div className="path-picker-row">
+                  <input
+                    type="text"
+                    value={repoPath}
+                    onChange={(e) => {
+                      setRepoPath(e.target.value);
+                      setBranchOptions([]);
+                      setBranchName("");
+                    }}
+                    onBlur={() => loadGitBranches(repoPath)}
+                    placeholder="选择或拖入 Git 仓库目录"
+                  />
+                  <button type="button" className="path-picker-btn" onClick={handleSelectRepo}>
+                    <FolderOpen size={16} /> 选择
+                  </button>
+                  <button
+                    type="button"
+                    className="path-picker-btn"
+                    onClick={() => loadGitBranches(repoPath)}
+                    disabled={!repoPath || isLoadingBranches}
+                  >
+                    <GitBranch size={16} /> {isLoadingBranches ? "读取中" : "刷新分支"}
+                  </button>
+                </div>
+                {repoPath && <p className="template-hint">当前选择：{repoPath}</p>}
+              </div>
+
+              {branchProjectType === "npm" && (
+                <div className="form-group">
+                  <label>前端子目录（自动检测）</label>
+                  <input
+                    type="text"
+                    value={frontendDir}
+                    onChange={(e) => {
+                      setFrontendDir(e.target.value);
+                      if (repoPath) {
+                        loadNpmScripts(repoPath, e.target.value);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (repoPath) {
+                        loadNpmScripts(repoPath, frontendDir);
+                      }
+                    }}
+                    placeholder="自动检测中..."
+                  />
+                  <p className="template-hint">
+                    {frontendDir ? `已检测到前端目录: ${frontendDir}` : "选择仓库后自动检测 package.json 所在目录"}
+                  </p>
+                </div>
+              )}
+
+              {branchProjectType === "npm" && npmScripts.length > 0 && (
+                <div className="form-group">
+                  <label>构建命令</label>
+                  <SearchableDropdown
+                    value={selectedBuildScript}
+                    options={npmScripts}
+                    onChange={setSelectedBuildScript}
+                    placeholder="选择构建命令..."
+                    disabled={isLoadingScripts}
+                    loading={isLoadingScripts}
+                  />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label>目标分支</label>
+                <SearchableDropdown
+                  value={branchName}
+                  options={branchOptions.map((b) => b.name)}
+                  onChange={setBranchName}
+                  placeholder={isLoadingBranches ? "加载中..." : branchOptions.length === 0 ? "请先选择仓库" : "搜索或选择分支..."}
+                  disabled={!repoPath || branchOptions.length === 0}
+                  loading={isLoadingBranches}
+                />
+                <p className="template-hint">点击打包时会先执行 git fetch --all --prune 更新分支代码</p>
+              </div>
+
+              <div className="branch-command-preview">
+                固定命令：
+                <code>{branchProjectType === "maven" ? "mvn clean package -DskipTests" : `npm install && npm run ${selectedBuildScript || "build"}`}</code>
+              </div>
+
+              <div className="form-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={config.remember_branch_settings}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setConfig((prev) => ({ ...prev, remember_branch_settings: checked }));
+                      // 如果勾选，立即保存当前设置
+                      if (checked) {
+                        const updatedConfig = {
+                          ...config,
+                          remember_branch_settings: true,
+                          last_repo_path: repoPath,
+                          last_branch: branchName.trim(),
+                          last_frontend_dir: frontendDir.trim(),
+                          last_build_script: selectedBuildScript,
+                          last_project_type: branchProjectType,
+                        };
+                        invoke("save_config", { config: updatedConfig }).then(() => {
+                          setConfig(updatedConfig);
+                        });
+                      }
+                    }}
+                  />
+                  <span className="checkbox-toggle"></span>
+                  <span>记住本次配置，下次自动带出</span>
+                </label>
+              </div>
+            </div>
+
+            <button
+              className="build-btn"
+              onClick={handlePackageFromBranch}
+              disabled={isBuilding || !repoPath || !branchName.trim()}
+            >
+              {isBuilding ? (
+                <>
+                  <Loader2 size={18} className="spin" /> 分支打包中...
+                </>
+              ) : (
+                <>
+                  <GitBranch size={18} /> 从指定分支打包
+                </>
+              )}
+            </button>
+
+            {isBuilding && (
+              <div className="progress-section">
+                <div className="progress-info">
+                  <span className="progress-message">{progressMessage}</span>
+                  <span className="progress-percent">{progress}%</span>
+                </div>
+                <div className="progress-track">
+                  <div
+                    className="progress-bar"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {artifactPath && (
+              <div className="path-links">
+                <div className="path-link-item">
+                  <span className="path-link-label">📦 产物目录:</span>
+                  <button
+                    type="button"
+                    className="path-link-btn"
+                    onClick={() => handleOpenDirectory(artifactPath)}
+                  >
+                    {artifactPath}
+                  </button>
+                </div>
+                {worktreePath && (
+                  <div className="path-link-item">
+                    <span className="path-link-label">📁 Worktree:</span>
+                    <button
+                      type="button"
+                      className="path-link-btn"
+                      onClick={() => handleOpenDirectory(worktreePath)}
+                    >
+                      {worktreePath}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -392,7 +975,7 @@ function App() {
               />
             </div>
             <div className="form-group">
-              <label>基础镜像</label>
+              <label>JAR基础镜像</label>
               <input
                 type="text"
                 value={config.base_image}
@@ -401,12 +984,49 @@ function App() {
               />
             </div>
             <div className="form-group">
-              <label>暴露端口</label>
+              <label>JAR暴露端口</label>
               <input
                 type="text"
                 value={config.expose_port}
                 onChange={(e) => handleConfigChange("expose_port", e.target.value)}
                 placeholder="例如: 8181"
+              />
+            </div>
+            <div className="form-group">
+              <label>前端基础镜像</label>
+              <input
+                type="text"
+                value={config.frontend_base_image}
+                onChange={(e) => handleConfigChange("frontend_base_image", e.target.value)}
+                placeholder="例如: nginx:alpine"
+              />
+            </div>
+            <div className="form-group">
+              <label>前端暴露端口</label>
+              <input
+                type="text"
+                value={config.frontend_expose_port}
+                onChange={(e) => handleConfigChange("frontend_expose_port", e.target.value)}
+                placeholder="例如: 80"
+              />
+            </div>
+            <div className="form-group">
+              <label>前端 Dockerfile 模板</label>
+              <textarea
+                value={config.frontend_dockerfile_template}
+                onChange={(e) => handleConfigChange("frontend_dockerfile_template", e.target.value)}
+                spellCheck={false}
+                rows={6}
+              />
+              <p className="template-hint">可用变量：{"{{BASE_IMAGE}}"}、{"{{EXPOSE_PORT}}"}、{"{{NGINX_CONF_PATH}}"}、{"{{DIST_DIR}}"}、{"{{IMAGE_NAME}}"}、{"{{IMAGE_TAG}}"}、{"{{FULL_IMAGE}}"}</p>
+            </div>
+            <div className="form-group">
+              <label>nginx.conf 模板</label>
+              <textarea
+                value={config.frontend_nginx_template}
+                onChange={(e) => handleConfigChange("frontend_nginx_template", e.target.value)}
+                spellCheck={false}
+                rows={9}
               />
             </div>
 
@@ -428,7 +1048,9 @@ function App() {
                 <li>配置保存后无需重复填写</li>
                 <li>Harbor地址不需要带 https:// 前缀</li>
                 <li>项目名称为Harbor中的项目名</li>
-                <li>基础镜像为构建Docker镜像时的FROM镜像</li>
+                <li>JAR模式使用JAR基础镜像和JAR暴露端口</li>
+                <li>前端dist模式会把所选 dist 目录的内容复制为 nginx 站点根目录，不会在镜像里嵌套 dist 目录</li>
+                <li>默认 nginx.conf 的 /index.html 回退路径对应 /usr/share/nginx/html/index.html</li>
               </ul>
             </div>
           </div>

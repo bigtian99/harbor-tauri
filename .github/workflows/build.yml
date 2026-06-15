@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to upload to, for example v1.0. Leave empty to use package.json version.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -69,7 +75,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tauriScript: pnpm tauri
+          # tauri-action appends `build`; use the CLI directly instead of
+          # the package `tauri` script, which is reserved for `tauri dev`.
+          tauriScript: pnpm exec tauri
           args: --target ${{ matrix.target }}
 
       - name: Upload artifacts
@@ -88,18 +96,59 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'workflow_dispatch'
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_RELEASE_TAG" ]]; then
+            tag="$INPUT_RELEASE_TAG"
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            version="$(node -p "require('./package.json').version")"
+            tag="v${version}"
+          else
+            tag="$REF_NAME"
+          fi
+
+          if [[ "$tag" != v* ]]; then
+            echo "::error::Release tag must start with v, got: $tag"
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $tag"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
 
+      - name: List release assets
+        shell: bash
+        run: |
+          if ! find artifacts -type f -print -quit | grep -q .; then
+            echo "::error::No build artifacts were downloaded for the release"
+            exit 1
+          fi
+
+          find artifacts -type f -print | sort
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
           generate_release_notes: true
           files: artifacts/**/*
         env:

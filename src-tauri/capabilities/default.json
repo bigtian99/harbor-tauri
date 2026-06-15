@@ -9,6 +9,7 @@
     "shell:allow-execute",
     "shell:allow-spawn",
     "core:event:default",
-    "core:path:default"
+    "core:path:default",
+    "dialog:default"
   ]
 }
