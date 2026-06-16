@@ -112,6 +112,9 @@ pub struct HarborConfig {
     pub last_frontend_dir: String,
     pub last_build_script: String,
     pub last_project_type: String,
+    pub last_auto_push_image: bool,
+    pub repo_path_history: Vec<String>,
+    pub npm_package_manager: String,
 }
 
 impl Default for HarborConfig {
@@ -134,6 +137,9 @@ impl Default for HarborConfig {
             last_frontend_dir: String::new(),
             last_build_script: String::new(),
             last_project_type: "maven".to_string(),
+            last_auto_push_image: false,
+            repo_path_history: Vec::new(),
+            npm_package_manager: "npm".to_string(),
         }
     }
 }
@@ -207,6 +213,21 @@ fn render_template(template: &str, replacements: &[(&str, String)]) -> String {
 
 fn docker_json_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// 清理临时目录中所有 jarporter-worktree- 和 jarporter-build- 前缀的残留目录
+fn cleanup_old_temp_dirs() {
+    let temp = std::env::temp_dir();
+    let prefixes = ["jarporter-worktree-", "jarporter-build-"];
+    if let Ok(entries) = fs::read_dir(&temp) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if prefixes.iter().any(|p| name_str.starts_with(p)) {
+                fs::remove_dir_all(entry.path()).ok();
+            }
+        }
+    }
 }
 
 fn create_temp_build_dir() -> Result<PathBuf, String> {
@@ -753,6 +774,7 @@ async fn package_from_branch(
     project_type: String,
     frontend_dir: Option<String>,
     build_script: Option<String>,
+    package_manager: Option<String>,
 ) -> Result<PackageFromBranchResult, String> {
     let project_type = PackageProjectType::from_string(project_type)?;
     let branch = branch.trim().to_string();
@@ -764,6 +786,9 @@ async fn package_from_branch(
     if !repo_path.is_dir() {
         return Err(format!("仓库路径不是目录: {}", repo_path.display()));
     }
+
+    // 每次打包前清理之前的临时 worktree/build 残留目录
+    cleanup_old_temp_dirs();
 
     // 处理前端子目录路径
     let build_dir = if let Some(ref dir) = frontend_dir {
@@ -864,9 +889,21 @@ async fn package_from_branch(
 
     match project_type {
         PackageProjectType::Maven if !actual_build_path.join("pom.xml").is_file() => {
+            // 列出 worktree 中的文件帮助诊断
+            let files_in_worktree = fs::read_dir(&actual_build_path)
+                .map(|entries| {
+                    entries
+                        .filter_map(|e| e.ok())
+                        .map(|e| format!("  - {}", e.file_name().to_string_lossy()))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .unwrap_or_else(|e| format!("  无法读取目录: {}", e));
             cleanup_worktree(&repo_root, &worktree_path);
             return Err(format!(
-                "目标分支缺少 pom.xml，已清理临时 worktree: {}",
+                "目标分支缺少 pom.xml\n\n期望路径: {}\n\nworktree 中的文件:\n{}\n\n已清理临时 worktree: {}",
+                actual_build_path.join("pom.xml").display(),
+                files_in_worktree,
                 worktree_path.display()
             ));
         }
@@ -912,7 +949,8 @@ async fn package_from_branch(
                     Ok((artifact_path, build_script_used, logs))
                 }
                 PackageProjectType::Npm => {
-                    logs.push(run_command(&worktree_for_build, "npm", &["install"])?);
+                    let pm = package_manager.as_deref().unwrap_or("npm");
+                    logs.push(run_command(&worktree_for_build, pm, &["install"])?);
                     // 使用用户选择的构建命令，如果没有则自动检测
                     let script_name = if let Some(ref s) = user_build_script {
                         if !s.trim().is_empty() {
@@ -923,8 +961,8 @@ async fn package_from_branch(
                     } else {
                         detect_npm_build_script(&worktree_for_build)?
                     };
-                    build_script_used = format!("npm run {}", script_name);
-                    logs.push(run_command(&worktree_for_build, "npm", &["run", &script_name])?);
+                    build_script_used = format!("{} run {}", pm, script_name);
+                    logs.push(run_command(&worktree_for_build, pm, &["run", &script_name])?);
                     let artifact_path = find_npm_artifact(&worktree_for_build)?;
                     Ok((artifact_path, build_script_used, logs))
                 }

@@ -63,6 +63,9 @@ interface HarborConfig {
   last_frontend_dir: string;
   last_build_script: string;
   last_project_type: string;
+  last_auto_push_image: boolean;
+  repo_path_history: string[];
+  npm_package_manager: string;
 }
 
 interface PackageFromBranchResult {
@@ -102,6 +105,9 @@ function App() {
     last_frontend_dir: "",
     last_build_script: "",
     last_project_type: "maven",
+    last_auto_push_image: false,
+    repo_path_history: [],
+    npm_package_manager: "npm",
   });
   const [artifactType, setArtifactType] = useState<ArtifactType>("jar");
   const [artifactPath, setArtifactPath] = useState<string>("");
@@ -118,6 +124,8 @@ function App() {
   const [log, setLog] = useState<string>("");
   const [worktreePath, setWorktreePath] = useState<string>("");
   const [isBuilding, setIsBuilding] = useState(false);
+  const [autoPushImage, setAutoPushImage] = useState<boolean>(false);
+  const [branchFullImage, setBranchFullImage] = useState<string>("");
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
@@ -235,6 +243,9 @@ function App() {
         }
         if (savedConfig.last_project_type) {
           setBranchProjectType(savedConfig.last_project_type as BranchProjectType);
+        }
+        if (savedConfig.last_auto_push_image !== undefined) {
+          setAutoPushImage(savedConfig.last_auto_push_image);
         }
       }
     } catch (e) {
@@ -391,6 +402,14 @@ function App() {
         const selectedPath = selected as string;
         setRepoPath(selectedPath);
         await loadGitBranches(selectedPath);
+        // 选择后更新历史记录
+        if (config.remember_branch_settings) {
+          const history = (config.repo_path_history || []).filter((p) => p !== selectedPath);
+          const newHistory = [selectedPath, ...history].slice(0, 20);
+          const updatedConfig = { ...config, repo_path_history: newHistory };
+          await invoke("save_config", { config: updatedConfig });
+          setConfig(updatedConfig);
+        }
       }
     } catch (e) {
       setLog(`❌ 选择仓库目录失败:\n${e}`);
@@ -455,25 +474,65 @@ function App() {
     }
 
     setIsBuilding(true);
+    setActiveTab("branch");
     setCopied(false);
     setProgress(0);
     setProgressMessage("⬇️ 开始更新分支代码...");
     setLog("");
     setArtifactPath("");
     setWorktreePath("");
+    setBranchFullImage("");
 
     try {
       const result = await invoke<PackageFromBranchResult>("package_from_branch", {
         repoPath,
         branch: branchName.trim(),
         projectType: branchProjectType,
-        frontendDir: frontendDir.trim() || null,
+        // 只有 NPM 项目才传递 frontendDir，Maven 项目忽略它
+        frontendDir: branchProjectType === "npm" ? (frontendDir.trim() || null) : null,
         buildScript: branchProjectType === "npm" ? selectedBuildScript : null,
+        packageManager: branchProjectType === "npm" ? config.npm_package_manager : null,
       });
       setArtifactPath(result.artifact_path);
       setWorktreePath(result.worktree_path);
       // 打包成功后保存设置
       await saveBranchSettings();
+      setActiveTab("branch");
+
+      // 如果勾选了自动推送镜像，且是 Maven 项目，自动调用 build_and_push
+      if (autoPushImage && branchProjectType === "maven") {
+        // 检查 Harbor 配置是否完整
+        if (!config.harbor_url || !config.username || !config.password || !config.project) {
+          setLog(`⚠️ 分支打包成功，但 Harbor 配置不完整，无法推送镜像\n\n请在"推送配置" tab 中完善 Harbor 配置后重试\n\n${result.log}`);
+        } else {
+          // 验证镜像名称是否已设置
+          const finalImageName = imageName || inferImageName(result.artifact_path, "jar");
+          if (!finalImageName.trim()) {
+            setLog(`⚠️ 分支打包成功，但未设置镜像名称，跳过推送\n\n${result.log}`);
+          } else {
+            setProgress(60);
+            setProgressMessage("🚀 打包完成，开始推送镜像...");
+            try {
+              const pushResult = await invoke<string>("build_and_push", {
+                jarPath: result.artifact_path,
+                imageName: finalImageName,
+                imageTag: imageTag || "latest",
+                artifactType: "jar",
+              });
+              // 从推送结果中提取完整镜像地址
+              const imageMatch = pushResult.match(/完整镜像:\s*(.+)/);
+              if (imageMatch) {
+                setBranchFullImage(imageMatch[1].trim());
+              }
+              setLog(`✅ 分支打包并推送镜像完成\n\n${result.log}\n\n📦 镜像推送: ${pushResult}`);
+              setActiveTab("branch");
+            } catch (pushErr) {
+              setLog(`⚠️ 分支打包成功，但镜像推送失败:\n${pushErr}\n\n${result.log}`);
+              setActiveTab("branch");
+            }
+          }
+        }
+      }
     } catch (e) {
       setLog(`❌ 打包失败:\n${e}`);
     } finally {
@@ -486,6 +545,10 @@ function App() {
       return;
     }
     try {
+      // 更新仓库路径历史（去重，最新的放前面，最多保留20个）
+      const history = (config.repo_path_history || []).filter((p) => p !== repoPath);
+      const newHistory = repoPath.trim() ? [repoPath, ...history].slice(0, 20) : history;
+
       const updatedConfig = {
         ...config,
         last_repo_path: repoPath,
@@ -493,6 +556,8 @@ function App() {
         last_frontend_dir: frontendDir.trim(),
         last_build_script: selectedBuildScript,
         last_project_type: branchProjectType,
+        last_auto_push_image: autoPushImage,
+        repo_path_history: newHistory,
       };
       await invoke("save_config", { config: updatedConfig });
       setConfig(updatedConfig);
@@ -748,17 +813,22 @@ function App() {
               <div className="form-group">
                 <label>Git 仓库目录</label>
                 <div className="path-picker-row">
-                  <input
-                    type="text"
-                    value={repoPath}
-                    onChange={(e) => {
-                      setRepoPath(e.target.value);
-                      setBranchOptions([]);
-                      setBranchName("");
-                    }}
-                    onBlur={() => loadGitBranches(repoPath)}
-                    placeholder="选择或拖入 Git 仓库目录"
-                  />
+                  <div className="searchable-dropdown-wrapper">
+                    <SearchableDropdown
+                      value={repoPath}
+                      options={config.repo_path_history || []}
+                      onChange={(value) => {
+                        setRepoPath(value);
+                        if (value.trim()) {
+                          loadGitBranches(value);
+                        } else {
+                          setBranchOptions([]);
+                          setBranchName("");
+                        }
+                      }}
+                      placeholder="选择或输入 Git 仓库目录"
+                    />
+                  </div>
                   <button type="button" className="path-picker-btn" onClick={handleSelectRepo}>
                     <FolderOpen size={16} /> 选择
                   </button>
@@ -799,6 +869,29 @@ function App() {
                 </div>
               )}
 
+              {branchProjectType === "npm" && (
+                <div className="form-group">
+                  <label>包管理器</label>
+                  <div className="pm-selector">
+                    {["npm", "cnpm", "pnpm", "yarn"].map((pm) => (
+                      <button
+                        key={pm}
+                        type="button"
+                        className={`pm-btn ${config.npm_package_manager === pm ? "active" : ""}`}
+                        onClick={() => setConfig((prev) => ({ ...prev, npm_package_manager: pm }))}
+                      >
+                        {pm}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="template-hint">
+                    {config.npm_package_manager === "cnpm" ? "使用 cnpm 加速安装（需全局安装 cnpm）" :
+                     config.npm_package_manager === "pnpm" ? "使用 pnpm（更快的包管理器）" :
+                     config.npm_package_manager === "yarn" ? "使用 yarn" : "使用 npm（默认）"}
+                  </p>
+                </div>
+              )}
+
               {branchProjectType === "npm" && npmScripts.length > 0 && (
                 <div className="form-group">
                   <label>构建命令</label>
@@ -831,6 +924,48 @@ function App() {
                 <code>{branchProjectType === "maven" ? "mvn clean package -DskipTests" : `npm install && npm run ${selectedBuildScript || "build"}`}</code>
               </div>
 
+              {branchProjectType === "maven" && (
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={autoPushImage}
+                      onChange={(e) => setAutoPushImage(e.target.checked)}
+                    />
+                    <span className="checkbox-toggle"></span>
+                    <span>打包后联动推送镜像到 Harbor</span>
+                  </label>
+                  <p className="template-hint">
+                    {autoPushImage ? "打包成功后将自动构建并推送镜像" : "勾选后打包成功会自动推送镜像"}
+                  </p>
+                </div>
+              )}
+
+              {branchProjectType === "maven" && autoPushImage && (
+                <>
+                  <div className="form-group">
+                    <label>镜像名称</label>
+                    <input
+                      type="text"
+                      value={imageName}
+                      onChange={(e) => setImageName(e.target.value)}
+                      placeholder="例如: tksy-admin（小写）"
+                    />
+                    <p className="template-hint">留空则自动从 JAR 文件名推断</p>
+                  </div>
+                  <div className="form-group">
+                    <label>镜像标签</label>
+                    <input
+                      type="text"
+                      value={imageTag}
+                      onChange={(e) => setImageTag(e.target.value)}
+                      placeholder="latest"
+                    />
+                    <p className="template-hint">留空则使用时间戳格式 v.YY.MM.DD.HH.MM</p>
+                  </div>
+                </>
+              )}
+
               <div className="form-group">
                 <label className="checkbox-label">
                   <input
@@ -841,6 +976,8 @@ function App() {
                       setConfig((prev) => ({ ...prev, remember_branch_settings: checked }));
                       // 如果勾选，立即保存当前设置
                       if (checked) {
+                        const history = (config.repo_path_history || []).filter((p) => p !== repoPath);
+                        const newHistory = repoPath.trim() ? [repoPath, ...history].slice(0, 20) : history;
                         const updatedConfig = {
                           ...config,
                           remember_branch_settings: true,
@@ -849,6 +986,8 @@ function App() {
                           last_frontend_dir: frontendDir.trim(),
                           last_build_script: selectedBuildScript,
                           last_project_type: branchProjectType,
+                          last_auto_push_image: autoPushImage,
+                          repo_path_history: newHistory,
                         };
                         invoke("save_config", { config: updatedConfig }).then(() => {
                           setConfig(updatedConfig);
@@ -895,6 +1034,27 @@ function App() {
 
             {artifactPath && (
               <div className="path-links">
+                {branchFullImage && (
+                  <div className="path-link-item image-url-row">
+                    <span className="path-link-label">🐳 完整镜像:</span>
+                    <span className="image-url-value" title={branchFullImage}>{branchFullImage}</span>
+                    <button
+                      className={`copy-btn ${copied ? "copied" : ""}`}
+                      onClick={() => handleCopyImage(branchFullImage)}
+                      title="复制镜像地址"
+                    >
+                      {copied ? (
+                        <>
+                          <CheckCircle size={14} /> 已复制
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={14} /> 复制
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
                 <div className="path-link-item">
                   <span className="path-link-label">📦 产物目录:</span>
                   <button

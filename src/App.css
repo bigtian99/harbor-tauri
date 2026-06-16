@@ -297,6 +297,39 @@ body::before {
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.pm-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.pm-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 255, 218, 0.14);
+  background: rgba(15, 52, 96, 0.35);
+  color: #8892b0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pm-btn:hover {
+  color: #ccd6f6;
+  border-color: rgba(100, 255, 218, 0.3);
+  background: rgba(100, 255, 218, 0.08);
+}
+
+.pm-btn.active {
+  color: #64ffda;
+  border-color: rgba(100, 255, 218, 0.45);
+  background: linear-gradient(135deg, rgba(15, 52, 96, 0.85), rgba(22, 33, 62, 0.95));
+  box-shadow:
+    0 2px 8px rgba(100, 255, 218, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
 .image-config {
   display: flex;
   gap: 16px;
@@ -809,6 +842,11 @@ body::before {
 }
 
 /* 可搜索下拉框样式 */
+.searchable-dropdown-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
 .searchable-dropdown {
   position: relative;
   width: 100%;
