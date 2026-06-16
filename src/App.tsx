@@ -66,6 +66,7 @@ interface HarborConfig {
   last_auto_push_image: boolean;
   repo_path_history: string[];
   npm_package_manager: string;
+  npm_registry: string;
 }
 
 interface PackageFromBranchResult {
@@ -108,6 +109,7 @@ function App() {
     last_auto_push_image: false,
     repo_path_history: [],
     npm_package_manager: "npm",
+    npm_registry: "",
   });
   const [artifactType, setArtifactType] = useState<ArtifactType>("jar");
   const [artifactPath, setArtifactPath] = useState<string>("");
@@ -128,6 +130,9 @@ function App() {
   const [branchFullImage, setBranchFullImage] = useState<string>("");
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [springProfile, setSpringProfile] = useState<string>("");
+  const [springProfiles, setSpringProfiles] = useState<string[]>([]);
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -241,11 +246,12 @@ function App() {
         if (savedConfig.last_build_script) {
           setSelectedBuildScript(savedConfig.last_build_script);
         }
-        if (savedConfig.last_project_type) {
-          setBranchProjectType(savedConfig.last_project_type as BranchProjectType);
-        }
         if (savedConfig.last_auto_push_image !== undefined) {
           setAutoPushImage(savedConfig.last_auto_push_image);
+        }
+        // 恢复后自动加载 Spring Profiles（始终默认 Maven）
+        if (savedConfig.last_repo_path && savedConfig.last_branch) {
+          await loadSpringProfiles(savedConfig.last_repo_path, savedConfig.last_branch);
         }
       }
     } catch (e) {
@@ -332,7 +338,12 @@ function App() {
         repoPath: nextRepoPath,
       });
       setBranchOptions(branches);
-      setBranchName(branches[0]?.name ?? "");
+      const firstBranch = branches[0]?.name ?? "";
+      setBranchName(firstBranch);
+      // 加载 Spring profiles
+      if (branchProjectType === "maven" && firstBranch) {
+        await loadSpringProfiles(nextRepoPath, firstBranch);
+      }
       if (branches.length === 0) {
         setLog("⚠️ 没有读取到可用分支");
       }
@@ -357,6 +368,27 @@ function App() {
       setLog(`❌ 读取分支失败:\n${e}`);
     } finally {
       setIsLoadingBranches(false);
+    }
+  }
+
+  async function loadSpringProfiles(repoPath: string, branch: string) {
+    if (!repoPath.trim() || !branch.trim() || !isTauriRuntime()) {
+      setSpringProfiles([]);
+      return;
+    }
+    setIsLoadingProfiles(true);
+    try {
+      const profiles = await invoke<string[]>("detect_spring_profiles", {
+        repoPath: repoPath.trim(),
+        branch: branch.trim(),
+      });
+      console.log("[Spring Profiles] 检测到:", profiles);
+      setSpringProfiles(profiles);
+    } catch (e) {
+      console.error("[Spring Profiles] 检测失败:", e);
+      setSpringProfiles([]);
+    } finally {
+      setIsLoadingProfiles(false);
     }
   }
 
@@ -491,7 +523,8 @@ function App() {
         // 只有 NPM 项目才传递 frontendDir，Maven 项目忽略它
         frontendDir: branchProjectType === "npm" ? (frontendDir.trim() || null) : null,
         buildScript: branchProjectType === "npm" ? selectedBuildScript : null,
-        packageManager: branchProjectType === "npm" ? config.npm_package_manager : null,
+        packageManager: null,
+        springProfile: branchProjectType === "maven" && springProfile.trim() ? springProfile.trim() : null,
       });
       setArtifactPath(result.artifact_path);
       setWorktreePath(result.worktree_path);
@@ -869,29 +902,6 @@ function App() {
                 </div>
               )}
 
-              {branchProjectType === "npm" && (
-                <div className="form-group">
-                  <label>包管理器</label>
-                  <div className="pm-selector">
-                    {["npm", "cnpm", "pnpm", "yarn"].map((pm) => (
-                      <button
-                        key={pm}
-                        type="button"
-                        className={`pm-btn ${config.npm_package_manager === pm ? "active" : ""}`}
-                        onClick={() => setConfig((prev) => ({ ...prev, npm_package_manager: pm }))}
-                      >
-                        {pm}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="template-hint">
-                    {config.npm_package_manager === "cnpm" ? "使用 cnpm 加速安装（需全局安装 cnpm）" :
-                     config.npm_package_manager === "pnpm" ? "使用 pnpm（更快的包管理器）" :
-                     config.npm_package_manager === "yarn" ? "使用 yarn" : "使用 npm（默认）"}
-                  </p>
-                </div>
-              )}
-
               {branchProjectType === "npm" && npmScripts.length > 0 && (
                 <div className="form-group">
                   <label>构建命令</label>
@@ -911,7 +921,15 @@ function App() {
                 <SearchableDropdown
                   value={branchName}
                   options={branchOptions.map((b) => b.name)}
-                  onChange={setBranchName}
+                  onChange={async (value) => {
+                    setBranchName(value);
+                    setSpringProfile("");
+                    if (value.trim() && repoPath) {
+                      await loadSpringProfiles(repoPath, value);
+                    } else {
+                      setSpringProfiles([]);
+                    }
+                  }}
                   placeholder={isLoadingBranches ? "加载中..." : branchOptions.length === 0 ? "请先选择仓库" : "搜索或选择分支..."}
                   disabled={!repoPath || branchOptions.length === 0}
                   loading={isLoadingBranches}
@@ -919,9 +937,32 @@ function App() {
                 <p className="template-hint">点击打包时会先执行 git fetch --all --prune 更新分支代码</p>
               </div>
 
+              {branchProjectType === "maven" && (
+                <div className="form-group">
+                  <label>Spring Profile</label>
+                  <SearchableDropdown
+                    value={springProfile}
+                    options={springProfiles}
+                    onChange={setSpringProfile}
+                    placeholder={isLoadingProfiles ? "扫描中..." : springProfiles.length === 0 ? "未检测到 profile 配置文件" : "选择 profile..."}
+                    disabled={isLoadingProfiles}
+                    loading={isLoadingProfiles}
+                  />
+                  <p className="template-hint">
+                    {springProfile
+                      ? `将执行: mvn clean package -DskipTests -Dspring.profiles.active=${springProfile}`
+                      : springProfiles.length > 0
+                        ? `检测到 ${springProfiles.length} 个 profile: ${springProfiles.join(", ")}`
+                        : "留空则不添加 -Dspring.profiles.active 参数"}
+                  </p>
+                </div>
+              )}
+
               <div className="branch-command-preview">
                 固定命令：
-                <code>{branchProjectType === "maven" ? "mvn clean package -DskipTests" : `npm install && npm run ${selectedBuildScript || "build"}`}</code>
+                <code>{branchProjectType === "maven"
+                  ? `mvn clean package -DskipTests${springProfile.trim() ? ` -Dspring.profiles.active=${springProfile.trim()}` : ""}`
+                  : `npm install && npm run ${selectedBuildScript || "build"}`}</code>
               </div>
 
               {branchProjectType === "maven" && (

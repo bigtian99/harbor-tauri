@@ -115,6 +115,7 @@ pub struct HarborConfig {
     pub last_auto_push_image: bool,
     pub repo_path_history: Vec<String>,
     pub npm_package_manager: String,
+    pub npm_registry: String,
 }
 
 impl Default for HarborConfig {
@@ -140,6 +141,7 @@ impl Default for HarborConfig {
             last_auto_push_image: false,
             repo_path_history: Vec::new(),
             npm_package_manager: "npm".to_string(),
+            npm_registry: String::new(),
         }
     }
 }
@@ -330,12 +332,118 @@ fn detect_npm_build_script(project_dir: &Path) -> Result<String, String> {
     ))
 }
 
+// ── node_modules 缓存 ──────────────────────────────────────────────
+
+fn npm_cache_dir() -> PathBuf {
+    dirs::cache_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("jarporter")
+        .join("npm-cache")
+}
+
+/// 根据 lock 文件内容生成 hash 作为缓存 key
+fn lock_file_hash(build_dir: &Path) -> Option<String> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let lock_files = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"];
+    let lock_path = lock_files
+        .iter()
+        .map(|f| build_dir.join(f))
+        .find(|p| p.is_file())?;
+
+    let content = fs::read(&lock_path).ok()?;
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    Some(format!("{:016x}", hasher.finish()))
+}
+
+/// 尝试从缓存恢复 node_modules，返回 true 表示成功
+fn try_restore_node_modules(build_dir: &Path, cache_key: &str) -> Result<bool, String> {
+    let cache_path = npm_cache_dir().join(cache_key).join("node_modules");
+    let target = build_dir.join("node_modules");
+
+    if !cache_path.is_dir() {
+        return Ok(false);
+    }
+
+    // 清理已有 node_modules
+    if target.exists() {
+        fs::remove_dir_all(&target).ok();
+    }
+
+    // 用 cp -a 复制（兼容跨文件系统，比硬链接可靠）
+    let output = Command::new("cp")
+        .args(["-a", cache_path.to_str().unwrap(), target.to_str().unwrap()])
+        .output()
+        .map_err(|e| format!("cp 命令执行失败: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!("缓存恢复失败: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    if !target.join("package.json").is_file() {
+        return Err("缓存恢复后缺少 package.json".to_string());
+    }
+
+    Ok(true)
+}
+
+/// 将 node_modules 保存到缓存（先清理旧缓存）
+fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
+    let cache_dir = npm_cache_dir();
+    let cache_base = cache_dir.join(cache_key);
+    let cache_path = cache_base.join("node_modules");
+    let source = build_dir.join("node_modules");
+
+    if !source.is_dir() {
+        return;
+    }
+
+    // 清理所有旧缓存，只保留当前这一次
+    if cache_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&cache_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() && path != cache_base {
+                    fs::remove_dir_all(&path).ok();
+                }
+            }
+        }
+    }
+
+    // 准备目录
+    if cache_path.exists() {
+        fs::remove_dir_all(&cache_path).ok();
+    }
+    fs::create_dir_all(&cache_base).ok();
+
+    // cp -a 复制
+    Command::new("cp")
+        .args(["-a", source.to_str().unwrap(), cache_path.to_str().unwrap()])
+        .output()
+        .ok();
+}
+
 fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new(command)
+    // 先尝试直接执行，失败则通过 shell 执行（解决 nvm/pyenv 等 PATH 问题）
+    let output = match Command::new(command)
         .args(args)
         .current_dir(current_dir)
         .output()
-        .map_err(|e| format!("启动命令失败 {}: {}", command, e))?;
+    {
+        Ok(output) => output,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // 通过 login shell 执行，确保加载 nvm/pyenv 等环境
+            let full_cmd = format!("{} {}", command, args.join(" "));
+            Command::new("sh")
+                .args(["-l", "-c", &full_cmd])
+                .current_dir(current_dir)
+                .output()
+                .map_err(|e2| format!("启动命令失败 {}: {}", command, e2))?
+        }
+        Err(e) => return Err(format!("启动命令失败 {}: {}", command, e)),
+    };
     let details = command_output_text(&output);
 
     if output.status.success() {
@@ -767,6 +875,7 @@ async fn open_directory(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[allow(unused_variables)]
 async fn package_from_branch(
     app: tauri::AppHandle,
     repo_path: String,
@@ -775,6 +884,7 @@ async fn package_from_branch(
     frontend_dir: Option<String>,
     build_script: Option<String>,
     package_manager: Option<String>,
+    spring_profile: Option<String>,
 ) -> Result<PackageFromBranchResult, String> {
     let project_type = PackageProjectType::from_string(project_type)?;
     let branch = branch.trim().to_string();
@@ -918,8 +1028,8 @@ async fn package_from_branch(
     }
 
     let package_message = match project_type {
-        PackageProjectType::Maven => "☕ 执行 Maven 打包...",
-        PackageProjectType::Npm => "📦 执行 npm install...",
+        PackageProjectType::Maven => "☕ 执行 Maven 打包...".to_string(),
+        PackageProjectType::Npm => "📦 执行 npm install...".to_string(),
     };
     app.emit(
         "build-progress",
@@ -939,18 +1049,51 @@ async fn package_from_branch(
 
             match project_type {
                 PackageProjectType::Maven => {
-                    build_script_used = "mvn clean package -DskipTests".to_string();
+                    let mut mvn_args = vec!["clean", "package", "-DskipTests"];
+                    let profile_arg;
+                    if let Some(ref profile) = spring_profile {
+                        if !profile.trim().is_empty() {
+                            profile_arg = format!("-Dspring.profiles.active={}", profile.trim());
+                            mvn_args.push(&profile_arg);
+                        }
+                    }
+                    build_script_used = format!("mvn {}", mvn_args.join(" "));
                     logs.push(run_command(
                         &worktree_for_build,
                         "mvn",
-                        &["clean", "package", "-DskipTests"],
+                        &mvn_args,
                     )?);
                     let artifact_path = find_maven_artifact(&worktree_for_build)?;
                     Ok((artifact_path, build_script_used, logs))
                 }
                 PackageProjectType::Npm => {
-                    let pm = package_manager.as_deref().unwrap_or("npm");
-                    logs.push(run_command(&worktree_for_build, pm, &["install"])?);
+                    // 检查缓存，依赖未变则跳过 install
+                    let cached = if let Some(key) = lock_file_hash(&worktree_for_build) {
+                        match try_restore_node_modules(&worktree_for_build, &key) {
+                            Ok(true) => {
+                                logs.push(format!("✅ 命中缓存 (hash={})，跳过 npm install", key));
+                                true
+                            }
+                            Ok(false) => {
+                                logs.push(format!("cache miss (hash={})", key));
+                                false
+                            }
+                            Err(e) => {
+                                logs.push(format!("⚠️ 缓存恢复失败: {}，重新 install", e));
+                                false
+                            }
+                        }
+                    } else {
+                        logs.push("未找到 lock 文件，跳过缓存".to_string());
+                        false
+                    };
+                    if !cached {
+                        logs.push(run_command(&worktree_for_build, "npm", &["install"])?);
+                        if let Some(key) = lock_file_hash(&worktree_for_build) {
+                            save_node_modules_to_cache(&worktree_for_build, &key);
+                            logs.push(format!("💾 node_modules 已缓存 (hash={})", key));
+                        }
+                    }
                     // 使用用户选择的构建命令，如果没有则自动检测
                     let script_name = if let Some(ref s) = user_build_script {
                         if !s.trim().is_empty() {
@@ -961,8 +1104,8 @@ async fn package_from_branch(
                     } else {
                         detect_npm_build_script(&worktree_for_build)?
                     };
-                    build_script_used = format!("{} run {}", pm, script_name);
-                    logs.push(run_command(&worktree_for_build, pm, &["run", &script_name])?);
+                    build_script_used = format!("npm run {}", script_name);
+                    logs.push(run_command(&worktree_for_build, "npm", &["run", &script_name])?);
                     let artifact_path = find_npm_artifact(&worktree_for_build)?;
                     Ok((artifact_path, build_script_used, logs))
                 }
@@ -994,6 +1137,62 @@ async fn package_from_branch(
         build_script,
         log,
     })
+}
+
+#[tauri::command]
+async fn detect_spring_profiles(repo_path: String, branch: String) -> Result<Vec<String>, String> {
+    let repo_path = PathBuf::from(&repo_path);
+    if !repo_path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+    }
+
+    let repo_root = repo_root_for(&repo_path)?;
+    let branch = branch.trim();
+    if branch.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // 用 git ls-tree 列出指定分支中所有 application-*.yml / application-*.properties 文件
+    let output = Command::new("git")
+        .args(["ls-tree", "-r", "--name-only", branch])
+        .current_dir(&repo_root)
+        .output()
+        .map_err(|e| format!("执行 git ls-tree 失败: {}", e))?;
+
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut profiles = Vec::new();
+
+    for line in stdout.lines() {
+        let file_name = line.rsplit('/').next().unwrap_or(line);
+
+        // 匹配 application-{profile}.yml 或 application-{profile}.properties
+        let prefix = "application-";
+        if file_name.starts_with(prefix) {
+            let rest = &file_name[prefix.len()..];
+            // 去掉扩展名
+            let profile = if let Some(pos) = rest.rfind('.') {
+                &rest[..pos]
+            } else {
+                rest
+            };
+            // 过滤：不能为空、不能包含路径分隔符、不能是纯数字
+            if !profile.is_empty()
+                && !profile.contains('/')
+                && !profile.contains('\\')
+                && profile.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                && !profiles.contains(&profile.to_string())
+            {
+                profiles.push(profile.to_string());
+            }
+        }
+    }
+
+    profiles.sort();
+    Ok(profiles)
 }
 
 #[tauri::command]
@@ -1245,6 +1444,7 @@ pub fn run() {
             list_git_branches,
             list_npm_scripts,
             detect_frontend_dir,
+            detect_spring_profiles,
             package_from_branch,
             build_and_push,
             open_directory
