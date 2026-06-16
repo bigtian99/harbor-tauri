@@ -95,9 +95,11 @@ struct GitBranchOption {
 #[derive(Debug, Serialize)]
 struct LastCommitInfo {
     hash: String,
+    short_hash: String,
     message: String,
     author: String,
     date: String,
+    url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -756,15 +758,46 @@ async fn get_last_commit(repo_path: String, branch: Option<String>) -> Result<La
                 local.format("%Y-%m-%d %H:%M:%S").to_string()
             })
             .unwrap_or(date_str);
+        // 获取远程仓库 URL 并生成提交链接
+        let commit_url = git_output(&repo_root, &["remote", "get-url", "origin"])
+            .ok()
+            .and_then(|url| remote_url_to_commit_url(&url.trim(), &lines[0]));
         Ok(LastCommitInfo {
             hash: lines[0].to_string(),
+            short_hash: lines[0][..8.min(lines[0].len())].to_string(),
             message: lines[1].to_string(),
             author: lines[2].to_string(),
             date: formatted_date,
+            url: commit_url,
         })
     })
     .await
     .map_err(|e| format!("读取提交信息线程异常: {}", e))?
+}
+
+/// 将 git remote URL 转换为 commit 页面 URL
+fn remote_url_to_commit_url(remote_url: &str, commit_hash: &str) -> Option<String> {
+    // 移除 .git 后缀
+    let url = remote_url.trim_end_matches(".git");
+
+    // 处理 SSH 格式: git@gitee.com:user/repo.git
+    if url.starts_with("git@") {
+        let without_prefix = url.strip_prefix("git@")?;
+        let parts: Vec<&str> = without_prefix.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            let host = parts[0];
+            let path = parts[1].trim_start_matches('/');
+            return Some(format!("https://{}/{}/commit/{}", host, path, commit_hash));
+        }
+    }
+
+    // 处理 HTTPS 格式: https://gitee.com/user/repo.git
+    if url.starts_with("https://") || url.starts_with("http://") {
+        let without_protocol = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://"))?;
+        return Some(format!("https://{}/commit/{}", without_protocol, commit_hash));
+    }
+
+    None
 }
 
 #[tauri::command]

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Container, Upload, Settings, Rocket, Package, FileText, CheckCircle, Copy, AlertCircle, Loader2, Eye, EyeOff, GitBranch, FolderOpen } from "lucide-react";
+import { Container, Upload, Settings, Rocket, Package, FileText, CheckCircle, Copy, AlertCircle, Loader2, Eye, EyeOff, GitBranch, FolderOpen, ExternalLink } from "lucide-react";
 import { SearchableDropdown } from "./components/SearchableDropdown";
 import "./App.css";
 
@@ -82,9 +83,11 @@ interface GitBranchOption {
 
 interface LastCommitInfo {
   hash: string;
+  short_hash: string;
   message: string;
   author: string;
   date: string;
+  url: string | null;
 }
 
 type TabType = "upload" | "branch" | "config";
@@ -983,7 +986,18 @@ function App() {
                     {isLoadingCommit && <span className="commit-loading">加载中...</span>}
                   </div>
                   <div className="commit-info-detail">
-                    <span className="commit-hash" title={lastCommit.hash}>{lastCommit.hash.substring(0, 8)}</span>
+                    {lastCommit.url ? (
+                      <button
+                        className="commit-hash commit-link"
+                        title={`在浏览器中打开: ${lastCommit.hash}`}
+                        onClick={() => openUrl(lastCommit.url!)}
+                      >
+                        {lastCommit.short_hash}
+                        <ExternalLink size={12} />
+                      </button>
+                    ) : (
+                      <span className="commit-hash" title={lastCommit.hash}>{lastCommit.short_hash}</span>
+                    )}
                     <span className="commit-message">{lastCommit.message}</span>
                   </div>
                   <div className="commit-info-meta">

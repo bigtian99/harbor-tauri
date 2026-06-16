@@ -1152,6 +1152,30 @@ body::before {
   flex-shrink: 0;
 }
 
+.commit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border: none;
+  background: rgba(100, 255, 218, 0.1);
+  transition: all 0.2s ease;
+}
+
+.commit-link:hover {
+  background: rgba(100, 255, 218, 0.2);
+  color: #fff;
+}
+
+.commit-link svg {
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.commit-link:hover svg {
+  opacity: 1;
+}
+
 .commit-message {
   font-size: 13px;
   color: #e0e0e0;
