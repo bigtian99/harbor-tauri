@@ -92,6 +92,14 @@ struct GitBranchOption {
     name: String,
 }
 
+#[derive(Debug, Serialize)]
+struct LastCommitInfo {
+    hash: String,
+    message: String,
+    author: String,
+    date: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct HarborConfig {
@@ -710,6 +718,53 @@ async fn list_git_branches(repo_path: String) -> Result<Vec<GitBranchOption>, St
     })
     .await
     .map_err(|e| format!("读取分支线程异常: {}", e))?
+}
+
+#[tauri::command]
+async fn get_last_commit(repo_path: String, branch: Option<String>) -> Result<LastCommitInfo, String> {
+    let repo_path = PathBuf::from(repo_path);
+    if !repo_path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+    }
+
+    let branch = branch.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+        let rev = if branch.trim().is_empty() {
+            "HEAD".to_string()
+        } else {
+            branch.trim().to_string()
+        };
+        let output = git_output(
+            &repo_root,
+            &[
+                "log",
+                "-1",
+                "--format=%H%n%s%n%an%n%ai",
+                &rev,
+            ],
+        )?;
+        let lines: Vec<&str> = output.lines().collect();
+        if lines.len() < 4 {
+            return Err("无法解析提交信息".to_string());
+        }
+        // 将 ISO 8601 日期转换为本地时间格式
+        let date_str = lines[3].to_string();
+        let formatted_date = chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
+            .map(|dt| {
+                let local: chrono::DateTime<chrono::Local> = dt.with_timezone(&chrono::Local);
+                local.format("%Y-%m-%d %H:%M:%S").to_string()
+            })
+            .unwrap_or(date_str);
+        Ok(LastCommitInfo {
+            hash: lines[0].to_string(),
+            message: lines[1].to_string(),
+            author: lines[2].to_string(),
+            date: formatted_date,
+        })
+    })
+    .await
+    .map_err(|e| format!("读取提交信息线程异常: {}", e))?
 }
 
 #[tauri::command]
@@ -1442,6 +1497,7 @@ pub fn run() {
             load_config,
             save_config,
             list_git_branches,
+            get_last_commit,
             list_npm_scripts,
             detect_frontend_dir,
             detect_spring_profiles,

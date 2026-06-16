@@ -80,6 +80,13 @@ interface GitBranchOption {
   name: string;
 }
 
+interface LastCommitInfo {
+  hash: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
 type TabType = "upload" | "branch" | "config";
 
 function isTauriRuntime() {
@@ -133,6 +140,8 @@ function App() {
   const [springProfile, setSpringProfile] = useState<string>("");
   const [springProfiles, setSpringProfiles] = useState<string[]>([]);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
+  const [lastCommit, setLastCommit] = useState<LastCommitInfo | null>(null);
+  const [isLoadingCommit, setIsLoadingCommit] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -249,9 +258,13 @@ function App() {
         if (savedConfig.last_auto_push_image !== undefined) {
           setAutoPushImage(savedConfig.last_auto_push_image);
         }
-        // 恢复后自动加载 Spring Profiles（始终默认 Maven）
-        if (savedConfig.last_repo_path && savedConfig.last_branch) {
-          await loadSpringProfiles(savedConfig.last_repo_path, savedConfig.last_branch);
+        // 恢复后加载分支列表、Spring Profiles 和提交信息
+        if (savedConfig.last_repo_path) {
+          await loadGitBranches(savedConfig.last_repo_path);
+          if (savedConfig.last_branch) {
+            await loadSpringProfiles(savedConfig.last_repo_path, savedConfig.last_branch);
+            loadLastCommit(savedConfig.last_repo_path, savedConfig.last_branch);
+          }
         }
       }
     } catch (e) {
@@ -344,6 +357,10 @@ function App() {
       if (branchProjectType === "maven" && firstBranch) {
         await loadSpringProfiles(nextRepoPath, firstBranch);
       }
+      // 加载最后一次提交信息
+      if (firstBranch) {
+        loadLastCommit(nextRepoPath, firstBranch);
+      }
       if (branches.length === 0) {
         setLog("⚠️ 没有读取到可用分支");
       }
@@ -389,6 +406,26 @@ function App() {
       setSpringProfiles([]);
     } finally {
       setIsLoadingProfiles(false);
+    }
+  }
+
+  async function loadLastCommit(repoPath: string, branch: string) {
+    if (!repoPath.trim() || !isTauriRuntime()) {
+      setLastCommit(null);
+      return;
+    }
+    setIsLoadingCommit(true);
+    try {
+      const commit = await invoke<LastCommitInfo>("get_last_commit", {
+        repoPath: repoPath.trim(),
+        branch: branch.trim() || null,
+      });
+      setLastCommit(commit);
+    } catch (e) {
+      console.error("[Last Commit] 获取失败:", e);
+      setLastCommit(null);
+    } finally {
+      setIsLoadingCommit(false);
     }
   }
 
@@ -926,8 +963,10 @@ function App() {
                     setSpringProfile("");
                     if (value.trim() && repoPath) {
                       await loadSpringProfiles(repoPath, value);
+                      loadLastCommit(repoPath, value);
                     } else {
                       setSpringProfiles([]);
+                      setLastCommit(null);
                     }
                   }}
                   placeholder={isLoadingBranches ? "加载中..." : branchOptions.length === 0 ? "请先选择仓库" : "搜索或选择分支..."}
@@ -936,6 +975,23 @@ function App() {
                 />
                 <p className="template-hint">点击打包时会先执行 git fetch --all --prune 更新分支代码</p>
               </div>
+
+              {lastCommit && (
+                <div className="commit-info">
+                  <div className="commit-info-header">
+                    <span className="commit-info-label">📌 最近提交</span>
+                    {isLoadingCommit && <span className="commit-loading">加载中...</span>}
+                  </div>
+                  <div className="commit-info-detail">
+                    <span className="commit-hash" title={lastCommit.hash}>{lastCommit.hash.substring(0, 8)}</span>
+                    <span className="commit-message">{lastCommit.message}</span>
+                  </div>
+                  <div className="commit-info-meta">
+                    <span className="commit-author">{lastCommit.author}</span>
+                    <span className="commit-date">{lastCommit.date}</span>
+                  </div>
+                </div>
+              )}
 
               {branchProjectType === "maven" && (
                 <div className="form-group">

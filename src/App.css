@@ -1107,3 +1107,69 @@ body::before {
     transform: translateX(-50%) translateY(-20px);
   }
 }
+
+/* Commit info styles */
+.commit-info {
+  background: rgba(15, 52, 96, 0.5);
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 12px;
+}
+
+.commit-info-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.commit-info-label {
+  font-weight: 600;
+  color: #64ffda;
+  font-size: 13px;
+}
+
+.commit-loading {
+  font-size: 12px;
+  color: #888;
+}
+
+.commit-info-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.commit-hash {
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  color: #64ffda;
+  background: rgba(100, 255, 218, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.commit-message {
+  font-size: 13px;
+  color: #e0e0e0;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.commit-info-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #888;
+}
+
+.commit-author {
+  color: #aaa;
+}
+
+.commit-date {
+  color: #888;
+}
