@@ -305,6 +305,7 @@ function App() {
     try {
       const savedConfig = await invoke<HarborConfig>("load_config");
       setConfig(savedConfig);
+      setBuildHistory(savedConfig.build_history || []);
       // 加载记忆的分支打包设置
       if (savedConfig.remember_branch_settings) {
         if (savedConfig.last_repo_path) {
@@ -729,6 +730,7 @@ function App() {
       setWorktreePath(result.worktree_path);
       // 打包成功后保存设置
       await saveBranchSettings();
+      await loadBuildHistory();
       setActiveTab("branch");
 
       // 如果勾选了自动推送镜像，且是 Maven 项目，自动调用 build_and_push

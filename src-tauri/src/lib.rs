@@ -121,7 +121,7 @@ struct CommitListResult {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct BuildRecord {
+pub struct BuildRecord {
     id: String,
     timestamp: String,
     repo_path: String,
@@ -347,8 +347,8 @@ fn detect_npm_build_script(project_dir: &Path) -> Result<String, String> {
     let content = fs::read_to_string(&package_json_path)
         .map_err(|e| format!("读取 package.json 失败: {}", e))?;
 
-    let package_json: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("解析 package.json 失败: {}", e))?;
+    let package_json: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("解析 package.json 失败: {}", e))?;
 
     let scripts = package_json
         .get("scripts")
@@ -372,7 +372,12 @@ fn detect_npm_build_script(project_dir: &Path) -> Result<String, String> {
 
     if !build_prefixed.is_empty() {
         // 优先 prod/production，其次任意一个
-        let preferred = ["build:prod", "build:production", "build-prod", "build-production"];
+        let preferred = [
+            "build:prod",
+            "build:production",
+            "build-prod",
+            "build-production",
+        ];
         for candidate in &preferred {
             if build_prefixed.iter().any(|s| s == candidate) {
                 return Ok(candidate.to_string());
@@ -436,7 +441,10 @@ fn try_restore_node_modules(build_dir: &Path, cache_key: &str) -> Result<bool, S
         .map_err(|e| format!("cp 命令执行失败: {}", e))?;
 
     if !output.status.success() {
-        return Err(format!("缓存恢复失败: {}", String::from_utf8_lossy(&output.stderr)));
+        return Err(format!(
+            "缓存恢复失败: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
 
     if !target.join("package.json").is_file() {
@@ -748,8 +756,15 @@ fn load_config() -> Result<HarborConfig, String> {
 }
 
 #[tauri::command]
-fn save_config(config: HarborConfig) -> Result<(), String> {
+fn save_config(mut config: HarborConfig) -> Result<(), String> {
     let path = get_config_path();
+    let legacy_path = config_path_for(LEGACY_CONFIG_DIR);
+    if path.exists() || legacy_path.exists() {
+        if let Ok(existing_config) = load_config() {
+            config.build_history = existing_config.build_history;
+        }
+    }
+    let config = normalize_config(config);
     let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(&path, content).map_err(|e| e.to_string())
 }
@@ -770,7 +785,10 @@ async fn list_git_branches(repo_path: String) -> Result<Vec<GitBranchOption>, St
 }
 
 #[tauri::command]
-async fn get_last_commit(repo_path: String, branch: Option<String>) -> Result<LastCommitInfo, String> {
+async fn get_last_commit(
+    repo_path: String,
+    branch: Option<String>,
+) -> Result<LastCommitInfo, String> {
     let repo_path = PathBuf::from(repo_path);
     if !repo_path.is_dir() {
         return Err(format!("仓库路径不是目录: {}", repo_path.display()));
@@ -786,12 +804,7 @@ async fn get_last_commit(repo_path: String, branch: Option<String>) -> Result<La
         };
         let output = git_output(
             &repo_root,
-            &[
-                "log",
-                "-1",
-                "--format=%H%n%s%n%an%n%ai",
-                &rev,
-            ],
+            &["log", "-1", "--format=%H%n%s%n%an%n%ai", &rev],
         )?;
         let lines: Vec<&str> = output.lines().collect();
         if lines.len() < 4 {
@@ -840,8 +853,13 @@ fn remote_url_to_commit_url(remote_url: &str, commit_hash: &str) -> Option<Strin
 
     // 处理 HTTPS 格式: https://gitee.com/user/repo.git
     if url.starts_with("https://") || url.starts_with("http://") {
-        let without_protocol = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://"))?;
-        return Some(format!("https://{}/commit/{}", without_protocol, commit_hash));
+        let without_protocol = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))?;
+        return Some(format!(
+            "https://{}/commit/{}",
+            without_protocol, commit_hash
+        ));
     }
 
     None
@@ -873,13 +891,11 @@ async fn get_commit_authors(
         };
 
         // 获取所有提交的作者信息
-        let output = git_output(
-            &repo_root,
-            &["log", "--format=%an", &rev],
-        )?;
+        let output = git_output(&repo_root, &["log", "--format=%an", &rev])?;
 
         // 统计每个作者的提交次数
-        let mut author_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut author_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
         for line in output.lines() {
             let author = line.trim().to_string();
             if !author.is_empty() {
@@ -981,14 +997,18 @@ async fn get_commit_list(
             let author = chunk[2].to_string();
             let date_str = chunk[3].to_string();
 
-            let formatted_date = chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
-                .map(|dt| {
-                    let local: chrono::DateTime<chrono::Local> = dt.with_timezone(&chrono::Local);
-                    local.format("%Y-%m-%d %H:%M:%S").to_string()
-                })
-                .unwrap_or(date_str);
+            let formatted_date =
+                chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
+                    .map(|dt| {
+                        let local: chrono::DateTime<chrono::Local> =
+                            dt.with_timezone(&chrono::Local);
+                        local.format("%Y-%m-%d %H:%M:%S").to_string()
+                    })
+                    .unwrap_or(date_str);
 
-            let url = remote_url.as_ref().and_then(|u| remote_url_to_commit_url(u, &hash));
+            let url = remote_url
+                .as_ref()
+                .and_then(|u| remote_url_to_commit_url(u, &hash));
 
             commits.push(CommitInfo {
                 hash,
@@ -1012,10 +1032,7 @@ async fn get_commit_list(
 }
 
 #[tauri::command]
-async fn save_build_record(
-    app: tauri::AppHandle,
-    record: BuildRecord,
-) -> Result<(), String> {
+async fn save_build_record(_app: tauri::AppHandle, record: BuildRecord) -> Result<(), String> {
     let mut config = load_config()?;
     config.build_history.insert(0, record);
     // 最多保留10条记录
@@ -1065,25 +1082,29 @@ fn copy_artifact_to_output_internal(src: &Path, dst_dir: &Path) -> Result<String
 }
 
 #[tauri::command]
-async fn copy_artifact_to_output(artifact_path: String, output_dir: String) -> Result<String, String> {
+async fn copy_artifact_to_output(
+    artifact_path: String,
+    output_dir: String,
+) -> Result<String, String> {
     let src = PathBuf::from(&artifact_path);
     let dst_dir = PathBuf::from(&output_dir);
     copy_artifact_to_output_internal(&src, &dst_dir)
 }
 
 #[tauri::command]
-async fn list_npm_scripts(repo_path: String, frontend_dir: Option<String>) -> Result<Vec<String>, String> {
+async fn list_npm_scripts(
+    repo_path: String,
+    frontend_dir: Option<String>,
+) -> Result<Vec<String>, String> {
     let repo_path = PathBuf::from(repo_path);
     if !repo_path.is_dir() {
         return Err(format!("仓库路径不是目录: {}", repo_path.display()));
     }
 
     let worktree_path = create_temp_worktree_path()?;
-    let repo_root = tauri::async_runtime::spawn_blocking(move || {
-        repo_root_for(&repo_path)
-    })
-    .await
-    .map_err(|e| format!("读取仓库线程异常: {}", e))??;
+    let repo_root = tauri::async_runtime::spawn_blocking(move || repo_root_for(&repo_path))
+        .await
+        .map_err(|e| format!("读取仓库线程异常: {}", e))??;
 
     // 创建临时 worktree 来读取 package.json
     let branch = "HEAD";
@@ -1155,9 +1176,7 @@ async fn detect_frontend_dir(repo_path: String) -> Result<Option<String>, String
     }
 
     // 常见前端目录名，按优先级排序
-    let candidates = [
-        "frontend", "front-end", "web", "ui", "client", "app",
-    ];
+    let candidates = ["frontend", "front-end", "web", "ui", "client", "app"];
 
     // 搜索一级子目录
     if let Ok(entries) = fs::read_dir(&repo_path) {
@@ -1402,8 +1421,8 @@ async fn package_from_branch(
 
     let worktree_for_build = actual_build_path.clone();
     let user_build_script = build_script.clone();
-    let build_result =
-        tauri::async_runtime::spawn_blocking(move || -> Result<(PathBuf, String, Vec<String>), String> {
+    let build_result = tauri::async_runtime::spawn_blocking(
+        move || -> Result<(PathBuf, String, Vec<String>), String> {
             let mut logs = Vec::new();
             let build_script_used;
 
@@ -1418,11 +1437,7 @@ async fn package_from_branch(
                         }
                     }
                     build_script_used = format!("mvn {}", mvn_args.join(" "));
-                    logs.push(run_command(
-                        &worktree_for_build,
-                        "mvn",
-                        &mvn_args,
-                    )?);
+                    logs.push(run_command(&worktree_for_build, "mvn", &mvn_args)?);
                     let artifact_path = find_maven_artifact(&worktree_for_build)?;
                     Ok((artifact_path, build_script_used, logs))
                 }
@@ -1465,14 +1480,19 @@ async fn package_from_branch(
                         detect_npm_build_script(&worktree_for_build)?
                     };
                     build_script_used = format!("npm run {}", script_name);
-                    logs.push(run_command(&worktree_for_build, "npm", &["run", &script_name])?);
+                    logs.push(run_command(
+                        &worktree_for_build,
+                        "npm",
+                        &["run", &script_name],
+                    )?);
                     let artifact_path = find_npm_artifact(&worktree_for_build)?;
                     Ok((artifact_path, build_script_used, logs))
                 }
             }
-        })
-        .await
-        .map_err(|e| format!("打包线程异常: {}", e))?;
+        },
+    )
+    .await
+    .map_err(|e| format!("打包线程异常: {}", e))?;
 
     let (artifact_path, build_script, logs) = build_result?;
 
@@ -1492,10 +1512,14 @@ async fn package_from_branch(
         .join("\n\n");
 
     // 保存构建记录
-    let record_id = format!("{}-{}", std::process::id(), std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis());
+    let record_id = format!(
+        "{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let log_summary = log.lines().take(3).collect::<Vec<_>>().join(" ");
     let duration_ms = 0; // TODO: 实际计算耗时
@@ -1608,7 +1632,9 @@ async fn detect_spring_profiles(repo_path: String, branch: String) -> Result<Vec
             if !profile.is_empty()
                 && !profile.contains('/')
                 && !profile.contains('\\')
-                && profile.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                && profile
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
                 && !profiles.contains(&profile.to_string())
             {
                 profiles.push(profile.to_string());
