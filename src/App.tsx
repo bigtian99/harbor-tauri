@@ -3,8 +3,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Container, Upload, Settings, Rocket, Package, FileText, CheckCircle, Copy, AlertCircle, Loader2, Eye, EyeOff, GitBranch, FolderOpen, ExternalLink } from "lucide-react";
+import {
+  Container, Upload, Settings, Rocket, Package, FileText, CheckCircle, Copy,
+  AlertCircle, Loader2, Eye, EyeOff, GitBranch, FolderOpen, ExternalLink,
+  History, List, Pin, Search, User, Folder, BookOpen, BookMarked, Trash2,
+  ChevronLeft, ChevronRight, Archive
+} from "lucide-react";
 import { SearchableDropdown } from "./components/SearchableDropdown";
+import { Modal } from "./components/Modal";
 import "./App.css";
 
 const DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE = `FROM {{BASE_IMAGE}}
@@ -68,6 +74,10 @@ interface HarborConfig {
   repo_path_history: string[];
   npm_package_manager: string;
   npm_registry: string;
+  // 打包产物输出目录
+  artifact_output_dir: string;
+  // 历史打包记录
+  build_history: BuildRecord[];
 }
 
 interface PackageFromBranchResult {
@@ -88,6 +98,43 @@ interface LastCommitInfo {
   author: string;
   date: string;
   url: string | null;
+}
+
+interface CommitInfo {
+  hash: string;
+  short_hash: string;
+  message: string;
+  author: string;
+  date: string;
+  url: string | null;
+}
+
+interface CommitListResult {
+  commits: CommitInfo[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+interface AuthorInfo {
+  name: string;
+  count: number;
+}
+
+interface BuildRecord {
+  id: string;
+  timestamp: string;
+  repo_path: string;
+  branch: string;
+  project_type: string;
+  artifact_path: string;
+  image_name: string | null;
+  image_tag: string | null;
+  build_command: string;
+  duration_ms: number;
+  status: string;
+  log_summary: string;
+  full_log: string;
 }
 
 type TabType = "upload" | "branch" | "config";
@@ -120,6 +167,8 @@ function App() {
     repo_path_history: [],
     npm_package_manager: "npm",
     npm_registry: "",
+    artifact_output_dir: "",
+    build_history: [],
   });
   const [artifactType, setArtifactType] = useState<ArtifactType>("jar");
   const [artifactPath, setArtifactPath] = useState<string>("");
@@ -145,6 +194,18 @@ function App() {
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
   const [lastCommit, setLastCommit] = useState<LastCommitInfo | null>(null);
   const [isLoadingCommit, setIsLoadingCommit] = useState(false);
+  const [commitList, setCommitList] = useState<CommitInfo[]>([]);
+  const [commitListTotal, setCommitListTotal] = useState(0);
+  const [commitListPage, setCommitListPage] = useState(1);
+  const [isLoadingCommitList, setIsLoadingCommitList] = useState(false);
+  const [commitAuthorFilter, setCommitAuthorFilter] = useState("");
+  const [commitMessageFilter, setCommitMessageFilter] = useState("");
+  const [commitAuthors, setCommitAuthors] = useState<AuthorInfo[]>([]);
+  const [buildHistory, setBuildHistory] = useState<BuildRecord[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+  const [showCommitListModal, setShowCommitListModal] = useState(false);
+  const [showBuildHistoryModal, setShowBuildHistoryModal] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -363,6 +424,7 @@ function App() {
       // 加载最后一次提交信息
       if (firstBranch) {
         loadLastCommit(nextRepoPath, firstBranch);
+        loadCommitList(nextRepoPath, firstBranch, 1);
       }
       if (branches.length === 0) {
         setLog("⚠️ 没有读取到可用分支");
@@ -429,6 +491,103 @@ function App() {
       setLastCommit(null);
     } finally {
       setIsLoadingCommit(false);
+    }
+  }
+
+  async function loadCommitList(repoPath: string, branch: string, page: number = 1, authorFilter?: string, messageFilter?: string) {
+    if (!repoPath.trim() || !isTauriRuntime()) {
+      setCommitList([]);
+      setCommitListTotal(0);
+      return;
+    }
+    setIsLoadingCommitList(true);
+    try {
+      const result = await invoke<CommitListResult>("get_commit_list", {
+        repoPath: repoPath.trim(),
+        branch: branch.trim() || null,
+        page,
+        pageSize: 10,
+        authorFilter: authorFilter || null,
+        messageFilter: messageFilter || null,
+      });
+      setCommitList(result.commits);
+      setCommitListTotal(result.total);
+      setCommitListPage(result.page);
+    } catch (e) {
+      console.error("[Commit List] 获取失败:", e);
+      setCommitList([]);
+      setCommitListTotal(0);
+    } finally {
+      setIsLoadingCommitList(false);
+    }
+  }
+
+  async function loadCommitAuthors(repoPath: string, branch: string) {
+    if (!repoPath.trim() || !isTauriRuntime()) {
+      setCommitAuthors([]);
+      return;
+    }
+    try {
+      const authors = await invoke<AuthorInfo[]>("get_commit_authors", {
+        repoPath: repoPath.trim(),
+        branch: branch.trim() || null,
+      });
+      setCommitAuthors(authors);
+    } catch (e) {
+      console.error("[Commit Authors] 获取失败:", e);
+      setCommitAuthors([]);
+    }
+  }
+
+  async function loadBuildHistory() {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    setIsLoadingHistory(true);
+    try {
+      const history = await invoke<BuildRecord[]>("get_build_history");
+      setBuildHistory(history);
+      setConfig(prev => ({ ...prev, build_history: history }));
+    } catch (e) {
+      console.error("[Build History] 获取失败:", e);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }
+
+  async function deleteBuildRecord(recordId: string) {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    try {
+      await invoke("delete_build_record", { recordId });
+      setBuildHistory(prev => prev.filter(r => r.id !== recordId));
+    } catch (e) {
+      console.error("[Delete Record] 删除失败:", e);
+    }
+  }
+
+  async function clearBuildHistory() {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    try {
+      await invoke("clear_build_history");
+      setBuildHistory([]);
+    } catch (e) {
+      console.error("[Clear History] 清空失败:", e);
+    }
+  }
+
+  async function openArtifactPath(path: string) {
+    if (!isTauriRuntime()) {
+      setToast({ show: true, message: "浏览器环境下无法打开目录" });
+      return;
+    }
+    try {
+      await invoke("open_directory", { path });
+    } catch (e) {
+      setToast({ show: true, message: `打开失败: ${e}` });
     }
   }
 
@@ -967,9 +1126,12 @@ function App() {
                     if (value.trim() && repoPath) {
                       await loadSpringProfiles(repoPath, value);
                       loadLastCommit(repoPath, value);
+                      loadCommitList(repoPath, value, 1);
                     } else {
                       setSpringProfiles([]);
                       setLastCommit(null);
+                      setCommitList([]);
+                      setCommitListTotal(0);
                     }
                   }}
                   placeholder={isLoadingBranches ? "加载中..." : branchOptions.length === 0 ? "请先选择仓库" : "搜索或选择分支..."}
@@ -982,7 +1144,7 @@ function App() {
               {lastCommit && (
                 <div className="commit-info">
                   <div className="commit-info-header">
-                    <span className="commit-info-label">📌 最近提交</span>
+                    <span className="commit-info-label"><Pin size={14} /> 最近提交</span>
                     {isLoadingCommit && <span className="commit-loading">加载中...</span>}
                   </div>
                   <div className="commit-info-detail">
@@ -1005,6 +1167,24 @@ function App() {
                     <span className="commit-date">{lastCommit.date}</span>
                   </div>
                 </div>
+              )}
+
+              {commitListTotal > 0 && (
+                <button
+                  className="modal-trigger-btn"
+                  onClick={() => {
+                    setShowCommitListModal(true);
+                    if (commitList.length === 0) {
+                      loadCommitList(repoPath, branchName, 1);
+                    }
+                    if (commitAuthors.length === 0) {
+                      loadCommitAuthors(repoPath, branchName);
+                    }
+                  }}
+                >
+                  <List size={16} />
+                  查看提交记录 ({commitListTotal})
+                </button>
               )}
 
               {branchProjectType === "maven" && (
@@ -1167,7 +1347,7 @@ function App() {
                   </div>
                 )}
                 <div className="path-link-item">
-                  <span className="path-link-label">📦 产物目录:</span>
+                  <span className="path-link-label"><FileText size={14} /> 产物目录:</span>
                   <button
                     type="button"
                     className="path-link-btn"
@@ -1178,7 +1358,7 @@ function App() {
                 </div>
                 {worktreePath && (
                   <div className="path-link-item">
-                    <span className="path-link-label">📁 Worktree:</span>
+                    <span className="path-link-label"><FolderOpen size={14} /> Worktree:</span>
                     <button
                       type="button"
                       className="path-link-btn"
@@ -1196,6 +1376,17 @@ function App() {
                 {renderLog(log)}
               </div>
             )}
+
+            <button
+              className="modal-trigger-btn"
+              onClick={() => {
+                setShowBuildHistoryModal(true);
+                loadBuildHistory();
+              }}
+            >
+              <History size={16} />
+              历史打包记录 ({buildHistory.length})
+            </button>
           </div>
         ) : (
           <div className="config-panel">
@@ -1301,6 +1492,44 @@ function App() {
               />
             </div>
 
+            <div className="form-group">
+              <label><Archive size={14} /> 打包产物目录</label>
+              <div className="path-picker-row">
+                <input
+                  type="text"
+                  value={config.artifact_output_dir}
+                  onChange={(e) => handleConfigChange("artifact_output_dir", e.target.value)}
+                  placeholder="默认: 桌面"
+                />
+                <button
+                  type="button"
+                  className="path-picker-btn"
+                  onClick={async () => {
+                    if (!isTauriRuntime()) {
+                      setLog("⚠️ 当前是浏览器预览环境，无法打开系统目录选择器");
+                      return;
+                    }
+                    try {
+                      const selected = await open({
+                        multiple: false,
+                        directory: true,
+                        recursive: false,
+                        title: "选择打包产物输出目录",
+                      });
+                      if (selected) {
+                        handleConfigChange("artifact_output_dir", selected as string);
+                      }
+                    } catch (e) {
+                      console.error("选择目录失败:", e);
+                    }
+                  }}
+                >
+                  <FolderOpen size={16} /> 选择
+                </button>
+              </div>
+              <p className="template-hint">打包产物将自动复制到此目录，留空则不复制</p>
+            </div>
+
             <button className="save-btn" onClick={handleSaveConfig}>
               {configSaved ? (
                 <>
@@ -1334,6 +1563,221 @@ function App() {
           {toast.message}
         </div>
       )}
+
+      <Modal
+        isOpen={showCommitListModal}
+        onClose={() => {
+          setShowCommitListModal(false);
+          setCommitAuthorFilter("");
+          setCommitMessageFilter("");
+        }}
+        title="提交记录"
+        width="700px"
+        footer={
+          commitList.length > 0 || commitAuthorFilter || commitMessageFilter ? (
+            <div className="modal-pagination">
+              <button
+                className="pagination-btn"
+                disabled={commitListPage <= 1 || isLoadingCommitList}
+                onClick={() => loadCommitList(repoPath, branchName, commitListPage - 1, commitAuthorFilter, commitMessageFilter)}
+              >
+                <ChevronLeft size={14} /> 上一页
+              </button>
+              <span className="modal-pagination-info">
+                第 {commitListPage} 页 / 共 {Math.ceil(commitListTotal / 10)} 页
+              </span>
+              <button
+                className="pagination-btn"
+                disabled={commitListPage >= Math.ceil(commitListTotal / 10) || isLoadingCommitList}
+                onClick={() => loadCommitList(repoPath, branchName, commitListPage + 1, commitAuthorFilter, commitMessageFilter)}
+              >
+                下一页 <ChevronRight size={14} />
+              </button>
+            </div>
+          ) : undefined
+        }
+      >
+        <div className="commit-search-bar">
+          <div className="commit-search-input-wrapper">
+            <Search size={14} className="commit-search-icon" />
+            <input
+              type="text"
+              className="commit-search-input"
+              placeholder="搜索提交信息..."
+              value={commitMessageFilter}
+              onChange={(e) => setCommitMessageFilter(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter);
+                }
+              }}
+            />
+          </div>
+          <div className="commit-author-select-wrapper">
+            <User size={14} className="commit-author-icon" />
+            <select
+              className="commit-author-select"
+              value={commitAuthorFilter}
+              onChange={(e) => {
+                setCommitAuthorFilter(e.target.value);
+                loadCommitList(repoPath, branchName, 1, e.target.value, commitMessageFilter);
+              }}
+            >
+              <option value="">全部作者</option>
+              {commitAuthors.map((author) => (
+                <option key={author.name} value={author.name}>
+                  {author.name} ({author.count})
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            className="commit-search-btn"
+            onClick={() => loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter)}
+          >
+            搜索
+          </button>
+          {(commitAuthorFilter || commitMessageFilter) && (
+            <button
+              className="commit-search-clear"
+              onClick={() => {
+                setCommitAuthorFilter("");
+                setCommitMessageFilter("");
+                loadCommitList(repoPath, branchName, 1, "", "");
+              }}
+            >
+              清除
+            </button>
+          )}
+        </div>
+
+        {commitList.length === 0 && isLoadingCommitList ? (
+          <div className="modal-loading">加载中...</div>
+        ) : commitList.length === 0 ? (
+          <div className="modal-empty">暂无提交记录</div>
+        ) : (
+          <div className="modal-list-wrapper">
+            {isLoadingCommitList && (
+              <div className="modal-loading-inline">加载中...</div>
+            )}
+            <div className="modal-list">
+              {commitList.map((commit) => (
+                <div key={commit.hash} className="modal-list-item">
+                  <div className="modal-list-item-main">
+                    {commit.url ? (
+                      <button
+                        className="commit-hash commit-link"
+                        title={`在浏览器中打开: ${commit.hash}`}
+                        onClick={() => openUrl(commit.url!)}
+                      >
+                        {commit.short_hash}
+                        <ExternalLink size={10} />
+                      </button>
+                    ) : (
+                      <span className="commit-hash" title={commit.hash}>{commit.short_hash}</span>
+                    )}
+                    <span className="commit-message">{commit.message}</span>
+                  </div>
+                  <div className="modal-list-item-meta">
+                    <span className="commit-author">{commit.author}</span>
+                    <span className="commit-date">{commit.date}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={showBuildHistoryModal}
+        onClose={() => setShowBuildHistoryModal(false)}
+        title="历史打包记录"
+        width="800px"
+      >
+        {isLoadingHistory ? (
+          <div className="modal-loading">加载中...</div>
+        ) : buildHistory.length === 0 ? (
+          <div className="modal-empty">暂无打包记录</div>
+        ) : (
+          <>
+            <div className="modal-list">
+              {buildHistory.map((record) => (
+                <div key={record.id} className={`modal-history-item ${record.status}`}>
+                  <div className="modal-history-item-header">
+                    <span className={`history-status ${record.status}`}>
+                      {record.status === 'success' ? '✅' : '❌'}
+                    </span>
+                    <div className="modal-history-item-info">
+                      <div className="modal-history-item-row">
+                        <span className="history-time">{record.timestamp}</span>
+                        <span className="history-branch">{record.branch}</span>
+                        {record.image_name && (
+                          <span className="history-image">{record.image_name}</span>
+                        )}
+                        <span className="history-meta">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
+                      </div>
+                      <div className="modal-history-item-path">
+                        <button
+                          className="path-link-btn"
+                          onClick={() => openArtifactPath(record.artifact_path)}
+                          title={record.artifact_path}
+                        >
+                          {record.artifact_path}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="modal-history-item-actions">
+                      <button
+                        className="history-action-btn"
+                        onClick={() => openArtifactPath(record.artifact_path)}
+                        title="打开产物目录"
+                      >
+                        <Folder size={14} />
+                      </button>
+                      <button
+                        className="history-action-btn"
+                        onClick={() => setExpandedRecordId(expandedRecordId === record.id ? null : record.id)}
+                        title={expandedRecordId === record.id ? "收起日志" : "展开日志"}
+                      >
+                        {expandedRecordId === record.id ? <BookMarked size={14} /> : <BookOpen size={14} />}
+                      </button>
+                      <button
+                        className="history-action-btn delete"
+                        onClick={() => {
+                          if (confirm('确定要删除这条记录吗？')) {
+                            deleteBuildRecord(record.id);
+                          }
+                        }}
+                        title="删除记录"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {expandedRecordId === record.id && (
+                    <div className="modal-history-log">
+                      <pre>{record.full_log}</pre>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button
+                className="clear-history-btn"
+                onClick={() => {
+                  if (confirm('确定要清空所有打包历史吗？')) {
+                    clearBuildHistory();
+                  }
+                }}
+              >
+                清空历史
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

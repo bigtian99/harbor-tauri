@@ -73,7 +73,7 @@ struct DockerBuildContext {
     cleanup_dir: Option<PathBuf>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PackageProjectType {
     Maven,
     Npm,
@@ -103,6 +103,41 @@ struct LastCommitInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+struct CommitInfo {
+    hash: String,
+    short_hash: String,
+    message: String,
+    author: String,
+    date: String,
+    url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct CommitListResult {
+    commits: Vec<CommitInfo>,
+    total: usize,
+    page: usize,
+    page_size: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct BuildRecord {
+    id: String,
+    timestamp: String,
+    repo_path: String,
+    branch: String,
+    project_type: String,
+    artifact_path: String,
+    image_name: Option<String>,
+    image_tag: Option<String>,
+    build_command: String,
+    duration_ms: u64,
+    status: String,
+    log_summary: String,
+    full_log: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct HarborConfig {
     pub harbor_url: String,
@@ -126,10 +161,18 @@ pub struct HarborConfig {
     pub repo_path_history: Vec<String>,
     pub npm_package_manager: String,
     pub npm_registry: String,
+    // 打包产物输出目录
+    pub artifact_output_dir: String,
+    // 历史打包记录
+    pub build_history: Vec<BuildRecord>,
 }
 
 impl Default for HarborConfig {
     fn default() -> Self {
+        let default_output_dir = dirs::desktop_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .to_string_lossy()
+            .to_string();
         Self {
             harbor_url: "dockerhub.kubekey.local".to_string(),
             username: String::new(),
@@ -152,6 +195,10 @@ impl Default for HarborConfig {
             repo_path_history: Vec::new(),
             npm_package_manager: "npm".to_string(),
             npm_registry: String::new(),
+            // 打包产物输出目录默认为桌面
+            artifact_output_dir: default_output_dir,
+            // 历史打包记录默认为空
+            build_history: Vec::new(),
         }
     }
 }
@@ -800,6 +847,230 @@ fn remote_url_to_commit_url(remote_url: &str, commit_hash: &str) -> Option<Strin
     None
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct AuthorInfo {
+    name: String,
+    count: usize,
+}
+
+#[tauri::command]
+async fn get_commit_authors(
+    repo_path: String,
+    branch: Option<String>,
+) -> Result<Vec<AuthorInfo>, String> {
+    let repo_path = PathBuf::from(repo_path);
+    if !repo_path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+    }
+
+    let branch = branch.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+        let rev = if branch.trim().is_empty() {
+            "HEAD".to_string()
+        } else {
+            branch.trim().to_string()
+        };
+
+        // 获取所有提交的作者信息
+        let output = git_output(
+            &repo_root,
+            &["log", "--format=%an", &rev],
+        )?;
+
+        // 统计每个作者的提交次数
+        let mut author_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for line in output.lines() {
+            let author = line.trim().to_string();
+            if !author.is_empty() {
+                *author_counts.entry(author).or_insert(0) += 1;
+            }
+        }
+
+        // 转换为 AuthorInfo 列表并按提交次数排序
+        let mut authors: Vec<AuthorInfo> = author_counts
+            .into_iter()
+            .map(|(name, count)| AuthorInfo { name, count })
+            .collect();
+        authors.sort_by(|a, b| b.count.cmp(&a.count));
+
+        Ok(authors)
+    })
+    .await
+    .map_err(|e| format!("获取提交者列表线程异常: {}", e))?
+}
+
+#[tauri::command]
+async fn get_commit_list(
+    repo_path: String,
+    branch: Option<String>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+    author_filter: Option<String>,
+    message_filter: Option<String>,
+) -> Result<CommitListResult, String> {
+    let repo_path = PathBuf::from(repo_path);
+    if !repo_path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+    }
+
+    let branch = branch.unwrap_or_default();
+    let author_filter = author_filter.unwrap_or_default();
+    let message_filter = message_filter.unwrap_or_default();
+    let page = page.unwrap_or(1).max(1);
+    let page_size = page_size.unwrap_or(10).max(1).min(50);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+        let rev = if branch.trim().is_empty() {
+            "HEAD".to_string()
+        } else {
+            branch.trim().to_string()
+        };
+
+        // 构建 git log 命令，支持搜索
+        let mut git_args = vec![
+            "log".to_string(),
+            "--format=%H%n%s%n%an%n%ai".to_string(),
+            rev.clone(),
+        ];
+
+        // 添加作者过滤
+        if !author_filter.trim().is_empty() {
+            git_args.push(format!("--author={}", author_filter.trim()));
+        }
+
+        // 添加提交信息过滤
+        if !message_filter.trim().is_empty() {
+            git_args.push(format!("--grep={}", message_filter.trim()));
+        }
+
+        // 获取过滤后的总提交数
+        let mut count_args = vec!["rev-list".to_string(), "--count".to_string()];
+        count_args.extend(git_args.iter().skip(2).cloned());
+        let count_output = git_output(
+            &repo_root,
+            &count_args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        )?;
+        let total: usize = count_output.trim().parse().unwrap_or(0);
+
+        // 获取远程仓库 URL
+        let remote_url = git_output(&repo_root, &["remote", "get-url", "origin"])
+            .ok()
+            .map(|u| u.trim().to_string());
+
+        // 添加分页参数
+        let skip = (page - 1) * page_size;
+        git_args.insert(1, format!("-{}", page_size));
+        git_args.insert(2, format!("--skip={}", skip));
+
+        let output = git_output(
+            &repo_root,
+            &git_args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        )?;
+
+        let mut commits = Vec::new();
+        let lines: Vec<&str> = output.lines().collect();
+        for chunk in lines.chunks(4) {
+            if chunk.len() < 4 {
+                continue;
+            }
+            let hash = chunk[0].to_string();
+            let short_hash = hash[..8.min(hash.len())].to_string();
+            let message = chunk[1].to_string();
+            let author = chunk[2].to_string();
+            let date_str = chunk[3].to_string();
+
+            let formatted_date = chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
+                .map(|dt| {
+                    let local: chrono::DateTime<chrono::Local> = dt.with_timezone(&chrono::Local);
+                    local.format("%Y-%m-%d %H:%M:%S").to_string()
+                })
+                .unwrap_or(date_str);
+
+            let url = remote_url.as_ref().and_then(|u| remote_url_to_commit_url(u, &hash));
+
+            commits.push(CommitInfo {
+                hash,
+                short_hash,
+                message,
+                author,
+                date: formatted_date,
+                url,
+            });
+        }
+
+        Ok(CommitListResult {
+            commits,
+            total,
+            page,
+            page_size,
+        })
+    })
+    .await
+    .map_err(|e| format!("读取提交列表线程异常: {}", e))?
+}
+
+#[tauri::command]
+async fn save_build_record(
+    app: tauri::AppHandle,
+    record: BuildRecord,
+) -> Result<(), String> {
+    let mut config = load_config()?;
+    config.build_history.insert(0, record);
+    // 最多保留10条记录
+    config.build_history.truncate(10);
+    let path = get_config_path();
+    let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_build_history() -> Result<Vec<BuildRecord>, String> {
+    let config = load_config()?;
+    Ok(config.build_history)
+}
+
+#[tauri::command]
+async fn clear_build_history() -> Result<(), String> {
+    let mut config = load_config()?;
+    config.build_history.clear();
+    let path = get_config_path();
+    let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn delete_build_record(record_id: String) -> Result<(), String> {
+    let mut config = load_config()?;
+    config.build_history.retain(|r| r.id != record_id);
+    let path = get_config_path();
+    let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+fn copy_artifact_to_output_internal(src: &Path, dst_dir: &Path) -> Result<String, String> {
+    if !src.exists() {
+        return Err(format!("产物文件不存在: {}", src.display()));
+    }
+
+    fs::create_dir_all(dst_dir).map_err(|e| format!("创建输出目录失败: {}", e))?;
+
+    let file_name = src.file_name().ok_or("无法获取文件名")?;
+    let dst = dst_dir.join(file_name);
+
+    fs::copy(src, &dst).map_err(|e| format!("复制产物失败: {}", e))?;
+
+    Ok(dst.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn copy_artifact_to_output(artifact_path: String, output_dir: String) -> Result<String, String> {
+    let src = PathBuf::from(&artifact_path);
+    let dst_dir = PathBuf::from(&output_dir);
+    copy_artifact_to_output_internal(&src, &dst_dir)
+}
+
 #[tauri::command]
 async fn list_npm_scripts(repo_path: String, frontend_dir: Option<String>) -> Result<Vec<String>, String> {
     let repo_path = PathBuf::from(repo_path);
@@ -1009,9 +1280,10 @@ async fn package_from_branch(
     .ok();
 
     let worktree_path = create_temp_worktree_path()?;
+    let repo_path_clone = repo_path.clone();
     let result = tauri::async_runtime::spawn_blocking(
         move || -> Result<(PathBuf, PathBuf, String, PackageProjectType), String> {
-            let repo_root = repo_root_for(&repo_path)?;
+            let repo_root = repo_root_for(&repo_path_clone)?;
 
             git_output(&repo_root, &["fetch", "--all", "--prune"])
                 .map_err(|e| format!("更新分支代码失败: {}", e))?;
@@ -1219,12 +1491,77 @@ async fn package_from_branch(
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    Ok(PackageFromBranchResult {
+    // 保存构建记录
+    let record_id = format!("{}-{}", std::process::id(), std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+    let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let log_summary = log.lines().take(3).collect::<Vec<_>>().join(" ");
+    let duration_ms = 0; // TODO: 实际计算耗时
+
+    let record = BuildRecord {
+        id: record_id,
+        timestamp,
+        repo_path: repo_path.to_string_lossy().to_string(),
+        branch: branch.clone(),
+        project_type: format!("{:?}", project_type),
         artifact_path: artifact_path.to_string_lossy().to_string(),
+        image_name: None,
+        image_tag: None,
+        build_command: build_script.clone(),
+        duration_ms,
+        status: "success".to_string(),
+        log_summary,
+        full_log: log.clone(),
+    };
+
+    if let Err(e) = save_build_record_direct(record) {
+        eprintln!("[JarPorter] 保存构建记录失败: {}", e);
+    } else {
+        eprintln!("[JarPorter] 构建记录已保存");
+    }
+
+    // 复制产物到配置的输出目录
+    let config = load_config().unwrap_or_default();
+    let final_artifact_path = if !config.artifact_output_dir.trim().is_empty() {
+        let output_dir = PathBuf::from(&config.artifact_output_dir);
+        if output_dir.is_dir() {
+            match copy_artifact_to_output_internal(&artifact_path, &output_dir) {
+                Ok(copied_path) => {
+                    eprintln!("[JarPorter] 产物已复制到: {}", copied_path);
+                    copied_path
+                }
+                Err(e) => {
+                    eprintln!("[JarPorter] 复制产物失败: {}", e);
+                    artifact_path.to_string_lossy().to_string()
+                }
+            }
+        } else {
+            artifact_path.to_string_lossy().to_string()
+        }
+    } else {
+        artifact_path.to_string_lossy().to_string()
+    };
+
+    Ok(PackageFromBranchResult {
+        artifact_path: final_artifact_path,
         worktree_path: worktree_path.to_string_lossy().to_string(),
         build_script,
         log,
     })
+}
+
+fn save_build_record_direct(record: BuildRecord) -> Result<(), String> {
+    let mut config = load_config()?;
+    config.build_history.insert(0, record);
+    config.build_history.truncate(10);
+    let path = get_config_path();
+    let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    eprintln!("[JarPorter] 保存构建记录到: {}", path.display());
+    eprintln!("[JarPorter] 构建记录数量: {}", config.build_history.len());
+    fs::write(&path, &content).map_err(|e| format!("写入配置文件失败: {}", e))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1531,12 +1868,19 @@ pub fn run() {
             save_config,
             list_git_branches,
             get_last_commit,
+            get_commit_list,
+            get_commit_authors,
             list_npm_scripts,
             detect_frontend_dir,
             detect_spring_profiles,
             package_from_branch,
             build_and_push,
-            open_directory
+            open_directory,
+            save_build_record,
+            get_build_history,
+            clear_build_history,
+            delete_build_record,
+            copy_artifact_to_output
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
