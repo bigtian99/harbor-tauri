@@ -207,6 +207,7 @@ function App() {
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
   const [showCommitListModal, setShowCommitListModal] = useState(false);
   const [showBuildHistoryModal, setShowBuildHistoryModal] = useState(false);
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [configSaved, setConfigSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -216,6 +217,22 @@ function App() {
 
   function getPathName(path: string) {
     return path.split(/[/\\]/).filter(Boolean).pop() || path;
+  }
+
+  function getProjectName(repoPath: string) {
+    return repoPath.split('/').filter(Boolean).pop() || repoPath;
+  }
+
+  function toggleProjectCollapse(projectName: string) {
+    setCollapsedProjects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(projectName)) {
+        newSet.delete(projectName);
+      } else {
+        newSet.add(projectName);
+      }
+      return newSet;
+    });
   }
 
   function inferImageName(path: string, type: ArtifactType) {
@@ -1733,66 +1750,103 @@ function App() {
         ) : (
           <>
             <div className="modal-list">
-              {buildHistory.map((record) => (
-                <div key={record.id} className={`modal-history-item ${record.status}`}>
-                  <div className="modal-history-item-header">
-                    <span className={`history-status ${record.status}`}>
-                      {record.status === 'success' ? '✅' : '❌'}
-                    </span>
-                    <div className="modal-history-item-info">
-                      <div className="modal-history-item-row">
-                        <span className="history-time">{record.timestamp}</span>
-                        <span className="history-branch">{record.branch}</span>
-                        {record.image_name && (
-                          <span className="history-image">{record.image_name}</span>
-                        )}
-                        <span className="history-meta">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
-                      </div>
-                      <div className="modal-history-item-path">
-                        <button
-                          className="path-link-btn"
-                          onClick={() => openArtifactPath(record.artifact_path)}
-                          title={record.artifact_path}
-                        >
-                          {record.artifact_path}
-                        </button>
-                      </div>
+              {(() => {
+                // 按repo_path分组
+                const groupedRecords = buildHistory.reduce((groups, record) => {
+                  const projectName = getProjectName(record.repo_path);
+                  if (!groups[projectName]) {
+                    groups[projectName] = {
+                      repoPath: record.repo_path,
+                      records: []
+                    };
+                  }
+                  groups[projectName].records.push(record);
+                  return groups;
+                }, {} as Record<string, { repoPath: string; records: BuildRecord[] }>);
+
+                // 按项目名称排序
+                const sortedProjects = Object.entries(groupedRecords).sort(([a], [b]) => a.localeCompare(b));
+
+                return sortedProjects.map(([projectName, { repoPath, records }]) => (
+                  <div key={projectName} className="project-group">
+                    <div
+                      className="project-group-header"
+                      onClick={() => toggleProjectCollapse(projectName)}
+                    >
+                      <span className={`project-group-arrow ${collapsedProjects.has(projectName) ? 'collapsed' : ''}`}>
+                        ▼
+                      </span>
+                      <span className="project-group-name">{projectName}</span>
+                      <span className="project-group-count">({records.length} 条记录)</span>
+                      <span className="project-group-path" title={repoPath}>{repoPath}</span>
                     </div>
-                    <div className="modal-history-item-actions">
-                      <button
-                        className="history-action-btn"
-                        onClick={() => openArtifactPath(record.artifact_path)}
-                        title="打开产物目录"
-                      >
-                        <Folder size={14} />
-                      </button>
-                      <button
-                        className="history-action-btn"
-                        onClick={() => setExpandedRecordId(expandedRecordId === record.id ? null : record.id)}
-                        title={expandedRecordId === record.id ? "收起日志" : "展开日志"}
-                      >
-                        {expandedRecordId === record.id ? <BookMarked size={14} /> : <BookOpen size={14} />}
-                      </button>
-                      <button
-                        className="history-action-btn delete"
-                        onClick={() => {
-                          if (confirm('确定要删除这条记录吗？')) {
-                            deleteBuildRecord(record.id);
-                          }
-                        }}
-                        title="删除记录"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    {!collapsedProjects.has(projectName) && (
+                      <div className="project-group-items">
+                        {records.map((record) => (
+                          <div key={record.id} className={`modal-history-item ${record.status}`}>
+                            <div className="modal-history-item-header">
+                              <span className={`history-status ${record.status}`}>
+                                {record.status === 'success' ? '✅' : '❌'}
+                              </span>
+                              <div className="modal-history-item-info">
+                                <div className="modal-history-item-row">
+                                  <span className="history-time">{record.timestamp}</span>
+                                  <span className="history-branch">{record.branch}</span>
+                                  {record.image_name && (
+                                    <span className="history-image">{record.image_name}</span>
+                                  )}
+                                  <span className="history-meta">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
+                                </div>
+                                <div className="modal-history-item-path">
+                                  <button
+                                    className="path-link-btn"
+                                    onClick={() => openArtifactPath(record.artifact_path)}
+                                    title={record.artifact_path}
+                                  >
+                                    {record.artifact_path}
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="modal-history-item-actions">
+                                <button
+                                  className="history-action-btn"
+                                  onClick={() => openArtifactPath(record.artifact_path)}
+                                  title="打开产物目录"
+                                >
+                                  <Folder size={14} />
+                                </button>
+                                <button
+                                  className="history-action-btn"
+                                  onClick={() => setExpandedRecordId(expandedRecordId === record.id ? null : record.id)}
+                                  title={expandedRecordId === record.id ? "收起日志" : "展开日志"}
+                                >
+                                  {expandedRecordId === record.id ? <BookMarked size={14} /> : <BookOpen size={14} />}
+                                </button>
+                                <button
+                                  className="history-action-btn delete"
+                                  onClick={() => {
+                                    if (confirm('确定要删除这条记录吗？')) {
+                                      deleteBuildRecord(record.id);
+                                    }
+                                  }}
+                                  title="删除记录"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                            {expandedRecordId === record.id && (
+                              <div className="modal-history-log">
+                                <pre>{record.full_log}</pre>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {expandedRecordId === record.id && (
-                    <div className="modal-history-log">
-                      <pre>{record.full_log}</pre>
-                    </div>
-                  )}
-                </div>
-              ))}
+                ));
+              })()}
             </div>
             <div className="modal-footer">
               <button

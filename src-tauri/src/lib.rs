@@ -1074,7 +1074,7 @@ async fn delete_build_record(record_id: String) -> Result<(), String> {
 
 fn copy_artifact_to_output_internal(src: &Path, dst_dir: &Path) -> Result<String, String> {
     if !src.exists() {
-        return Err(format!("产物文件不存在: {}", src.display()));
+        return Err(format!("产物路径不存在: {}", src.display()));
     }
 
     fs::create_dir_all(dst_dir).map_err(|e| format!("创建输出目录失败: {}", e))?;
@@ -1082,9 +1082,30 @@ fn copy_artifact_to_output_internal(src: &Path, dst_dir: &Path) -> Result<String
     let file_name = src.file_name().ok_or("无法获取文件名")?;
     let dst = dst_dir.join(file_name);
 
-    fs::copy(src, &dst).map_err(|e| format!("复制产物失败: {}", e))?;
+    if src.is_dir() {
+        // 递归复制目录
+        copy_dir_recursive(src, &dst).map_err(|e| format!("复制产物目录失败: {}", e))?;
+    } else {
+        // 复制文件
+        fs::copy(src, &dst).map_err(|e| format!("复制产物文件失败: {}", e))?;
+    }
 
     Ok(dst.to_string_lossy().to_string())
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1294,6 +1315,9 @@ async fn package_from_branch(
     } else {
         None
     };
+
+    // 记录开始时间
+    let start_time = std::time::Instant::now();
 
     app.emit(
         "build-progress",
@@ -1517,7 +1541,36 @@ async fn package_from_branch(
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    // 保存构建记录
+    // 复制产物到配置的输出目录
+    let config = load_config().unwrap_or_default();
+    eprintln!("[JarPorter] 配置的输出目录: '{}'", config.artifact_output_dir);
+    eprintln!("[JarPorter] 原始产物路径: {}", artifact_path.display());
+
+    let final_artifact_path = if !config.artifact_output_dir.trim().is_empty() {
+        let output_dir = PathBuf::from(&config.artifact_output_dir);
+        eprintln!("[JarPorter] 目标输出目录: {}", output_dir.display());
+        // 自动创建目录（如果不存在）
+        if let Err(e) = fs::create_dir_all(&output_dir) {
+            eprintln!("[JarPorter] 创建输出目录失败: {}", e);
+            artifact_path.to_string_lossy().to_string()
+        } else {
+            match copy_artifact_to_output_internal(&artifact_path, &output_dir) {
+                Ok(copied_path) => {
+                    eprintln!("[JarPorter] ✅ 产物已复制到: {}", copied_path);
+                    copied_path
+                }
+                Err(e) => {
+                    eprintln!("[JarPorter] ❌ 复制产物失败: {}", e);
+                    artifact_path.to_string_lossy().to_string()
+                }
+            }
+        }
+    } else {
+        eprintln!("[JarPorter] 输出目录为空，跳过复制");
+        artifact_path.to_string_lossy().to_string()
+    };
+
+    // 保存构建记录（使用复制后的路径）
     let record_id = format!(
         "{}-{}",
         std::process::id(),
@@ -1528,7 +1581,7 @@ async fn package_from_branch(
     );
     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let log_summary = log.lines().take(3).collect::<Vec<_>>().join(" ");
-    let duration_ms = 0; // TODO: 实际计算耗时
+    let duration_ms = start_time.elapsed().as_millis() as u64;
 
     let record = BuildRecord {
         id: record_id,
@@ -1536,7 +1589,7 @@ async fn package_from_branch(
         repo_path: repo_path.to_string_lossy().to_string(),
         branch: branch.clone(),
         project_type: format!("{:?}", project_type),
-        artifact_path: artifact_path.to_string_lossy().to_string(),
+        artifact_path: final_artifact_path.clone(),
         image_name: None,
         image_tag: None,
         build_command: build_script.clone(),
@@ -1551,28 +1604,6 @@ async fn package_from_branch(
     } else {
         eprintln!("[JarPorter] 构建记录已保存");
     }
-
-    // 复制产物到配置的输出目录
-    let config = load_config().unwrap_or_default();
-    let final_artifact_path = if !config.artifact_output_dir.trim().is_empty() {
-        let output_dir = PathBuf::from(&config.artifact_output_dir);
-        if output_dir.is_dir() {
-            match copy_artifact_to_output_internal(&artifact_path, &output_dir) {
-                Ok(copied_path) => {
-                    eprintln!("[JarPorter] 产物已复制到: {}", copied_path);
-                    copied_path
-                }
-                Err(e) => {
-                    eprintln!("[JarPorter] 复制产物失败: {}", e);
-                    artifact_path.to_string_lossy().to_string()
-                }
-            }
-        } else {
-            artifact_path.to_string_lossy().to_string()
-        }
-    } else {
-        artifact_path.to_string_lossy().to_string()
-    };
 
     Ok(PackageFromBranchResult {
         artifact_path: final_artifact_path,
