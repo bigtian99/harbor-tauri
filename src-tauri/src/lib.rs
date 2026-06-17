@@ -328,10 +328,32 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 清理 ANSI 转义序列（颜色码等），让终端输出在日志中可读
+fn strip_ansi_codes(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' && chars.peek() == Some(&'[') {
+            // 跳过整个 ANSI 转义序列 \x1b[...m
+            chars.next(); // skip '['
+            while let Some(&c) = chars.peek() {
+                if c.is_ascii_alphabetic() {
+                    chars.next(); // skip the terminating letter
+                    break;
+                }
+                chars.next();
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
 fn command_output_text(output: &std::process::Output) -> String {
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    [stdout, stderr]
+    let stdout = strip_ansi_codes(&String::from_utf8_lossy(&output.stdout));
+    let stderr = strip_ansi_codes(&String::from_utf8_lossy(&output.stderr));
+    [stdout.trim().to_string(), stderr.trim().to_string()]
         .into_iter()
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
@@ -396,6 +418,9 @@ fn detect_npm_build_script(project_dir: &Path) -> Result<String, String> {
 
 // ── node_modules 缓存 ──────────────────────────────────────────────
 
+/// 最多保留的缓存条目数
+const MAX_CACHE_ENTRIES: usize = 5;
+
 fn npm_cache_dir() -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -421,6 +446,7 @@ fn lock_file_hash(build_dir: &Path) -> Option<String> {
 }
 
 /// 尝试从缓存恢复 node_modules，返回 true 表示成功
+/// 优先使用硬链接 (cp -al)，同文件系统下几乎瞬时完成（0.1s vs 30s）
 fn try_restore_node_modules(build_dir: &Path, cache_key: &str) -> Result<bool, String> {
     let cache_path = npm_cache_dir().join(cache_key).join("node_modules");
     let target = build_dir.join("node_modules");
@@ -434,27 +460,49 @@ fn try_restore_node_modules(build_dir: &Path, cache_key: &str) -> Result<bool, S
         fs::remove_dir_all(&target).ok();
     }
 
-    // 用 cp -a 复制（兼容跨文件系统，比硬链接可靠）
-    let output = Command::new("cp")
-        .args(["-a", cache_path.to_str().unwrap(), target.to_str().unwrap()])
+    // 优先尝试硬链接 (cp -al)，同文件系统下 100K+ 文件几乎瞬时完成
+    // npm install 对已安装的包会跳过，不修改硬链接文件；需要更新时会先删除再写入，不会污染缓存
+    let link_output = Command::new("cp")
+        .args([
+            "-al",
+            cache_path.to_str().unwrap(),
+            target.to_str().unwrap(),
+        ])
         .output()
         .map_err(|e| format!("cp 命令执行失败: {}", e))?;
 
-    if !output.status.success() {
-        return Err(format!(
-            "缓存恢复失败: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+    if !link_output.status.success() {
+        // 硬链接失败（跨文件系统），回退到复制
+        eprintln!(
+            "[JarPorter] 硬链接恢复失败，回退到复制: {}",
+            String::from_utf8_lossy(&link_output.stderr).trim()
+        );
+        let copy_output = Command::new("cp")
+            .args(["-a", cache_path.to_str().unwrap(), target.to_str().unwrap()])
+            .output()
+            .map_err(|e| format!("cp 命令执行失败: {}", e))?;
+
+        if !copy_output.status.success() {
+            return Err(format!(
+                "缓存恢复失败: {}",
+                String::from_utf8_lossy(&copy_output.stderr)
+            ));
+        }
     }
 
-    if !target.join("package.json").is_file() {
-        return Err("缓存恢复后缺少 package.json".to_string());
+    // 校验缓存恢复是否成功：检查 node_modules 是否有内容（至少一个子目录）
+    let has_content = fs::read_dir(&target)
+        .map(|mut entries| entries.next().is_some())
+        .unwrap_or(false);
+    if !has_content {
+        fs::remove_dir_all(&target).ok();
+        return Err("缓存恢复后 node_modules 为空".to_string());
     }
 
     Ok(true)
 }
 
-/// 将 node_modules 保存到缓存（先清理旧缓存）
+/// 将 node_modules 保存到缓存（LRU 策略，最多保留 MAX_CACHE_ENTRIES 个条目）
 fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
     let cache_dir = npm_cache_dir();
     let cache_base = cache_dir.join(cache_key);
@@ -465,15 +513,34 @@ fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
         return;
     }
 
-    // 清理所有旧缓存，只保留当前这一次
-    if cache_dir.is_dir() {
-        if let Ok(entries) = fs::read_dir(&cache_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() && path != cache_base {
-                    fs::remove_dir_all(&path).ok();
-                }
-            }
+    // 如果缓存已存在（相同 key），更新其修改时间即可
+    if cache_path.is_dir() {
+        // touch 更新 mtime，标记为最近使用
+        Command::new("touch").arg(&cache_base).output().ok();
+        return;
+    }
+
+    // LRU 淘汰：超过上限时删除最旧的条目
+    if let Ok(entries) = fs::read_dir(&cache_dir) {
+        let mut dirs: Vec<(std::time::SystemTime, PathBuf)> = entries
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .filter_map(|e| {
+                let mtime = e.metadata().ok()?.modified().ok()?;
+                Some((mtime, e.path()))
+            })
+            .collect();
+
+        // 按修改时间排序，最旧的在前
+        dirs.sort_by_key(|(mtime, _)| *mtime);
+
+        // 删除超出上限的旧条目
+        let to_remove = dirs
+            .len()
+            .saturating_sub(MAX_CACHE_ENTRIES.saturating_sub(1));
+        for (_, path) in dirs.iter().take(to_remove) {
+            eprintln!("[JarPorter] 淘汰旧缓存: {}", path.display());
+            fs::remove_dir_all(path).ok();
         }
     }
 
@@ -483,11 +550,31 @@ fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
     }
     fs::create_dir_all(&cache_base).ok();
 
-    // cp -a 复制
-    Command::new("cp")
-        .args(["-a", source.to_str().unwrap(), cache_path.to_str().unwrap()])
-        .output()
-        .ok();
+    // 优先硬链接，跨文件系统时回退到复制
+    let link_result = Command::new("cp")
+        .args([
+            "-al",
+            source.to_str().unwrap(),
+            cache_path.to_str().unwrap(),
+        ])
+        .output();
+
+    match link_result {
+        Ok(output) if output.status.success() => {
+            eprintln!("[JarPorter] 硬链接保存缓存成功 (hash={})", cache_key);
+        }
+        _ => {
+            // 硬链接失败，回退到复制
+            eprintln!(
+                "[JarPorter] 硬链接保存失败，回退到复制 (hash={})",
+                cache_key
+            );
+            Command::new("cp")
+                .args(["-a", source.to_str().unwrap(), cache_path.to_str().unwrap()])
+                .output()
+                .ok();
+        }
+    }
 }
 
 fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<String, String> {
@@ -1072,6 +1159,21 @@ async fn delete_build_record(record_id: String) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+/// 更新最新一条构建记录的镜像信息（推送完成后调用）
+#[tauri::command]
+async fn update_build_record_image(image_name: String, image_tag: String) -> Result<(), String> {
+    let mut config = load_config()?;
+    if let Some(record) = config.build_history.first_mut() {
+        record.image_name = Some(image_name);
+        record.image_tag = Some(image_tag);
+        record.status = "pushed".to_string();
+        let path = get_config_path();
+        let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+        fs::write(&path, content).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn copy_artifact_to_output_internal(src: &Path, dst_dir: &Path) -> Result<String, String> {
     if !src.exists() {
         return Err(format!("产物路径不存在: {}", src.display()));
@@ -1280,7 +1382,6 @@ async fn open_directory(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-#[allow(unused_variables)]
 async fn package_from_branch(
     app: tauri::AppHandle,
     repo_path: String,
@@ -1305,6 +1406,41 @@ async fn package_from_branch(
     // 每次打包前清理之前的临时 worktree/build 残留目录
     cleanup_old_temp_dirs();
 
+    // 提前加载配置，获取输出目录和包管理器设置
+    let config = load_config().unwrap_or_default();
+
+    // 提取仓库名，用于组织输出目录结构
+    let repo_name = repo_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // 生成时间戳，用于输出目录命名
+    let build_timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let branch_slug = branch.replace('/', "_");
+
+    // 确定基础输出目录：优先使用用户配置，为空则回退到桌面
+    let output_base = if !config.artifact_output_dir.trim().is_empty() {
+        PathBuf::from(&config.artifact_output_dir)
+    } else {
+        dirs::desktop_dir().unwrap_or_else(|| std::env::temp_dir())
+    };
+
+    // worktree 放在输出目录下（和产物同一目录，构建完清理只留产物）
+    let worktree_path = output_base
+        .join(&repo_name)
+        .join(format!("_{}_{}", &branch_slug, &build_timestamp));
+
+    // 确保父目录存在
+    fs::create_dir_all(worktree_path.parent().unwrap())
+        .map_err(|e| format!("创建 worktree 父目录失败: {}", e))?;
+
+    eprintln!(
+        "[JarPorter] Worktree 路径: {} (输出目录: {})",
+        worktree_path.display(),
+        output_base.display()
+    );
+
     // 处理前端子目录路径
     let build_dir = if let Some(ref dir) = frontend_dir {
         if !dir.trim().is_empty() {
@@ -1328,33 +1464,31 @@ async fn package_from_branch(
     )
     .ok();
 
-    let worktree_path = create_temp_worktree_path()?;
     let repo_path_clone = repo_path.clone();
-    let result = tauri::async_runtime::spawn_blocking(
-        move || -> Result<(PathBuf, PathBuf, String, PackageProjectType), String> {
-            let repo_root = repo_root_for(&repo_path_clone)?;
+    let branch_for_git = branch.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<PathBuf, String> {
+        let repo_root = repo_root_for(&repo_path_clone)?;
 
-            git_output(&repo_root, &["fetch", "--all", "--prune"])
-                .map_err(|e| format!("更新分支代码失败: {}", e))?;
+        git_output(&repo_root, &["fetch", "--all", "--prune"])
+            .map_err(|e| format!("更新分支代码失败: {}", e))?;
 
-            git_output(
-                &repo_root,
-                &[
-                    "rev-parse",
-                    "--verify",
-                    "--quiet",
-                    &format!("{}^{{commit}}", branch),
-                ],
-            )
-            .map_err(|_| format!("目标分支或引用不存在: {}", branch))?;
+        git_output(
+            &repo_root,
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("{}^{{commit}}", branch_for_git),
+            ],
+        )
+        .map_err(|_| format!("目标分支或引用不存在: {}", branch_for_git))?;
 
-            Ok((repo_root, worktree_path, branch, project_type))
-        },
-    )
+        Ok(repo_root)
+    })
     .await
     .map_err(|e| format!("Git 校验线程异常: {}", e))?;
 
-    let (repo_root, worktree_path, branch, project_type) = result?;
+    let repo_root = result?;
 
     app.emit(
         "build-progress",
@@ -1451,6 +1585,19 @@ async fn package_from_branch(
 
     let worktree_for_build = actual_build_path.clone();
     let user_build_script = build_script.clone();
+    // 使用用户指定的包管理器，默认 npm
+    let pm = package_manager
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| {
+            if config.npm_package_manager.trim().is_empty() {
+                "npm".to_string()
+            } else {
+                config.npm_package_manager.clone()
+            }
+        });
+    let npm_registry = config.npm_registry.clone();
+    let app_for_build = app.clone();
     let build_result = tauri::async_runtime::spawn_blocking(
         move || -> Result<(PathBuf, String, Vec<String>), String> {
             let mut logs = Vec::new();
@@ -1476,25 +1623,81 @@ async fn package_from_branch(
                     let cached = if let Some(key) = lock_file_hash(&worktree_for_build) {
                         match try_restore_node_modules(&worktree_for_build, &key) {
                             Ok(true) => {
-                                logs.push(format!("✅ 命中缓存 (hash={})，跳过 npm install", key));
+                                let msg = format!("✅ 命中缓存 (hash={})，跳过 {} install", &key[..12], pm);
+                                app_for_build.emit(
+                                    "build-progress",
+                                    serde_json::json!({
+                                        "percent": 52,
+                                        "message": &msg
+                                    }),
+                                ).ok();
+                                logs.push(msg);
                                 true
                             }
                             Ok(false) => {
+                                let msg = format!("❓ 缓存未命中 (hash={})，执行 {} install...", &key[..12], pm);
+                                app_for_build.emit(
+                                    "build-progress",
+                                    serde_json::json!({
+                                        "percent": 52,
+                                        "message": &msg
+                                    }),
+                                ).ok();
                                 logs.push(format!("cache miss (hash={})", key));
                                 false
                             }
                             Err(e) => {
-                                logs.push(format!("⚠️ 缓存恢复失败: {}，重新 install", e));
+                                let msg = format!("⚠️ 缓存恢复失败: {}，重新 install", e);
+                                app_for_build.emit(
+                                    "build-progress",
+                                    serde_json::json!({
+                                        "percent": 52,
+                                        "message": &msg
+                                    }),
+                                ).ok();
+                                logs.push(msg);
                                 false
                             }
                         }
                     } else {
+                        let msg = "📦 未找到 lock 文件，执行 install...".to_string();
+                        app_for_build.emit(
+                            "build-progress",
+                            serde_json::json!({
+                                "percent": 52,
+                                "message": &msg
+                            }),
+                        ).ok();
                         logs.push("未找到 lock 文件，跳过缓存".to_string());
                         false
                     };
                     if !cached {
-                        logs.push(run_command(&worktree_for_build, "npm", &["install"])?);
+                        // npm install 进度
+                        app_for_build.emit(
+                            "build-progress",
+                            serde_json::json!({
+                                "percent": 55,
+                                "message": format!("📦 执行 {} install（首次下载依赖，可能需要几分钟）...", pm)
+                            }),
+                        ).ok();
+                        // 支持自定义 registry
+                        if npm_registry.trim().is_empty() {
+                            logs.push(run_command(&worktree_for_build, &pm, &["install"])?);
+                        } else {
+                            logs.push(run_command(
+                                &worktree_for_build,
+                                &pm,
+                                &["install", "--registry", npm_registry.trim()],
+                            )?);
+                        }
                         if let Some(key) = lock_file_hash(&worktree_for_build) {
+                            app_for_build.emit(
+                                "build-progress",
+                                serde_json::json!({
+                                    "percent": 60,
+                                    "message": format!("💾 保存 node_modules 到缓存 (hash={})...", &key[..12])
+                                }),
+                            ).ok();
                             save_node_modules_to_cache(&worktree_for_build, &key);
                             logs.push(format!("💾 node_modules 已缓存 (hash={})", key));
                         }
@@ -1509,10 +1712,17 @@ async fn package_from_branch(
                     } else {
                         detect_npm_build_script(&worktree_for_build)?
                     };
-                    build_script_used = format!("npm run {}", script_name);
+                    build_script_used = format!("{} run {}", pm, script_name);
+                    app_for_build.emit(
+                        "build-progress",
+                        serde_json::json!({
+                            "percent": 65,
+                            "message": format!("🔨 执行构建: {} run {}", pm, script_name)
+                        }),
+                    ).ok();
                     logs.push(run_command(
                         &worktree_for_build,
-                        "npm",
+                        &pm,
                         &["run", &script_name],
                     )?);
                     let artifact_path = find_npm_artifact(&worktree_for_build)?;
@@ -1529,8 +1739,8 @@ async fn package_from_branch(
     app.emit(
         "build-progress",
         serde_json::json!({
-            "percent": 100,
-            "message": "✅ 分支打包完成，临时 worktree 已保留"
+            "percent": 85,
+            "message": "📋 复制产物到输出目录..."
         }),
     )
     .ok();
@@ -1541,36 +1751,49 @@ async fn package_from_branch(
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    // 复制产物到配置的输出目录
-    let config = load_config().unwrap_or_default();
-    eprintln!("[JarPorter] 配置的输出目录: '{}'", config.artifact_output_dir);
-    eprintln!("[JarPorter] 原始产物路径: {}", artifact_path.display());
+    // 产物输出目录 — worktree 同级的干净目录
+    // worktree:  <output_base>/<repo_name>/_{branch}_{timestamp}/   (构建后清理)
+    // artifact: <output_base>/<repo_name>/<branch>_<timestamp>/     (最终输出)
+    let artifact_dir = output_base
+        .join(&repo_name)
+        .join(format!("{}_{}", &branch_slug, &build_timestamp));
 
-    let final_artifact_path = if !config.artifact_output_dir.trim().is_empty() {
-        let output_dir = PathBuf::from(&config.artifact_output_dir);
-        eprintln!("[JarPorter] 目标输出目录: {}", output_dir.display());
-        // 自动创建目录（如果不存在）
-        if let Err(e) = fs::create_dir_all(&output_dir) {
-            eprintln!("[JarPorter] 创建输出目录失败: {}", e);
-            artifact_path.to_string_lossy().to_string()
-        } else {
-            match copy_artifact_to_output_internal(&artifact_path, &output_dir) {
-                Ok(copied_path) => {
-                    eprintln!("[JarPorter] ✅ 产物已复制到: {}", copied_path);
-                    copied_path
-                }
-                Err(e) => {
-                    eprintln!("[JarPorter] ❌ 复制产物失败: {}", e);
-                    artifact_path.to_string_lossy().to_string()
-                }
-            }
+    // 复制产物到输出目录
+    let final_artifact_path = match copy_artifact_to_output_internal(&artifact_path, &artifact_dir)
+    {
+        Ok(copied_path) => {
+            eprintln!("[JarPorter] ✅ 产物已输出到: {}", copied_path);
+            copied_path
         }
-    } else {
-        eprintln!("[JarPorter] 输出目录为空，跳过复制");
-        artifact_path.to_string_lossy().to_string()
+        Err(e) => {
+            eprintln!("[JarPorter] ❌ 产物复制失败: {}", e);
+            artifact_path.to_string_lossy().to_string()
+        }
     };
 
-    // 保存构建记录（使用复制后的路径）
+    // 清理 worktree — 只保留产物，删除源码
+    app.emit(
+        "build-progress",
+        serde_json::json!({
+            "percent": 95,
+            "message": "🧹 清理 worktree 源码..."
+        }),
+    )
+    .ok();
+
+    cleanup_worktree(&repo_root, &worktree_path);
+    eprintln!("[JarPorter] Worktree 已清理: {}", worktree_path.display());
+
+    app.emit(
+        "build-progress",
+        serde_json::json!({
+            "percent": 100,
+            "message": "✅ 打包完成！产物已输出，worktree 已清理"
+        }),
+    )
+    .ok();
+
+    // 保存构建记录
     let record_id = format!(
         "{}-{}",
         std::process::id(),
@@ -1607,7 +1830,8 @@ async fn package_from_branch(
 
     Ok(PackageFromBranchResult {
         artifact_path: final_artifact_path,
-        worktree_path: worktree_path.to_string_lossy().to_string(),
+        // 返回产物输出目录（worktree 已清理）
+        worktree_path: artifact_dir.to_string_lossy().to_string(),
         build_script,
         log,
     })
@@ -1857,12 +2081,12 @@ async fn build_and_push(
         return Err(format!("docker push失败:\n{}", stderr));
     }
 
-    // 步骤5: 推送成功后删除本地镜像，避免本机堆积历史 tag。
+    // 步骤5: 推送成功后删除本地镜像，避免本机堆积历史 tag（失败不影响结果）
     app.emit(
         "build-progress",
         serde_json::json!({
             "percent": 92,
-            "message": "🧹 删除本地 Docker 镜像..."
+            "message": "🧹 清理本地镜像缓存..."
         }),
     )
     .ok();
@@ -1875,49 +2099,29 @@ async fn build_and_push(
     })
     .await;
 
-    let cleanup_warning = match remove_result {
-        Ok(Ok(output)) if output.status.success() => None,
-        Ok(Ok(output)) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            let details = [stdout, stderr]
-                .into_iter()
-                .filter(|part| !part.is_empty())
-                .collect::<Vec<_>>()
-                .join("\n");
-            Some(if details.is_empty() {
-                "⚠️ 本地镜像删除失败: docker rmi 返回非 0 状态".to_string()
-            } else {
-                format!("⚠️ 本地镜像删除失败:\n{}", details)
-            })
+    // docker rmi 失败是常见情况（多 tag 共享、被其他镜像依赖等），不影响推送结果
+    match remove_result {
+        Ok(Ok(output)) if output.status.success() => {
+            eprintln!("[JarPorter] 本地镜像已删除: {}", full_image);
         }
-        Ok(Err(error)) => Some(format!("⚠️ 执行 docker rmi 失败: {}", error)),
-        Err(error) => Some(format!("⚠️ 删除本地镜像线程异常: {}", error)),
-    };
+        _ => {
+            eprintln!(
+                "[JarPorter] 本地镜像清理跳过（不影响推送结果）: {}",
+                full_image
+            );
+        }
+    }
 
     app.emit(
         "build-progress",
         serde_json::json!({
             "percent": 100,
-            "message": if cleanup_warning.is_some() {
-                "⚠️ 推送完成，本地镜像清理失败"
-            } else {
-                "✅ 推送完成，本地镜像已删除!"
-            }
+            "message": "✅ 推送完成!"
         }),
     )
     .ok();
 
-    match cleanup_warning {
-        Some(warning) => Ok(format!(
-            "✅ 镜像推送成功!\n\n完整镜像: {}\n\n{}",
-            full_image, warning
-        )),
-        None => Ok(format!(
-            "✅ 镜像推送成功!\n\n完整镜像: {}\n本地镜像已删除: {}",
-            full_image, full_image
-        )),
-    }
+    Ok(format!("✅ 镜像推送成功!\n\n完整镜像: {}", full_image))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1943,6 +2147,7 @@ pub fn run() {
             get_build_history,
             clear_build_history,
             delete_build_record,
+            update_build_record_image,
             copy_artifact_to_output
         ])
         .run(tauri::generate_context!())

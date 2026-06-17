@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -208,12 +208,43 @@ function App() {
   const [showCommitListModal, setShowCommitListModal] = useState(false);
   const [showBuildHistoryModal, setShowBuildHistoryModal] = useState(false);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [historySearch, setHistorySearch] = useState("");
   const [configSaved, setConfigSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
+  const [showBuildLog, setShowBuildLog] = useState(false);
+
+  // 构建日志自动展开/收起：错误自动展开，清空自动收起
+  useEffect(() => {
+    if (!log) {
+      setShowBuildLog(false);
+    } else if (log.includes("❌")) {
+      setShowBuildLog(true);
+    }
+  }, [log]);
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
   const [progressMessage, setProgressMessage] = useState("");
+  const toastTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  function showToast(message: string, duration = 2000) {
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    setToast({ show: true, message });
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast({ show: false, message: "" });
+      toastTimerRef.current = null;
+    }, duration);
+  }
 
   function getPathName(path: string) {
     return path.split(/[/\\]/).filter(Boolean).pop() || path;
@@ -600,13 +631,13 @@ function App() {
 
   async function openArtifactPath(path: string) {
     if (!isTauriRuntime()) {
-      setToast({ show: true, message: "浏览器环境下无法打开目录" });
+      showToast("浏览器环境下无法打开目录");
       return;
     }
     try {
       await invoke("open_directory", { path });
     } catch (e) {
-      setToast({ show: true, message: `打开失败: ${e}` });
+      showToast(`打开失败: ${e}`);
     }
   }
 
@@ -741,7 +772,7 @@ function App() {
         // 只有 NPM 项目才传递 frontendDir，Maven 项目忽略它
         frontendDir: branchProjectType === "npm" ? (frontendDir.trim() || null) : null,
         buildScript: branchProjectType === "npm" ? selectedBuildScript : null,
-        packageManager: null,
+        packageManager: config.npm_package_manager || "npm",
         springProfile: branchProjectType === "maven" && springProfile.trim() ? springProfile.trim() : null,
       });
       setArtifactPath(result.artifact_path);
@@ -751,14 +782,15 @@ function App() {
       await loadBuildHistory();
       setActiveTab("branch");
 
-      // 如果勾选了自动推送镜像，且是 Maven 项目，自动调用 build_and_push
-      if (autoPushImage && branchProjectType === "maven") {
+      // 如果勾选了自动推送镜像，自动调用 build_and_push
+      if (autoPushImage) {
         // 检查 Harbor 配置是否完整
         if (!config.harbor_url || !config.username || !config.password || !config.project) {
           setLog(`⚠️ 分支打包成功，但 Harbor 配置不完整，无法推送镜像\n\n请在"推送配置" tab 中完善 Harbor 配置后重试\n\n${result.log}`);
         } else {
+          const artifactType = branchProjectType === "npm" ? "frontend_dist" : "jar";
           // 验证镜像名称是否已设置
-          const finalImageName = imageName || inferImageName(result.artifact_path, "jar");
+          const finalImageName = imageName || inferImageName(result.artifact_path, artifactType);
           if (!finalImageName.trim()) {
             setLog(`⚠️ 分支打包成功，但未设置镜像名称，跳过推送\n\n${result.log}`);
           } else {
@@ -769,12 +801,23 @@ function App() {
                 jarPath: result.artifact_path,
                 imageName: finalImageName,
                 imageTag: imageTag || "latest",
-                artifactType: "jar",
+                artifactType,
               });
               // 从推送结果中提取完整镜像地址
               const imageMatch = pushResult.match(/完整镜像:\s*(.+)/);
               if (imageMatch) {
-                setBranchFullImage(imageMatch[1].trim());
+                const fullImage = imageMatch[1].trim();
+                setBranchFullImage(fullImage);
+                // 更新构建记录，保存镜像信息
+                try {
+                  await invoke("update_build_record_image", {
+                    imageName: finalImageName,
+                    imageTag: fullImage,
+                  });
+                  await loadBuildHistory();
+                } catch {
+                  // 更新记录失败不影响主流程
+                }
               }
               setLog(`✅ 分支打包并推送镜像完成\n\n${result.log}\n\n📦 镜像推送: ${pushResult}`);
               setActiveTab("branch");
@@ -820,13 +863,13 @@ function App() {
 
   async function handleOpenDirectory(path: string) {
     if (!isTauriRuntime()) {
-      setToast({ show: true, message: "浏览器环境下无法打开目录" });
+      showToast("浏览器环境下无法打开目录");
       return;
     }
     try {
       await invoke("open_directory", { path });
     } catch (e) {
-      setToast({ show: true, message: `打开目录失败: ${e}` });
+      showToast(`打开目录失败: ${e}`);
     }
   }
 
@@ -834,10 +877,9 @@ function App() {
     try {
       await navigator.clipboard.writeText(imageUrl);
       setCopied(true);
-      setToast({ show: true, message: "镜像地址已复制到剪贴板" });
+      showToast("镜像地址已复制到剪贴板");
       setTimeout(() => {
         setCopied(false);
-        setToast({ show: false, message: "" });
       }, 2000);
     } catch (e) {
       console.error("复制失败:", e);
@@ -1043,8 +1085,21 @@ function App() {
             )}
 
             {log && (
-              <div className={`log-panel ${log.includes("✅") ? "success" : ""}`}>
-                {renderLog(log)}
+              <div className="log-section">
+                <button
+                  type="button"
+                  className="log-toggle-btn"
+                  onClick={() => setShowBuildLog(!showBuildLog)}
+                  title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
+                >
+                  {showBuildLog ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
+                </button>
+                {showBuildLog && (
+                  <div className={`log-panel ${log.includes("✅") ? "success" : ""}`}>
+                    {renderLog(log)}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1406,7 +1461,7 @@ function App() {
                 </div>
                 {worktreePath && (
                   <div className="path-link-item">
-                    <span className="path-link-label"><FolderOpen size={14} /> Worktree:</span>
+                    <span className="path-link-label"><FolderOpen size={14} /> 输出目录:</span>
                     <button
                       type="button"
                       className="path-link-btn"
@@ -1420,8 +1475,21 @@ function App() {
             )}
 
             {log && (
-              <div className={`log-panel ${log.includes("✅") ? "success" : ""}`}>
-                {renderLog(log)}
+              <div className="log-section">
+                <button
+                  type="button"
+                  className="log-toggle-btn"
+                  onClick={() => setShowBuildLog(!showBuildLog)}
+                  title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
+                >
+                  {showBuildLog ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
+                </button>
+                {showBuildLog && (
+                  <div className={`log-panel ${log.includes("✅") ? "success" : ""}`}>
+                    {renderLog(log)}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1739,7 +1807,7 @@ function App() {
 
       <Modal
         isOpen={showBuildHistoryModal}
-        onClose={() => setShowBuildHistoryModal(false)}
+        onClose={() => { setShowBuildHistoryModal(false); setHistorySearch(""); }}
         title="历史打包记录"
         width="800px"
       >
@@ -1749,10 +1817,30 @@ function App() {
           <div className="modal-empty">暂无打包记录</div>
         ) : (
           <>
+            {/* 搜索栏 — 支持搜索 Docker 镜像地址、分支名、项目名 */}
+            <div className="history-search-bar">
+              <Search size={14} className="history-search-icon" />
+              <input
+                type="text"
+                className="history-search-input"
+                placeholder="搜索 Docker 镜像地址 / 分支名 / 项目名..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+              />
+              {historySearch && (
+                <button
+                  className="history-search-clear"
+                  onClick={() => setHistorySearch("")}
+                  title="清除搜索"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <div className="modal-list">
               {(() => {
                 // 按repo_path分组
-                const groupedRecords = buildHistory.reduce((groups, record) => {
+                let groupedRecords = buildHistory.reduce((groups, record) => {
                   const projectName = getProjectName(record.repo_path);
                   if (!groups[projectName]) {
                     groups[projectName] = {
@@ -1764,8 +1852,29 @@ function App() {
                   return groups;
                 }, {} as Record<string, { repoPath: string; records: BuildRecord[] }>);
 
+                // 搜索过滤：匹配镜像地址、分支名、项目名、仓库路径
+                const searchLower = historySearch.trim().toLowerCase();
+                if (searchLower) {
+                  const filtered: Record<string, { repoPath: string; records: BuildRecord[] }> = {};
+                  for (const [projectName, group] of Object.entries(groupedRecords)) {
+                    const matchedRecords = group.records.filter(r =>
+                      r.image_tag?.toLowerCase().includes(searchLower) ||
+                      r.image_name?.toLowerCase().includes(searchLower) ||
+                      r.branch.toLowerCase().includes(searchLower) ||
+                      r.repo_path.toLowerCase().includes(searchLower) ||
+                      projectName.toLowerCase().includes(searchLower)
+                    );
+                    if (matchedRecords.length > 0) {
+                      filtered[projectName] = { ...group, records: matchedRecords };
+                    }
+                  }
+                  groupedRecords = filtered;
+                }
+
                 // 按项目名称排序
                 const sortedProjects = Object.entries(groupedRecords).sort(([a], [b]) => a.localeCompare(b));
+                // 搜索时自动展开所有匹配的项目
+                const isSearching = searchLower.length > 0;
 
                 return sortedProjects.map(([projectName, { repoPath, records }]) => (
                   <div key={projectName} className="project-group">
@@ -1780,20 +1889,30 @@ function App() {
                       <span className="project-group-count">({records.length} 条记录)</span>
                       <span className="project-group-path" title={repoPath}>{repoPath}</span>
                     </div>
-                    {!collapsedProjects.has(projectName) && (
+                    {(!collapsedProjects.has(projectName) || isSearching) && (
                       <div className="project-group-items">
                         {records.map((record) => (
                           <div key={record.id} className={`modal-history-item ${record.status}`}>
                             <div className="modal-history-item-header">
                               <span className={`history-status ${record.status}`}>
-                                {record.status === 'success' ? '✅' : '❌'}
+                                {record.status === 'success' || record.status === 'pushed' ? '✅' : '❌'}
                               </span>
                               <div className="modal-history-item-info">
                                 <div className="modal-history-item-row">
                                   <span className="history-time">{record.timestamp}</span>
                                   <span className="history-branch">{record.branch}</span>
-                                  {record.image_name && (
-                                    <span className="history-image">{record.image_name}</span>
+                                  {record.image_tag && (
+                                    <button
+                                      className="history-image-btn"
+                                      title={record.image_tag}
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        await handleCopyImage(record.image_tag!);
+                                      }}
+                                    >
+                                      <Copy size={12} />
+                                      <span className="history-image-text">{record.image_tag}</span>
+                                    </button>
                                   )}
                                   <span className="history-meta">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
                                 </div>

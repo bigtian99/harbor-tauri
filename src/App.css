@@ -647,6 +647,29 @@ body::before {
   line-height: 1.5;
 }
 
+.log-section {
+  margin-top: 10px;
+}
+
+.log-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(100, 255, 218, 0.06);
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: #64ffda;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.log-toggle-btn:hover {
+  background: rgba(100, 255, 218, 0.12);
+  border-color: rgba(100, 255, 218, 0.4);
+}
+
 .success-message {
   display: flex;
   align-items: flex-start;
@@ -1551,6 +1574,41 @@ body::before {
   border: 1px solid rgba(100, 255, 218, 0.15);
 }
 
+.history-image-btn {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 11px;
+  color: #ccd6f6;
+  background: rgba(100, 255, 218, 0.08);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(100, 255, 218, 0.15);
+  cursor: pointer;
+  flex: 1 1 100%;
+  max-width: 100%;
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+  transition: all 0.15s ease;
+}
+
+.history-image-btn svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.history-image-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.history-image-btn:hover {
+  background: rgba(100, 255, 218, 0.18);
+  border-color: rgba(100, 255, 218, 0.4);
+}
+
 .history-item-path {
   margin-bottom: 6px;
 }
@@ -1643,4 +1701,53 @@ body::before {
 
 .clear-history-btn:hover {
   background: rgba(255, 107, 107, 0.2);
+}
+
+/* ── 历史记录搜索栏 ── */
+
+.history-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(100, 255, 218, 0.15);
+  border-radius: 8px;
+}
+
+.history-search-icon {
+  color: rgba(100, 255, 218, 0.5);
+  flex-shrink: 0;
+}
+
+.history-search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: #ccd6f6;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.history-search-input::placeholder {
+  color: rgba(168, 178, 209, 0.4);
+}
+
+.history-search-clear {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #8892b0;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.history-search-clear:hover {
+  color: #ccd6f6;
+  background: rgba(255, 255, 255, 0.06);
 }
