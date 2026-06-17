@@ -778,6 +778,12 @@ async fn list_git_branches(repo_path: String) -> Result<Vec<GitBranchOption>, St
 
     tauri::async_runtime::spawn_blocking(move || {
         let repo_root = repo_root_for(&repo_path)?;
+        // 先执行 git fetch 获取远程最新分支信息
+        Command::new("git")
+            .args(["fetch", "--all", "--prune"])
+            .current_dir(&repo_root)
+            .output()
+            .ok(); // 忽略 fetch 错误，继续获取分支列表
         list_known_git_branches(&repo_root)
     })
     .await

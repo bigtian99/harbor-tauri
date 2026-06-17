@@ -146,6 +146,7 @@ function isTauriRuntime() {
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>("upload");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [config, setConfig] = useState<HarborConfig>({
     harbor_url: "dockerhub.kubekey.local",
     username: "",
@@ -870,31 +871,59 @@ function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1><Container className="header-icon" />JarPorter</h1>
-        <p className="subtitle">拖拽产物推送 Harbor，或从指定 Git 分支隔离打包</p>
-      </header>
+      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+        <div className="sidebar-header">
+          <Container size={24} className="header-icon" />
+          {!sidebarCollapsed && <h1>JarPorter</h1>}
+        </div>
+        <nav className="sidebar-nav">
+          <button
+            className={`sidebar-item ${activeTab === "upload" ? "active" : ""}`}
+            onClick={() => setActiveTab("upload")}
+            data-label="上传推送"
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              document.documentElement.style.setProperty('--tooltip-top', `${rect.top + rect.height / 2}px`);
+            }}
+          >
+            <Upload size={18} />
+            {!sidebarCollapsed && <span>上传推送</span>}
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === "branch" ? "active" : ""}`}
+            onClick={() => setActiveTab("branch")}
+            data-label="分支打包"
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              document.documentElement.style.setProperty('--tooltip-top', `${rect.top + rect.height / 2}px`);
+            }}
+          >
+            <GitBranch size={18} />
+            {!sidebarCollapsed && <span>分支打包</span>}
+          </button>
+        </nav>
+        <div className="sidebar-footer">
+          <button
+            className="sidebar-item settings-item"
+            onClick={() => setActiveTab("config")}
+            data-label="Harbor配置"
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              document.documentElement.style.setProperty('--tooltip-top', `${rect.top + rect.height / 2}px`);
+            }}
+          >
+            <Settings size={18} />
+            {!sidebarCollapsed && <span>Harbor配置</span>}
+          </button>
+        </div>
+      </aside>
 
-      <nav className="tabs">
-        <button
-          className={`tab ${activeTab === "upload" ? "active" : ""}`}
-          onClick={() => setActiveTab("upload")}
-        >
-          <Upload size={16} /> 上传推送
-        </button>
-        <button
-          className={`tab ${activeTab === "branch" ? "active" : ""}`}
-          onClick={() => setActiveTab("branch")}
-        >
-          <GitBranch size={16} /> 分支打包
-        </button>
-        <button
-          className={`tab ${activeTab === "config" ? "active" : ""}`}
-          onClick={() => setActiveTab("config")}
-        >
-          <Settings size={16} /> Harbor配置
-        </button>
-      </nav>
+      <button
+        className="sidebar-toggle"
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+      >
+        {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+      </button>
 
       <main className="content">
         {activeTab === "upload" ? (
