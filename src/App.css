@@ -1969,8 +1969,10 @@ body::before {
 
 /* ========== 落地页生成面板 ========== */
 .landing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding: 32px 40px;
-  max-width: 900px;
   height: 100%;
   overflow-y: auto;
 }
@@ -1982,14 +1984,12 @@ body::before {
   font-size: 22px;
   font-weight: 700;
   color: #e0e0e0;
-  margin-bottom: 28px;
+  margin-bottom: 0;
 }
 
 .landing-actions {
   display: flex;
   gap: 12px;
-  margin-top: 24px;
-  margin-bottom: 24px;
 }
 
 .landing-actions .modal-trigger-btn,
@@ -2006,7 +2006,6 @@ body::before {
 }
 
 .landing-section {
-  margin-top: 28px;
   padding-top: 24px;
   border-top: 1px solid rgba(100, 255, 218, 0.1);
 }

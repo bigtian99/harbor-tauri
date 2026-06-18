@@ -277,6 +277,7 @@ function App() {
   // FTP 上传状态
   const [ftpUploadResults, setFtpUploadResults] = useState<Record<string, FtpUploadResult>>({});
   const [isUploadingToFtp, setIsUploadingToFtp] = useState(false);
+  const landingDebounceRef = useRef<number | null>(null);
 
   // 构建日志自动展开/收起：错误自动展开，清空自动收起
   useEffect(() => {
@@ -425,6 +426,58 @@ function App() {
       }).catch(() => {});
     }
   }, [activeTab, landingOutputDir]);
+
+  // 子渠道 IDs 输入后自动加载数据并生成落地页（防抖 800ms）
+  useEffect(() => {
+    if (landingDebounceRef.current !== null) {
+      window.clearTimeout(landingDebounceRef.current);
+    }
+    if (!landingIds.trim() || !isTauriRuntime() || !landingOutputDir) {
+      setLandingPreviewData([]);
+      setLandingGenerated({});
+      setFtpUploadResults({});
+      return;
+    }
+    landingDebounceRef.current = window.setTimeout(async () => {
+      setIsFetchingPreview(true);
+      setLandingPreviewData([]);
+      setLandingGenerated({});
+      setFtpUploadResults({});
+      setLog("");
+      setProgress(0);
+      try {
+        const data = await invoke<SubChannelData[]>("fetch_sub_channels", {
+          apiUrl: landingApiUrl,
+          ids: landingIds.trim(),
+        });
+        setLandingPreviewData(data);
+        setIsGenerating(true);
+        const results = await invoke<LandingPageResult[]>("generate_landing_pages", {
+          apiUrl: landingApiUrl,
+          ids: landingIds.trim(),
+          templateBase: landingTemplateBase,
+          outputDir: landingOutputDir.trim(),
+        });
+        const map: Record<string, LandingPageResult> = {};
+        for (const r of results) {
+          map[r.id] = r;
+        }
+        setLandingGenerated(map);
+        const success = results.filter((r) => r.status === "success").length;
+        showToast(`生成完成: 成功 ${success} / ${results.length}`);
+      } catch (e: any) {
+        showToast(`操作失败: ${e}`);
+      } finally {
+        setIsFetchingPreview(false);
+        setIsGenerating(false);
+      }
+    }, 800);
+    return () => {
+      if (landingDebounceRef.current !== null) {
+        window.clearTimeout(landingDebounceRef.current);
+      }
+    };
+  }, [landingIds, landingOutputDir, landingTemplateBase]);
 
   // 检测分支是否有自定义 Dockerfile
   async function checkBranchDockerfile() {
