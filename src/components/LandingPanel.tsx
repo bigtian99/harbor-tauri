@@ -55,12 +55,32 @@ export function LandingPanel({
     });
   }, [landingGenerated]);
 
-  const getCurrentIframeSrc = useCallback((genResult: LandingPageResult) => {
+  const getTemplateIframeSrc = useCallback((genResult: LandingPageResult, templateIdx: number) => {
     if (!genResult.template_dirs || genResult.template_dirs.length === 0) {
       return convertFileSrc(`${genResult.output_dir}/template_0/index.html`);
     }
-    const index = getTemplateIndex(genResult.id);
-    return convertFileSrc(`${genResult.output_dir}/template_${index}/index.html`);
+    return convertFileSrc(`${genResult.output_dir}/template_${templateIdx}/index.html`);
+  }, []);
+
+  // 获取轮播中三个位置的模板索引
+  const getCarouselIndices = useCallback((id: string, total: number) => {
+    const current = getTemplateIndex(id);
+    const indices: number[] = [];
+
+    if (total === 1) {
+      indices.push(0);
+    } else if (total === 2) {
+      indices.push(0, 1);
+    } else {
+      // 左边
+      indices.push(current > 0 ? current - 1 : total - 1);
+      // 中间
+      indices.push(current);
+      // 右边
+      indices.push(current < total - 1 ? current + 1 : 0);
+    }
+
+    return indices;
   }, [getTemplateIndex]);
 
   return (
@@ -182,9 +202,9 @@ export function LandingPanel({
                   </span>
                   <span className="lt-col lt-col-template">
                     {genResult?.status === "success" ? (
-                      <div className="lt-iframe-container">
+                      <div className="lt-iframe-carousel">
                         {hasMultipleTemplates && (
-                          <div className="lt-iframe-nav nav-left">
+                          <div className="lt-iframe-nav">
                             <button
                               className="lt-iframe-nav-btn"
                               onClick={(e) => {
@@ -197,45 +217,79 @@ export function LandingPanel({
                             </button>
                           </div>
                         )}
-                        <div
-                          className="lt-iframe-carousel"
-                          onClick={() => {
-                            if (isTauriRuntime()) {
-                              invoke("preview_landing_page", {
-                                path: genResult.output_dir,
-                                templateIndex: currentTemplateIndex
-                              });
-                            }
-                          }}
-                          title="点击放大预览"
-                        >
-                          <div className="lt-iframe-wrapper">
-                            <iframe
-                              src={getCurrentIframeSrc(genResult)}
-                              className="lt-iframe"
-                              loading="lazy"
-                              title={item.subChannelName || ""}
-                            />
-                          </div>
-                        </div>
-                        {hasMultipleTemplates && (
-                          <>
-                            <div className="lt-iframe-nav nav-right">
-                              <button
-                                className="lt-iframe-nav-btn"
+
+                        {hasMultipleTemplates ? (
+                          getCarouselIndices(item.id, genResult.template_dirs.length).map((tempIdx, pos) => {
+                            const isCenter = pos === 1 || genResult.template_dirs.length < 3;
+                            return (
+                              <div
+                                key={tempIdx}
+                                className={`lt-iframe-card ${isCenter ? 'card-center' : 'card-side'}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  switchTemplate(item.id, 'next');
+                                  if (isTauriRuntime()) {
+                                    invoke("preview_landing_page", {
+                                      path: genResult.output_dir,
+                                      templateIndex: tempIdx
+                                    });
+                                  }
                                 }}
-                                title="下一个模板"
+                                title={`模板 ${tempIdx + 1}`}
                               >
-                                <ChevronRight size={14} />
-                              </button>
+                                <div className="lt-iframe-wrapper">
+                                  <iframe
+                                    src={getTemplateIframeSrc(genResult, tempIdx)}
+                                    className="lt-iframe"
+                                    loading="lazy"
+                                    title={`${item.subChannelName || ""} - 模板${tempIdx + 1}`}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div
+                            className="lt-iframe-card card-center"
+                            onClick={() => {
+                              if (isTauriRuntime()) {
+                                invoke("preview_landing_page", {
+                                  path: genResult.output_dir,
+                                  templateIndex: 0
+                                });
+                              }
+                            }}
+                            title="点击放大预览"
+                          >
+                            <div className="lt-iframe-wrapper">
+                              <iframe
+                                src={getTemplateIframeSrc(genResult, 0)}
+                                className="lt-iframe"
+                                loading="lazy"
+                                title={item.subChannelName || ""}
+                              />
                             </div>
-                            <span className="lt-iframe-nav-info">
-                              {currentTemplateIndex + 1}/{genResult.template_dirs.length}
-                            </span>
-                          </>
+                          </div>
+                        )}
+
+                        {hasMultipleTemplates && (
+                          <div className="lt-iframe-nav">
+                            <button
+                              className="lt-iframe-nav-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                switchTemplate(item.id, 'next');
+                              }}
+                              title="下一个模板"
+                            >
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                        )}
+
+                        {hasMultipleTemplates && (
+                          <span className="lt-iframe-nav-info">
+                            {currentTemplateIndex + 1}/{genResult.template_dirs.length}
+                          </span>
                         )}
                       </div>
                     ) : (

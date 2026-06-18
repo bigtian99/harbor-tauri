@@ -2046,100 +2046,118 @@ body::before {
   display: flex;
   align-items: center;
   min-width: 0;
+  gap: 0;
 }
 
 .lt-col-logo {
   width: 36px;
   flex-shrink: 0;
   justify-content: center;
+  margin-right: 10px;
 }
 
 .lt-col-name {
-  flex: 2;
+  width: 120px;
+  flex-shrink: 0;
   font-size: 13px;
   font-weight: 500;
   color: #e0e0e0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding-right: 16px;
 }
 
 .lt-col-type {
-  width: 120px;
+  width: 180px;
   flex-shrink: 0;
-  padding-right: 12px;
+  margin-left: 16px;
+  margin-right: 8px;
 }
 
 .lt-col-product {
-  flex: 1;
-  min-width: 0;
+  width: 300px;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding-right: 16px;
 }
 
 .lt-col-template {
-  width: 160px;
+  width: 180px;
   flex-shrink: 0;
   justify-content: center;
-  padding-right: 16px;
-}
-
-/* iframe 容器 */
-.lt-iframe-container {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
+  margin-left: 8px;
 }
 
 /* iframe 轮播容器 */
 .lt-iframe-carousel {
   position: relative;
-  width: 56px;
-  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 90px;
+}
+
+/* 单个 iframe 卡片 */
+.lt-iframe-card {
+  position: relative;
   border-radius: 6px;
   border: 1px solid rgba(100, 255, 218, 0.15);
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   background: #fff;
+  flex-shrink: 0;
 }
 
-.lt-iframe-carousel:hover {
-  border-color: rgba(100, 255, 218, 0.6);
-  box-shadow: 0 0 12px rgba(100, 255, 218, 0.25);
-  transform: scale(1.2);
-  z-index: 10;
-  transform-origin: center center;
+.lt-iframe-card.card-side {
+  width: 36px;
+  height: 52px;
+  opacity: 0.6;
 }
 
-/* iframe 导航箭头 - 在 iframe 两侧 */
-.lt-iframe-nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+.lt-iframe-card.card-side:hover {
+  opacity: 0.9;
+}
+
+.lt-iframe-card.card-center {
+  width: 56px;
+  height: 76px;
+  border-color: rgba(100, 255, 218, 0.5);
+  box-shadow: 0 0 12px rgba(100, 255, 218, 0.3);
+  z-index: 2;
+}
+
+.lt-iframe-card.card-center:hover {
+  border-color: rgba(100, 255, 218, 0.7);
+  box-shadow: 0 0 16px rgba(100, 255, 218, 0.4);
+}
+
+/* iframe 内容 */
+.lt-iframe-wrapper {
+  width: 375px;
+  height: 812px;
+  transform: scale(0.149);
+  transform-origin: top left;
   pointer-events: none;
 }
 
-.lt-iframe-container:hover .lt-iframe-nav {
-  opacity: 1;
-  pointer-events: auto;
+.lt-iframe-card.card-side .lt-iframe-wrapper {
+  transform: scale(0.095);
 }
 
-.lt-iframe-nav.nav-left {
-  right: 100%;
-  margin-right: 4px;
+.lt-iframe {
+  width: 375px;
+  height: 812px;
+  border: none;
+  pointer-events: none;
 }
 
-.lt-iframe-nav.nav-right {
-  left: 100%;
-  margin-left: 4px;
+/* 导航箭头 */
+.lt-iframe-nav {
+  display: flex;
+  align-items: center;
 }
 
 .lt-iframe-nav-btn {
@@ -2155,6 +2173,7 @@ body::before {
   cursor: pointer;
   transition: all 0.15s ease;
   padding: 0;
+  flex-shrink: 0;
 }
 
 .lt-iframe-nav-btn:hover {
@@ -2165,7 +2184,7 @@ body::before {
 
 .lt-iframe-nav-info {
   position: absolute;
-  bottom: -16px;
+  bottom: -14px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 10px;
@@ -2218,6 +2237,7 @@ body::before {
   color: #8892b0;
   font-family: "SF Mono", "Fira Code", monospace;
   padding-right: 16px;
+  margin-left: auto;
 }
 
 .lt-col-status {
