@@ -154,12 +154,15 @@ export function LandingPanel({
         )}
       </div>
 
-      {(isUploadingToFtp || progress > 0) && (
+      {isUploadingToFtp && (
         <div className="build-progress">
-          <div className="progress-bar">
+          <div className="progress-info">
+            <p className="progress-message">{progressMessage}</p>
+            <span className="progress-percent">{progress}%</span>
+          </div>
+          <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
-          <p>{progressMessage}</p>
         </div>
       )}
 

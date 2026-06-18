@@ -3156,51 +3156,46 @@ async fn upload_landing_to_ftp(
     app: tauri::AppHandle,
     items: Vec<FtpUploadItem>,
 ) -> Result<Vec<FtpUploadResult>, String> {
+    use std::sync::{Arc, Mutex};
+
     let total = items.len();
 
     app.emit("build-progress", serde_json::json!({
-        "percent": 5,
-        "message": "📡 连接 FTP 服务器..."
+        "percent": 0,
+        "message": format!("📤 准备上传 {} 个文件...", total)
     })).ok();
 
-    // 使用多线程并行上传，限制并发数为 2
-    let max_concurrent = 2;
-    let mut handles: Vec<std::thread::JoinHandle<FtpUploadResult>> = Vec::new();
-    let mut results: Vec<FtpUploadResult> = Vec::new();
+    // 并行上传，限制并发数为 3
+    let max_concurrent = 3;
+    let completed = Arc::new(Mutex::new(0));
+    let mut handles: Vec<Option<std::thread::JoinHandle<FtpUploadResult>>> = Vec::new();
 
     for (idx, item) in items.iter().enumerate() {
-        // 如果达到并发上限，等待一个完成
+        // 控制并发数：等待一个完成后再启动新的
         if handles.len() >= max_concurrent {
-            let handle = handles.remove(0);
-            match handle.join() {
-                Ok(result) => results.push(result),
-                Err(e) => eprintln!("[JarPorter] ❌ 线程异常: {:?}", e),
+            if let Some(handle) = handles.remove(0) {
+                let _ = handle.join();
             }
         }
 
         let app_clone = app.clone();
         let item_clone = item.clone();
         let total_clone = total;
-        let idx_clone = idx;
+        let completed_clone = completed.clone();
 
         let handle = std::thread::spawn(move || {
-            let base_progress = 10 + ((idx_clone as f64 / total_clone as f64) * 80.0) as i32;
-            eprintln!(
-                "[JarPorter] 📤 开始上传 [{}/{}]: {} -> {}",
-                idx_clone + 1, total_clone, item_clone.local_dir, item_clone.remote_dir
-            );
-            app_clone.emit(
-                "build-progress",
-                serde_json::json!({
-                    "percent": base_progress,
-                    "message": format!("📤 [{}/{}] 上传 {}...", idx_clone + 1, total_clone, item_clone.remote_dir),
-                }),
-            )
-            .ok();
-
             let local_dir = PathBuf::from(&item_clone.local_dir);
             if !local_dir.is_dir() {
                 eprintln!("[JarPorter] ❌ 本地目录不存在: {}", item_clone.local_dir);
+                // 即使失败也更新进度
+                let mut c = completed_clone.lock().unwrap();
+                *c += 1;
+                let progress = ((*c as f64 / total_clone as f64) * 100.0) as i32;
+                drop(c);
+                app_clone.emit("build-progress", serde_json::json!({
+                    "percent": progress,
+                    "message": format!("📤 [{}/{}] 完成", *completed_clone.lock().unwrap(), total_clone),
+                })).ok();
                 return FtpUploadResult {
                     id: item_clone.id.clone(),
                     url: String::new(),
@@ -3209,7 +3204,9 @@ async fn upload_landing_to_ftp(
                 };
             }
 
-            match run_ftp_upload(&local_dir, &item_clone.remote_dir) {
+            eprintln!("[JarPorter] 📤 上传: {}", item_clone.remote_dir);
+
+            let result = match run_ftp_upload(&local_dir, &item_clone.remote_dir) {
                 Ok(()) => {
                     let url = format!("https://{}/{}/", FTP_BASE_DIR, &item_clone.remote_dir);
                     eprintln!("[JarPorter] ✅ 上传成功: {}", url);
@@ -3229,18 +3226,29 @@ async fn upload_landing_to_ftp(
                         message: e,
                     }
                 }
-            }
+            };
+
+            // 更新完成计数和进度
+            let mut c = completed_clone.lock().unwrap();
+            *c += 1;
+            let progress = ((*c as f64 / total_clone as f64) * 100.0) as i32;
+            let current = *c;
+            drop(c);
+            app_clone.emit("build-progress", serde_json::json!({
+                "percent": progress,
+                "message": format!("📤 [{}/{}] 完成", current, total_clone),
+            })).ok();
+
+            result
         });
-        handles.push(handle);
+        handles.push(Some(handle));
     }
 
     // 等待剩余线程完成
-    for handle in handles {
-        match handle.join() {
-            Ok(result) => results.push(result),
-            Err(e) => {
-                eprintln!("[JarPorter] ❌ 线程异常: {:?}", e);
-            }
+    let mut results = Vec::new();
+    for handle in handles.into_iter().flatten() {
+        if let Ok(result) = handle.join() {
+            results.push(result);
         }
     }
 

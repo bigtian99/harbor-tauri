@@ -766,6 +766,7 @@ function App() {
     const unlistenProgress = appWindow.listen<{ percent: number; message: string }>(
       "build-progress",
       (event) => {
+        console.log("[Progress]", event.payload);
         setProgress(event.payload.percent);
         setProgressMessage(event.payload.message);
       }
@@ -992,6 +993,8 @@ function App() {
     if (!isTauriRuntime()) return;
     setIsUploadingToFtp(true);
     setFtpUploadResults({});
+    setProgress(0);
+    setProgressMessage("");
     try {
       console.log("[FTP] 当前 templateIndices:", templateIndices);
       const items: { id: string; local_dir: string; remote_dir: string }[] = Object.entries(landingGenerated)
