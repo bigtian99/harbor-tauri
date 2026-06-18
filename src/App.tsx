@@ -7,7 +7,7 @@ import {
   Container, Upload, Settings, Rocket, Package, FileText, CheckCircle, Copy,
   AlertCircle, Loader2, Eye, EyeOff, GitBranch, FolderOpen, ExternalLink,
   History, List, Pin, Search, User, Folder, BookOpen, BookMarked, Trash2,
-  ChevronLeft, ChevronRight, Archive
+  ChevronLeft, ChevronRight, Archive, RefreshCw, XCircle
 } from "lucide-react";
 import { SearchableDropdown } from "./components/SearchableDropdown";
 import { Modal } from "./components/Modal";
@@ -71,6 +71,7 @@ interface HarborConfig {
   last_build_script: string;
   last_project_type: string;
   last_auto_push_image: boolean;
+  last_package_with_backend: boolean;
   repo_path_history: string[];
   npm_package_manager: string;
   npm_registry: string;
@@ -82,6 +83,7 @@ interface HarborConfig {
 
 interface PackageFromBranchResult {
   artifact_path: string;
+  backend_artifact_path?: string;
   worktree_path: string;
   build_script: string;
   log: string;
@@ -128,6 +130,7 @@ interface BuildRecord {
   branch: string;
   project_type: string;
   artifact_path: string;
+  backend_artifact_path?: string;
   image_name: string | null;
   image_tag: string | null;
   build_command: string;
@@ -137,7 +140,7 @@ interface BuildRecord {
   full_log: string;
 }
 
-type TabType = "upload" | "branch" | "config";
+type TabType = "upload" | "branch" | "config" | "history";
 
 function isTauriRuntime() {
   return typeof window !== "undefined"
@@ -165,6 +168,7 @@ function App() {
     last_build_script: "",
     last_project_type: "maven",
     last_auto_push_image: false,
+    last_package_with_backend: false,
     repo_path_history: [],
     npm_package_manager: "npm",
     npm_registry: "",
@@ -173,6 +177,7 @@ function App() {
   });
   const [artifactType, setArtifactType] = useState<ArtifactType>("jar");
   const [artifactPath, setArtifactPath] = useState<string>("");
+  const [backendArtifactPath, setBackendArtifactPath] = useState<string>("");
   const [imageName, setImageName] = useState<string>("");
   const [imageTag, setImageTag] = useState<string>("latest");
   const [repoPath, setRepoPath] = useState<string>("");
@@ -187,6 +192,7 @@ function App() {
   const [worktreePath, setWorktreePath] = useState<string>("");
   const [isBuilding, setIsBuilding] = useState(false);
   const [autoPushImage, setAutoPushImage] = useState<boolean>(false);
+  const [packageWithBackend, setPackageWithBackend] = useState<boolean>(false);
   const [branchFullImage, setBranchFullImage] = useState<string>("");
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -206,7 +212,6 @@ function App() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
   const [showCommitListModal, setShowCommitListModal] = useState(false);
-  const [showBuildHistoryModal, setShowBuildHistoryModal] = useState(false);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [historySearch, setHistorySearch] = useState("");
   const [configSaved, setConfigSaved] = useState(false);
@@ -214,6 +219,7 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [showBuildLog, setShowBuildLog] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   // 构建日志自动展开/收起：错误自动展开，清空自动收起
   useEffect(() => {
@@ -347,6 +353,13 @@ function App() {
     };
   }, [activeTab, artifactType, imageName]);
 
+  // 切换到历史记录tab时自动加载
+  useEffect(() => {
+    if (activeTab === "history" && isTauriRuntime()) {
+      loadBuildHistory();
+    }
+  }, [activeTab]);
+
   async function loadConfig() {
     if (!isTauriRuntime()) {
       return;
@@ -371,6 +384,9 @@ function App() {
         }
         if (savedConfig.last_auto_push_image !== undefined) {
           setAutoPushImage(savedConfig.last_auto_push_image);
+        }
+        if (savedConfig.last_package_with_backend !== undefined) {
+          setPackageWithBackend(savedConfig.last_package_with_backend);
         }
         // 恢复后加载分支列表、Spring Profiles 和提交信息
         if (savedConfig.last_repo_path) {
@@ -605,13 +621,18 @@ function App() {
     }
   }
 
-  async function deleteBuildRecord(recordId: string) {
+  async function deleteBuildRecord(record: BuildRecord) {
     if (!isTauriRuntime()) {
       return;
     }
     try {
-      await invoke("delete_build_record", { recordId });
-      setBuildHistory(prev => prev.filter(r => r.id !== recordId));
+      await invoke("delete_build_record", { recordId: record.id });
+      // 删除产物文件
+      await deleteArtifactFiles(record.artifact_path);
+      if (record.backend_artifact_path) {
+        await deleteArtifactFiles(record.backend_artifact_path);
+      }
+      setBuildHistory(prev => prev.filter(r => r.id !== record.id));
     } catch (e) {
       console.error("[Delete Record] 删除失败:", e);
     }
@@ -622,10 +643,28 @@ function App() {
       return;
     }
     try {
+      // 删除所有记录的产物文件
+      for (const record of buildHistory) {
+        await deleteArtifactFiles(record.artifact_path);
+        if (record.backend_artifact_path) {
+          await deleteArtifactFiles(record.backend_artifact_path);
+        }
+      }
       await invoke("clear_build_history");
       setBuildHistory([]);
     } catch (e) {
       console.error("[Clear History] 清空失败:", e);
+    }
+  }
+
+  async function deleteArtifactFiles(path: string) {
+    if (!isTauriRuntime() || !path) {
+      return;
+    }
+    try {
+      await invoke("delete_artifact_path", { path });
+    } catch (e) {
+      console.error("[Delete Artifact] 删除产物失败:", path, e);
     }
   }
 
@@ -761,6 +800,7 @@ function App() {
     setProgressMessage("⬇️ 开始更新分支代码...");
     setLog("");
     setArtifactPath("");
+    setBackendArtifactPath("");
     setWorktreePath("");
     setBranchFullImage("");
 
@@ -774,8 +814,10 @@ function App() {
         buildScript: branchProjectType === "npm" ? selectedBuildScript : null,
         packageManager: config.npm_package_manager || "npm",
         springProfile: branchProjectType === "maven" && springProfile.trim() ? springProfile.trim() : null,
+        packageWithBackend: branchProjectType === "npm" ? packageWithBackend : false,
       });
       setArtifactPath(result.artifact_path);
+      setBackendArtifactPath(result.backend_artifact_path || "");
       setWorktreePath(result.worktree_path);
       // 打包成功后保存设置
       await saveBranchSettings();
@@ -788,17 +830,20 @@ function App() {
         if (!config.harbor_url || !config.username || !config.password || !config.project) {
           setLog(`⚠️ 分支打包成功，但 Harbor 配置不完整，无法推送镜像\n\n请在"推送配置" tab 中完善 Harbor 配置后重试\n\n${result.log}`);
         } else {
-          const artifactType = branchProjectType === "npm" ? "frontend_dist" : "jar";
+          // npm + 后端: 推送后端 jar；纯 npm: 推送前端 dist；maven: 推送 jar
+          const hasBackend = !!result.backend_artifact_path;
+          const artifactType = hasBackend ? "jar" : (branchProjectType === "npm" ? "frontend_dist" : "jar");
+          const pushPath = hasBackend ? result.backend_artifact_path! : result.artifact_path;
           // 验证镜像名称是否已设置
-          const finalImageName = imageName || inferImageName(result.artifact_path, artifactType);
+          const finalImageName = imageName || inferImageName(pushPath, artifactType);
           if (!finalImageName.trim()) {
             setLog(`⚠️ 分支打包成功，但未设置镜像名称，跳过推送\n\n${result.log}`);
           } else {
             setProgress(60);
-            setProgressMessage("🚀 打包完成，开始推送镜像...");
+            setProgressMessage(hasBackend ? "🚀 前端+后端打包完成，推送后端 JAR 镜像..." : "🚀 打包完成，开始推送镜像...");
             try {
               const pushResult = await invoke<string>("build_and_push", {
-                jarPath: result.artifact_path,
+                jarPath: pushPath,
                 imageName: finalImageName,
                 imageTag: imageTag || "latest",
                 artifactType,
@@ -852,6 +897,7 @@ function App() {
         last_build_script: selectedBuildScript,
         last_project_type: branchProjectType,
         last_auto_push_image: autoPushImage,
+        last_package_with_backend: packageWithBackend,
         repo_path_history: newHistory,
       };
       await invoke("save_config", { config: updatedConfig });
@@ -959,6 +1005,18 @@ function App() {
           >
             <GitBranch size={18} />
             {!sidebarCollapsed && <span>分支打包</span>}
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === "history" ? "active" : ""}`}
+            onClick={() => setActiveTab("history")}
+            data-label="历史记录"
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              document.documentElement.style.setProperty('--tooltip-top', `${rect.top + rect.height / 2}px`);
+            }}
+          >
+            <History size={18} />
+            {!sidebarCollapsed && <span>历史记录</span>}
           </button>
         </nav>
         <div className="sidebar-footer">
@@ -1218,6 +1276,25 @@ function App() {
                 </div>
               )}
 
+              {branchProjectType === "npm" && (
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={packageWithBackend}
+                      onChange={(e) => setPackageWithBackend(e.target.checked)}
+                    />
+                    <span className="checkbox-toggle"></span>
+                    <span>同时打包后端（Maven）</span>
+                  </label>
+                  <p className="template-hint">
+                    {packageWithBackend
+                      ? "前端构建完成后将在仓库根目录执行 mvn clean package -DskipTests"
+                      : "勾选后会将仓库根目录的 Spring Boot 后端一同打包"}
+                  </p>
+                </div>
+              )}
+
               <div className="form-group">
                 <label>目标分支</label>
                 <SearchableDropdown
@@ -1316,9 +1393,17 @@ function App() {
                 <code>{branchProjectType === "maven"
                   ? `mvn clean package -DskipTests${springProfile.trim() ? ` -Dspring.profiles.active=${springProfile.trim()}` : ""}`
                   : `npm install && npm run ${selectedBuildScript || "build"}`}</code>
+                {branchProjectType === "npm" && packageWithBackend && (
+                  <>
+                    <br />
+                    <span style={{ marginLeft: "2.5em" }}>+</span>{" "}
+                    <code>mvn clean package -DskipTests</code>
+                    {" "}<span style={{ color: "var(--muted)", fontSize: "0.8em" }}>(仓库根目录)</span>
+                  </>
+                )}
               </div>
 
-              {branchProjectType === "maven" && (
+              {(branchProjectType === "maven" || branchProjectType === "npm") && (
                 <div className="form-group">
                   <label className="checkbox-label">
                     <input
@@ -1330,34 +1415,50 @@ function App() {
                     <span>打包后联动推送镜像到 Harbor</span>
                   </label>
                   <p className="template-hint">
-                    {autoPushImage ? "打包成功后将自动构建并推送镜像" : "勾选后打包成功会自动推送镜像"}
+                    {autoPushImage
+                      ? branchProjectType === "npm" && !packageWithBackend
+                        ? "打包成功后将构建前端 nginx 镜像并推送"
+                        : "打包成功后将自动构建并推送镜像"
+                      : "勾选后打包成功会自动推送镜像"}
                   </p>
                 </div>
               )}
 
-              {branchProjectType === "maven" && autoPushImage && (
-                <>
-                  <div className="form-group">
-                    <label>镜像名称</label>
-                    <input
-                      type="text"
-                      value={imageName}
-                      onChange={(e) => setImageName(e.target.value)}
-                      placeholder="例如: tksy-admin（小写）"
-                    />
-                    <p className="template-hint">留空则自动从 JAR 文件名推断</p>
+              {(branchProjectType === "maven" || branchProjectType === "npm") && autoPushImage && (
+                <div className="advanced-settings">
+                  <div
+                    className="advanced-settings-header"
+                    onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                  >
+                    <span>{showAdvancedSettings ? '▼' : '▶'}</span>
+                    <span>高级设置</span>
+                    <span className="template-hint" style={{ marginLeft: '8px' }}>可选：自定义镜像名称和标签</span>
                   </div>
-                  <div className="form-group">
-                    <label>镜像标签</label>
-                    <input
-                      type="text"
-                      value={imageTag}
-                      onChange={(e) => setImageTag(e.target.value)}
-                      placeholder="latest"
-                    />
-                    <p className="template-hint">留空则使用时间戳格式 v.YY.MM.DD.HH.MM</p>
-                  </div>
-                </>
+                  {showAdvancedSettings && (
+                    <>
+                      <div className="form-group">
+                        <label>镜像名称</label>
+                        <input
+                          type="text"
+                          value={imageName}
+                          onChange={(e) => setImageName(e.target.value)}
+                          placeholder={branchProjectType === "npm" ? "例如: my-frontend（小写）" : "例如: tksy-admin（小写）"}
+                        />
+                        <p className="template-hint">留空则自动从{branchProjectType === "npm" ? "目录名" : "JAR 文件名"}推断</p>
+                      </div>
+                      <div className="form-group">
+                        <label>镜像标签</label>
+                        <input
+                          type="text"
+                          value={imageTag}
+                          onChange={(e) => setImageTag(e.target.value)}
+                          placeholder="latest"
+                        />
+                        <p className="template-hint">留空则使用时间戳格式 v.YY.MM.DD.HH.MM</p>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
 
               <div className="form-group">
@@ -1381,6 +1482,7 @@ function App() {
                           last_build_script: selectedBuildScript,
                           last_project_type: branchProjectType,
                           last_auto_push_image: autoPushImage,
+                          last_package_with_backend: packageWithBackend,
                           repo_path_history: newHistory,
                         };
                         invoke("save_config", { config: updatedConfig }).then(() => {
@@ -1459,6 +1561,18 @@ function App() {
                     {artifactPath}
                   </button>
                 </div>
+                {backendArtifactPath && (
+                  <div className="path-link-item">
+                    <span className="path-link-label"><FileText size={14} /> 后端产物:</span>
+                    <button
+                      type="button"
+                      className="path-link-btn"
+                      onClick={() => handleOpenDirectory(backendArtifactPath)}
+                    >
+                      {backendArtifactPath}
+                    </button>
+                  </div>
+                )}
                 {worktreePath && (
                   <div className="path-link-item">
                     <span className="path-link-label"><FolderOpen size={14} /> 输出目录:</span>
@@ -1493,16 +1607,232 @@ function App() {
               </div>
             )}
 
-            <button
-              className="modal-trigger-btn"
-              onClick={() => {
-                setShowBuildHistoryModal(true);
-                loadBuildHistory();
-              }}
-            >
-              <History size={16} />
-              历史打包记录 ({buildHistory.length})
-            </button>
+          </div>
+        ) : activeTab === "history" ? (
+          <div className="history-panel">
+            <div className="history-header">
+              <h2><History size={20} /> 历史打包记录</h2>
+              <div className="history-header-actions">
+                {buildHistory.length > 0 && (
+                  <button
+                    className="modal-trigger-btn"
+                    onClick={async () => {
+                      if (confirm('确定要清空所有打包历史吗？删除后将同时清理产物文件。')) {
+                        await clearBuildHistory();
+                      }
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    清空历史
+                  </button>
+                )}
+                <button
+                  className="modal-trigger-btn"
+                  onClick={() => loadBuildHistory()}
+                >
+                  <RefreshCw size={14} />
+                  刷新
+                </button>
+              </div>
+            </div>
+            {isLoadingHistory ? (
+              <div className="modal-loading">加载中...</div>
+            ) : buildHistory.length === 0 ? (
+              <div className="modal-empty">暂无打包记录</div>
+            ) : (
+              <>
+                <div className="history-search-bar">
+                  <Search size={14} className="history-search-icon" />
+                  <input
+                    type="text"
+                    className="history-search-input"
+                    placeholder="搜索 Docker 镜像地址 / 分支名 / 项目名..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                  />
+                  {historySearch && (
+                    <button
+                      className="history-search-clear"
+                      onClick={() => setHistorySearch("")}
+                      title="清除搜索"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <div className="modal-list">
+                  {(() => {
+                    let groupedRecords = buildHistory.reduce((groups, record) => {
+                      const projectName = getProjectName(record.repo_path);
+                      if (!groups[projectName]) {
+                        groups[projectName] = {
+                          repoPath: record.repo_path,
+                          records: []
+                        };
+                      }
+                      groups[projectName].records.push(record);
+                      return groups;
+                    }, {} as Record<string, { repoPath: string; records: BuildRecord[] }>);
+
+                    const searchLower = historySearch.trim().toLowerCase();
+                    if (searchLower) {
+                      const filtered: Record<string, { repoPath: string; records: BuildRecord[] }> = {};
+                      for (const [projectName, group] of Object.entries(groupedRecords)) {
+                        const matchedRecords = group.records.filter(r =>
+                          r.image_tag?.toLowerCase().includes(searchLower) ||
+                          r.image_name?.toLowerCase().includes(searchLower) ||
+                          r.branch.toLowerCase().includes(searchLower) ||
+                          r.repo_path.toLowerCase().includes(searchLower) ||
+                          r.artifact_path.toLowerCase().includes(searchLower) ||
+                          r.backend_artifact_path?.toLowerCase().includes(searchLower) ||
+                          projectName.toLowerCase().includes(searchLower)
+                        );
+                        if (matchedRecords.length > 0) {
+                          filtered[projectName] = { ...group, records: matchedRecords };
+                        }
+                      }
+                      groupedRecords = filtered;
+                    }
+
+                    const sortedProjects = Object.entries(groupedRecords).sort(([a], [b]) => a.localeCompare(b));
+                    const isSearching = searchLower.length > 0;
+
+                    return sortedProjects.map(([projectName, { repoPath, records }]) => (
+                      <div key={projectName} className="project-group">
+                        <div
+                          className="project-group-header"
+                          onClick={() => toggleProjectCollapse(projectName)}
+                        >
+                          <span className={`project-group-arrow ${collapsedProjects.has(projectName) ? 'collapsed' : ''}`}>
+                            ▼
+                          </span>
+                          <span className="project-group-name">{projectName}</span>
+                          <span className="project-group-count">({records.length} 条记录)</span>
+                          <span className="project-group-path" title={repoPath}>{repoPath}</span>
+                        </div>
+                        {(!collapsedProjects.has(projectName) || isSearching) && (
+                          <div className="project-group-items">
+                            {records.map((record) => (
+                              <div key={record.id} className={`modal-history-item ${record.status}`}>
+                                <div className="modal-history-item-header">
+                                  <span className={`history-status ${record.status}`}>
+                                    {record.status === 'success' || record.status === 'pushed' ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                                  </span>
+                                  <div className="modal-history-item-info">
+                                    <div className="modal-history-item-row">
+                                      <span className="history-time">{record.timestamp}</span>
+                                      <span className="history-branch">{record.branch}</span>
+                                      <span className={`history-project-type ${record.project_type.toLowerCase()}`}>
+                                        {record.project_type.toLowerCase() === 'maven' ? '后端' : '前端'}
+                                      </span>
+                                      <span className="history-meta">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
+                                      {record.image_tag && (
+                                        <span className="history-image">
+                                          <span className="history-image-text">{record.image_tag}</span>
+                                          <button
+                                            className="history-copy-btn"
+                                            title="复制镜像地址"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              await handleCopyImage(record.image_tag!);
+                                            }}
+                                          >
+                                            <Copy size={12} />
+                                          </button>
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="modal-history-item-path">
+                                      <div className="path-item">
+                                        <span className="path-label">{record.project_type.toLowerCase() === 'maven' ? '后端' : '前端'}</span>
+                                        <button
+                                          className="path-link-btn"
+                                          onClick={() => openArtifactPath(record.artifact_path)}
+                                          title={record.artifact_path}
+                                        >
+                                          {record.artifact_path}
+                                        </button>
+                                        <button
+                                          className="path-open-btn"
+                                          onClick={() => openArtifactPath(record.artifact_path)}
+                                          title="打开目录"
+                                        >
+                                          <FolderOpen size={12} />
+                                        </button>
+                                      </div>
+                                      {record.backend_artifact_path && (
+                                        <div className="path-item">
+                                          <span className="path-label">后端</span>
+                                          <button
+                                            className="path-link-btn"
+                                            onClick={() => openArtifactPath(record.backend_artifact_path!)}
+                                            title={record.backend_artifact_path}
+                                          >
+                                            {record.backend_artifact_path}
+                                          </button>
+                                          <button
+                                            className="path-open-btn"
+                                            onClick={() => openArtifactPath(record.backend_artifact_path!)}
+                                            title="打开目录"
+                                          >
+                                            <FolderOpen size={12} />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="modal-history-item-actions">
+                                    <button
+                                      className="history-action-btn"
+                                      onClick={() => openArtifactPath(record.artifact_path)}
+                                      title="打开产物目录"
+                                    >
+                                      <Folder size={14} />
+                                    </button>
+                                    {record.backend_artifact_path && (
+                                      <button
+                                        className="history-action-btn"
+                                        onClick={() => openArtifactPath(record.backend_artifact_path!)}
+                                        title="打开后端产物"
+                                      >
+                                        <FileText size={14} />
+                                      </button>
+                                    )}
+                                    <button
+                                      className="history-action-btn"
+                                      onClick={() => setExpandedRecordId(expandedRecordId === record.id ? null : record.id)}
+                                      title={expandedRecordId === record.id ? "收起日志" : "展开日志"}
+                                    >
+                                      {expandedRecordId === record.id ? <BookMarked size={14} /> : <BookOpen size={14} />}
+                                    </button>
+                                    <button
+                                      className="history-action-btn delete"
+                                      onClick={async () => {
+                                        if (confirm('确定要删除这条记录吗？删除后将同时清理产物文件。')) {
+                                          await deleteBuildRecord(record);
+                                        }
+                                      }}
+                                      title="删除记录"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                                {expandedRecordId === record.id && (
+                                  <div className="modal-history-log">
+                                    <div className="log-content">{record.full_log}</div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="config-panel">
@@ -1802,184 +2132,6 @@ function App() {
               ))}
             </div>
           </div>
-        )}
-      </Modal>
-
-      <Modal
-        isOpen={showBuildHistoryModal}
-        onClose={() => { setShowBuildHistoryModal(false); setHistorySearch(""); }}
-        title="历史打包记录"
-        width="800px"
-      >
-        {isLoadingHistory ? (
-          <div className="modal-loading">加载中...</div>
-        ) : buildHistory.length === 0 ? (
-          <div className="modal-empty">暂无打包记录</div>
-        ) : (
-          <>
-            {/* 搜索栏 — 支持搜索 Docker 镜像地址、分支名、项目名 */}
-            <div className="history-search-bar">
-              <Search size={14} className="history-search-icon" />
-              <input
-                type="text"
-                className="history-search-input"
-                placeholder="搜索 Docker 镜像地址 / 分支名 / 项目名..."
-                value={historySearch}
-                onChange={(e) => setHistorySearch(e.target.value)}
-              />
-              {historySearch && (
-                <button
-                  className="history-search-clear"
-                  onClick={() => setHistorySearch("")}
-                  title="清除搜索"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            <div className="modal-list">
-              {(() => {
-                // 按repo_path分组
-                let groupedRecords = buildHistory.reduce((groups, record) => {
-                  const projectName = getProjectName(record.repo_path);
-                  if (!groups[projectName]) {
-                    groups[projectName] = {
-                      repoPath: record.repo_path,
-                      records: []
-                    };
-                  }
-                  groups[projectName].records.push(record);
-                  return groups;
-                }, {} as Record<string, { repoPath: string; records: BuildRecord[] }>);
-
-                // 搜索过滤：匹配镜像地址、分支名、项目名、仓库路径
-                const searchLower = historySearch.trim().toLowerCase();
-                if (searchLower) {
-                  const filtered: Record<string, { repoPath: string; records: BuildRecord[] }> = {};
-                  for (const [projectName, group] of Object.entries(groupedRecords)) {
-                    const matchedRecords = group.records.filter(r =>
-                      r.image_tag?.toLowerCase().includes(searchLower) ||
-                      r.image_name?.toLowerCase().includes(searchLower) ||
-                      r.branch.toLowerCase().includes(searchLower) ||
-                      r.repo_path.toLowerCase().includes(searchLower) ||
-                      projectName.toLowerCase().includes(searchLower)
-                    );
-                    if (matchedRecords.length > 0) {
-                      filtered[projectName] = { ...group, records: matchedRecords };
-                    }
-                  }
-                  groupedRecords = filtered;
-                }
-
-                // 按项目名称排序
-                const sortedProjects = Object.entries(groupedRecords).sort(([a], [b]) => a.localeCompare(b));
-                // 搜索时自动展开所有匹配的项目
-                const isSearching = searchLower.length > 0;
-
-                return sortedProjects.map(([projectName, { repoPath, records }]) => (
-                  <div key={projectName} className="project-group">
-                    <div
-                      className="project-group-header"
-                      onClick={() => toggleProjectCollapse(projectName)}
-                    >
-                      <span className={`project-group-arrow ${collapsedProjects.has(projectName) ? 'collapsed' : ''}`}>
-                        ▼
-                      </span>
-                      <span className="project-group-name">{projectName}</span>
-                      <span className="project-group-count">({records.length} 条记录)</span>
-                      <span className="project-group-path" title={repoPath}>{repoPath}</span>
-                    </div>
-                    {(!collapsedProjects.has(projectName) || isSearching) && (
-                      <div className="project-group-items">
-                        {records.map((record) => (
-                          <div key={record.id} className={`modal-history-item ${record.status}`}>
-                            <div className="modal-history-item-header">
-                              <span className={`history-status ${record.status}`}>
-                                {record.status === 'success' || record.status === 'pushed' ? '✅' : '❌'}
-                              </span>
-                              <div className="modal-history-item-info">
-                                <div className="modal-history-item-row">
-                                  <span className="history-time">{record.timestamp}</span>
-                                  <span className="history-branch">{record.branch}</span>
-                                  {record.image_tag && (
-                                    <button
-                                      className="history-image-btn"
-                                      title={record.image_tag}
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        await handleCopyImage(record.image_tag!);
-                                      }}
-                                    >
-                                      <Copy size={12} />
-                                      <span className="history-image-text">{record.image_tag}</span>
-                                    </button>
-                                  )}
-                                  <span className="history-meta">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
-                                </div>
-                                <div className="modal-history-item-path">
-                                  <button
-                                    className="path-link-btn"
-                                    onClick={() => openArtifactPath(record.artifact_path)}
-                                    title={record.artifact_path}
-                                  >
-                                    {record.artifact_path}
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="modal-history-item-actions">
-                                <button
-                                  className="history-action-btn"
-                                  onClick={() => openArtifactPath(record.artifact_path)}
-                                  title="打开产物目录"
-                                >
-                                  <Folder size={14} />
-                                </button>
-                                <button
-                                  className="history-action-btn"
-                                  onClick={() => setExpandedRecordId(expandedRecordId === record.id ? null : record.id)}
-                                  title={expandedRecordId === record.id ? "收起日志" : "展开日志"}
-                                >
-                                  {expandedRecordId === record.id ? <BookMarked size={14} /> : <BookOpen size={14} />}
-                                </button>
-                                <button
-                                  className="history-action-btn delete"
-                                  onClick={() => {
-                                    if (confirm('确定要删除这条记录吗？')) {
-                                      deleteBuildRecord(record.id);
-                                    }
-                                  }}
-                                  title="删除记录"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </div>
-                            {expandedRecordId === record.id && (
-                              <div className="modal-history-log">
-                                <pre>{record.full_log}</pre>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ));
-              })()}
-            </div>
-            <div className="modal-footer">
-              <button
-                className="clear-history-btn"
-                onClick={() => {
-                  if (confirm('确定要清空所有打包历史吗？')) {
-                    clearBuildHistory();
-                  }
-                }}
-              >
-                清空历史
-              </button>
-            </div>
-          </>
         )}
       </Modal>
     </div>

@@ -1536,19 +1536,23 @@ body::before {
   justify-content: center;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 50%;
+  color: #ff6b6b;
 }
 
-.history-item-info {
+.history-status.success,
+.history-status.pushed {
+  color: #64ffda;
+}
+
+.modal-history-item-info {
   flex: 1;
   min-width: 0;
 }
 
-.history-item-header {
+.modal-history-item-header {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .history-time {
@@ -1565,58 +1569,123 @@ body::before {
   font-weight: 500;
 }
 
-.history-image {
+.history-project-type {
   font-size: 11px;
-  color: #ccd6f6;
-  background: rgba(100, 255, 218, 0.08);
   padding: 3px 8px;
   border-radius: 4px;
-  border: 1px solid rgba(100, 255, 218, 0.15);
-}
-
-.history-image-btn {
+  font-weight: 500;
   display: inline-flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 4px;
-  font-size: 11px;
-  color: #ccd6f6;
-  background: rgba(100, 255, 218, 0.08);
-  padding: 3px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(100, 255, 218, 0.15);
-  cursor: pointer;
-  flex: 1 1 100%;
-  max-width: 100%;
-  min-width: 0;
-  text-align: left;
-  white-space: normal;
-  transition: all 0.15s ease;
 }
 
-.history-image-btn svg {
-  flex-shrink: 0;
-  margin-top: 1px;
+.history-project-type.maven {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.history-project-type.npm {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.history-image {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #ccd6f6;
+  background: rgba(15, 52, 96, 0.6);
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  white-space: nowrap;
 }
 
 .history-image-text {
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+.history-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  color: #8892b0;
+  transition: color 0.15s ease;
+}
+
+.history-copy-btn:hover {
+  color: #64ffda;
+}
+
+.modal-history-item-path {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-history-item-path .path-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 4px 10px;
+  background: rgba(15, 52, 96, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.modal-history-item-path .path-label {
+  color: #8892b0;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.modal-history-item-path .path-link-btn {
+  flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: #64ffda;
+  font-family: monospace;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
 }
 
-.history-image-btn:hover {
-  background: rgba(100, 255, 218, 0.18);
-  border-color: rgba(100, 255, 218, 0.4);
+.modal-history-item-path .path-link-btn:hover {
+  text-decoration: underline;
 }
 
-.history-item-path {
-  margin-bottom: 6px;
+.modal-history-item-path .path-open-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  color: #8892b0;
+  transition: color 0.15s ease;
 }
 
-.history-item-path .path-link-btn {
-  font-size: 12px;
-  color: #aaa;
-  word-break: break-all;
+.modal-history-item-path .path-open-btn:hover {
+  color: #64ffda;
 }
 
 .history-item-meta {
@@ -1626,7 +1695,7 @@ body::before {
   color: #666;
 }
 
-.history-item-actions {
+.modal-history-item-actions {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
@@ -1750,4 +1819,69 @@ body::before {
 .history-search-clear:hover {
   color: #ccd6f6;
   background: rgba(255, 255, 255, 0.06);
+}
+
+/* 高级设置折叠区域 */
+.advanced-settings {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  margin-top: 4px;
+}
+
+.advanced-settings-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #8892b0;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.advanced-settings-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ccd6f6;
+}
+
+.advanced-settings-header span:first-child {
+  font-size: 0.7em;
+  width: 12px;
+  text-align: center;
+}
+
+/* 历史记录面板 */
+.history-panel {
+  padding: 0;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.history-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.history-header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.history-header-actions .modal-trigger-btn {
+  white-space: nowrap;
 }

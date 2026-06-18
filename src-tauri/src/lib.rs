@@ -82,6 +82,7 @@ enum PackageProjectType {
 #[derive(Debug, Serialize)]
 struct PackageFromBranchResult {
     artifact_path: String,
+    backend_artifact_path: Option<String>,
     worktree_path: String,
     build_script: String,
     log: String,
@@ -128,6 +129,7 @@ pub struct BuildRecord {
     branch: String,
     project_type: String,
     artifact_path: String,
+    backend_artifact_path: Option<String>,
     image_name: Option<String>,
     image_tag: Option<String>,
     build_command: String,
@@ -158,6 +160,7 @@ pub struct HarborConfig {
     pub last_build_script: String,
     pub last_project_type: String,
     pub last_auto_push_image: bool,
+    pub last_package_with_backend: bool,
     pub repo_path_history: Vec<String>,
     pub npm_package_manager: String,
     pub npm_registry: String,
@@ -192,6 +195,7 @@ impl Default for HarborConfig {
             last_build_script: String::new(),
             last_project_type: "maven".to_string(),
             last_auto_push_image: false,
+            last_package_with_backend: false,
             repo_path_history: Vec::new(),
             npm_package_manager: "npm".to_string(),
             npm_registry: String::new(),
@@ -1159,6 +1163,23 @@ async fn delete_build_record(record_id: String) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+/// 删除产物文件或目录
+#[tauri::command]
+async fn delete_artifact_path(path: String) -> Result<(), String> {
+    let path = PathBuf::from(&path);
+    if !path.exists() {
+        return Ok(()); // 不存在就不处理
+    }
+    if path.is_dir() {
+        fs::remove_dir_all(&path)
+            .map_err(|e| format!("删除目录失败: {} ({})", path.display(), e))?;
+    } else if path.is_file() {
+        fs::remove_file(&path)
+            .map_err(|e| format!("删除文件失败: {} ({})", path.display(), e))?;
+    }
+    Ok(())
+}
+
 /// 更新最新一条构建记录的镜像信息（推送完成后调用）
 #[tauri::command]
 async fn update_build_record_image(image_name: String, image_tag: String) -> Result<(), String> {
@@ -1391,6 +1412,7 @@ async fn package_from_branch(
     build_script: Option<String>,
     package_manager: Option<String>,
     spring_profile: Option<String>,
+    package_with_backend: Option<bool>,
 ) -> Result<PackageFromBranchResult, String> {
     let project_type = PackageProjectType::from_string(project_type)?;
     let branch = branch.trim().to_string();
@@ -1584,6 +1606,7 @@ async fn package_from_branch(
     .ok();
 
     let worktree_for_build = actual_build_path.clone();
+    let worktree_root_for_backend = worktree_path.clone();
     let user_build_script = build_script.clone();
     // 使用用户指定的包管理器，默认 npm
     let pm = package_manager
@@ -1599,7 +1622,7 @@ async fn package_from_branch(
     let npm_registry = config.npm_registry.clone();
     let app_for_build = app.clone();
     let build_result = tauri::async_runtime::spawn_blocking(
-        move || -> Result<(PathBuf, String, Vec<String>), String> {
+        move || -> Result<(PathBuf, String, Vec<String>, Option<String>), String> {
             let mut logs = Vec::new();
             let build_script_used;
 
@@ -1616,9 +1639,35 @@ async fn package_from_branch(
                     build_script_used = format!("mvn {}", mvn_args.join(" "));
                     logs.push(run_command(&worktree_for_build, "mvn", &mvn_args)?);
                     let artifact_path = find_maven_artifact(&worktree_for_build)?;
-                    Ok((artifact_path, build_script_used, logs))
+                    Ok((artifact_path, build_script_used, logs, None))
                 }
                 PackageProjectType::Npm => {
+                    // 如果用户勾选了"同时打包后端"，先检查 pom.xml 是否存在，若存在则启动并行构建
+                    let backend_handle: Option<std::thread::JoinHandle<Result<(String, String), String>>> =
+                        if package_with_backend.unwrap_or(false) && worktree_root_for_backend.join("pom.xml").is_file() {
+                            let root = worktree_root_for_backend.clone();
+                            logs.push("☕ 启动后端并行构建: mvn clean package -DskipTests".to_string());
+                            app_for_build.emit(
+                                "build-progress",
+                                serde_json::json!({
+                                    "percent": 55,
+                                    "message": "📦 前端安装依赖... | ☕ 后端并行打包中"
+                                }),
+                            ).ok();
+                            Some(std::thread::spawn(move || {
+                                let mvn_log = run_command(&root, "mvn", &["clean", "package", "-DskipTests"])
+                                    .map_err(|e| format!("后端 Maven 打包失败: {}", e))?;
+                                let jar = find_maven_artifact(&root)?;
+                                Ok((jar.to_string_lossy().to_string(), mvn_log))
+                            }))
+                        } else if package_with_backend.unwrap_or(false) {
+                            logs.push("⚠️ 勾选了同时打包后端，但 worktree 根目录未找到 pom.xml，跳过后端打包".to_string());
+                            None
+                        } else {
+                            None
+                        };
+
+                    // 前端构建（与后端并行进行）
                     // 检查缓存，依赖未变则跳过 install
                     let cached = if let Some(key) = lock_file_hash(&worktree_for_build) {
                         match try_restore_node_modules(&worktree_for_build, &key) {
@@ -1673,11 +1722,16 @@ async fn package_from_branch(
                     };
                     if !cached {
                         // npm install 进度
+                        let install_msg = if backend_handle.is_some() {
+                            format!("📦 执行 {} install... | ☕ 后端并行打包中", pm)
+                        } else {
+                            format!("📦 执行 {} install（首次下载依赖，可能需要几分钟）...", pm)
+                        };
                         app_for_build.emit(
                             "build-progress",
                             serde_json::json!({
                                 "percent": 55,
-                                "message": format!("📦 执行 {} install（首次下载依赖，可能需要几分钟）...", pm)
+                                "message": install_msg
                             }),
                         ).ok();
                         // 支持自定义 registry
@@ -1713,11 +1767,16 @@ async fn package_from_branch(
                         detect_npm_build_script(&worktree_for_build)?
                     };
                     build_script_used = format!("{} run {}", pm, script_name);
+                    let build_msg = if backend_handle.is_some() {
+                        format!("🔨 前端构建: {} run {} | ☕ 后端并行打包中", pm, script_name)
+                    } else {
+                        format!("🔨 执行构建: {} run {}", pm, script_name)
+                    };
                     app_for_build.emit(
                         "build-progress",
                         serde_json::json!({
                             "percent": 65,
-                            "message": format!("🔨 执行构建: {} run {}", pm, script_name)
+                            "message": build_msg
                         }),
                     ).ok();
                     logs.push(run_command(
@@ -1726,7 +1785,36 @@ async fn package_from_branch(
                         &["run", &script_name],
                     )?);
                     let artifact_path = find_npm_artifact(&worktree_for_build)?;
-                    Ok((artifact_path, build_script_used, logs))
+
+                    // 等待后端构建完成（如果有）
+                    let backend_artifact: Option<String> = if let Some(handle) = backend_handle {
+                        app_for_build.emit(
+                            "build-progress",
+                            serde_json::json!({
+                                "percent": 68,
+                                "message": "✅ 前端构建完成，⏳ 等待后端 Maven 打包..."
+                            }),
+                        ).ok();
+                        match handle.join() {
+                            Ok(Ok((jar_path, mvn_log))) => {
+                                logs.push(format!("☕ 后端 Maven 打包:\n{}", mvn_log));
+                                logs.push(format!("✅ 后端打包成功: {}", jar_path));
+                                Some(jar_path)
+                            }
+                            Ok(Err(e)) => {
+                                logs.push(format!("❌ {}", e));
+                                return Err(e);
+                            }
+                            Err(_) => {
+                                logs.push("❌ 后端打包线程异常".to_string());
+                                return Err("后端打包线程异常".to_string());
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    Ok((artifact_path, build_script_used, logs, backend_artifact))
                 }
             }
         },
@@ -1734,7 +1822,7 @@ async fn package_from_branch(
     .await
     .map_err(|e| format!("打包线程异常: {}", e))?;
 
-    let (artifact_path, build_script, logs) = build_result?;
+    let (artifact_path, build_script, logs, backend_artifact_path) = build_result?;
 
     app.emit(
         "build-progress",
@@ -1769,6 +1857,23 @@ async fn package_from_branch(
             eprintln!("[JarPorter] ❌ 产物复制失败: {}", e);
             artifact_path.to_string_lossy().to_string()
         }
+    };
+
+    // 复制后端产物到输出目录
+    let backend_final_path: Option<String> = if let Some(ref backend_src) = backend_artifact_path {
+        let backend_src_path = PathBuf::from(backend_src);
+        match copy_artifact_to_output_internal(&backend_src_path, &artifact_dir) {
+            Ok(copied) => {
+                eprintln!("[JarPorter] ✅ 后端产物已输出到: {}", copied);
+                Some(copied)
+            }
+            Err(e) => {
+                eprintln!("[JarPorter] ❌ 后端产物复制失败: {}", e);
+                Some(backend_src.clone())
+            }
+        }
+    } else {
+        None
     };
 
     // 清理 worktree — 只保留产物，删除源码
@@ -1813,6 +1918,7 @@ async fn package_from_branch(
         branch: branch.clone(),
         project_type: format!("{:?}", project_type),
         artifact_path: final_artifact_path.clone(),
+        backend_artifact_path: backend_final_path.clone(),
         image_name: None,
         image_tag: None,
         build_command: build_script.clone(),
@@ -1830,6 +1936,7 @@ async fn package_from_branch(
 
     Ok(PackageFromBranchResult {
         artifact_path: final_artifact_path,
+        backend_artifact_path: backend_final_path,
         // 返回产物输出目录（worktree 已清理）
         worktree_path: artifact_dir.to_string_lossy().to_string(),
         build_script,
@@ -2148,7 +2255,8 @@ pub fn run() {
             clear_build_history,
             delete_build_record,
             update_build_record_image,
-            copy_artifact_to_output
+            copy_artifact_to_output,
+            delete_artifact_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
