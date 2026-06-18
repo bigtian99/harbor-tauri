@@ -441,6 +441,7 @@ body::before {
   color: #ccd6f6;
   letter-spacing: 0.3px;
   line-height: 1;
+  margin-bottom: 6px;
 }
 
 .form-group label svg {
@@ -929,7 +930,11 @@ body::before {
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+}
+
+.form-group + .form-group {
+  margin-top: 16px;
 }
 
 .form-group input,
@@ -1364,6 +1369,16 @@ body::before {
   background: rgba(255, 255, 255, 0.05);
   padding: 2px 6px;
   border-radius: 4px;
+}
+
+.history-config-tag {
+  font-size: 10px;
+  color: #ccd6f6;
+  background: rgba(100, 255, 218, 0.1);
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
 }
 
 /* Commit list styles */
@@ -1827,7 +1842,7 @@ body::before {
   border-radius: 6px;
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.03);
-  margin-top: 4px;
+  margin: 12px 0;
 }
 
 .advanced-settings-header {

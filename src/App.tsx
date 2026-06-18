@@ -134,6 +134,11 @@ interface BuildRecord {
   image_name: string | null;
   image_tag: string | null;
   build_command: string;
+  // 打包配置
+  frontend_dir?: string;
+  package_manager?: string;
+  spring_profile?: string;
+  package_with_backend: boolean;
   duration_ms: number;
   status: string;
   log_summary: string;
@@ -220,6 +225,7 @@ function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [showBuildLog, setShowBuildLog] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [showImageConfig, setShowImageConfig] = useState(false);
 
   // 构建日志自动展开/收起：错误自动展开，清空自动收起
   useEffect(() => {
@@ -1090,25 +1096,37 @@ function App() {
               )}
             </div>
 
-            <div className="image-config">
-              <div className="form-row">
-                <label>镜像名称</label>
-                <input
-                  type="text"
-                  value={imageName}
-                  onChange={(e) => setImageName(e.target.value)}
-                  placeholder="例如: my-app"
-                />
+            <div className="advanced-settings">
+              <div
+                className="advanced-settings-header"
+                onClick={() => setShowImageConfig(!showImageConfig)}
+              >
+                <span>{showImageConfig ? '▼' : '▶'}</span>
+                <span>镜像配置</span>
+                <span className="template-hint" style={{ marginLeft: '8px' }}>可选：自定义镜像名称和标签</span>
               </div>
-              <div className="form-row">
-                <label>镜像标签</label>
-                <input
-                  type="text"
-                  value={imageTag}
-                  onChange={(e) => setImageTag(e.target.value)}
-                  placeholder="留空则自动生成 v.YY.MM.DD.HH.MM"
-                />
-              </div>
+              {showImageConfig && (
+                <>
+                  <div className="form-group">
+                    <label>镜像名称</label>
+                    <input
+                      type="text"
+                      value={imageName}
+                      onChange={(e) => setImageName(e.target.value)}
+                      placeholder="例如: my-app"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>镜像标签</label>
+                    <input
+                      type="text"
+                      value={imageTag}
+                      onChange={(e) => setImageTag(e.target.value)}
+                      placeholder="留空则自动生成 v.YY.MM.DD.HH.MM"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <button
@@ -1726,6 +1744,27 @@ function App() {
                                         {record.project_type.toLowerCase() === 'maven' ? '后端' : '前端'}
                                       </span>
                                       <span className="history-meta">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
+                                      {/* 打包配置标签 */}
+                                      {record.package_manager && (
+                                        <span className="history-config-tag" title="包管理器">
+                                          📦 {record.package_manager}
+                                        </span>
+                                      )}
+                                      {record.spring_profile && (
+                                        <span className="history-config-tag" title="Spring Profile">
+                                          ☕ {record.spring_profile}
+                                        </span>
+                                      )}
+                                      {record.package_with_backend && (
+                                        <span className="history-config-tag" title="包含后端">
+                                          🔧 含后端
+                                        </span>
+                                      )}
+                                      {record.frontend_dir && (
+                                        <span className="history-config-tag" title="前端目录">
+                                          📁 {record.frontend_dir}
+                                        </span>
+                                      )}
                                       {record.image_tag && (
                                         <span className="history-image">
                                           <span className="history-image-text">{record.image_tag}</span>

@@ -133,6 +133,11 @@ pub struct BuildRecord {
     image_name: Option<String>,
     image_tag: Option<String>,
     build_command: String,
+    // 打包配置
+    frontend_dir: Option<String>,
+    package_manager: Option<String>,
+    spring_profile: Option<String>,
+    package_with_backend: bool,
     duration_ms: u64,
     status: String,
     log_summary: String,
@@ -581,9 +586,79 @@ fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
     }
 }
 
+/// 查找 Maven 可执行文件路径
+fn find_maven_path() -> Option<String> {
+    // 1. 检查环境变量
+    if let Ok(m2_home) = std::env::var("M2_HOME") {
+        let path = PathBuf::from(m2_home).join("bin/mvn");
+        if path.exists() {
+            return Some(path.to_string_lossy().to_string());
+        }
+    }
+    if let Ok(maven_home) = std::env::var("MAVEN_HOME") {
+        let path = PathBuf::from(maven_home).join("bin/mvn");
+        if path.exists() {
+            return Some(path.to_string_lossy().to_string());
+        }
+    }
+
+    // 2. 检查用户 home 目录下的常见安装位置
+    if let Some(home) = dirs::home_dir() {
+        // SDKMAN
+        let sdkman_mvn = home.join(".sdkman/candidates/maven/current/bin/mvn");
+        if sdkman_mvn.exists() {
+            return Some(sdkman_mvn.to_string_lossy().to_string());
+        }
+        // Homebrew (Apple Silicon)
+        let brew_arm = PathBuf::from("/opt/homebrew/bin/mvn");
+        if brew_arm.exists() {
+            return Some(brew_arm.to_string_lossy().to_string());
+        }
+        // Homebrew (Intel)
+        let brew_intel = PathBuf::from("/usr/local/bin/mvn");
+        if brew_intel.exists() {
+            return Some(brew_intel.to_string_lossy().to_string());
+        }
+    }
+
+    // 3. 检查 IntelliJ IDEA 内置 Maven
+    if let Some(home) = dirs::home_dir() {
+        let idea_dir = home.join("Library/Application Support/JetBrains");
+        if idea_dir.exists() {
+            // 按版本倒序，优先使用最新版本
+            if let Ok(entries) = fs::read_dir(&idea_dir) {
+                let mut versions: Vec<String> = entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_name().to_string_lossy().starts_with("IntelliJIdea"))
+                    .map(|e| e.file_name().to_string_lossy().to_string())
+                    .collect();
+                versions.sort_by(|a, b| b.cmp(a)); // 倒序
+
+                for version in versions {
+                    let mvn_path = idea_dir
+                        .join(&version)
+                        .join("plugins/maven/lib/maven3/bin/mvn");
+                    if mvn_path.exists() {
+                        return Some(mvn_path.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<String, String> {
+    // 对 mvn 命令特殊处理，查找完整路径
+    let actual_command = if command == "mvn" {
+        find_maven_path().unwrap_or_else(|| "mvn".to_string())
+    } else {
+        command.to_string()
+    };
+
     // 先尝试直接执行，失败则通过 shell 执行（解决 nvm/pyenv 等 PATH 问题）
-    let output = match Command::new(command)
+    let output = match Command::new(&actual_command)
         .args(args)
         .current_dir(current_dir)
         .output()
@@ -591,14 +666,14 @@ fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<Strin
         Ok(output) => output,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // 通过 login shell 执行，确保加载 nvm/pyenv 等环境
-            let full_cmd = format!("{} {}", command, args.join(" "));
+            let full_cmd = format!("{} {}", actual_command, args.join(" "));
             Command::new("sh")
                 .args(["-l", "-c", &full_cmd])
                 .current_dir(current_dir)
                 .output()
-                .map_err(|e2| format!("启动命令失败 {}: {}", command, e2))?
+                .map_err(|e2| format!("启动命令失败 {}: {}", actual_command, e2))?
         }
-        Err(e) => return Err(format!("启动命令失败 {}: {}", command, e)),
+        Err(e) => return Err(format!("启动命令失败 {}: {}", actual_command, e)),
     };
     let details = command_output_text(&output);
 
@@ -1621,6 +1696,8 @@ async fn package_from_branch(
         });
     let npm_registry = config.npm_registry.clone();
     let app_for_build = app.clone();
+    // 克隆配置用于闭包
+    let spring_profile_clone = spring_profile.clone();
     let build_result = tauri::async_runtime::spawn_blocking(
         move || -> Result<(PathBuf, String, Vec<String>, Option<String>), String> {
             let mut logs = Vec::new();
@@ -1630,7 +1707,7 @@ async fn package_from_branch(
                 PackageProjectType::Maven => {
                     let mut mvn_args = vec!["clean", "package", "-DskipTests"];
                     let profile_arg;
-                    if let Some(ref profile) = spring_profile {
+                    if let Some(ref profile) = spring_profile_clone {
                         if !profile.trim().is_empty() {
                             profile_arg = format!("-Dspring.profiles.active={}", profile.trim());
                             mvn_args.push(&profile_arg);
@@ -1922,6 +1999,11 @@ async fn package_from_branch(
         image_name: None,
         image_tag: None,
         build_command: build_script.clone(),
+        // 打包配置
+        frontend_dir: frontend_dir.clone(),
+        package_manager: package_manager.clone(),
+        spring_profile: spring_profile.clone(),
+        package_with_backend: package_with_backend.unwrap_or(false),
         duration_ms,
         status: "success".to_string(),
         log_summary,
