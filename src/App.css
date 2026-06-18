@@ -2087,6 +2087,14 @@ body::before {
   padding-right: 16px;
 }
 
+/* iframe 容器 */
+.lt-iframe-container {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 /* iframe 轮播容器 */
 .lt-iframe-carousel {
   position: relative;
@@ -2103,9 +2111,50 @@ body::before {
 .lt-iframe-carousel:hover {
   border-color: rgba(100, 255, 218, 0.6);
   box-shadow: 0 0 12px rgba(100, 255, 218, 0.25);
-  transform: scale(1.6);
+  transform: scale(1.2);
   z-index: 10;
   transform-origin: center center;
+}
+
+/* iframe 导航箭头 - 在 iframe 外面 */
+.lt-iframe-nav {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.lt-iframe-container:hover .lt-iframe-nav {
+  opacity: 1;
+}
+
+.lt-iframe-nav-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(100, 255, 218, 0.3);
+  background: rgba(15, 52, 96, 0.8);
+  color: #64ffda;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.lt-iframe-nav-btn:hover {
+  background: rgba(100, 255, 218, 0.2);
+  border-color: rgba(100, 255, 218, 0.6);
+  transform: scale(1.1);
+}
+
+.lt-iframe-nav-info {
+  font-size: 10px;
+  color: #8892b0;
+  min-width: 24px;
+  text-align: center;
 }
 
 .lt-iframe-wrapper {

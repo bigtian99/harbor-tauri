@@ -1,6 +1,8 @@
+import { useState, useCallback } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import {
-  Globe, Rocket, ExternalLink, Copy, Loader2, Eye
+  Globe, Rocket, ExternalLink, Copy, Loader2, Eye,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import type { SubChannelData, LandingPageResult, FtpUploadResult } from "../types";
 import { isTauriRuntime } from "../types";
@@ -31,6 +33,36 @@ export function LandingPanel({
   setLandingTemplateBase, setLandingIds,
   onPreview, onFtpUpload, onCopyAllLinks,
 }: LandingPanelProps) {
+  const [templateIndices, setTemplateIndices] = useState<Record<string, number>>({});
+
+  const getTemplateIndex = useCallback((id: string) => {
+    return templateIndices[id] || 0;
+  }, [templateIndices]);
+
+  const switchTemplate = useCallback((id: string, direction: 'prev' | 'next') => {
+    const result = landingGenerated[id];
+    if (!result || !result.template_dirs || result.template_dirs.length <= 1) return;
+
+    setTemplateIndices(prev => {
+      const currentIndex = prev[id] || 0;
+      let newIndex: number;
+      if (direction === 'prev') {
+        newIndex = currentIndex > 0 ? currentIndex - 1 : result.template_dirs.length - 1;
+      } else {
+        newIndex = currentIndex < result.template_dirs.length - 1 ? currentIndex + 1 : 0;
+      }
+      return { ...prev, [id]: newIndex };
+    });
+  }, [landingGenerated]);
+
+  const getCurrentIframeSrc = useCallback((genResult: LandingPageResult) => {
+    if (!genResult.template_dirs || genResult.template_dirs.length === 0) {
+      return convertFileSrc(`${genResult.output_dir}/template_0/index.html`);
+    }
+    const index = getTemplateIndex(genResult.id);
+    return convertFileSrc(`${genResult.output_dir}/template_${index}/index.html`);
+  }, [getTemplateIndex]);
+
   return (
     <div className="landing-panel">
       <h2><Globe size={20} /> 生成落地页</h2>
@@ -117,6 +149,8 @@ export function LandingPanel({
             {landingPreviewData.map((item, idx) => {
               const genResult = landingGenerated[item.id];
               const ftpResult = ftpUploadResults[item.id];
+              const currentTemplateIndex = getTemplateIndex(item.id);
+              const hasMultipleTemplates = genResult?.template_dirs && genResult.template_dirs.length > 1;
               return (
                 <div key={item.id || idx} className="landing-table-row">
                   <span className="lt-col lt-col-logo">
@@ -148,24 +182,55 @@ export function LandingPanel({
                   </span>
                   <span className="lt-col lt-col-template">
                     {genResult?.status === "success" ? (
-                      <div
-                        className="lt-iframe-carousel"
-                        onClick={() => {
-                          if (isTauriRuntime()) {
-                            invoke("preview_landing_page", { path: genResult.output_dir });
-                          }
-                        }}
-                        title="点击放大预览"
-                      >
-                        <div className="lt-iframe-wrapper">
-                          <iframe
-                            src={convertFileSrc(`${genResult.output_dir}/index.html`)}
-                            className="lt-iframe"
-                            sandbox="allow-same-origin"
-                            loading="lazy"
-                            title={item.subChannelName || ""}
-                          />
+                      <div className="lt-iframe-container">
+                        <div
+                          className="lt-iframe-carousel"
+                          onClick={() => {
+                            if (isTauriRuntime()) {
+                              invoke("preview_landing_page", {
+                                path: genResult.output_dir,
+                                templateIndex: currentTemplateIndex
+                              });
+                            }
+                          }}
+                          title="点击放大预览"
+                        >
+                          <div className="lt-iframe-wrapper">
+                            <iframe
+                              src={getCurrentIframeSrc(genResult)}
+                              className="lt-iframe"
+                              loading="lazy"
+                              title={item.subChannelName || ""}
+                            />
+                          </div>
                         </div>
+                        {hasMultipleTemplates && (
+                          <div className="lt-iframe-nav">
+                            <button
+                              className="lt-iframe-nav-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                switchTemplate(item.id, 'prev');
+                              }}
+                              title="上一个模板"
+                            >
+                              <ChevronLeft size={14} />
+                            </button>
+                            <span className="lt-iframe-nav-info">
+                              {currentTemplateIndex + 1}/{genResult.template_dirs.length}
+                            </span>
+                            <button
+                              className="lt-iframe-nav-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                switchTemplate(item.id, 'next');
+                              }}
+                              title="下一个模板"
+                            >
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="lt-iframe-empty">
@@ -202,7 +267,10 @@ export function LandingPanel({
                         className="lt-preview-btn"
                         onClick={() => {
                           if (isTauriRuntime()) {
-                            invoke("preview_landing_page", { path: genResult.output_dir });
+                            invoke("preview_landing_page", {
+                              path: genResult.output_dir,
+                              templateIndex: currentTemplateIndex
+                            });
                           }
                         }}
                         title="在浏览器中预览"

@@ -119,6 +119,8 @@ export interface LandingPageResult {
   status: string;
   message: string;
   thumbnail_path?: string;
+  template_dirs: string[];
+  current_template_index: number;
 }
 
 export interface FtpUploadResult {

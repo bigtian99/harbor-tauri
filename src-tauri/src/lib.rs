@@ -257,6 +257,8 @@ struct LandingPageResult {
     output_dir: String,
     status: String,
     message: String,
+    template_dirs: Vec<String>,
+    current_template_index: usize,
 }
 
 impl ArtifactType {
@@ -1637,8 +1639,21 @@ async fn get_temp_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn preview_landing_page(path: String) -> Result<(), String> {
-    let html_path = PathBuf::from(&path).join("index.html");
+async fn preview_landing_page(path: String, template_index: Option<usize>) -> Result<(), String> {
+    let path_buf = PathBuf::from(&path);
+    let template_idx = template_index.unwrap_or(0);
+    let mut html_path = path_buf.join(format!("template_{}", template_idx)).join("index.html");
+
+    // 如果指定的模板路径不存在，尝试查找 template_0
+    if !html_path.exists() {
+        html_path = path_buf.join("template_0").join("index.html");
+    }
+
+    // 如果 template_0 也不存在，尝试直接查找 index.html（兼容旧格式）
+    if !html_path.exists() {
+        html_path = path_buf.join("index.html");
+    }
+
     if !html_path.exists() {
         return Err(format!("文件不存在: {}", html_path.display()));
     }
@@ -2820,88 +2835,112 @@ async fn generate_landing_pages(
             }),
         ).ok();
 
-        // 查找模板目录
-        let template_dir = Path::new(&template_base).join(&channel.type_code);
-        if !template_dir.exists() || !template_dir.is_dir() {
-            results.push(LandingPageResult {
-                id: channel.id.clone(),
-                type_code: channel.type_code.clone(),
-                name: channel.sub_channel_name.clone(),
-                output_dir: channel_output_str,
-                status: "error".to_string(),
-                message: format!("模板目录不存在: {}", template_dir.display()),
-            });
-            continue;
-        }
-
-        // 复制模板目录
-        if let Err(e) = copy_dir_recursive(&template_dir, &channel_output_dir) {
-            results.push(LandingPageResult {
-                id: channel.id.clone(),
-                type_code: channel.type_code.clone(),
-                name: channel.sub_channel_name.clone(),
-                output_dir: channel_output_str,
-                status: "error".to_string(),
-                message: format!("复制模板失败: {}", e),
-            });
-            continue;
-        }
-
-        // 修改 index.html
-        let html_path = channel_output_dir.join("index.html");
-        if !html_path.exists() {
-            results.push(LandingPageResult {
-                id: channel.id.clone(),
-                type_code: channel.type_code.clone(),
-                name: channel.sub_channel_name.clone(),
-                output_dir: channel_output_str,
-                status: "error".to_string(),
-                message: "模板中未找到 index.html".to_string(),
-            });
-            continue;
-        }
-
-        match fs::read_to_string(&html_path) {
-            Ok(content) => {
-                let new_content = replace_landing_page_content(&content, channel);
-                if let Err(e) = fs::write(&html_path, &new_content) {
-                    results.push(LandingPageResult {
-                        id: channel.id.clone(),
-                        type_code: channel.type_code.clone(),
-                        name: channel.sub_channel_name.clone(),
-                        output_dir: channel_output_str,
-                        status: "error".to_string(),
-                        message: format!("写入文件失败: {}", e),
-                    });
-                } else {
-                    // 验证生成的文件是否可读
-                    let verify_index = channel_output_dir.join("index.html");
-                    let file_exists = verify_index.exists();
-                    let file_size = fs::metadata(&verify_index).map(|m| m.len()).unwrap_or(0);
-                    eprintln!(
-                        "[JarPorter] ✅ 落地页生成成功: {} | output_dir={} | index.html exists={} size={}",
-                        channel.sub_channel_name, channel_output_str, file_exists, file_size
-                    );
-                    results.push(LandingPageResult {
-                        id: channel.id.clone(),
-                        type_code: channel.type_code.clone(),
-                        name: channel.sub_channel_name.clone(),
-                        output_dir: channel_output_str,
-                        status: "success".to_string(),
-                        message: "生成成功".to_string(),
-                    });
+        // 查找所有匹配的模板目录（以 type_code 开头的目录）
+        let template_base_path = Path::new(&template_base);
+        let mut template_dirs: Vec<PathBuf> = Vec::new();
+        if let Ok(entries) = fs::read_dir(template_base_path) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name == channel.type_code || name.starts_with(&format!("{}-", channel.type_code)) {
+                    if entry.path().is_dir() {
+                        template_dirs.push(entry.path());
+                    }
                 }
             }
-            Err(e) => {
-                results.push(LandingPageResult {
-                    id: channel.id.clone(),
-                    type_code: channel.type_code.clone(),
-                    name: channel.sub_channel_name.clone(),
-                    output_dir: channel_output_str,
-                    status: "error".to_string(),
-                    message: format!("读取 index.html 失败: {}", e),
-                });
+        }
+        template_dirs.sort();
+
+        if template_dirs.is_empty() {
+            results.push(LandingPageResult {
+                id: channel.id.clone(),
+                type_code: channel.type_code.clone(),
+                name: channel.sub_channel_name.clone(),
+                output_dir: channel_output_str,
+                status: "error".to_string(),
+                message: format!("没有找到 {} 类型的模板目录", channel.type_code),
+                template_dirs: Vec::new(),
+                current_template_index: 0,
+            });
+            continue;
+        }
+
+        let template_dir_strs: Vec<String> = template_dirs.iter()
+            .map(|p| p.display().to_string())
+            .collect();
+
+        // 为所有模板创建输出目录并生成
+        let mut all_success = true;
+        let mut error_message = String::new();
+        let mut first_template_output = PathBuf::new();
+
+        for (idx, template) in template_dirs.iter().enumerate() {
+            let template_output = channel_output_dir.join(format!("template_{}", idx));
+            if idx == 0 {
+                first_template_output = template_output.clone();
             }
+
+            // 复制模板目录
+            if let Err(e) = copy_dir_recursive(template, &template_output) {
+                all_success = false;
+                error_message = format!("复制模板 {} 失败: {}", idx, e);
+                break;
+            }
+
+            // 修改 index.html
+            let html_path = template_output.join("index.html");
+            if !html_path.exists() {
+                all_success = false;
+                error_message = format!("模板 {} 中未找到 index.html", idx);
+                break;
+            }
+
+            match fs::read_to_string(&html_path) {
+                Ok(content) => {
+                    let new_content = replace_landing_page_content(&content, channel);
+                    if let Err(e) = fs::write(&html_path, &new_content) {
+                        all_success = false;
+                        error_message = format!("写入模板 {} 文件失败: {}", idx, e);
+                        break;
+                    }
+                }
+                Err(e) => {
+                    all_success = false;
+                    error_message = format!("读取模板 {} index.html 失败: {}", idx, e);
+                    break;
+                }
+            }
+        }
+
+        if !all_success {
+            results.push(LandingPageResult {
+                id: channel.id.clone(),
+                type_code: channel.type_code.clone(),
+                name: channel.sub_channel_name.clone(),
+                output_dir: channel_output_str,
+                status: "error".to_string(),
+                message: error_message,
+                template_dirs: template_dir_strs,
+                current_template_index: 0,
+            });
+        } else {
+            // 验证生成的文件是否可读
+            let verify_index = first_template_output.join("index.html");
+            let file_exists = verify_index.exists();
+            let file_size = fs::metadata(&verify_index).map(|m| m.len()).unwrap_or(0);
+            eprintln!(
+                "[JarPorter] ✅ 落地页生成成功: {} | output_dir={} | templates={} | index.html exists={} size={}",
+                channel.sub_channel_name, channel_output_str, template_dirs.len(), file_exists, file_size
+            );
+            results.push(LandingPageResult {
+                id: channel.id.clone(),
+                type_code: channel.type_code.clone(),
+                name: channel.sub_channel_name.clone(),
+                output_dir: channel_output_str,
+                status: "success".to_string(),
+                message: "生成成功".to_string(),
+                template_dirs: template_dir_strs,
+                current_template_index: 0,
+            });
         }
     }
 
