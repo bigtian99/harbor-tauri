@@ -1185,6 +1185,18 @@ body::before {
     0 0 40px rgba(100, 255, 218, 0.15);
 }
 
+.save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.save-btn:disabled:hover {
+  transform: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
 .config-tip {
   margin-top: 10px;
   padding: 14px;
@@ -1953,4 +1965,123 @@ body::before {
 
 .history-header-actions .modal-trigger-btn {
   white-space: nowrap;
+}
+
+/* ========== 落地页生成面板 ========== */
+.landing-panel {
+  padding: 32px 40px;
+  max-width: 900px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.landing-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #e0e0e0;
+  margin-bottom: 28px;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
+.landing-actions .modal-trigger-btn,
+.landing-actions .save-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* 落地页渠道预览对齐：给 meta 行增加左 padding 与名称列对齐 */
+.landing-section .modal-list-item-meta {
+  padding-left: 38px;
+}
+
+.landing-section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(100, 255, 218, 0.1);
+}
+
+.landing-section h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #8892b0;
+  margin-bottom: 14px;
+}
+
+/* 落地页结果 --- 复用 modal-list 结构 */
+.item-name {
+  font-weight: 600;
+  color: #e0e0e0;
+  margin-right: 8px;
+}
+
+.item-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.item-logo-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(100, 255, 218, 0.15);
+  color: #64ffda;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.item-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(100, 255, 218, 0.12);
+  color: #64ffda;
+  margin-right: 6px;
+}
+
+.item-badge-product {
+  background: rgba(255, 193, 7, 0.12);
+  color: #ffc107;
+}
+
+.item-badge-success {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+}
+
+.item-badge-error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.output-path {
+  font-size: 11px;
+  color: #64748b;
+  font-family: "SF Mono", "Fira Code", monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 360px;
+  display: inline-block;
 }

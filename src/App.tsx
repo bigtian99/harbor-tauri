@@ -7,7 +7,7 @@ import {
   Container, Upload, Settings, Rocket, Package, FileText, CheckCircle, Copy,
   AlertCircle, Loader2, Eye, EyeOff, GitBranch, FolderOpen, ExternalLink,
   History, List, Pin, Search, User, Folder, BookOpen, BookMarked, Trash2,
-  ChevronLeft, ChevronRight, Archive, RefreshCw, XCircle, Coffee, Wrench
+  ChevronLeft, ChevronRight, Archive, RefreshCw, XCircle, Coffee, Wrench, Globe
 } from "lucide-react";
 import { SearchableDropdown } from "./components/SearchableDropdown";
 import { Modal } from "./components/Modal";
@@ -88,6 +88,7 @@ interface PackageFromBranchResult {
   build_script: string;
   log: string;
   dockerfile_path?: string;
+  dockerfile_context?: string;
 }
 
 interface GitBranchOption {
@@ -146,7 +147,28 @@ interface BuildRecord {
   full_log: string;
 }
 
-type TabType = "upload" | "branch" | "config" | "history";
+interface SubChannelData {
+  id: string;
+  typeCode: string;
+  subChannelName: string;
+  subChannelLogo: string | null;
+  subChannelLink: string | null;
+  productName: string | null;
+  typeName: string | null;
+  channelName: string | null;
+  subChannelDomain: string | null;
+}
+
+interface LandingPageResult {
+  id: string;
+  type_code: string;
+  name: string;
+  output_dir: string;
+  status: string;
+  message: string;
+}
+
+type TabType = "upload" | "branch" | "config" | "history" | "landing";
 
 function isTauriRuntime() {
   return typeof window !== "undefined"
@@ -229,6 +251,16 @@ function App() {
   const [showBuildLog, setShowBuildLog] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showImageConfig, setShowImageConfig] = useState(false);
+
+  // 落地页生成状态
+  const [landingApiUrl, setLandingApiUrl] = useState("http://localhost:8080");
+  const [landingTemplateBase, setLandingTemplateBase] = useState("/Users/daijunxiong/Desktop/tksy-h5-app");
+  const [landingIds, setLandingIds] = useState("");
+  const [landingOutputDir, setLandingOutputDir] = useState("");
+  const [landingPreviewData, setLandingPreviewData] = useState<SubChannelData[]>([]);
+  const [landingResults, setLandingResults] = useState<LandingPageResult[]>([]);
+  const [isFetchingPreview, setIsFetchingPreview] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // 构建日志自动展开/收起：错误自动展开，清空自动收起
   useEffect(() => {
@@ -898,6 +930,7 @@ function App() {
                 imageTag: branchImageTag,
                 artifactType,
                 dockerfilePath: result.dockerfile_path || null,
+                dockerfileContext: result.dockerfile_context || null,
               });
               // 从推送结果中提取完整镜像地址
               const imageMatch = pushResult.match(/完整镜像:\s*(.+)/);
@@ -1068,6 +1101,18 @@ function App() {
           >
             <History size={18} />
             {!sidebarCollapsed && <span>历史记录</span>}
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === "landing" ? "active" : ""}`}
+            onClick={() => setActiveTab("landing")}
+            data-label="生成落地页"
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              document.documentElement.style.setProperty('--tooltip-top', `${rect.top + rect.height / 2}px`);
+            }}
+          >
+            <Globe size={18} />
+            {!sidebarCollapsed && <span>生成落地页</span>}
           </button>
         </nav>
         <div className="sidebar-footer">
@@ -1947,6 +1992,238 @@ function App() {
                   })()}
                 </div>
               </>
+            )}
+          </div>
+        ) : activeTab === "landing" ? (
+          <div className="landing-panel">
+            <h2><Globe size={20} /> 生成落地页</h2>
+
+            <div className="form-group">
+              <label>API 服务地址</label>
+              <input
+                type="text"
+                className="form-input"
+                value={landingApiUrl}
+                onChange={(e) => setLandingApiUrl(e.target.value)}
+                placeholder="http://localhost:8080"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>模板目录 (tksy-h5-app)</label>
+              <input
+                type="text"
+                className="form-input"
+                value={landingTemplateBase}
+                onChange={(e) => setLandingTemplateBase(e.target.value)}
+                placeholder="/Users/daijunxiong/Desktop/tksy-h5-app"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>子渠道 IDs（逗号分隔）</label>
+              <input
+                type="text"
+                className="form-input"
+                value={landingIds}
+                onChange={(e) => setLandingIds(e.target.value)}
+                placeholder="例如: 154,155,156"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>输出目录（临时文件夹）</label>
+              <div className="input-with-button">
+                <input
+                  type="text"
+                  className="form-input"
+                  value={landingOutputDir}
+                  onChange={(e) => setLandingOutputDir(e.target.value)}
+                  placeholder="选择或输入临时输出目录"
+                />
+                <button
+                  className="modal-trigger-btn"
+                  onClick={async () => {
+                    if (!isTauriRuntime()) return;
+                    try {
+                      const selected = await open({ directory: true });
+                      if (selected) setLandingOutputDir(selected as string);
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}
+                >
+                  <FolderOpen size={14} /> 选择
+                </button>
+              </div>
+            </div>
+
+            <div className="landing-actions">
+              <button
+                className="modal-trigger-btn"
+                disabled={!landingIds || isFetchingPreview}
+                onClick={async () => {
+                  if (!isTauriRuntime() || !landingIds.trim()) return;
+                  setIsFetchingPreview(true);
+                  setLandingPreviewData([]);
+                  try {
+                    const data = await invoke<SubChannelData[]>("fetch_sub_channels", {
+                      apiUrl: landingApiUrl,
+                      ids: landingIds.trim(),
+                    });
+                    setLandingPreviewData(data);
+                    showToast(`获取到 ${data.length} 条渠道数据`);
+                  } catch (e: any) {
+                    showToast(`获取失败: ${e}`);
+                  } finally {
+                    setIsFetchingPreview(false);
+                  }
+                }}
+              >
+                {isFetchingPreview ? (
+                  <Loader2 size={14} className="spinning" />
+                ) : (
+                  <Search size={14} />
+                )}
+                预览数据
+              </button>
+
+              <button
+                className="save-btn"
+                disabled={!landingIds || !landingOutputDir || isGenerating}
+                onClick={async () => {
+                  if (!isTauriRuntime() || !landingIds.trim() || !landingOutputDir.trim()) return;
+                  setIsGenerating(true);
+                  setLandingResults([]);
+                  setLog("");
+                  setProgress(0);
+                  try {
+                    const results = await invoke<LandingPageResult[]>("generate_landing_pages", {
+                      apiUrl: landingApiUrl,
+                      ids: landingIds.trim(),
+                      templateBase: landingTemplateBase,
+                      outputDir: landingOutputDir.trim(),
+                    });
+                    setLandingResults(results);
+                    const success = results.filter((r) => r.status === "success").length;
+                    showToast(`生成完成: 成功 ${success} / ${results.length}`);
+                  } catch (e: any) {
+                    showToast(`生成失败: ${e}`);
+                  } finally {
+                    setIsGenerating(false);
+                  }
+                }}
+              >
+                {isGenerating ? (
+                  <Loader2 size={14} className="spinning" />
+                ) : (
+                  <Rocket size={14} />
+                )}
+                生成落地页
+              </button>
+            </div>
+
+            {(isGenerating || progress > 0) && (
+              <div className="build-progress">
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${progress}%` }} />
+                </div>
+                <p>{progressMessage || (isGenerating ? "处理中..." : "")}</p>
+              </div>
+            )}
+
+            {landingPreviewData.length > 0 && (
+              <div className="landing-section">
+                <h3>渠道数据预览 ({landingPreviewData.length})</h3>
+                <div className="modal-list">
+                  {landingPreviewData.map((item, idx) => (
+                    <div key={item.id || idx} className="modal-list-item">
+                      <div className="modal-list-item-main">
+                        {item.subChannelLogo ? (
+                          <img
+                            src={item.subChannelLogo}
+                            alt={item.subChannelName || ""}
+                            className="item-logo"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="item-logo-placeholder">
+                            {(item.subChannelName || "?").charAt(0)}
+                          </div>
+                        )}
+                        <span className="item-name">{item.subChannelName || "(未命名)"}</span>
+                        <span className="item-badge">{item.typeCode || "-"}</span>
+                        {item.productName && (
+                          <span className="item-badge item-badge-product">{item.productName}</span>
+                        )}
+                      </div>
+                      <div className="modal-list-item-meta">
+                        <span>ID: {item.id}</span>
+                        {item.typeName && <span>类型: {item.typeName}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {landingResults.length > 0 && (
+              <div className="landing-section">
+                <h3>
+                  生成结果 ({landingResults.filter((r) => r.status === "success").length}/{landingResults.length}{" "}
+                  成功)
+                </h3>
+                <div className="modal-list">
+                  {landingResults.map((r, i) => (
+                    <div key={`${r.id}-${i}`} className="modal-list-item">
+                      <div className="modal-list-item-main">
+                        <span className="item-name">{r.name}</span>
+                        <span
+                          className={`item-badge ${r.status === "success" ? "item-badge-success" : "item-badge-error"}`}
+                        >
+                          {r.status === "success" ? "✓" : "✗"} {r.type_code}
+                        </span>
+                      </div>
+                      <div className="modal-list-item-meta">
+                        <span>{r.message}</span>
+                        {r.status === "success" && (
+                          <span className="output-path" title={r.output_dir}>
+                            {r.output_dir}
+                          </span>
+                        )}
+                      </div>
+                      {r.status === "success" && (
+                        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                          <button
+                            className="modal-trigger-btn"
+                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                            onClick={() => {
+                              if (isTauriRuntime()) {
+                                invoke("preview_landing_page", { path: r.output_dir });
+                              }
+                            }}
+                          >
+                            <Eye size={14} /> 预览
+                          </button>
+                          <button
+                            className="modal-trigger-btn"
+                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                            onClick={() => {
+                              if (isTauriRuntime()) {
+                                invoke("open_directory", { path: r.output_dir });
+                              }
+                            }}
+                          >
+                            <ExternalLink size={12} /> 打开目录
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         ) : (

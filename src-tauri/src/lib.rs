@@ -92,6 +92,7 @@ struct PackageFromBranchResult {
     build_script: String,
     log: String,
     dockerfile_path: Option<String>,
+    dockerfile_context: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -216,6 +217,46 @@ impl Default for HarborConfig {
             build_history: Vec::new(),
         }
     }
+}
+
+// ========== 落地页生成相关数据结构 ==========
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct SubChannelApiResponse {
+    code: Option<i32>,
+    message: Option<String>,
+    data: Option<Vec<SubChannelData>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct SubChannelData {
+    id: String,
+    #[serde(rename = "typeCode")]
+    type_code: String,
+    #[serde(rename = "subChannelName")]
+    sub_channel_name: String,
+    #[serde(rename = "subChannelLogo")]
+    sub_channel_logo: Option<String>,
+    #[serde(rename = "subChannelLink")]
+    sub_channel_link: Option<String>,
+    #[serde(rename = "productName")]
+    product_name: Option<String>,
+    #[serde(rename = "typeName")]
+    type_name: Option<String>,
+    #[serde(rename = "channelName")]
+    channel_name: Option<String>,
+    #[serde(rename = "subChannelDomain")]
+    sub_channel_domain: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct LandingPageResult {
+    id: String,
+    type_code: String,
+    name: String,
+    output_dir: String,
+    status: String,
+    message: String,
 }
 
 impl ArtifactType {
@@ -1587,6 +1628,40 @@ async fn open_directory(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn preview_landing_page(path: String) -> Result<(), String> {
+    let html_path = PathBuf::from(&path).join("index.html");
+    if !html_path.exists() {
+        return Err(format!("文件不存在: {}", html_path.display()));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&html_path)
+            .output()
+            .map_err(|e| format!("打开预览失败: {}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/c", "start", "", &html_path.to_string_lossy()])
+            .output()
+            .map_err(|e| format!("打开预览失败: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&html_path)
+            .output()
+            .map_err(|e| format!("打开预览失败: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn check_dockerfile(repo_path: String, branch: String) -> Result<bool, String> {
     let repo_path = PathBuf::from(repo_path);
     if !repo_path.is_dir() {
@@ -2098,57 +2173,64 @@ async fn package_from_branch(
 
     // 清理 worktree — 只保留产物，删除源码
     // 清理前先检查是否有自定义 Dockerfile（支持大小写，检查 worktree 根目录和构建子目录）
-    let dockerfile_path: Option<String> = {
+    // 如果找到自定义 Dockerfile，保留 worktree 作为 Docker 构建上下文
+    let (dockerfile_path, dockerfile_context): (Option<String>, Option<String>) = {
         let dockerfile_names = ["Dockerfile", "dockerfile"];
         let search_dirs = vec![worktree_path.clone(), actual_build_path.clone()];
-        let mut found = false;
-        let mut result = None;
+        let mut found_df_path = None;
+        let mut found_df_context = None;
 
         for search_dir in &search_dirs {
             for name in &dockerfile_names {
                 let df_in_worktree = search_dir.join(name);
                 if df_in_worktree.is_file() {
-                    let dest = artifact_dir.join("Dockerfile");
-                    match fs::copy(&df_in_worktree, &dest) {
-                        Ok(_) => {
-                            eprintln!("[JarPorter] 📄 检测到自定义 Dockerfile: {} → {}", df_in_worktree.display(), dest.display());
-                            found = true;
-                            result = Some(dest.to_string_lossy().to_string());
-                            break;
-                        }
-                        Err(e) => {
-                            eprintln!("[JarPorter] ⚠️ 复制自定义 Dockerfile 失败: {}", e);
-                        }
-                    }
+                    eprintln!("[JarPorter] 📄 检测到自定义 Dockerfile: {}", df_in_worktree.display());
+                    // 使用 worktree 作为 Docker 构建上下文（包含 Dockerfile、JAR、tools/ 等）
+                    found_df_path = Some(df_in_worktree.to_string_lossy().to_string());
+                    found_df_context = Some(worktree_path.to_string_lossy().to_string());
+                    break;
                 }
             }
-            if found {
+            if found_df_path.is_some() {
                 break;
             }
         }
-        if !found {
+        if found_df_path.is_none() {
             eprintln!("[JarPorter] 未检测到自定义 Dockerfile（已检查: {:?}）", search_dirs);
         }
-        result
+        (found_df_path, found_df_context)
     };
 
-    app.emit(
-        "build-progress",
-        serde_json::json!({
-            "percent": 95,
-            "message": "🧹 清理 worktree 源码..."
-        }),
-    )
-    .ok();
-
-    cleanup_worktree(&repo_root, &worktree_path);
-    eprintln!("[JarPorter] Worktree 已清理: {}", worktree_path.display());
+    if dockerfile_context.is_some() {
+        // 有自定义 Dockerfile，保留 worktree 作为构建上下文
+        app.emit(
+            "build-progress",
+            serde_json::json!({
+                "percent": 95,
+                "message": "📄 检测到自定义 Dockerfile，保留 worktree 作为构建上下文..."
+            }),
+        )
+        .ok();
+        eprintln!("[JarPorter] 保留 worktree 用于 Docker 构建: {}", worktree_path.display());
+    } else {
+        // 没有自定义 Dockerfile，正常清理 worktree
+        app.emit(
+            "build-progress",
+            serde_json::json!({
+                "percent": 95,
+                "message": "🧹 清理 worktree 源码..."
+            }),
+        )
+        .ok();
+        cleanup_worktree(&repo_root, &worktree_path);
+        eprintln!("[JarPorter] Worktree 已清理: {}", worktree_path.display());
+    }
 
     app.emit(
         "build-progress",
         serde_json::json!({
             "percent": 100,
-            "message": "✅ 打包完成！产物已输出，worktree 已清理"
+            "message": "✅ 打包完成！产物已输出"
         }),
     )
     .ok();
@@ -2197,11 +2279,12 @@ async fn package_from_branch(
     Ok(PackageFromBranchResult {
         artifact_path: final_artifact_path,
         backend_artifact_path: backend_final_path,
-        // 返回产物输出目录（worktree 已清理）
+        // 返回产物输出目录（worktree 已清理，或保留为 Docker 构建上下文）
         worktree_path: artifact_dir.to_string_lossy().to_string(),
         build_script,
         log,
         dockerfile_path,
+        dockerfile_context,
     })
 }
 
@@ -2299,6 +2382,7 @@ async fn build_and_push(
     image_tag: String,
     artifact_type: Option<String>,
     dockerfile_path: Option<String>,
+    dockerfile_context: Option<String>,
 ) -> Result<String, String> {
     reset_cancel_flag();
     let config = load_config()?;
@@ -2341,12 +2425,31 @@ async fn build_and_push(
     )
     .ok();
 
-    let build_context = if let Some(ref df_path) = dockerfile_path {
+    let build_context = if let Some(ref ctx_path) = dockerfile_context {
+        // 有自定义 Dockerfile，使用 worktree 作为构建上下文
+        let ctx = PathBuf::from(ctx_path);
+        let df = if let Some(ref df_path) = dockerfile_path {
+            PathBuf::from(df_path)
+        } else {
+            ctx.join("Dockerfile")
+        };
+        if !df.is_file() {
+            return Err(format!("自定义Dockerfile不存在: {}", df.display()));
+        }
+        eprintln!("[JarPorter] 使用自定义Dockerfile，构建上下文: {}", ctx_path);
+        // worktree 作为构建上下文，Docker 构建完后清理
+        DockerBuildContext {
+            context_dir: ctx.clone(),
+            dockerfile_path: df,
+            cleanup_file: None,
+            cleanup_dir: Some(ctx),
+        }
+    } else if let Some(ref df_path) = dockerfile_path {
         let df = PathBuf::from(df_path);
         if df.is_file() {
             let custom_content = fs::read_to_string(&df)
                 .map_err(|e| format!("读取自定义Dockerfile失败: {}", e))?;
-            eprintln!("[JarPorter] 使用自定义Dockerfile: {}", df_path);
+            eprintln!("[JarPorter] 使用自定义Dockerfile (独立上下文): {}", df_path);
             prepare_custom_docker_context(
                 &config,
                 &artifact_path,
@@ -2548,6 +2651,255 @@ async fn build_and_push(
     Ok(format!("✅ 镜像推送成功!\n\n完整镜像: {}", full_image))
 }
 
+// ========== 落地页生成命令 ==========
+
+#[tauri::command]
+async fn fetch_sub_channels(api_url: String, ids: String) -> Result<Vec<SubChannelData>, String> {
+    let url = format!("{}/api/sub-channel/list?ids={}", api_url.trim_end_matches('/'), ids);
+    eprintln!("[JarPorter] 请求渠道数据: {}", url);
+
+    let response = reqwest::get(&url)
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    let api_response: SubChannelApiResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("解析响应失败: {}", e))?;
+
+    if api_response.code != Some(200) {
+        return Err(format!(
+            "API 返回错误: code={:?}, message={:?}",
+            api_response.code, api_response.message
+        ));
+    }
+
+    Ok(api_response.data.unwrap_or_default())
+}
+
+/// 替换落地页模板内容
+fn replace_landing_page_content(
+    content: &str,
+    sub_channel: &SubChannelData,
+) -> String {
+    let name = &sub_channel.sub_channel_name;
+    let logo = sub_channel.sub_channel_logo.as_deref().unwrap_or("");
+    let download_link = sub_channel.sub_channel_link.as_deref().unwrap_or("");
+
+    let mut result = content.to_string();
+
+    // 替换 <title> 标签内容
+    if let Some(title_start) = result.find("<title>") {
+        if let Some(title_end) = result[title_start..].find("</title>") {
+            let new_title = format!("<title>{} - 官方下载</title>", name);
+            result.replace_range(title_start..title_start + title_end + "</title>".len(), &new_title);
+        }
+    }
+
+    // 替换 logo 图片路径
+    if !logo.is_empty() {
+        result = result
+            .replace("src=\"logo.jpg\"", &format!("src=\"{}\"", logo))
+            .replace("src=\"白鸽软件库.jpg\"", &format!("src=\"{}\"", logo))
+            .replace("src=\"./image/logo.png\"", &format!("src=\"{}\"", logo))
+            .replace("src='./image/logo.png'", &format!("src='{}'", logo));
+    }
+
+    // 替换 APK 下载链接（替换所有 tiankongshuyu 域名下的 .apk 链接）
+    if !download_link.is_empty() {
+        result = replace_apk_links(&result, download_link);
+    }
+
+    // 替换页面中的名称文本
+    let known_names = [
+        "白鸽软件库", "游戏库预览链接", "短剧融合影视",
+        "短剧影视", "异次元 · 高清动漫阅读", "笔书阁", "Tofai", "漫蛙",
+        "白鸽", "游戏库",
+    ];
+    for known in &known_names {
+        // 替换 Nav brand 中的名称
+        result = result.replace(&format!(">{}</span>", known), &format!(">{}</span>", name));
+        // 替换 vis-card name
+        result = result.replace(&format!(">{}</div>", known), &format!(">{}</div>", name));
+        // 替换 header-title
+        result = result.replace(&format!(">{}</span>", known), &format!(">{}</span>", name));
+        // 替换 item-title
+        result = result.replace(&format!("<span>{}</span>", known), &format!("<span>{}</span>", name));
+        // 替换 H1 中的名称
+        result = result.replace(known, name);
+    }
+
+    result
+}
+
+/// 替换所有 APK 下载链接（匹配 tiankongshuyu 域名 + .apk 后缀）
+fn replace_apk_links(content: &str, new_link: &str) -> String {
+    // 查找 .apk 链接的特征模式并替换
+    let mut result = content.to_string();
+    let patterns: &[&str] = &["https://"];
+    for pattern in patterns {
+        let mut search_start = 0;
+        while let Some(pos) = result[search_start..].find(pattern) {
+            let abs_pos = search_start + pos;
+            let _link_start = abs_pos;
+            // 找到链接结束位置（空格、引号、换行等）
+            if let Some(link_end) = result[abs_pos..].find(|c: char| c == '"' || c == '\'' || c == ' ' || c == '\n' || c == '>') {
+                let link = &result[abs_pos..abs_pos + link_end];
+                if link.contains(".apk") {
+                    result.replace_range(abs_pos..abs_pos + link_end, new_link);
+                    search_start = abs_pos + new_link.len();
+                } else {
+                    search_start = abs_pos + link_end;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+    result
+}
+
+#[tauri::command]
+async fn generate_landing_pages(
+    app: tauri::AppHandle,
+    api_url: String,
+    ids: String,
+    template_base: String,
+    output_dir: String,
+) -> Result<Vec<LandingPageResult>, String> {
+    let mut results: Vec<LandingPageResult> = Vec::new();
+
+    // Step 1: 获取子渠道数据
+    app.emit(
+        "build-progress",
+        serde_json::json!({
+            "percent": 10,
+            "message": "📡 获取子渠道数据..."
+        }),
+    ).ok();
+
+    let sub_channels = match fetch_sub_channels(api_url.clone(), ids.clone()).await {
+        Ok(data) => data,
+        Err(e) => {
+            return Err(format!("获取渠道数据失败: {}", e));
+        }
+    };
+
+    if sub_channels.is_empty() {
+        return Err("未获取到任何渠道数据，请检查 ID 是否正确".to_string());
+    }
+
+    let total = sub_channels.len();
+    eprintln!("[JarPorter] 开始生成 {} 个落地页", total);
+
+    // 确保输出目录存在
+    let output_base = Path::new(&output_dir);
+    fs::create_dir_all(output_base)
+        .map_err(|e| format!("创建输出目录失败: {}", e))?;
+
+    for (i, channel) in sub_channels.iter().enumerate() {
+        let progress = 20 + ((i as f64 / total as f64) * 70.0) as i32;
+        let safe_name = channel.sub_channel_name.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+        let channel_output_dir = output_base.join(format!("{}_{}", safe_name, channel.id));
+        let channel_output_str = channel_output_dir.display().to_string();
+
+        app.emit(
+            "build-progress",
+            serde_json::json!({
+                "percent": progress,
+                "message": format!("📝 [{}/{}] 生成落地页: {}", i + 1, total, channel.sub_channel_name),
+            }),
+        ).ok();
+
+        // 查找模板目录
+        let template_dir = Path::new(&template_base).join(&channel.type_code);
+        if !template_dir.exists() || !template_dir.is_dir() {
+            results.push(LandingPageResult {
+                id: channel.id.clone(),
+                type_code: channel.type_code.clone(),
+                name: channel.sub_channel_name.clone(),
+                output_dir: channel_output_str,
+                status: "error".to_string(),
+                message: format!("模板目录不存在: {}", template_dir.display()),
+            });
+            continue;
+        }
+
+        // 复制模板目录
+        if let Err(e) = copy_dir_recursive(&template_dir, &channel_output_dir) {
+            results.push(LandingPageResult {
+                id: channel.id.clone(),
+                type_code: channel.type_code.clone(),
+                name: channel.sub_channel_name.clone(),
+                output_dir: channel_output_str,
+                status: "error".to_string(),
+                message: format!("复制模板失败: {}", e),
+            });
+            continue;
+        }
+
+        // 修改 index.html
+        let html_path = channel_output_dir.join("index.html");
+        if !html_path.exists() {
+            results.push(LandingPageResult {
+                id: channel.id.clone(),
+                type_code: channel.type_code.clone(),
+                name: channel.sub_channel_name.clone(),
+                output_dir: channel_output_str,
+                status: "error".to_string(),
+                message: "模板中未找到 index.html".to_string(),
+            });
+            continue;
+        }
+
+        match fs::read_to_string(&html_path) {
+            Ok(content) => {
+                let new_content = replace_landing_page_content(&content, channel);
+                if let Err(e) = fs::write(&html_path, &new_content) {
+                    results.push(LandingPageResult {
+                        id: channel.id.clone(),
+                        type_code: channel.type_code.clone(),
+                        name: channel.sub_channel_name.clone(),
+                        output_dir: channel_output_str,
+                        status: "error".to_string(),
+                        message: format!("写入文件失败: {}", e),
+                    });
+                } else {
+                    results.push(LandingPageResult {
+                        id: channel.id.clone(),
+                        type_code: channel.type_code.clone(),
+                        name: channel.sub_channel_name.clone(),
+                        output_dir: channel_output_str,
+                        status: "success".to_string(),
+                        message: "生成成功".to_string(),
+                    });
+                }
+            }
+            Err(e) => {
+                results.push(LandingPageResult {
+                    id: channel.id.clone(),
+                    type_code: channel.type_code.clone(),
+                    name: channel.sub_channel_name.clone(),
+                    output_dir: channel_output_str,
+                    status: "error".to_string(),
+                    message: format!("读取 index.html 失败: {}", e),
+                });
+            }
+        }
+    }
+
+    let success_count = results.iter().filter(|r| r.status == "success").count();
+    app.emit(
+        "build-progress",
+        serde_json::json!({
+            "percent": 100,
+            "message": format!("✅ 完成! 成功 {} / {}", success_count, total),
+        }),
+    ).ok();
+
+    Ok(results)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -2575,7 +2927,10 @@ pub fn run() {
             delete_build_record,
             update_build_record_image,
             copy_artifact_to_output,
-            delete_artifact_path
+            delete_artifact_path,
+            fetch_sub_channels,
+            generate_landing_pages,
+            preview_landing_page
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
