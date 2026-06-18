@@ -1,0 +1,90 @@
+.tc-carousel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0 8px;
+}
+
+.tc-viewport {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(15, 52, 96, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tc-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tc-empty {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: rgba(15, 52, 96, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5a6a8a;
+  font-size: 9px;
+}
+
+.tc-arrow {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.tc-carousel:hover .tc-arrow {
+  opacity: 1;
+}
+
+.tc-arrow:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.tc-dots {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 3px;
+}
+
+.tc-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.tc-dot.active {
+  background: #64ffda;
+}
+
+.tc-dot:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.4);
+}

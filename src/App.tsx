@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -166,6 +166,7 @@ interface LandingPageResult {
   output_dir: string;
   status: string;
   message: string;
+  thumbnail_path?: string;
 }
 
 interface FtpUploadResult {
@@ -2098,8 +2099,6 @@ function App() {
               />
             </div>
 
-            {/* 输出目录自动生成到临时文件夹，无需显示 */}
-
             <div className="landing-actions">
               <button
                 className="save-btn"
@@ -2112,14 +2111,11 @@ function App() {
                   setLog("");
                   setProgress(0);
                   try {
-                    // Step 1: 获取渠道数据
                     const data = await invoke<SubChannelData[]>("fetch_sub_channels", {
                       apiUrl: landingApiUrl,
                       ids: landingIds.trim(),
                     });
                     setLandingPreviewData(data);
-
-                    // Step 2: 自动生成落地页
                     setIsGenerating(true);
                     const results = await invoke<LandingPageResult[]>("generate_landing_pages", {
                       apiUrl: landingApiUrl,
@@ -2128,9 +2124,7 @@ function App() {
                       outputDir: landingOutputDir.trim(),
                     });
                     const map: Record<string, LandingPageResult> = {};
-                    for (const r of results) {
-                      map[r.id] = r;
-                    }
+                    for (const r of results) { map[r.id] = r; }
                     setLandingGenerated(map);
                     const success = results.filter((r) => r.status === "success").length;
                     showToast(`生成完成: 成功 ${success} / ${results.length}`);
@@ -2149,7 +2143,6 @@ function App() {
                 )}
                 预览数据
               </button>
-              {/* FTP 上传按钮 — 生成完成后才显示 */}
               {Object.keys(landingGenerated).length > 0 && !isGenerating && (
                 <button
                   className="save-btn"
@@ -2159,7 +2152,6 @@ function App() {
                     setIsUploadingToFtp(true);
                     setFtpUploadResults({});
                     try {
-                      // 构建上传项目列表
                       const items: FtpUploadItem[] = Object.entries(landingGenerated)
                         .filter(([, r]) => r.status === "success")
                         .map(([, r]) => ({
@@ -2173,9 +2165,7 @@ function App() {
                       }
                       const results = await invoke<FtpUploadResult[]>("upload_landing_to_ftp", { items });
                       const map: Record<string, FtpUploadResult> = {};
-                      for (const r of results) {
-                        map[r.id] = r;
-                      }
+                      for (const r of results) { map[r.id] = r; }
                       setFtpUploadResults(map);
                       const success = results.filter((r) => r.status === "success").length;
                       showToast(`FTP 上传完成: 成功 ${success} / ${results.length}`);
@@ -2194,6 +2184,25 @@ function App() {
                   上传到 FTP
                 </button>
               )}
+              {Object.keys(ftpUploadResults).length > 0 && !isGenerating && (
+                <button
+                  className="save-btn"
+                  onClick={async () => {
+                    const urls = Object.values(ftpUploadResults)
+                      .filter((r) => r.status === "success")
+                      .map((r) => r.url);
+                    if (urls.length === 0) {
+                      showToast("没有可复制的链接");
+                      return;
+                    }
+                    await navigator.clipboard.writeText(urls.join("\n"));
+                    showToast(`已复制 ${urls.length} 个链接`);
+                  }}
+                >
+                  <Copy size={14} />
+                  复制所有链接
+                </button>
+              )}
             </div>
 
             {(isGenerating || isUploadingToFtp || progress > 0) && (
@@ -2207,102 +2216,121 @@ function App() {
 
             {landingPreviewData.length > 0 && (
               <div className="landing-section">
-                <h3>渠道数据预览 ({landingPreviewData.length})</h3>
-                <div className="modal-list">
-                  {landingPreviewData.map((item, idx) => (
-                    <div key={item.id || idx} className="modal-list-item">
-                      <div className="modal-list-item-main">
-                        {item.subChannelLogo ? (
-                          <img
-                            src={item.subChannelLogo}
-                            alt={item.subChannelName || ""}
-                            className="item-logo"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <div className="item-logo-placeholder">
-                            {(item.subChannelName || "?").charAt(0)}
-                          </div>
-                        )}
-                        <span className="item-name">{item.subChannelName || "(未命名)"}</span>
-                        <span className="item-badge">{item.typeCode || "-"}</span>
-                        {item.productName && (
-                          <span className="item-badge item-badge-product">{item.productName}</span>
-                        )}
-                        {landingGenerated[item.id]?.status === "success" && (
-                          <span className="item-badge item-badge-success">✓ 已生成</span>
-                        )}
-                        {landingGenerated[item.id]?.status === "error" && (
-                          <span className="item-badge item-badge-error">✗ 失败</span>
-                        )}
+                <div className="landing-table">
+                  <div className="landing-table-header">
+                    <span className="lt-col lt-col-logo"></span>
+                    <span className="lt-col lt-col-name">名称</span>
+                    <span className="lt-col lt-col-type">类型</span>
+                    <span className="lt-col lt-col-product">产品</span>
+                    <span className="lt-col lt-col-template">模板</span>
+                    <span className="lt-col lt-col-id">ID</span>
+                    <span className="lt-col lt-col-status">状态</span>
+                    <span className="lt-col lt-col-action">操作</span>
+                  </div>
+                  {landingPreviewData.map((item, idx) => {
+                    const genResult = landingGenerated[item.id];
+                    const ftpResult = ftpUploadResults[item.id];
+                    return (
+                      <div key={item.id || idx} className="landing-table-row">
+                        <span className="lt-col lt-col-logo">
+                          {item.subChannelLogo ? (
+                            <img
+                              src={item.subChannelLogo}
+                              alt={item.subChannelName || ""}
+                              className="lt-logo"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="lt-logo-placeholder">
+                              {(item.subChannelName || "?").charAt(0)}
+                            </div>
+                          )}
+                        </span>
+                        <span className="lt-col lt-col-name" title={item.subChannelName || ""}>
+                          {item.subChannelName || "(未命名)"}
+                        </span>
+                        <span className="lt-col lt-col-type">
+                          <span className="item-badge">{item.typeCode || "-"}</span>
+                        </span>
+                        <span className="lt-col lt-col-product">
+                          {item.productName && (
+                            <span className="item-badge item-badge-product">{item.productName}</span>
+                          )}
+                        </span>
+                        <span className="lt-col lt-col-template">
+                          {genResult?.status === "success" ? (
+                            <div
+                              className="lt-iframe-carousel"
+                              onClick={() => {
+                                if (isTauriRuntime()) {
+                                  invoke("preview_landing_page", { path: genResult.output_dir });
+                                }
+                              }}
+                              title="点击放大预览"
+                            >
+                              <div className="lt-iframe-wrapper">
+                                <iframe
+                                  src={convertFileSrc(`${genResult.output_dir}/index.html`)}
+                                  className="lt-iframe"
+                                  sandbox="allow-same-origin"
+                                  loading="lazy"
+                                  title={item.subChannelName || ""}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="lt-iframe-empty">
+                              {item.subChannelLogo ? (
+                                <img
+                                  src={item.subChannelLogo}
+                                  alt=""
+                                  className="lt-iframe-empty-logo"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <span>{(item.subChannelName || "?").charAt(0)}</span>
+                              )}
+                            </div>
+                          )}
+                        </span>
+                        <span className="lt-col lt-col-id">{item.id}</span>
+                        <span className="lt-col lt-col-status">
+                          {genResult?.status === "success" && (
+                            <span className="item-badge item-badge-success">✓ 已生成</span>
+                          )}
+                          {genResult?.status === "error" && (
+                            <span className="item-badge item-badge-error" title={genResult.message}>✗ 失败</span>
+                          )}
+                          {ftpResult?.status === "success" && (
+                            <span className="item-badge item-badge-ftp">↑ 已上传</span>
+                          )}
+                        </span>
+                        <span className="lt-col lt-col-action">
+                          {genResult?.status === "success" && (
+                            <button
+                              className="lt-preview-btn"
+                              onClick={() => {
+                                if (isTauriRuntime()) {
+                                  invoke("preview_landing_page", { path: genResult.output_dir });
+                                }
+                              }}
+                              title="在浏览器中预览"
+                            >
+                              <Eye size={13} /> 预览
+                            </button>
+                          )}
+                          {genResult?.status === "error" && (
+                            <span className="lt-error-text" title={genResult.message}>失败</span>
+                          )}
+                        </span>
                       </div>
-                      <div className="modal-list-item-meta">
-                        <span>ID: {item.id}</span>
-                        {item.typeName && <span>类型: {item.typeName}</span>}
-                        {landingGenerated[item.id]?.message && landingGenerated[item.id]?.status !== "success" && (
-                          <span className="item-error-msg">{landingGenerated[item.id]!.message}</span>
-                        )}
-                      </div>
-                      {landingGenerated[item.id]?.status === "success" && (
-                        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                          <button
-                            className="modal-trigger-btn"
-                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-                            onClick={() => {
-                              if (isTauriRuntime()) {
-                                invoke("preview_landing_page", { path: landingGenerated[item.id]!.output_dir });
-                              }
-                            }}
-                          >
-                            <Eye size={14} /> 预览
-                          </button>
-                        </div>
-                      )}
-                      {ftpUploadResults[item.id]?.status === "success" && (
-                        <div className="ftp-url-row" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
-                          <ExternalLink size={12} />
-                          <a
-                            href={ftpUploadResults[item.id]!.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ color: "var(--primary)", fontSize: "0.85em", wordBreak: "break-all" }}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              if (isTauriRuntime()) {
-                                openUrl(ftpUploadResults[item.id]!.url);
-                              } else {
-                                window.open(ftpUploadResults[item.id]!.url, "_blank");
-                              }
-                            }}
-                          >
-                            {ftpUploadResults[item.id]!.url}
-                          </a>
-                          <button
-                            className="copy-btn"
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(ftpUploadResults[item.id]!.url);
-                              showToast("链接已复制");
-                            }}
-                            title="复制链接"
-                          >
-                            <Copy size={12} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              </div>
-            )}
-
-            {progress > 0 && progress < 100 && !isGenerating && (
-              <div className="build-progress">
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${progress}%` }} />
-                </div>
-                <p>{progressMessage || ""}</p>
               </div>
             )}
           </div>
