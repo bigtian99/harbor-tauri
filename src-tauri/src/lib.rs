@@ -865,8 +865,10 @@ fn prepare_custom_docker_context(
             fs::copy(artifact_path, &dest_jar)
                 .map_err(|e| format!("复制JAR到构建上下文失败: {}", e))?;
 
-            // 渲染并写入自定义 Dockerfile
-            let rendered = render_template(dockerfile_content, &replacements);
+            // 渲染自定义 Dockerfile，支持 {{JAR_FILE}} 占位符
+            let mut rendered = render_template(dockerfile_content, &replacements);
+            // 替换 JAR 文件名占位符
+            rendered = rendered.replace("{{JAR_FILE}}", &jar_name);
             let df_path = context_dir.join("Dockerfile");
             fs::write(&df_path, rendered)
                 .map_err(|e| format!("写入Dockerfile失败: {}", e))?;
@@ -2430,7 +2432,10 @@ async fn build_and_push(
     if !build_output.status.success() {
         let stderr = String::from_utf8_lossy(&build_output.stderr);
         let stdout = String::from_utf8_lossy(&build_output.stdout);
-        return Err(format!("docker build失败:\n{}\n{}", stdout, stderr));
+        return Err(format!(
+            "docker build失败:\n--- stderr ---\n{}\n--- stdout ---\n{}",
+            stderr, stdout
+        ));
     }
 
     // 步骤3: docker login (阻塞操作放到线程池)
