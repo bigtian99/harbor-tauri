@@ -154,12 +154,12 @@ export function LandingPanel({
         )}
       </div>
 
-      {(isGenerating || isUploadingToFtp || progress > 0) && (
+      {(isUploadingToFtp || progress > 0) && (
         <div className="build-progress">
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
-          <p>{progressMessage || (isGenerating ? "处理中..." : "")}</p>
+          <p>{progressMessage}</p>
         </div>
       )}
 

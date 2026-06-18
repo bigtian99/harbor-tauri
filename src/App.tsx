@@ -837,12 +837,14 @@ function App() {
     if (!landingIds.trim() || !isTauriRuntime() || !landingOutputDir) {
       setLandingPreviewData([]);
       setLandingGenerated({});
+      setFtpUploadResults({});
       return;
     }
     landingDebounceRef.current = window.setTimeout(async () => {
       setIsFetchingPreview(true);
       setLandingPreviewData([]);
       setLandingGenerated({});
+      setFtpUploadResults({});
       setLog("");
       setProgress(0);
       try {
@@ -863,8 +865,6 @@ function App() {
           map[r.id] = r;
         }
         setLandingGenerated(map);
-        const success = results.filter((r) => r.status === "success").length;
-        showToast(`生成完成: 成功 ${success} / ${results.length}`);
       } catch (e: any) {
         showToast(`操作失败: ${e}`);
       } finally {
@@ -980,7 +980,6 @@ function App() {
       for (const r of results) { map[r.id] = r; }
       setLandingGenerated(map);
       const success = results.filter((r) => r.status === "success").length;
-      showToast(`生成完成: 成功 ${success} / ${results.length}`);
     } catch (e: any) {
       showToast(`操作失败: ${e}`);
     } finally {

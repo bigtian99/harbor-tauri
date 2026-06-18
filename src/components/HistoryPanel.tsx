@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   History, CheckCircle, Copy, Trash2, RefreshCw, Search,
   FolderOpen, FileText, BookOpen, BookMarked, Folder,
-  Coffee, Package, Wrench
+  Coffee, Package, Wrench, ChevronRight, Clock
 } from "lucide-react";
 import type { BuildRecord } from "../types";
 import { getProjectName } from "../types";
@@ -26,35 +26,33 @@ export function HistoryPanel({
 }: HistoryPanelProps) {
   const [search, setSearch] = useState(historySearch);
   const [expandedId, setExpandedId] = useState<string | null>(expandedRecordId);
-  const [collapsed, setCollapsed] = useState<Set<string>>(collapsedProjects);
+  // collapsedProjects 保留用于接口兼容性
+  const [_collapsedProjects] = useState<Set<string>>(collapsedProjects);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
 
-  function toggleProjectCollapse(projectName: string) {
-    setCollapsed(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(projectName)) {
-        newSet.delete(projectName);
-      } else {
-        newSet.add(projectName);
-      }
-      return newSet;
-    });
-  }
+  // 使用 _collapsedProjects 避免未使用警告
+  void _collapsedProjects;
 
   // 按项目分组
-  let groupedRecords = buildHistory.reduce((groups, record) => {
-    const projectName = getProjectName(record.repo_path);
-    if (!groups[projectName]) {
-      groups[projectName] = {
-        repoPath: record.repo_path,
-        records: []
-      };
-    }
-    groups[projectName].records.push(record);
-    return groups;
-  }, {} as Record<string, { repoPath: string; records: BuildRecord[] }>);
+  const groupedRecords = useMemo(() => {
+    return buildHistory.reduce((groups, record) => {
+      const projectName = getProjectName(record.repo_path);
+      if (!groups[projectName]) {
+        groups[projectName] = {
+          repoPath: record.repo_path,
+          records: []
+        };
+      }
+      groups[projectName].records.push(record);
+      return groups;
+    }, {} as Record<string, { repoPath: string; records: BuildRecord[] }>);
+  }, [buildHistory]);
 
-  const searchLower = search.trim().toLowerCase();
-  if (searchLower) {
+  // 搜索过滤
+  const filteredGroupedRecords = useMemo(() => {
+    const searchLower = search.trim().toLowerCase();
+    if (!searchLower) return groupedRecords;
+
     const filtered: Record<string, { repoPath: string; records: BuildRecord[] }> = {};
     for (const [projectName, group] of Object.entries(groupedRecords)) {
       const matchedRecords = group.records.filter(r =>
@@ -70,218 +68,273 @@ export function HistoryPanel({
         filtered[projectName] = { ...group, records: matchedRecords };
       }
     }
-    groupedRecords = filtered;
+    return filtered;
+  }, [groupedRecords, search]);
+
+  const sortedProjects = Object.entries(filteredGroupedRecords).sort(([a], [b]) => a.localeCompare(b));
+  const selectedProjectData = selectedProject ? filteredGroupedRecords[selectedProject] : null;
+
+  // 如果只有一个项目，自动选中
+  if (sortedProjects.length === 1 && !selectedProject) {
+    setSelectedProject(sortedProjects[0][0]);
   }
 
-  const sortedProjects = Object.entries(groupedRecords).sort(([a], [b]) => a.localeCompare(b));
-  const isSearching = searchLower.length > 0;
-
   return (
-    <div className="history-panel">
-      <div className="history-header">
-        <h2><History size={20} /> 历史打包记录</h2>
-        <div className="history-header-actions">
-          {buildHistory.length > 0 && (
+    <div className="history-panel-new">
+      {/* 左侧项目列表 */}
+      <div className="history-sidebar">
+        <div className="history-sidebar-header">
+          <h3>
+            <Folder size={16} />
+            项目列表
+          </h3>
+          <span className="history-sidebar-count">{sortedProjects.length}</span>
+        </div>
+
+        <div className="history-sidebar-search">
+          <Search size={14} className="history-sidebar-search-icon" />
+          <input
+            type="text"
+            className="history-sidebar-search-input"
+            placeholder="搜索项目..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
             <button
-              className="modal-trigger-btn"
-              onClick={() => {
-                if (confirm('确定要清空所有打包历史吗？删除后将同时清理产物文件。')) {
-                  onClearHistory();
-                }
-              }}
+              className="history-sidebar-search-clear"
+              onClick={() => setSearch("")}
+              title="清除搜索"
             >
-              <Trash2 size={14} />
-              清空历史
+              ✕
             </button>
           )}
-          <button className="modal-trigger-btn" onClick={onLoadHistory}>
-            <RefreshCw size={14} />
-            刷新
-          </button>
+        </div>
+
+        <div className="history-sidebar-list">
+          {isLoadingHistory ? (
+            <div className="history-sidebar-loading">加载中...</div>
+          ) : sortedProjects.length === 0 ? (
+            <div className="history-sidebar-empty">暂无项目</div>
+          ) : (
+            sortedProjects.map(([projectName, { records }]) => (
+              <div
+                key={projectName}
+                className={`history-sidebar-item ${selectedProject === projectName ? 'active' : ''}`}
+                onClick={() => setSelectedProject(projectName)}
+              >
+                <div className="history-sidebar-item-icon">
+                  <Folder size={16} />
+                </div>
+                <div className="history-sidebar-item-content">
+                  <div className="history-sidebar-item-name">{projectName}</div>
+                  <div className="history-sidebar-item-meta">{records.length} 条记录</div>
+                </div>
+                <ChevronRight size={14} className="history-sidebar-item-arrow" />
+              </div>
+            ))
+          )}
         </div>
       </div>
 
-      {isLoadingHistory ? (
-        <div className="modal-loading">加载中...</div>
-      ) : buildHistory.length === 0 ? (
-        <div className="modal-empty">暂无打包记录</div>
-      ) : (
-        <>
-          <div className="history-search-bar">
-            <Search size={14} className="history-search-icon" />
-            <input
-              type="text"
-              className="history-search-input"
-              placeholder="搜索 Docker 镜像地址 / 分支名 / 项目名..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && (
-              <button
-                className="history-search-clear"
-                onClick={() => setSearch("")}
-                title="清除搜索"
-              >
-                ✕
-              </button>
-            )}
+      {/* 右侧打包记录 */}
+      <div className="history-content">
+        {!selectedProject ? (
+          <div className="history-content-empty">
+            <div className="history-content-empty-icon">
+              <History size={48} />
+            </div>
+            <h3>选择项目查看打包记录</h3>
+            <p>从左侧项目列表中选择一个项目</p>
           </div>
-          <div className="modal-list">
-            {sortedProjects.map(([projectName, { repoPath, records }]) => (
-              <div key={projectName} className="project-group">
-                <div
-                  className="project-group-header"
-                  onClick={() => toggleProjectCollapse(projectName)}
-                >
-                  <span className={`project-group-arrow ${collapsed.has(projectName) ? 'collapsed' : ''}`}>
-                    ▼
-                  </span>
-                  <span className="project-group-name">{projectName}</span>
-                  <span className="project-group-count">({records.length} 条记录)</span>
-                  <span className="project-group-path" title={repoPath}>{repoPath}</span>
-                </div>
-                {(!collapsed.has(projectName) || isSearching) && (
-                  <div className="project-group-items">
-                    {records.map((record) => (
-                      <div key={record.id} className={`modal-history-item ${record.status}`}>
-                        <div className="modal-history-item-header">
-                          <span className={`history-status ${record.status}`}>
-                            {record.status === 'success' || record.status === 'pushed' ? <CheckCircle size={16} /> : <span>✗</span>}
+        ) : selectedProjectData ? (
+          <>
+            <div className="history-content-header">
+              <div className="history-content-header-info">
+                <h2>
+                  <Folder size={20} />
+                  {selectedProject}
+                </h2>
+                <span className="history-content-header-path" title={selectedProjectData.repoPath}>
+                  {selectedProjectData.repoPath}
+                </span>
+              </div>
+              <div className="history-content-header-actions">
+                {buildHistory.length > 0 && (
+                  <button
+                    className="history-action-btn danger"
+                    onClick={() => {
+                      if (confirm('确定要清空所有打包历史吗？删除后将同时清理产物文件。')) {
+                        onClearHistory();
+                      }
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    清空历史
+                  </button>
+                )}
+                <button className="history-action-btn" onClick={onLoadHistory}>
+                  <RefreshCw size={14} />
+                  刷新
+                </button>
+              </div>
+            </div>
+
+            <div className="history-content-records">
+              {selectedProjectData.records.map((record) => (
+                <div key={record.id} className={`history-record-card ${record.status}`}>
+                  <div className="history-record-header">
+                    <div className="history-record-status">
+                      {record.status === 'success' || record.status === 'pushed' ? (
+                        <CheckCircle size={18} />
+                      ) : (
+                        <span className="history-record-status-failed">✗</span>
+                      )}
+                    </div>
+                    <div className="history-record-info">
+                      <div className="history-record-meta">
+                        <span className="history-record-time">
+                          <Clock size={12} />
+                          {record.timestamp}
+                        </span>
+                        <span className="history-record-branch">{record.branch}</span>
+                        <span className={`history-record-type ${record.project_type.toLowerCase()}`}>
+                          {record.project_type.toLowerCase() === 'maven' ? '后端' : record.package_with_backend ? '前端+后端' : '前端'}
+                        </span>
+                        <span className="history-record-duration">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
+                        {record.project_type.toLowerCase() !== 'maven' && record.package_manager && (
+                          <span className="history-record-config" title="包管理器">
+                            <Package size={12} /> {record.package_manager}
                           </span>
-                          <div className="modal-history-item-info">
-                            <div className="modal-history-item-row">
-                              <span className="history-time">{record.timestamp}</span>
-                              <span className="history-branch">{record.branch}</span>
-                              <span className={`history-project-type ${record.project_type.toLowerCase()}`}>
-                                {record.project_type.toLowerCase() === 'maven' ? '后端' : record.package_with_backend ? '前端+后端' : '前端'}
-                              </span>
-                              <span className="history-meta">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
-                              {record.project_type.toLowerCase() !== 'maven' && record.package_manager && (
-                                <span className="history-config-tag" title="包管理器">
-                                  <Package size={12} /> {record.package_manager}
-                                </span>
-                              )}
-                              {(record.project_type.toLowerCase() === 'maven' || record.package_with_backend) && record.spring_profile && (
-                                <span className="history-config-tag" title="Spring Profile">
-                                  <Coffee size={12} /> {record.spring_profile}
-                                </span>
-                              )}
-                              {record.package_with_backend && (
-                                <span className="history-config-tag" title="包含后端">
-                                  <Wrench size={12} /> 含后端
-                                </span>
-                              )}
-                              {record.project_type.toLowerCase() !== 'maven' && record.frontend_dir && (
-                                <span className="history-config-tag" title="前端目录">
-                                  <Folder size={12} /> {record.frontend_dir}
-                                </span>
-                              )}
-                              {record.image_tag && (
-                                <span className="history-image">
-                                  <span className="history-image-text">{record.image_tag}</span>
-                                  <button
-                                    className="history-copy-btn"
-                                    title="复制镜像地址"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onCopyImage(record.image_tag!);
-                                    }}
-                                  >
-                                    <Copy size={12} />
-                                  </button>
-                                </span>
-                              )}
-                            </div>
-                            <div className="modal-history-item-path">
-                              <div className="path-item">
-                                <span className="path-label">{record.project_type.toLowerCase() === 'maven' ? '后端' : record.package_with_backend ? '前端+后端' : '前端'}</span>
-                                <button
-                                  className="path-link-btn"
-                                  onClick={() => onOpenArtifact(record.artifact_path)}
-                                  title={record.artifact_path}
-                                >
-                                  {record.artifact_path}
-                                </button>
-                                <button
-                                  className="path-open-btn"
-                                  onClick={() => onOpenArtifact(record.artifact_path)}
-                                  title="打开目录"
-                                >
-                                  <FolderOpen size={12} />
-                                </button>
-                              </div>
-                              {record.backend_artifact_path && (
-                                <div className="path-item">
-                                  <span className="path-label">后端</span>
-                                  <button
-                                    className="path-link-btn"
-                                    onClick={() => onOpenArtifact(record.backend_artifact_path!)}
-                                    title={record.backend_artifact_path}
-                                  >
-                                    {record.backend_artifact_path}
-                                  </button>
-                                  <button
-                                    className="path-open-btn"
-                                    onClick={() => onOpenArtifact(record.backend_artifact_path!)}
-                                    title="打开目录"
-                                  >
-                                    <FolderOpen size={12} />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="modal-history-item-actions">
-                            <button
-                              className="history-action-btn"
-                              onClick={() => onOpenArtifact(record.artifact_path)}
-                              title="打开产物目录"
-                            >
-                              <Folder size={14} />
-                            </button>
-                            {record.backend_artifact_path && (
-                              <button
-                                className="history-action-btn"
-                                onClick={() => onOpenArtifact(record.backend_artifact_path!)}
-                                title="打开后端产物"
-                              >
-                                <FileText size={14} />
-                              </button>
-                            )}
-                            <button
-                              className="history-action-btn"
-                              onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}
-                              title={expandedId === record.id ? "收起日志" : "展开日志"}
-                            >
-                              {expandedId === record.id ? <BookMarked size={14} /> : <BookOpen size={14} />}
-                            </button>
-                            <button
-                              className="history-action-btn delete"
-                              onClick={() => {
-                                if (confirm('确定要删除这条记录吗？删除后将同时清理产物文件。')) {
-                                  onDeleteRecord(record);
-                                }
-                              }}
-                              title="删除记录"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                        {expandedId === record.id && (
-                          <div className="modal-history-log">
-                            <div className="log-content">{record.full_log}</div>
-                          </div>
+                        )}
+                        {(record.project_type.toLowerCase() === 'maven' || record.package_with_backend) && record.spring_profile && (
+                          <span className="history-record-config" title="Spring Profile">
+                            <Coffee size={12} /> {record.spring_profile}
+                          </span>
+                        )}
+                        {record.package_with_backend && (
+                          <span className="history-record-config" title="包含后端">
+                            <Wrench size={12} /> 含后端
+                          </span>
+                        )}
+                        {record.project_type.toLowerCase() !== 'maven' && record.frontend_dir && (
+                          <span className="history-record-config" title="前端目录">
+                            <Folder size={12} /> {record.frontend_dir}
+                          </span>
                         )}
                       </div>
-                    ))}
+                      {record.image_tag && (
+                        <div className="history-record-image">
+                          <span className="history-record-image-text">{record.image_tag}</span>
+                          <button
+                            className="history-record-copy-btn"
+                            title="复制镜像地址"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onCopyImage(record.image_tag!);
+                            }}
+                          >
+                            <Copy size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="history-record-actions">
+                      <button
+                        className="history-record-action"
+                        onClick={() => onOpenArtifact(record.artifact_path)}
+                        title="打开产物目录"
+                      >
+                        <FolderOpen size={14} />
+                      </button>
+                      {record.backend_artifact_path && (
+                        <button
+                          className="history-record-action"
+                          onClick={() => onOpenArtifact(record.backend_artifact_path!)}
+                          title="打开后端产物"
+                        >
+                          <FileText size={14} />
+                        </button>
+                      )}
+                      <button
+                        className="history-record-action"
+                        onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}
+                        title={expandedId === record.id ? "收起日志" : "展开日志"}
+                      >
+                        {expandedId === record.id ? <BookMarked size={14} /> : <BookOpen size={14} />}
+                      </button>
+                      <button
+                        className="history-record-action danger"
+                        onClick={() => {
+                          if (confirm('确定要删除这条记录吗？删除后将同时清理产物文件。')) {
+                            onDeleteRecord(record);
+                          }
+                        }}
+                        title="删除记录"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  <div className="history-record-paths">
+                    <div className="history-record-path">
+                      <span className="history-record-path-label">{record.project_type.toLowerCase() === 'maven' ? '后端' : record.package_with_backend ? '前端+后端' : '前端'}</span>
+                      <button
+                        className="history-record-path-link"
+                        onClick={() => onOpenArtifact(record.artifact_path)}
+                        title={record.artifact_path}
+                      >
+                        {record.artifact_path}
+                      </button>
+                      <button
+                        className="history-record-path-open"
+                        onClick={() => onOpenArtifact(record.artifact_path)}
+                        title="打开目录"
+                      >
+                        <FolderOpen size={12} />
+                      </button>
+                    </div>
+                    {record.backend_artifact_path && (
+                      <div className="history-record-path">
+                        <span className="history-record-path-label">后端</span>
+                        <button
+                          className="history-record-path-link"
+                          onClick={() => onOpenArtifact(record.backend_artifact_path!)}
+                          title={record.backend_artifact_path}
+                        >
+                          {record.backend_artifact_path}
+                        </button>
+                        <button
+                          className="history-record-path-open"
+                          onClick={() => onOpenArtifact(record.backend_artifact_path!)}
+                          title="打开目录"
+                        >
+                          <FolderOpen size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {expandedId === record.id && (
+                    <div className="history-record-log">
+                      <div className="history-record-log-content">{record.full_log}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="history-content-empty">
+            <div className="history-content-empty-icon">
+              <History size={48} />
+            </div>
+            <h3>暂无打包记录</h3>
+            <p>该项目还没有打包记录</p>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
