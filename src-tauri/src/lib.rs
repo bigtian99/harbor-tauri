@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::Write;
+use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+use suppaftp::FtpStream;
 use tauri::Emitter;
 
 static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
@@ -2909,6 +2910,136 @@ async fn generate_landing_pages(
     Ok(results)
 }
 
+// ========== FTP 上传功能 ==========
+
+#[derive(Debug, Serialize, Clone)]
+struct FtpUploadResult {
+    id: String,
+    url: String,
+    status: String,
+    message: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct FtpUploadItem {
+    id: String,
+    local_dir: String,
+    remote_dir: String,
+}
+
+const FTP_HOST: &str = "120.77.204.231";
+const FTP_USER: &str = "admin";
+const FTP_PASS: &str = "pcm520..";
+const FTP_BASE_DIR: &str = "common.tiankongshuyu.fun";
+
+fn upload_dir_recursive(
+    ftp: &mut FtpStream,
+    local_path: &Path,
+) -> Result<(), String> {
+    for entry in fs::read_dir(local_path).map_err(|e| format!("读取目录失败: {}", e))? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        let local_child = entry.path();
+
+        if local_child.is_dir() {
+            // 创建远程子目录并进入
+            if ftp.cwd(&file_name).is_err() {
+                ftp.mkdir(&file_name)
+                    .map_err(|e| format!("创建子目录失败 {}: {}", file_name, e))?;
+                ftp.cwd(&file_name)
+                    .map_err(|e| format!("进入子目录失败 {}: {}", file_name, e))?;
+            }
+            upload_dir_recursive(ftp, &local_child)?;
+            ftp.cdup().map_err(|e| format!("返回上级目录失败: {}", e))?;
+        } else if local_child.is_file() {
+            // 读取本地文件并上传到当前 FTP 目录
+            let data = fs::read(&local_child)
+                .map_err(|e| format!("读取文件失败 {}: {}", local_child.display(), e))?;
+            let mut cursor = Cursor::new(data);
+            ftp.put_file(&file_name, &mut cursor)
+                .map_err(|e| format!("上传文件失败 {}: {}", file_name, e))?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn upload_landing_to_ftp(items: Vec<FtpUploadItem>) -> Result<Vec<FtpUploadResult>, String> {
+    let mut results = Vec::new();
+
+    // 连接 FTP
+    let mut ftp = FtpStream::connect(format!("{}:21", FTP_HOST))
+        .map_err(|e| format!("FTP 连接失败: {}", e))?;
+
+    ftp.login(FTP_USER, FTP_PASS)
+        .map_err(|e| format!("FTP 登录失败: {}", e))?;
+
+    // 切换到二进制模式
+    ftp.transfer_type(suppaftp::types::FileType::Binary)
+        .map_err(|e| format!("设置传输模式失败: {}", e))?;
+
+    // 切换到基础目录
+    if ftp.cwd(FTP_BASE_DIR).is_err() {
+        ftp.mkdir(FTP_BASE_DIR)
+            .map_err(|e| format!("创建基础目录失败: {}", e))?;
+        ftp.cwd(FTP_BASE_DIR)
+            .map_err(|e| format!("切换到基础目录失败: {}", e))?;
+    }
+
+    for item in &items {
+        let local_dir = PathBuf::from(&item.local_dir);
+        if !local_dir.is_dir() {
+            results.push(FtpUploadResult {
+                id: item.id.clone(),
+                url: String::new(),
+                status: "error".to_string(),
+                message: format!("本地目录不存在: {}", item.local_dir),
+            });
+            continue;
+        }
+
+        // 创建远程目录（已存在则覆盖 — 先删除再创建）
+        if ftp.cwd(&item.remote_dir).is_ok() {
+            ftp.cdup().ok();
+            ftp.rmdir(&item.remote_dir)
+                .map_err(|e| format!("删除远程目录失败: {}", e))?;
+        }
+        ftp.mkdir(&item.remote_dir)
+            .map_err(|e| format!("创建远程目录失败: {}", e))?;
+        ftp.cwd(&item.remote_dir)
+            .map_err(|e| format!("切换目录失败: {}", e))?;
+
+        // 上传所有文件（已在远程子目录内，用简单文件名）
+        if let Err(e) = upload_dir_recursive(&mut ftp, &local_dir) {
+            results.push(FtpUploadResult {
+                id: item.id.clone(),
+                url: String::new(),
+                status: "error".to_string(),
+                message: e,
+            });
+            // 回到基础目录准备下一个
+            ftp.cwd(&format!("/{}", FTP_BASE_DIR)).ok();
+            continue;
+        }
+
+        let url = format!("https://{}/{}/", FTP_BASE_DIR, &item.remote_dir);
+        results.push(FtpUploadResult {
+            id: item.id.clone(),
+            url,
+            status: "success".to_string(),
+            message: "上传成功".to_string(),
+        });
+
+        // 回到基础目录准备下一个
+        ftp.cwd(&format!("/{}", FTP_BASE_DIR)).ok();
+    }
+
+    // 断开 FTP 连接
+    ftp.quit().ok();
+
+    Ok(results)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -2939,6 +3070,7 @@ pub fn run() {
             delete_artifact_path,
             fetch_sub_channels,
             generate_landing_pages,
+            upload_landing_to_ftp,
             get_temp_dir,
             preview_landing_page
         ])

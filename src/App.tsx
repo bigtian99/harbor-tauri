@@ -168,6 +168,19 @@ interface LandingPageResult {
   message: string;
 }
 
+interface FtpUploadResult {
+  id: string;
+  url: string;
+  status: string;
+  message: string;
+}
+
+interface FtpUploadItem {
+  id: string;
+  local_dir: string;
+  remote_dir: string;
+}
+
 type TabType = "upload" | "branch" | "config" | "history" | "landing";
 
 function isTauriRuntime() {
@@ -261,6 +274,9 @@ function App() {
   const [landingGenerated, setLandingGenerated] = useState<Record<string, LandingPageResult>>({});
   const [isFetchingPreview, setIsFetchingPreview] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  // FTP 上传状态
+  const [ftpUploadResults, setFtpUploadResults] = useState<Record<string, FtpUploadResult>>({});
+  const [isUploadingToFtp, setIsUploadingToFtp] = useState(false);
 
   // 构建日志自动展开/收起：错误自动展开，清空自动收起
   useEffect(() => {
@@ -2091,9 +2107,54 @@ function App() {
                 )}
                 预览数据
               </button>
+              {/* FTP 上传按钮 — 生成完成后才显示 */}
+              {Object.keys(landingGenerated).length > 0 && !isGenerating && (
+                <button
+                  className="save-btn"
+                  disabled={isUploadingToFtp}
+                  onClick={async () => {
+                    if (!isTauriRuntime()) return;
+                    setIsUploadingToFtp(true);
+                    setFtpUploadResults({});
+                    try {
+                      // 构建上传项目列表
+                      const items: FtpUploadItem[] = Object.entries(landingGenerated)
+                        .filter(([, r]) => r.status === "success")
+                        .map(([, r]) => ({
+                          id: r.id,
+                          local_dir: r.output_dir,
+                          remote_dir: `${r.id}_${r.type_code}`,
+                        }));
+                      if (items.length === 0) {
+                        showToast("没有可上传的已成功生成的落地页");
+                        return;
+                      }
+                      const results = await invoke<FtpUploadResult[]>("upload_landing_to_ftp", { items });
+                      const map: Record<string, FtpUploadResult> = {};
+                      for (const r of results) {
+                        map[r.id] = r;
+                      }
+                      setFtpUploadResults(map);
+                      const success = results.filter((r) => r.status === "success").length;
+                      showToast(`FTP 上传完成: 成功 ${success} / ${results.length}`);
+                    } catch (e: any) {
+                      showToast(`FTP 上传失败: ${e}`);
+                    } finally {
+                      setIsUploadingToFtp(false);
+                    }
+                  }}
+                >
+                  {isUploadingToFtp ? (
+                    <Loader2 size={14} className="spinning" />
+                  ) : (
+                    <ExternalLink size={14} />
+                  )}
+                  上传到 FTP
+                </button>
+              )}
             </div>
 
-            {(isGenerating || progress > 0) && (
+            {(isGenerating || isUploadingToFtp || progress > 0) && (
               <div className="build-progress">
                 <div className="progress-bar">
                   <div className="progress-fill" style={{ width: `${progress}%` }} />
@@ -2154,6 +2215,37 @@ function App() {
                             }}
                           >
                             <Eye size={14} /> 预览
+                          </button>
+                        </div>
+                      )}
+                      {ftpUploadResults[item.id]?.status === "success" && (
+                        <div className="ftp-url-row" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                          <ExternalLink size={12} />
+                          <a
+                            href={ftpUploadResults[item.id]!.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: "var(--primary)", fontSize: "0.85em", wordBreak: "break-all" }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (isTauriRuntime()) {
+                                openUrl(ftpUploadResults[item.id]!.url);
+                              } else {
+                                window.open(ftpUploadResults[item.id]!.url, "_blank");
+                              }
+                            }}
+                          >
+                            {ftpUploadResults[item.id]!.url}
+                          </a>
+                          <button
+                            className="copy-btn"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(ftpUploadResults[item.id]!.url);
+                              showToast("链接已复制");
+                            }}
+                            title="复制链接"
+                          >
+                            <Copy size={12} />
                           </button>
                         </div>
                       )}
