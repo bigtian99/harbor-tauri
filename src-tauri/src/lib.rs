@@ -1694,6 +1694,30 @@ async fn preview_landing_page(path: String, template_index: Option<usize>) -> Re
 }
 
 #[tauri::command]
+async fn sync_template_dir(source_dir: String) -> Result<String, String> {
+    let source = PathBuf::from(&source_dir);
+    if !source.is_dir() {
+        return Err(format!("源目录不存在: {}", source_dir));
+    }
+
+    // 获取应用数据目录
+    let app_data_dir = dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("jarporter")
+        .join("templates");
+
+    fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("创建模板目录失败: {}", e))?;
+
+    // 复制模板目录
+    copy_dir_recursive(&source, &app_data_dir)
+        .map_err(|e| format!("复制模板失败: {}", e))?;
+
+    eprintln!("[JarPorter] ✅ 模板已同步到: {}", app_data_dir.display());
+    Ok(app_data_dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 async fn check_dockerfile(repo_path: String, branch: String) -> Result<bool, String> {
     let repo_path = PathBuf::from(repo_path);
     if !repo_path.is_dir() {

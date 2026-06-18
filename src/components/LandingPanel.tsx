@@ -129,18 +129,20 @@ export function LandingPanel({
       </div>
 
       <div className="landing-actions">
-        <button
-          className="save-btn"
-          disabled={!landingIds || isFetchingPreview || isGenerating}
-          onClick={onPreview}
-        >
-          {isFetchingPreview || isGenerating ? (
-            <Loader2 size={14} className="spin" />
-          ) : (
-            <Rocket size={14} />
-          )}
-          预览数据
-        </button>
+        {Object.keys(landingGenerated).length === 0 && (
+          <button
+            className="save-btn"
+            disabled={!landingIds || isFetchingPreview || isGenerating}
+            onClick={onPreview}
+          >
+            {isFetchingPreview || isGenerating ? (
+              <Loader2 size={14} className="spin" />
+            ) : (
+              <Rocket size={14} />
+            )}
+            预览数据
+          </button>
+        )}
         {Object.keys(landingGenerated).length > 0 && !isGenerating && (
           <button
             className="save-btn"
