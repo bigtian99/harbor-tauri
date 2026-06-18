@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import {
   Globe, Rocket, ExternalLink, Copy, Loader2, Eye,
@@ -34,6 +34,8 @@ export function LandingPanel({
   onPreview, onFtpUpload, onCopyAllLinks,
 }: LandingPanelProps) {
   const [templateIndices, setTemplateIndices] = useState<Record<string, number>>({});
+  const [animatingCards, setAnimatingCards] = useState<Record<string, string>>({});
+  const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getTemplateIndex = useCallback((id: string) => {
     return templateIndices[id] || 0;
@@ -42,6 +44,15 @@ export function LandingPanel({
   const switchTemplate = useCallback((id: string, direction: 'prev' | 'next') => {
     const result = landingGenerated[id];
     if (!result || !result.template_dirs || result.template_dirs.length <= 1) return;
+
+    // 清除之前的动画定时器
+    if (animationTimerRef.current) {
+      clearTimeout(animationTimerRef.current);
+    }
+
+    // 设置动画类名
+    const animClass = direction === 'prev' ? 'animating-left' : 'animating-right';
+    setAnimatingCards(prev => ({ ...prev, [id]: animClass }));
 
     setTemplateIndices(prev => {
       const currentIndex = prev[id] || 0;
@@ -53,6 +64,11 @@ export function LandingPanel({
       }
       return { ...prev, [id]: newIndex };
     });
+
+    // 动画完成后移除动画类名
+    animationTimerRef.current = setTimeout(() => {
+      setAnimatingCards(prev => ({ ...prev, [id]: '' }));
+    }, 400);
   }, [landingGenerated]);
 
   const getTemplateIframeSrc = useCallback((genResult: LandingPageResult, templateIdx: number) => {
@@ -224,7 +240,7 @@ export function LandingPanel({
                             return (
                               <div
                                 key={tempIdx}
-                                className={`lt-iframe-card ${isCenter ? 'card-center' : 'card-side'}`}
+                                className={`lt-iframe-card ${isCenter ? 'card-center' : 'card-side'} ${isCenter && animatingCards[item.id] ? animatingCards[item.id] : ''}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (isTauriRuntime()) {

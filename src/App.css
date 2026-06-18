@@ -2089,62 +2089,116 @@ body::before {
   margin-left: 8px;
 }
 
+/* 轮播切换动画 */
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes centerPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(100, 255, 218, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(100, 255, 218, 0);
+  }
+  100% {
+    box-shadow: 0 4px 20px rgba(100, 255, 218, 0.35);
+  }
+}
+
+.lt-iframe-card.animating-left {
+  animation: slideInFromLeft 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.lt-iframe-card.animating-right {
+  animation: slideInFromRight 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.lt-iframe-card.animating-center {
+  animation: centerPulse 0.4s ease-out forwards;
+}
+
 /* iframe 轮播容器 */
 .lt-iframe-carousel {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   height: 90px;
 }
 
 /* 单个 iframe 卡片 */
 .lt-iframe-card {
   position: relative;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid rgba(100, 255, 218, 0.15);
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.3s ease;
   background: #fff;
   flex-shrink: 0;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform, opacity, width, height, box-shadow;
 }
 
 .lt-iframe-card.card-side {
-  width: 36px;
-  height: 52px;
-  opacity: 0.6;
+  width: 40px;
+  height: 56px;
+  opacity: 0.5;
+  transform: scale(0.92);
 }
 
 .lt-iframe-card.card-side:hover {
-  opacity: 0.9;
+  opacity: 0.75;
+  transform: scale(0.96);
 }
 
 .lt-iframe-card.card-center {
-  width: 56px;
-  height: 76px;
-  border-color: rgba(100, 255, 218, 0.5);
-  box-shadow: 0 0 12px rgba(100, 255, 218, 0.3);
+  width: 60px;
+  height: 80px;
+  border-color: rgba(100, 255, 218, 0.6);
+  box-shadow: 0 4px 20px rgba(100, 255, 218, 0.35);
   z-index: 2;
+  opacity: 1;
+  transform: scale(1);
 }
 
 .lt-iframe-card.card-center:hover {
-  border-color: rgba(100, 255, 218, 0.7);
-  box-shadow: 0 0 16px rgba(100, 255, 218, 0.4);
+  border-color: rgba(100, 255, 218, 0.8);
+  box-shadow: 0 6px 24px rgba(100, 255, 218, 0.45);
+  transform: scale(1.08);
 }
 
 /* iframe 内容 */
 .lt-iframe-wrapper {
   width: 375px;
   height: 812px;
-  transform: scale(0.149);
+  transform: scale(0.16);
   transform-origin: top left;
   pointer-events: none;
+  transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .lt-iframe-card.card-side .lt-iframe-wrapper {
-  transform: scale(0.095);
+  transform: scale(0.107);
 }
 
 .lt-iframe {
@@ -2161,25 +2215,32 @@ body::before {
 }
 
 .lt-iframe-nav-btn {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  border: 1px solid rgba(100, 255, 218, 0.3);
-  background: rgba(15, 52, 96, 0.9);
+  border: 1px solid rgba(100, 255, 218, 0.4);
+  background: rgba(15, 52, 96, 0.95);
   color: #64ffda;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   padding: 0;
   flex-shrink: 0;
+  backdrop-filter: blur(4px);
 }
 
 .lt-iframe-nav-btn:hover {
-  background: rgba(100, 255, 218, 0.3);
-  border-color: rgba(100, 255, 218, 0.6);
-  transform: scale(1.1);
+  background: rgba(100, 255, 218, 0.35);
+  border-color: rgba(100, 255, 218, 0.8);
+  transform: scale(1.15);
+  box-shadow: 0 2px 12px rgba(100, 255, 218, 0.35);
+}
+
+.lt-iframe-nav-btn:active {
+  transform: scale(0.92);
+  transition-duration: 0.1s;
 }
 
 .lt-iframe-nav-info {
@@ -2190,6 +2251,7 @@ body::before {
   font-size: 10px;
   color: #8892b0;
   white-space: nowrap;
+  transition: all 0.3s ease;
 }
 
 .lt-iframe-wrapper {
@@ -2231,7 +2293,7 @@ body::before {
 }
 
 .lt-col-id {
-  width: 60px;
+  width: 80px;
   flex-shrink: 0;
   font-size: 12px;
   color: #8892b0;
@@ -2241,13 +2303,13 @@ body::before {
 }
 
 .lt-col-status {
-  width: 90px;
+  width: 120px;
   flex-shrink: 0;
   justify-content: center;
 }
 
 .lt-col-action {
-  width: 80px;
+  width: 100px;
   flex-shrink: 0;
   justify-content: flex-end;
 }

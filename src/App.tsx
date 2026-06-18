@@ -827,14 +827,12 @@ function App() {
     if (!landingIds.trim() || !isTauriRuntime() || !landingOutputDir) {
       setLandingPreviewData([]);
       setLandingGenerated({});
-      setFtpUploadResults({});
       return;
     }
     landingDebounceRef.current = window.setTimeout(async () => {
       setIsFetchingPreview(true);
       setLandingPreviewData([]);
       setLandingGenerated({});
-      setFtpUploadResults({});
       setLog("");
       setProgress(0);
       try {
