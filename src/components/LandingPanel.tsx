@@ -8,7 +8,6 @@ import type { SubChannelData, LandingPageResult, FtpUploadResult } from "../type
 import { isTauriRuntime } from "../types";
 
 interface LandingPanelProps {
-  landingTemplateBase: string;
   landingIds: string;
   landingPreviewData: SubChannelData[];
   landingGenerated: Record<string, LandingPageResult>;
@@ -19,7 +18,6 @@ interface LandingPanelProps {
   isUploadingToFtp: boolean;
   progress: number;
   progressMessage: string;
-  setLandingTemplateBase: (value: string) => void;
   setLandingIds: (value: string) => void;
   setTemplateIndices: (value: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void;
   onPreview: () => void;
@@ -28,12 +26,12 @@ interface LandingPanelProps {
 }
 
 export function LandingPanel({
-  landingTemplateBase, landingIds,
+  landingIds,
   landingPreviewData, landingGenerated, ftpUploadResults,
   templateIndices, setTemplateIndices,
   isFetchingPreview, isGenerating, isUploadingToFtp,
   progress, progressMessage,
-  setLandingTemplateBase, setLandingIds,
+  setLandingIds,
   onPreview, onFtpUpload, onCopyAllLinks,
 }: LandingPanelProps) {
   const [animatingCards, setAnimatingCards] = useState<Record<string, string>>({});
@@ -64,7 +62,6 @@ export function LandingPanel({
       } else {
         newIndex = currentIndex < result.template_dirs.length - 1 ? currentIndex + 1 : 0;
       }
-      console.log(`[Template] 切换模板: ${id}, ${currentIndex} -> ${newIndex}`);
       return { ...prev, [id]: newIndex };
     });
 
@@ -325,13 +322,13 @@ export function LandingPanel({
                   <span className="lt-col lt-col-id">{item.id}</span>
                   <span className="lt-col lt-col-status">
                     {genResult?.status === "success" && (
-                      <span className="item-badge item-badge-success">✓ 已生成</span>
+                      <span className="item-badge item-badge-success" style={{ borderRadius: 999, padding: "3px 12px", marginRight: 0 }}>✓ 已生成</span>
                     )}
                     {genResult?.status === "error" && (
-                      <span className="item-badge item-badge-error" title={genResult.message}>✗ 失败</span>
+                      <span className="item-badge item-badge-error" title={genResult.message} style={{ borderRadius: 999, padding: "3px 12px", marginRight: 0 }}>✗ 失败</span>
                     )}
                     {ftpResult?.status === "success" && (
-                      <span className="item-badge item-badge-ftp">↑ 已上传</span>
+                      <span className="item-badge item-badge-ftp" style={{ borderRadius: 999, padding: "3px 12px", marginRight: 0 }}>↑ 已上传</span>
                     )}
                   </span>
                   <span className="lt-col lt-col-action">

@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::{Cursor, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
 static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
@@ -711,7 +711,7 @@ fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<Strin
     };
 
     // 使用 spawn 替代 output，以便追踪 PID 支持取消
-    let mut child = match Command::new(&actual_command)
+    let child = match Command::new(&actual_command)
         .args(args)
         .current_dir(current_dir)
         .stdout(Stdio::piped())
@@ -2543,7 +2543,7 @@ async fn build_and_push(
         if CANCEL_FLAG.load(Ordering::SeqCst) {
             return Err("构建已取消".to_string());
         }
-        let mut child = Command::new("docker")
+        let child = Command::new("docker")
             .args([
                 "build",
                 "--platform",
@@ -3024,8 +3024,6 @@ const FTP_USER: &str = "admin";
 const FTP_PASS: &str = "pcm520..";
 const FTP_BASE_DIR: &str = "common.tiankongshuyu.fun";
 
-use std::io::Read;
-
 /// 生成 Python FTP 上传脚本并执行（带重试）
 fn run_ftp_upload(
     local_dir: &Path,
@@ -3170,7 +3168,7 @@ async fn upload_landing_to_ftp(
     let completed = Arc::new(Mutex::new(0));
     let mut handles: Vec<Option<std::thread::JoinHandle<FtpUploadResult>>> = Vec::new();
 
-    for (idx, item) in items.iter().enumerate() {
+    for (_idx, item) in items.iter().enumerate() {
         // 控制并发数：等待一个完成后再启动新的
         if handles.len() >= max_concurrent {
             if let Some(handle) = handles.remove(0) {

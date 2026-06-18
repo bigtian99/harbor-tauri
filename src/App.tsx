@@ -23,6 +23,13 @@ import {
   isTauriRuntime, inferImageName
 } from "./types";
 
+// 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
+function prependPathHistory(history: string[] | undefined, path: string): string[] {
+  const trimmed = path.trim();
+  const rest = (history || []).filter((p) => p !== trimmed);
+  return trimmed ? [trimmed, ...rest].slice(0, 20) : rest;
+}
+
 function App() {
   // ==================== 核心状态 ====================
   const [activeTab, setActiveTab] = useState<TabType>("upload");
@@ -60,14 +67,12 @@ function App() {
   const [imageName, setImageName] = useState<string>("");
   const [imageTag, setImageTag] = useState<string>("latest");
   const [isDragOver, setIsDragOver] = useState(false);
-  const [showImageConfig, setShowImageConfig] = useState(false);
 
   // ==================== 分支打包状态 ====================
   const [repoPath, setRepoPath] = useState<string>("");
   const [frontendDir, setFrontendDir] = useState<string>("");
   const [npmScripts, setNpmScripts] = useState<string[]>([]);
   const [selectedBuildScript, setSelectedBuildScript] = useState<string>("");
-  const [isLoadingScripts, setIsLoadingScripts] = useState(false);
   const [branchName, setBranchName] = useState<string>("");
   const [branchOptions, setBranchOptions] = useState<GitBranchOption[]>([]);
   const [branchProjectType, setBranchProjectType] = useState<BranchProjectType>("maven");
@@ -77,38 +82,48 @@ function App() {
   const [autoPushImage, setAutoPushImage] = useState<boolean>(false);
   const [packageWithBackend, setPackageWithBackend] = useState<boolean>(false);
   const [branchFullImage, setBranchFullImage] = useState<string>("");
-  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [springProfile, setSpringProfile] = useState<string>("");
   const [springProfiles, setSpringProfiles] = useState<string[]>([]);
-  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   // ==================== 提交信息状态 ====================
   const [lastCommit, setLastCommit] = useState<LastCommitInfo | null>(null);
-  const [isLoadingCommit, setIsLoadingCommit] = useState(false);
   const [commitList, setCommitList] = useState<CommitInfo[]>([]);
   const [commitListTotal, setCommitListTotal] = useState(0);
   const [commitListPage, setCommitListPage] = useState(1);
-  const [isLoadingCommitList, setIsLoadingCommitList] = useState(false);
   const [commitAuthorFilter, setCommitAuthorFilter] = useState("");
   const [commitMessageFilter, setCommitMessageFilter] = useState("");
   const [commitAuthors, setCommitAuthors] = useState<AuthorInfo[]>([]);
-  const [showCommitListModal, setShowCommitListModal] = useState(false);
+
+  // ==================== UI 状态（合并） ====================
+  const [ui, setUi] = useState({
+    showImageConfig: false,
+    showAdvancedSettings: false,
+    showCommitListModal: false,
+    showBuildLog: false,
+    showPassword: false,
+  });
+  const updateUi = (key: keyof typeof ui, value: boolean) => setUi(prev => ({ ...prev, [key]: value }));
+
+  // ==================== 加载状态（合并） ====================
+  const [loading, setLoading] = useState({
+    scripts: false,
+    branches: false,
+    profiles: false,
+    commit: false,
+    commitList: false,
+    history: false,
+  });
+  const updateLoading = (key: keyof typeof loading, value: boolean) => setLoading(prev => ({ ...prev, [key]: value }));
 
   // ==================== 构建和日志状态 ====================
   const [isBuilding, setIsBuilding] = useState(false);
   const [log, setLog] = useState<string>("");
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
-  const [showBuildLog, setShowBuildLog] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // ==================== 历史记录状态 ====================
   const [buildHistory, setBuildHistory] = useState<BuildRecord[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [expandedRecordId] = useState<string | null>(null);
-  const [collapsedProjects] = useState<Set<string>>(new Set());
-  const [historySearch] = useState("");
 
   // ==================== 落地页状态 ====================
   const landingApiUrl = "https://tksyadmin.tiankongshuyu.cn";
@@ -126,7 +141,6 @@ function App() {
 
   // ==================== 配置状态 ====================
   const [configSaved, setConfigSaved] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   // ==================== Toast ====================
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
@@ -233,17 +247,7 @@ function App() {
   }
 
   // ==================== 文件和拖拽处理 ====================
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDragEvents = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
   }, []);
@@ -296,7 +300,7 @@ function App() {
       setLog("⚠️ 当前是浏览器预览环境，无法读取本机 Git 分支；请在 Tauri 桌面窗口中操作");
       return;
     }
-    setIsLoadingBranches(true);
+    updateLoading('branches', true);
     setLog("");
     try {
       const branches = await invoke<GitBranchOption[]>("list_git_branches", { repoPath: nextRepoPath });
@@ -330,7 +334,7 @@ function App() {
     } catch (e) {
       setLog(`❌ 读取分支失败:\n${e}`);
     } finally {
-      setIsLoadingBranches(false);
+      updateLoading('branches', false);
     }
   }
 
@@ -339,7 +343,7 @@ function App() {
       setSpringProfiles([]);
       return;
     }
-    setIsLoadingProfiles(true);
+    updateLoading('profiles', true);
     try {
       const profiles = await invoke<string[]>("detect_spring_profiles", {
         repoPath: repoPath.trim(),
@@ -350,7 +354,7 @@ function App() {
       console.error("[Spring Profiles] 检测失败:", e);
       setSpringProfiles([]);
     } finally {
-      setIsLoadingProfiles(false);
+      updateLoading('profiles', false);
     }
   }
 
@@ -359,7 +363,7 @@ function App() {
       setLastCommit(null);
       return;
     }
-    setIsLoadingCommit(true);
+    updateLoading('commit', true);
     try {
       const commit = await invoke<LastCommitInfo>("get_last_commit", {
         repoPath: repoPath.trim(),
@@ -370,7 +374,7 @@ function App() {
       console.error("[Last Commit] 获取失败:", e);
       setLastCommit(null);
     } finally {
-      setIsLoadingCommit(false);
+      updateLoading('commit', false);
     }
   }
 
@@ -380,7 +384,7 @@ function App() {
       setCommitListTotal(0);
       return;
     }
-    setIsLoadingCommitList(true);
+    updateLoading('commitList', true);
     try {
       const result = await invoke<CommitListResult>("get_commit_list", {
         repoPath: repoPath.trim(),
@@ -398,7 +402,7 @@ function App() {
       setCommitList([]);
       setCommitListTotal(0);
     } finally {
-      setIsLoadingCommitList(false);
+      updateLoading('commitList', false);
     }
   }
 
@@ -442,7 +446,7 @@ function App() {
       setSelectedBuildScript("");
       return;
     }
-    setIsLoadingScripts(true);
+    updateLoading('scripts', true);
     try {
       const scripts = await invoke<string[]>("list_npm_scripts", {
         repoPath: repoPath.trim(),
@@ -456,7 +460,7 @@ function App() {
       setNpmScripts([]);
       setSelectedBuildScript("");
     } finally {
-      setIsLoadingScripts(false);
+      updateLoading('scripts', false);
     }
   }
 
@@ -477,8 +481,7 @@ function App() {
         setRepoPath(selectedPath);
         await loadGitBranches(selectedPath);
         if (config.remember_branch_settings) {
-          const history = (config.repo_path_history || []).filter((p) => p !== selectedPath);
-          const newHistory = [selectedPath, ...history].slice(0, 20);
+          const newHistory = prependPathHistory(config.repo_path_history, selectedPath);
           const updatedConfig = { ...config, repo_path_history: newHistory };
           await invoke("save_config", { config: updatedConfig });
           setConfig(updatedConfig);
@@ -644,8 +647,7 @@ function App() {
   async function saveBranchSettings() {
     if (!isTauriRuntime() || !config.remember_branch_settings) return;
     try {
-      const history = (config.repo_path_history || []).filter((p) => p !== repoPath);
-      const newHistory = repoPath.trim() ? [repoPath, ...history].slice(0, 20) : history;
+      const newHistory = prependPathHistory(config.repo_path_history, repoPath);
       const updatedConfig = {
         ...config,
         last_repo_path: repoPath,
@@ -667,7 +669,7 @@ function App() {
   // ==================== 历史记录操作 ====================
   async function loadBuildHistory() {
     if (!isTauriRuntime()) return;
-    setIsLoadingHistory(true);
+    updateLoading('history', true);
     try {
       const history = await invoke<BuildRecord[]>("get_build_history");
       setBuildHistory(history);
@@ -675,7 +677,7 @@ function App() {
     } catch (e) {
       console.error("[Build History] 获取失败:", e);
     } finally {
-      setIsLoadingHistory(false);
+      updateLoading('history', false);
     }
   }
 
@@ -752,9 +754,9 @@ function App() {
 
   useEffect(() => {
     if (!log) {
-      setShowBuildLog(false);
+      updateUi('showBuildLog', false);
     } else if (log.includes("❌")) {
-      setShowBuildLog(true);
+      updateUi('showBuildLog', true);
     }
   }, [log]);
 
@@ -766,7 +768,6 @@ function App() {
     const unlistenProgress = appWindow.listen<{ percent: number; message: string }>(
       "build-progress",
       (event) => {
-        console.log("[Progress]", event.payload);
         setProgress(event.payload.percent);
         setProgressMessage(event.payload.message);
       }
@@ -841,37 +842,8 @@ function App() {
       setFtpUploadResults({});
       return;
     }
-    landingDebounceRef.current = window.setTimeout(async () => {
-      setIsFetchingPreview(true);
-      setLandingPreviewData([]);
-      setLandingGenerated({});
-      setFtpUploadResults({});
-      setLog("");
-      setProgress(0);
-      try {
-        const data = await invoke<SubChannelData[]>("fetch_sub_channels", {
-          apiUrl: landingApiUrl,
-          ids: landingIds.trim(),
-        });
-        setLandingPreviewData(data);
-        setIsGenerating(true);
-        const results = await invoke<LandingPageResult[]>("generate_landing_pages", {
-          apiUrl: landingApiUrl,
-          ids: landingIds.trim(),
-          templateBase: landingTemplateBase,
-          outputDir: landingOutputDir.trim(),
-        });
-        const map: Record<string, LandingPageResult> = {};
-        for (const r of results) {
-          map[r.id] = r;
-        }
-        setLandingGenerated(map);
-      } catch (e: any) {
-        showToast(`操作失败: ${e}`);
-      } finally {
-        setIsFetchingPreview(false);
-        setIsGenerating(false);
-      }
+    landingDebounceRef.current = window.setTimeout(() => {
+      runLandingGeneration(false);
     }, 800);
     return () => {
       if (landingDebounceRef.current !== null) {
@@ -935,8 +907,7 @@ function App() {
   function handleRememberSettingsChange(checked: boolean) {
     setConfig((prev) => ({ ...prev, remember_branch_settings: checked }));
     if (checked) {
-      const history = (config.repo_path_history || []).filter((p) => p !== repoPath);
-      const newHistory = repoPath.trim() ? [repoPath, ...history].slice(0, 20) : history;
+      const newHistory = prependPathHistory(config.repo_path_history, repoPath);
       const updatedConfig = {
         ...config,
         remember_branch_settings: true,
@@ -956,8 +927,8 @@ function App() {
   }
 
   // ==================== 落地页操作 ====================
-  async function handleLandingPreview() {
-    if (!isTauriRuntime() || !landingIds.trim()) return;
+  // 拉取子渠道并生成落地页（防抖预览与手动预览共用）
+  async function runLandingGeneration(showDoneToast: boolean) {
     setIsFetchingPreview(true);
     setLandingPreviewData([]);
     setLandingGenerated({});
@@ -980,13 +951,26 @@ function App() {
       const map: Record<string, LandingPageResult> = {};
       for (const r of results) { map[r.id] = r; }
       setLandingGenerated(map);
-      const success = results.filter((r) => r.status === "success").length;
-    } catch (e: any) {
+      if (showDoneToast) {
+        const success = results.filter((r) => r.status === "success").length;
+        const failed = results.length - success;
+        showToast(
+          failed > 0
+            ? `生成完成: 成功 ${success} 个, 失败 ${failed} 个`
+            : `生成完成: 成功 ${success} 个`
+        );
+      }
+    } catch (e) {
       showToast(`操作失败: ${e}`);
     } finally {
       setIsFetchingPreview(false);
       setIsGenerating(false);
     }
+  }
+
+  async function handleLandingPreview() {
+    if (!isTauriRuntime() || !landingIds.trim()) return;
+    await runLandingGeneration(true);
   }
 
   async function handleFtpUpload() {
@@ -996,13 +980,11 @@ function App() {
     setProgress(0);
     setProgressMessage("");
     try {
-      console.log("[FTP] 当前 templateIndices:", templateIndices);
       const items: { id: string; local_dir: string; remote_dir: string }[] = Object.entries(landingGenerated)
         .filter(([, r]) => r.status === "success")
         .map(([key, r]) => {
           const templateIdx = templateIndices[key] || 0;
           const localDir = `${r.output_dir}/template_${templateIdx}`;
-          console.log(`[FTP] ${r.id}: key=${key}, templateIdx=${templateIdx}, localDir=${localDir}`);
           return {
             id: r.id,
             local_dir: localDir,
@@ -1013,16 +995,13 @@ function App() {
         showToast("没有可上传的已成功生成的落地页");
         return;
       }
-      console.log("[FTP] 上传项目:", items);
       const results = await invoke<FtpUploadResult[]>("upload_landing_to_ftp", { items });
-      console.log("[FTP] 上传结果:", results);
       const map: Record<string, FtpUploadResult> = {};
       for (const r of results) { map[r.id] = r; }
       setFtpUploadResults(map);
-      console.log("[FTP] 状态更新:", map);
       const success = results.filter((r) => r.status === "success").length;
       showToast(`FTP 上传完成: 成功 ${success} / ${results.length}`);
-    } catch (e: any) {
+    } catch (e) {
       showToast(`FTP 上传失败: ${e}`);
     } finally {
       setIsUploadingToFtp(false);
@@ -1030,11 +1009,9 @@ function App() {
   }
 
   async function handleCopyAllLinks() {
-    console.log("[Copy] 当前 ftpUploadResults:", ftpUploadResults);
     const urls = Object.values(ftpUploadResults)
       .filter((r) => r.status === "success")
       .map((r) => r.url);
-    console.log("[Copy] 筛选后的 URLs:", urls);
     if (urls.length === 0) {
       showToast("没有可复制的链接");
       return;
@@ -1062,8 +1039,8 @@ function App() {
             imageTag={imageTag}
             isDragOver={isDragOver}
             isBuilding={isBuilding}
-            showImageConfig={showImageConfig}
-            showBuildLog={showBuildLog}
+            showImageConfig={ui.showImageConfig}
+            showBuildLog={ui.showBuildLog}
             progress={progress}
             progressMessage={progressMessage}
             log={log}
@@ -1071,13 +1048,13 @@ function App() {
             onSelectFile={handleSelectFile}
             onBuildAndPush={handleBuildAndPush}
             onCancelBuild={handleCancelBuild}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
+            onDragOver={handleDragEvents}
+            onDragLeave={handleDragEvents}
+            onDrop={handleDragEvents}
             setImageName={setImageName}
             setImageTag={setImageTag}
-            setShowImageConfig={setShowImageConfig}
-            setShowBuildLog={setShowBuildLog}
+            setShowImageConfig={(v: boolean) => updateUi('showImageConfig', v)}
+            setShowBuildLog={(v: boolean) => updateUi('showBuildLog', v)}
             renderLog={renderLog}
           />
         )}
@@ -1088,20 +1065,20 @@ function App() {
             repoPath={repoPath}
             branchName={branchName}
             branchOptions={branchOptions}
-            isLoadingBranches={isLoadingBranches}
+            isLoadingBranches={loading.branches}
             frontendDir={frontendDir}
             npmScripts={npmScripts}
             selectedBuildScript={selectedBuildScript}
-            isLoadingScripts={isLoadingScripts}
+            isLoadingScripts={loading.scripts}
             packageWithBackend={packageWithBackend}
             springProfile={springProfile}
             springProfiles={springProfiles}
-            isLoadingProfiles={isLoadingProfiles}
+            isLoadingProfiles={loading.profiles}
             lastCommit={lastCommit}
-            isLoadingCommit={isLoadingCommit}
+            isLoadingCommit={loading.commit}
             commitList={commitList}
             commitListTotal={commitListTotal}
-            showCommitListModal={showCommitListModal}
+            showCommitListModal={ui.showCommitListModal}
             artifactPath={artifactPath}
             backendArtifactPath={backendArtifactPath}
             worktreePath={worktreePath}
@@ -1112,12 +1089,12 @@ function App() {
             branchFullImage={branchFullImage}
             imageName={imageName}
             imageTag={imageTag}
-            showAdvancedSettings={showAdvancedSettings}
+            showAdvancedSettings={ui.showAdvancedSettings}
             config={config}
             progress={progress}
             progressMessage={progressMessage}
             log={log}
-            showBuildLog={showBuildLog}
+            showBuildLog={ui.showBuildLog}
             copied={copied}
             onBranchProjectTypeChange={handleBranchProjectTypeChange}
             onRepoPathChange={handleRepoPathChange}
@@ -1133,11 +1110,11 @@ function App() {
             onSpringProfileChange={setSpringProfile}
             onAutoPushImageChange={setAutoPushImage}
             onRememberSettingsChange={handleRememberSettingsChange}
-            setShowCommitListModal={setShowCommitListModal}
+            setShowCommitListModal={(v: boolean) => updateUi('showCommitListModal', v)}
             loadCommitList={loadCommitList}
             loadCommitAuthors={loadCommitAuthors}
             commitAuthors={commitAuthors}
-            isLoadingCommitList={isLoadingCommitList}
+            isLoadingCommitList={loading.commitList}
             commitListPage={commitListPage}
             commitAuthorFilter={commitAuthorFilter}
             commitMessageFilter={commitMessageFilter}
@@ -1149,8 +1126,8 @@ function App() {
             onCopyImage={handleCopyImage}
             setImageName={setImageName}
             setImageTag={setImageTag}
-            setShowAdvancedSettings={setShowAdvancedSettings}
-            setShowBuildLog={setShowBuildLog}
+            setShowAdvancedSettings={(v: boolean) => updateUi('showAdvancedSettings', v)}
+            setShowBuildLog={(v: boolean) => updateUi('showBuildLog', v)}
             renderLog={renderLog}
           />
         )}
@@ -1158,10 +1135,10 @@ function App() {
         {activeTab === "history" && (
           <HistoryPanel
             buildHistory={buildHistory}
-            isLoadingHistory={isLoadingHistory}
-            expandedRecordId={expandedRecordId}
-            collapsedProjects={collapsedProjects}
-            historySearch={historySearch}
+            isLoadingHistory={loading.history}
+            expandedRecordId={null}
+            collapsedProjects={new Set()}
+            historySearch=""
             onLoadHistory={loadBuildHistory}
             onClearHistory={clearBuildHistory}
             onDeleteRecord={deleteBuildRecord}
@@ -1172,7 +1149,6 @@ function App() {
 
         {activeTab === "landing" && (
           <LandingPanel
-            landingTemplateBase={landingTemplateBase}
             landingIds={landingIds}
             landingPreviewData={landingPreviewData}
             landingGenerated={landingGenerated}
@@ -1183,7 +1159,6 @@ function App() {
             isUploadingToFtp={isUploadingToFtp}
             progress={progress}
             progressMessage={progressMessage}
-            setLandingTemplateBase={setLandingTemplateBase}
             setLandingIds={setLandingIds}
             setTemplateIndices={setTemplateIndices}
             onPreview={handleLandingPreview}
@@ -1196,10 +1171,10 @@ function App() {
           <ConfigPanel
             config={config}
             configSaved={configSaved}
-            showPassword={showPassword}
+            showPassword={ui.showPassword}
             onConfigChange={handleConfigChange}
             onSaveConfig={handleSaveConfig}
-            onTogglePassword={() => setShowPassword(!showPassword)}
+            onTogglePassword={() => updateUi('showPassword', !ui.showPassword)}
           />
         )}
       </main>
