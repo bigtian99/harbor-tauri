@@ -13,6 +13,7 @@ interface LandingPanelProps {
   landingPreviewData: SubChannelData[];
   landingGenerated: Record<string, LandingPageResult>;
   ftpUploadResults: Record<string, FtpUploadResult>;
+  templateIndices: Record<string, number>;
   isFetchingPreview: boolean;
   isGenerating: boolean;
   isUploadingToFtp: boolean;
@@ -20,6 +21,7 @@ interface LandingPanelProps {
   progressMessage: string;
   setLandingTemplateBase: (value: string) => void;
   setLandingIds: (value: string) => void;
+  setTemplateIndices: (value: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void;
   onPreview: () => void;
   onFtpUpload: () => void;
   onCopyAllLinks: () => void;
@@ -28,12 +30,12 @@ interface LandingPanelProps {
 export function LandingPanel({
   landingTemplateBase, landingIds,
   landingPreviewData, landingGenerated, ftpUploadResults,
+  templateIndices, setTemplateIndices,
   isFetchingPreview, isGenerating, isUploadingToFtp,
   progress, progressMessage,
   setLandingTemplateBase, setLandingIds,
   onPreview, onFtpUpload, onCopyAllLinks,
 }: LandingPanelProps) {
-  const [templateIndices, setTemplateIndices] = useState<Record<string, number>>({});
   const [animatingCards, setAnimatingCards] = useState<Record<string, string>>({});
   const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,6 +64,7 @@ export function LandingPanel({
       } else {
         newIndex = currentIndex < result.template_dirs.length - 1 ? currentIndex + 1 : 0;
       }
+      console.log(`[Template] 切换模板: ${id}, ${currentIndex} -> ${newIndex}`);
       return { ...prev, [id]: newIndex };
     });
 

@@ -3013,31 +3013,58 @@ fn run_python_ftp_upload(
     local_dir: &Path,
     remote_dir: &str,
 ) -> Result<(), String> {
+    let local_dir_str = local_dir.to_string_lossy().replace('\\', "\\\\");
     let python_script = format!(
         r#"
 import os
 import sys
 from ftplib import FTP
 
+def safe_cwd(ftp, dirname):
+    """安全地切换目录"""
+    if not dirname or not isinstance(dirname, str):
+        print('SKIP_CWD: invalid dirname=' + repr(dirname), flush=True)
+        return False
+    try:
+        ftp.cwd(dirname)
+        return True
+    except Exception as e:
+        print('CWD_FAILED: ' + dirname + ' -> ' + str(e), flush=True)
+        return False
+
+def ensure_dir(ftp, dirname):
+    """确保目录存在，不存在则创建（支持多级目录）"""
+    if not dirname:
+        return
+    # 逐级创建目录
+    parts = dirname.split('/')
+    for part in parts:
+        if not part:
+            continue
+        if safe_cwd(ftp, part):
+            continue
+        try:
+            ftp.mkd(part)
+            safe_cwd(ftp, part)
+        except Exception as e:
+            print('MKD_FAILED: ' + part + ' -> ' + str(e), flush=True)
+
 def upload_dir(ftp, local_path, remote_path):
     """递归上传目录到 FTP"""
     for name in os.listdir(local_path):
+        if not name or name.startswith('.'):
+            continue
         local_child = os.path.join(local_path, name)
         if os.path.isdir(local_child):
-            # 创建并进入远程子目录
-            try:
-                ftp.cwd(name)
-            except:
-                ftp.mkd(name)
-                ftp.cwd(name)
+            ensure_dir(ftp, name)
             upload_dir(ftp, local_child, os.path.join(remote_path, name))
-            ftp.cwd('..')
+            safe_cwd(ftp, '..')
         elif os.path.isfile(local_child):
             size = os.path.getsize(local_child)
-            print(f'UPLOAD:{{name}}:{{size}}', flush=True)
+            print('UPLOAD:' + name + ':' + str(size), flush=True)
             with open(local_child, 'rb') as f:
-                ftp.storbinary(f'STOR {{name}}', f)
-            print(f'DONE:{{name}}', flush=True)
+                ftp.storbinary('STOR ' + name, f)
+            print('DONE:' + name, flush=True)
 
 try:
     ftp = FTP()
@@ -3045,21 +3072,19 @@ try:
     ftp.login('{ftp_user}', '{ftp_pass}')
     print('CONNECTED', flush=True)
 
-    ftp.cwd('{ftp_base_dir}')
-    print(f'CD:{{ftp.cwd()}}', flush=True)
+    safe_cwd(ftp, '{ftp_base_dir}')
+    print('CD:' + ftp.pwd(), flush=True)
 
-    # 进入目标目录（不存在则创建）
-    try:
-        ftp.cwd('{remote_dir}')
-    except:
-        ftp.mkd('{remote_dir}')
-        ftp.cwd('{remote_dir}')
+    # 逐级创建远程目录
+    ensure_dir(ftp, '{remote_dir}')
 
     upload_dir(ftp, '{local_dir}', '{remote_dir}')
     ftp.quit()
     print('SUCCESS', flush=True)
 except Exception as e:
-    print(f'ERROR:{{e}}', flush=True)
+    print('ERROR:' + str(e), flush=True)
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 "#,
         ftp_host = FTP_HOST,
@@ -3067,7 +3092,7 @@ except Exception as e:
         ftp_pass = FTP_PASS,
         ftp_base_dir = FTP_BASE_DIR,
         remote_dir = remote_dir,
-        local_dir = local_dir.to_string_lossy().replace('\\', "\\\\"),
+        local_dir = local_dir_str,
     );
 
     let output = Command::new("python3")

@@ -121,6 +121,7 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [ftpUploadResults, setFtpUploadResults] = useState<Record<string, FtpUploadResult>>({});
   const [isUploadingToFtp, setIsUploadingToFtp] = useState(false);
+  const [templateIndices, setTemplateIndices] = useState<Record<string, number>>({});
   const landingDebounceRef = useRef<number | null>(null);
 
   // ==================== 配置状态 ====================
@@ -984,21 +985,30 @@ function App() {
     setIsUploadingToFtp(true);
     setFtpUploadResults({});
     try {
+      console.log("[FTP] 当前 templateIndices:", templateIndices);
       const items: { id: string; local_dir: string; remote_dir: string }[] = Object.entries(landingGenerated)
         .filter(([, r]) => r.status === "success")
-        .map(([, r]) => ({
-          id: r.id,
-          local_dir: r.output_dir,
-          remote_dir: `${r.id}_${r.type_code}`,
-        }));
+        .map(([key, r]) => {
+          const templateIdx = templateIndices[key] || 0;
+          const localDir = `${r.output_dir}/template_${templateIdx}`;
+          console.log(`[FTP] ${r.id}: key=${key}, templateIdx=${templateIdx}, localDir=${localDir}`);
+          return {
+            id: r.id,
+            local_dir: localDir,
+            remote_dir: `${r.id}/${r.type_code}`,
+          };
+        });
       if (items.length === 0) {
         showToast("没有可上传的已成功生成的落地页");
         return;
       }
+      console.log("[FTP] 上传项目:", items);
       const results = await invoke<FtpUploadResult[]>("upload_landing_to_ftp", { items });
+      console.log("[FTP] 上传结果:", results);
       const map: Record<string, FtpUploadResult> = {};
       for (const r of results) { map[r.id] = r; }
       setFtpUploadResults(map);
+      console.log("[FTP] 状态更新:", map);
       const success = results.filter((r) => r.status === "success").length;
       showToast(`FTP 上传完成: 成功 ${success} / ${results.length}`);
     } catch (e: any) {
@@ -1009,9 +1019,11 @@ function App() {
   }
 
   async function handleCopyAllLinks() {
+    console.log("[Copy] 当前 ftpUploadResults:", ftpUploadResults);
     const urls = Object.values(ftpUploadResults)
       .filter((r) => r.status === "success")
       .map((r) => r.url);
+    console.log("[Copy] 筛选后的 URLs:", urls);
     if (urls.length === 0) {
       showToast("没有可复制的链接");
       return;
@@ -1154,6 +1166,7 @@ function App() {
             landingPreviewData={landingPreviewData}
             landingGenerated={landingGenerated}
             ftpUploadResults={ftpUploadResults}
+            templateIndices={templateIndices}
             isFetchingPreview={isFetchingPreview}
             isGenerating={isGenerating}
             isUploadingToFtp={isUploadingToFtp}
@@ -1161,6 +1174,7 @@ function App() {
             progressMessage={progressMessage}
             setLandingTemplateBase={setLandingTemplateBase}
             setLandingIds={setLandingIds}
+            setTemplateIndices={setTemplateIndices}
             onPreview={handleLandingPreview}
             onFtpUpload={handleFtpUpload}
             onCopyAllLinks={handleCopyAllLinks}
