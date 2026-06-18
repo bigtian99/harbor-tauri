@@ -2272,11 +2272,20 @@ function App() {
                             >
                               <div className="lt-iframe-wrapper">
                                 <iframe
-                                  src={convertFileSrc(`${genResult.output_dir}/index.html`)}
+                                  src={(() => {
+                                    const filePath = `${genResult.output_dir}/index.html`;
+                                    const iframeSrc = convertFileSrc(filePath);
+                                    console.log("[iframe] output_dir:", genResult.output_dir);
+                                    console.log("[iframe] filePath:", filePath);
+                                    console.log("[iframe] iframeSrc:", iframeSrc);
+                                    return iframeSrc;
+                                  })()}
                                   className="lt-iframe"
                                   sandbox="allow-same-origin"
                                   loading="lazy"
                                   title={item.subChannelName || ""}
+                                  onLoad={() => console.log("[iframe] loaded:", genResult.output_dir)}
+                                  onError={(e) => console.error("[iframe] error:", e)}
                                 />
                               </div>
                             </div>

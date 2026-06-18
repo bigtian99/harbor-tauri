@@ -2874,6 +2874,14 @@ async fn generate_landing_pages(
                         message: format!("写入文件失败: {}", e),
                     });
                 } else {
+                    // 验证生成的文件是否可读
+                    let verify_index = channel_output_dir.join("index.html");
+                    let file_exists = verify_index.exists();
+                    let file_size = fs::metadata(&verify_index).map(|m| m.len()).unwrap_or(0);
+                    eprintln!(
+                        "[JarPorter] ✅ 落地页生成成功: {} | output_dir={} | index.html exists={} size={}",
+                        channel.sub_channel_name, channel_output_str, file_exists, file_size
+                    );
                     results.push(LandingPageResult {
                         id: channel.id.clone(),
                         type_code: channel.type_code.clone(),
