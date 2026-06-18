@@ -1449,6 +1449,14 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
         let entry = entry?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
+        let file_name = entry.file_name();
+        let file_name_str = file_name.to_string_lossy();
+
+        // 跳过不需要复制的文件
+        if file_name_str == "README.md" || file_name_str == ".DS_Store" {
+            continue;
+        }
+
         if src_path.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
@@ -2879,11 +2887,33 @@ async fn generate_landing_pages(
                 first_template_output = template_output.clone();
             }
 
+            eprintln!(
+                "[JarPorter] 复制模板 {}: {} -> {}",
+                idx, template.display(), template_output.display()
+            );
+
             // 复制模板目录
             if let Err(e) = copy_dir_recursive(template, &template_output) {
                 all_success = false;
                 error_message = format!("复制模板 {} 失败: {}", idx, e);
+                eprintln!("[JarPorter] ❌ {}", error_message);
                 break;
+            }
+
+            // 验证复制结果
+            if template_output.exists() {
+                let entries: Vec<String> = fs::read_dir(&template_output)
+                    .map(|entries| {
+                        entries
+                            .flatten()
+                            .map(|e| e.file_name().to_string_lossy().to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                eprintln!(
+                    "[JarPorter] ✅ 模板 {} 复制完成，内容: {:?}",
+                    idx, entries
+                );
             }
 
             // 修改 index.html
