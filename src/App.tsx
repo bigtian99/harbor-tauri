@@ -253,12 +253,12 @@ function App() {
   const [showImageConfig, setShowImageConfig] = useState(false);
 
   // 落地页生成状态
-  const [landingApiUrl, setLandingApiUrl] = useState("http://localhost:8080");
+  const [landingApiUrl, setLandingApiUrl] = useState("https://tksyadmin.tiankongshuyu.cn");
   const [landingTemplateBase, setLandingTemplateBase] = useState("/Users/daijunxiong/Desktop/tksy-h5-app");
   const [landingIds, setLandingIds] = useState("");
   const [landingOutputDir, setLandingOutputDir] = useState("");
   const [landingPreviewData, setLandingPreviewData] = useState<SubChannelData[]>([]);
-  const [landingResults, setLandingResults] = useState<LandingPageResult[]>([]);
+  const [landingGenerated, setLandingGenerated] = useState<Record<string, LandingPageResult>>({});
   const [isFetchingPreview, setIsFetchingPreview] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -1999,17 +1999,6 @@ function App() {
             <h2><Globe size={20} /> 生成落地页</h2>
 
             <div className="form-group">
-              <label>API 服务地址</label>
-              <input
-                type="text"
-                className="form-input"
-                value={landingApiUrl}
-                onChange={(e) => setLandingApiUrl(e.target.value)}
-                placeholder="http://localhost:8080"
-              />
-            </div>
-
-            <div className="form-group">
               <label>模板目录 (tksy-h5-app)</label>
               <input
                 type="text"
@@ -2094,7 +2083,7 @@ function App() {
                 onClick={async () => {
                   if (!isTauriRuntime() || !landingIds.trim() || !landingOutputDir.trim()) return;
                   setIsGenerating(true);
-                  setLandingResults([]);
+                  setLandingGenerated({});
                   setLog("");
                   setProgress(0);
                   try {
@@ -2104,7 +2093,11 @@ function App() {
                       templateBase: landingTemplateBase,
                       outputDir: landingOutputDir.trim(),
                     });
-                    setLandingResults(results);
+                    const map: Record<string, LandingPageResult> = {};
+                    for (const r of results) {
+                      map[r.id] = r;
+                    }
+                    setLandingGenerated(map);
                     const success = results.filter((r) => r.status === "success").length;
                     showToast(`生成完成: 成功 ${success} / ${results.length}`);
                   } catch (e: any) {
@@ -2158,50 +2151,28 @@ function App() {
                         {item.productName && (
                           <span className="item-badge item-badge-product">{item.productName}</span>
                         )}
+                        {landingGenerated[item.id]?.status === "success" && (
+                          <span className="item-badge item-badge-success">✓ 已生成</span>
+                        )}
+                        {landingGenerated[item.id]?.status === "error" && (
+                          <span className="item-badge item-badge-error">✗ 失败</span>
+                        )}
                       </div>
                       <div className="modal-list-item-meta">
                         <span>ID: {item.id}</span>
                         {item.typeName && <span>类型: {item.typeName}</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {landingResults.length > 0 && (
-              <div className="landing-section">
-                <h3>
-                  生成结果 ({landingResults.filter((r) => r.status === "success").length}/{landingResults.length}{" "}
-                  成功)
-                </h3>
-                <div className="modal-list">
-                  {landingResults.map((r, i) => (
-                    <div key={`${r.id}-${i}`} className="modal-list-item">
-                      <div className="modal-list-item-main">
-                        <span className="item-name">{r.name}</span>
-                        <span
-                          className={`item-badge ${r.status === "success" ? "item-badge-success" : "item-badge-error"}`}
-                        >
-                          {r.status === "success" ? "✓" : "✗"} {r.type_code}
-                        </span>
-                      </div>
-                      <div className="modal-list-item-meta">
-                        <span>{r.message}</span>
-                        {r.status === "success" && (
-                          <span className="output-path" title={r.output_dir}>
-                            {r.output_dir}
-                          </span>
+                        {landingGenerated[item.id]?.message && landingGenerated[item.id]?.status !== "success" && (
+                          <span className="item-error-msg">{landingGenerated[item.id]!.message}</span>
                         )}
                       </div>
-                      {r.status === "success" && (
+                      {landingGenerated[item.id]?.status === "success" && (
                         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                           <button
                             className="modal-trigger-btn"
                             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                             onClick={() => {
                               if (isTauriRuntime()) {
-                                invoke("preview_landing_page", { path: r.output_dir });
+                                invoke("preview_landing_page", { path: landingGenerated[item.id]!.output_dir });
                               }
                             }}
                           >
@@ -2212,7 +2183,7 @@ function App() {
                             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                             onClick={() => {
                               if (isTauriRuntime()) {
-                                invoke("open_directory", { path: r.output_dir });
+                                invoke("open_directory", { path: landingGenerated[item.id]!.output_dir });
                               }
                             }}
                           >
@@ -2223,6 +2194,15 @@ function App() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {progress > 0 && progress < 100 && !isGenerating && (
+              <div className="build-progress">
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${progress}%` }} />
+                </div>
+                <p>{progressMessage || ""}</p>
               </div>
             )}
           </div>

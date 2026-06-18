@@ -2075,6 +2075,16 @@ body::before {
   color: #ef4444;
 }
 
+.item-error-msg {
+  display: inline-block;
+  color: #ef4444;
+  font-size: 11px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .output-path {
   font-size: 11px;
   color: #64748b;
