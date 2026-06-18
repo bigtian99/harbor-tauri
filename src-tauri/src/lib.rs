@@ -3008,8 +3008,35 @@ const FTP_USER: &str = "admin";
 const FTP_PASS: &str = "pcm520..";
 const FTP_BASE_DIR: &str = "common.tiankongshuyu.fun";
 
-/// 生成 Python FTP 上传脚本并执行（Python ftplib 已验证稳定可靠）
-fn run_python_ftp_upload(
+use std::io::Read;
+
+/// 生成 Python FTP 上传脚本并执行（带重试）
+fn run_ftp_upload(
+    local_dir: &Path,
+    remote_dir: &str,
+) -> Result<(), String> {
+    let max_retries = 3;
+    let mut last_error = String::new();
+
+    for attempt in 1..=max_retries {
+        match run_ftp_upload_once(local_dir, remote_dir) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                eprintln!("[JarPorter] ⚠️ 上传失败 (第{}次): {}", attempt, e);
+                last_error = e;
+                if attempt < max_retries {
+                    eprintln!("[JarPorter] ⏳ 等待 2 秒后重试...");
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                }
+            }
+        }
+    }
+
+    Err(format!("上传失败（已重试{}次）: {}", max_retries, last_error))
+}
+
+/// 单次上传
+fn run_ftp_upload_once(
     local_dir: &Path,
     remote_dir: &str,
 ) -> Result<(), String> {
@@ -3021,22 +3048,17 @@ import sys
 from ftplib import FTP
 
 def safe_cwd(ftp, dirname):
-    """安全地切换目录"""
     if not dirname or not isinstance(dirname, str):
-        print('SKIP_CWD: invalid dirname=' + repr(dirname), flush=True)
         return False
     try:
         ftp.cwd(dirname)
         return True
-    except Exception as e:
-        print('CWD_FAILED: ' + dirname + ' -> ' + str(e), flush=True)
+    except Exception:
         return False
 
 def ensure_dir(ftp, dirname):
-    """确保目录存在，不存在则创建（支持多级目录）"""
     if not dirname:
         return
-    # 逐级创建目录
     parts = dirname.split('/')
     for part in parts:
         if not part:
@@ -3046,11 +3068,10 @@ def ensure_dir(ftp, dirname):
         try:
             ftp.mkd(part)
             safe_cwd(ftp, part)
-        except Exception as e:
-            print('MKD_FAILED: ' + part + ' -> ' + str(e), flush=True)
+        except Exception:
+            pass
 
 def upload_dir(ftp, local_path, remote_path):
-    """递归上传目录到 FTP"""
     for name in os.listdir(local_path):
         if not name or name.startswith('.'):
             continue
@@ -3073,18 +3094,12 @@ try:
     print('CONNECTED', flush=True)
 
     safe_cwd(ftp, '{ftp_base_dir}')
-    print('CD:' + ftp.pwd(), flush=True)
-
-    # 逐级创建远程目录
     ensure_dir(ftp, '{remote_dir}')
-
     upload_dir(ftp, '{local_dir}', '{remote_dir}')
     ftp.quit()
     print('SUCCESS', flush=True)
 except Exception as e:
     print('ERROR:' + str(e), flush=True)
-    import traceback
-    traceback.print_exc()
     sys.exit(1)
 "#,
         ftp_host = FTP_HOST,
@@ -3132,65 +3147,85 @@ async fn upload_landing_to_ftp(
         "message": "📡 连接 FTP 服务器..."
     })).ok();
 
-    let mut results = Vec::new();
+    // 使用多线程并行上传，限制并发数为 2
+    let max_concurrent = 2;
+    let mut handles: Vec<std::thread::JoinHandle<FtpUploadResult>> = Vec::new();
+    let mut results: Vec<FtpUploadResult> = Vec::new();
 
     for (idx, item) in items.iter().enumerate() {
-        let base_progress = 10 + ((idx as f64 / total as f64) * 80.0) as i32;
-        eprintln!(
-            "[JarPorter] 📤 开始上传 [{}/{}]: {} -> {}",
-            idx + 1, total, item.local_dir, item.remote_dir
-        );
-        app.emit(
-            "build-progress",
-            serde_json::json!({
-                "percent": base_progress,
-                "message": format!("📤 [{}/{}] 上传 {}...", idx + 1, total, item.remote_dir),
-            }),
-        )
-        .ok();
-
-        let local_dir = PathBuf::from(&item.local_dir);
-        if !local_dir.is_dir() {
-            eprintln!("[JarPorter] ❌ 本地目录不存在: {}", item.local_dir);
-            results.push(FtpUploadResult {
-                id: item.id.clone(),
-                url: String::new(),
-                status: "error".to_string(),
-                message: format!("本地目录不存在: {}", item.local_dir),
-            });
-            continue;
+        // 如果达到并发上限，等待一个完成
+        if handles.len() >= max_concurrent {
+            let handle = handles.remove(0);
+            match handle.join() {
+                Ok(result) => results.push(result),
+                Err(e) => eprintln!("[JarPorter] ❌ 线程异常: {:?}", e),
+            }
         }
 
-        match run_python_ftp_upload(&local_dir, &item.remote_dir) {
-            Ok(()) => {
-                let url = format!("https://{}/{}/", FTP_BASE_DIR, &item.remote_dir);
-                eprintln!("[JarPorter] ✅ 上传成功: {}", url);
-                results.push(FtpUploadResult {
-                    id: item.id.clone(),
-                    url,
-                    status: "success".to_string(),
-                    message: "上传成功".to_string(),
-                });
-            }
-            Err(e) => {
-                eprintln!("[JarPorter] ❌ 上传失败: {}", e);
-                results.push(FtpUploadResult {
-                    id: item.id.clone(),
+        let app_clone = app.clone();
+        let item_clone = item.clone();
+        let total_clone = total;
+        let idx_clone = idx;
+
+        let handle = std::thread::spawn(move || {
+            let base_progress = 10 + ((idx_clone as f64 / total_clone as f64) * 80.0) as i32;
+            eprintln!(
+                "[JarPorter] 📤 开始上传 [{}/{}]: {} -> {}",
+                idx_clone + 1, total_clone, item_clone.local_dir, item_clone.remote_dir
+            );
+            app_clone.emit(
+                "build-progress",
+                serde_json::json!({
+                    "percent": base_progress,
+                    "message": format!("📤 [{}/{}] 上传 {}...", idx_clone + 1, total_clone, item_clone.remote_dir),
+                }),
+            )
+            .ok();
+
+            let local_dir = PathBuf::from(&item_clone.local_dir);
+            if !local_dir.is_dir() {
+                eprintln!("[JarPorter] ❌ 本地目录不存在: {}", item_clone.local_dir);
+                return FtpUploadResult {
+                    id: item_clone.id.clone(),
                     url: String::new(),
                     status: "error".to_string(),
-                    message: e,
-                });
+                    message: format!("本地目录不存在: {}", item_clone.local_dir),
+                };
+            }
+
+            match run_ftp_upload(&local_dir, &item_clone.remote_dir) {
+                Ok(()) => {
+                    let url = format!("https://{}/{}/", FTP_BASE_DIR, &item_clone.remote_dir);
+                    eprintln!("[JarPorter] ✅ 上传成功: {}", url);
+                    FtpUploadResult {
+                        id: item_clone.id.clone(),
+                        url,
+                        status: "success".to_string(),
+                        message: "上传成功".to_string(),
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[JarPorter] ❌ 上传失败: {}", e);
+                    FtpUploadResult {
+                        id: item_clone.id.clone(),
+                        url: String::new(),
+                        status: "error".to_string(),
+                        message: e,
+                    }
+                }
+            }
+        });
+        handles.push(handle);
+    }
+
+    // 等待剩余线程完成
+    for handle in handles {
+        match handle.join() {
+            Ok(result) => results.push(result),
+            Err(e) => {
+                eprintln!("[JarPorter] ❌ 线程异常: {:?}", e);
             }
         }
-
-        app.emit(
-            "build-progress",
-            serde_json::json!({
-                "percent": base_progress + 70,
-                "message": format!("✅ [{}/{}] {} 上传完成", idx + 1, total, item.remote_dir),
-            }),
-        )
-        .ok();
     }
 
     app.emit(
