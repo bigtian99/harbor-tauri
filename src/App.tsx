@@ -2045,18 +2045,7 @@ function App() {
               />
             </div>
 
-            <div className="form-group">
-              <label>输出目录（自动生成到临时文件夹）</label>
-              <div className="input-with-button">
-                <input
-                  type="text"
-                  className="form-input"
-                  value={landingOutputDir}
-                  readOnly
-                  placeholder="自动生成到系统临时文件夹..."
-                />
-              </div>
-            </div>
+            {/* 输出目录自动生成到临时文件夹，无需显示 */}
 
             <div className="landing-actions">
               <button
