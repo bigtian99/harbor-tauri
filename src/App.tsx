@@ -2101,7 +2101,7 @@ function App() {
                 }}
               >
                 {isFetchingPreview || isGenerating ? (
-                  <Loader2 size={14} className="spinning" />
+                  <Loader2 size={14} className="spin" />
                 ) : (
                   <Rocket size={14} />
                 )}
@@ -2145,7 +2145,7 @@ function App() {
                   }}
                 >
                   {isUploadingToFtp ? (
-                    <Loader2 size={14} className="spinning" />
+                    <Loader2 size={14} className="spin" />
                   ) : (
                     <ExternalLink size={14} />
                   )}

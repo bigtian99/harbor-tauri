@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use suppaftp::FtpStream;
 use tauri::Emitter;
 
@@ -2935,107 +2935,220 @@ const FTP_BASE_DIR: &str = "common.tiankongshuyu.fun";
 fn upload_dir_recursive(
     ftp: &mut FtpStream,
     local_path: &Path,
+    app: &tauri::AppHandle,
+    remote_item_name: &str,
+    percent: i32,
 ) -> Result<(), String> {
-    for entry in fs::read_dir(local_path).map_err(|e| format!("读取目录失败: {}", e))? {
+    eprintln!("[JarPorter] 📂 上传目录: {}", local_path.display());
+    for entry in fs::read_dir(local_path).map_err(|e| {
+        eprintln!("[JarPorter] ❌ 读取目录失败: {}", e);
+        format!("读取目录失败: {}", e)
+    })? {
         let entry = entry.map_err(|e| e.to_string())?;
         let file_name = entry.file_name().to_string_lossy().to_string();
         let local_child = entry.path();
 
         if local_child.is_dir() {
-            // 创建远程子目录并进入
+            eprintln!("[JarPorter] 📁 创建远程子目录: {}", file_name);
             if ftp.cwd(&file_name).is_err() {
                 ftp.mkdir(&file_name)
-                    .map_err(|e| format!("创建子目录失败 {}: {}", file_name, e))?;
+                    .map_err(|e| {
+                        eprintln!("[JarPorter] ❌ 创建子目录失败 {}: {}", file_name, e);
+                        format!("创建子目录失败 {}: {}", file_name, e)
+                    })?;
                 ftp.cwd(&file_name)
-                    .map_err(|e| format!("进入子目录失败 {}: {}", file_name, e))?;
+                    .map_err(|e| {
+                        eprintln!("[JarPorter] ❌ 进入子目录失败 {}: {}", file_name, e);
+                        format!("进入子目录失败 {}: {}", file_name, e)
+                    })?;
             }
-            upload_dir_recursive(ftp, &local_child)?;
-            ftp.cdup().map_err(|e| format!("返回上级目录失败: {}", e))?;
+            upload_dir_recursive(ftp, &local_child, app, remote_item_name, percent)?;
+            ftp.cdup().map_err(|e| {
+                eprintln!("[JarPorter] ❌ 返回上级目录失败: {}", e);
+                format!("返回上级目录失败: {}", e)
+            })?;
         } else if local_child.is_file() {
-            // 读取本地文件并上传到当前 FTP 目录
-            let data = fs::read(&local_child)
-                .map_err(|e| format!("读取文件失败 {}: {}", local_child.display(), e))?;
-            let mut cursor = Cursor::new(data);
-            ftp.put_file(&file_name, &mut cursor)
-                .map_err(|e| format!("上传文件失败 {}: {}", file_name, e))?;
+            let file_size = local_child.metadata().ok().map(|m| m.len()).unwrap_or(0);
+            eprintln!("[JarPorter] 📄 上传文件: {} ({} bytes)", file_name, file_size);
+
+            // 通知上传开始
+            app.emit("build-progress", serde_json::json!({
+                "percent": percent,
+                "message": format!("📤 {} ➜ {} ({} B)", remote_item_name, file_name, file_size),
+            })).ok();
+
+            // 使用 File 直接上传（不通过内存缓存整个文件）
+            let mut file = fs::File::open(&local_child).map_err(|e| {
+                eprintln!("[JarPorter] ❌ 打开文件失败 {}: {}", local_child.display(), e);
+                format!("打开文件失败 {}: {}", local_child.display(), e)
+            })?;
+
+            ftp.put_file(&file_name, &mut file).map_err(|e| {
+                eprintln!("[JarPorter] ❌ 上传文件失败 {}: {}", file_name, e);
+                format!("上传文件失败 {}: {}", file_name, e)
+            })?;
+
+            eprintln!("[JarPorter] ✅ 上传成功: {} ({} bytes)", file_name, file_size);
+
+            // 通知上传完成
+            app.emit("build-progress", serde_json::json!({
+                "percent": percent,
+                "message": format!("✅ {} 上传完成 ({} B)", file_name, file_size),
+            })).ok();
         }
     }
     Ok(())
 }
 
 #[tauri::command]
-async fn upload_landing_to_ftp(items: Vec<FtpUploadItem>) -> Result<Vec<FtpUploadResult>, String> {
-    let mut results = Vec::new();
+async fn upload_landing_to_ftp(
+    app: tauri::AppHandle,
+    items: Vec<FtpUploadItem>,
+) -> Result<Vec<FtpUploadResult>, String> {
+    let total = items.len();
 
-    // 连接 FTP
-    let mut ftp = FtpStream::connect(format!("{}:21", FTP_HOST))
-        .map_err(|e| format!("FTP 连接失败: {}", e))?;
+    app.emit("build-progress", serde_json::json!({
+        "percent": 5,
+        "message": "📡 连接 FTP 服务器..."
+    })).ok();
 
-    ftp.login(FTP_USER, FTP_PASS)
-        .map_err(|e| format!("FTP 登录失败: {}", e))?;
+    // 将阻塞 FTP I/O 放到 spawn_blocking 执行，避免冻结 UI
+    let results = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<FtpUploadResult>, String> {
+        let mut results = Vec::new();
 
-    // 切换到二进制模式
-    ftp.transfer_type(suppaftp::types::FileType::Binary)
-        .map_err(|e| format!("设置传输模式失败: {}", e))?;
+        // 连接 FTP（带 15 秒超时）
+        eprintln!("[JarPorter] 📡 正在连接 FTP: {}:21", FTP_HOST);
+        let addr: std::net::SocketAddr = format!("{}:21", FTP_HOST)
+            .parse()
+            .map_err(|e| {
+                eprintln!("[JarPorter] ❌ FTP 地址解析失败: {}", e);
+                format!("FTP 地址解析失败: {}", e)
+            })?;
+        let mut ftp = FtpStream::connect_timeout(
+            addr,
+            Duration::from_secs(15),
+        )
+        .map_err(|e| {
+            eprintln!("[JarPorter] ❌ FTP 连接失败: {}", e);
+            format!("FTP 连接失败: {}", e)
+        })?;
+        eprintln!("[JarPorter] ✅ FTP 连接成功");
 
-    // 切换到基础目录
-    if ftp.cwd(FTP_BASE_DIR).is_err() {
-        ftp.mkdir(FTP_BASE_DIR)
-            .map_err(|e| format!("创建基础目录失败: {}", e))?;
-        ftp.cwd(FTP_BASE_DIR)
-            .map_err(|e| format!("切换到基础目录失败: {}", e))?;
-    }
+        // 尝试设置为主动模式（某些服务器被动模式有问题）
+        // ftp.set_mode(suppaftp::Mode::Active);
+        // 启用 NAT 穿透 workaround
+        ftp.set_passive_nat_workaround(true);
+        eprintln!("[JarPorter] ✅ 已启用 NAT 穿透 workaround");
 
-    for item in &items {
-        let local_dir = PathBuf::from(&item.local_dir);
-        if !local_dir.is_dir() {
+        eprintln!("[JarPorter] 🔐 正在登录 FTP: user={}", FTP_USER);
+        ftp.login(FTP_USER, FTP_PASS)
+            .map_err(|e| {
+                eprintln!("[JarPorter] ❌ FTP 登录失败: {}", e);
+                format!("FTP 登录失败: {}", e)
+            })?;
+        eprintln!("[JarPorter] ✅ FTP 登录成功");
+
+        // 切换到二进制模式
+        ftp.transfer_type(suppaftp::types::FileType::Binary)
+            .map_err(|e| {
+                eprintln!("[JarPorter] ❌ 设置传输模式失败: {}", e);
+                format!("设置传输模式失败: {}", e)
+            })?;
+        eprintln!("[JarPorter] ✅ 已切换到二进制模式");
+
+        // 切换到基础目录
+        eprintln!("[JarPorter] 📂 正在切换到基础目录: /{}", FTP_BASE_DIR);
+        if ftp.cwd(FTP_BASE_DIR).is_err() {
+            eprintln!("[JarPorter] ⚠️ 基础目录不存在，尝试创建...");
+            ftp.mkdir(FTP_BASE_DIR)
+                .map_err(|e| {
+                    eprintln!("[JarPorter] ❌ 创建基础目录失败: {}", e);
+                    format!("创建基础目录失败: {}", e)
+                })?;
+            ftp.cwd(FTP_BASE_DIR)
+                .map_err(|e| {
+                    eprintln!("[JarPorter] ❌ 切换到基础目录失败: {}", e);
+                    format!("切换到基础目录失败: {}", e)
+                })?;
+        }
+        eprintln!("[JarPorter] ✅ 当前 FTP 目录: {:?}", ftp.pwd());
+
+        for (idx, item) in items.iter().enumerate() {
+            let base_progress = 10 + ((idx as f64 / total as f64) * 80.0) as i32;
+            eprintln!("[JarPorter] 📤 开始上传 [{}/{}]: {} -> {}", idx + 1, total, item.local_dir, item.remote_dir);
+            app.emit("build-progress", serde_json::json!({
+                "percent": base_progress,
+                "message": format!("📤 [{}/{}] 上传 {}...", idx + 1, total, item.remote_dir),
+            })).ok();
+
+            let local_dir = PathBuf::from(&item.local_dir);
+            if !local_dir.is_dir() {
+                eprintln!("[JarPorter] ❌ 本地目录不存在: {}", item.local_dir);
+                results.push(FtpUploadResult {
+                    id: item.id.clone(),
+                    url: String::new(),
+                    status: "error".to_string(),
+                    message: format!("本地目录不存在: {}", item.local_dir),
+                });
+                continue;
+            }
+            eprintln!("[JarPorter] ✅ 本地目录存在: {}", local_dir.display());
+
+            // 创建远程目录（已存在则直接进入，文件会覆盖）
+            eprintln!("[JarPorter] 📂 准备远程目录: /{}/{}", FTP_BASE_DIR, item.remote_dir);
+            if ftp.cwd(&item.remote_dir).is_ok() {
+                eprintln!("[JarPorter] ✅ 远程目录已存在，直接进入（文件将覆盖）");
+            } else {
+                eprintln!("[JarPorter] ⚠️ 远程目录不存在，创建中...");
+                ftp.mkdir(&item.remote_dir)
+                    .map_err(|e| {
+                        eprintln!("[JarPorter] ❌ 创建远程目录失败: {}", e);
+                        format!("创建远程目录失败: {}", e)
+                    })?;
+                ftp.cwd(&item.remote_dir)
+                    .map_err(|e| {
+                        eprintln!("[JarPorter] ❌ 切换目录失败: {}", e);
+                        format!("切换目录失败: {}", e)
+                    })?;
+            }
+            eprintln!("[JarPorter] ✅ 已进入远程目录: {:?}", ftp.pwd());
+
+            // 上传所有文件
+            if let Err(e) = upload_dir_recursive(&mut ftp, &local_dir, &app, &item.remote_dir, base_progress) {
+                eprintln!("[JarPorter] ❌ 上传失败: {}", e);
+                results.push(FtpUploadResult {
+                    id: item.id.clone(),
+                    url: String::new(),
+                    status: "error".to_string(),
+                    message: e,
+                });
+                ftp.cwd(&format!("/{}", FTP_BASE_DIR)).ok();
+                continue;
+            }
+
+            let url = format!("https://{}/{}/", FTP_BASE_DIR, &item.remote_dir);
+            eprintln!("[JarPorter] ✅ 上传成功: {}", url);
             results.push(FtpUploadResult {
                 id: item.id.clone(),
-                url: String::new(),
-                status: "error".to_string(),
-                message: format!("本地目录不存在: {}", item.local_dir),
+                url,
+                status: "success".to_string(),
+                message: "上传成功".to_string(),
             });
-            continue;
-        }
 
-        // 创建远程目录（已存在则覆盖 — 先删除再创建）
-        if ftp.cwd(&item.remote_dir).is_ok() {
-            ftp.cdup().ok();
-            ftp.rmdir(&item.remote_dir)
-                .map_err(|e| format!("删除远程目录失败: {}", e))?;
-        }
-        ftp.mkdir(&item.remote_dir)
-            .map_err(|e| format!("创建远程目录失败: {}", e))?;
-        ftp.cwd(&item.remote_dir)
-            .map_err(|e| format!("切换目录失败: {}", e))?;
-
-        // 上传所有文件（已在远程子目录内，用简单文件名）
-        if let Err(e) = upload_dir_recursive(&mut ftp, &local_dir) {
-            results.push(FtpUploadResult {
-                id: item.id.clone(),
-                url: String::new(),
-                status: "error".to_string(),
-                message: e,
-            });
-            // 回到基础目录准备下一个
             ftp.cwd(&format!("/{}", FTP_BASE_DIR)).ok();
-            continue;
         }
 
-        let url = format!("https://{}/{}/", FTP_BASE_DIR, &item.remote_dir);
-        results.push(FtpUploadResult {
-            id: item.id.clone(),
-            url,
-            status: "success".to_string(),
-            message: "上传成功".to_string(),
-        });
+        app.emit("build-progress", serde_json::json!({
+            "percent": 100,
+            "message": "✅ FTP 上传完成！",
+        })).ok();
 
-        // 回到基础目录准备下一个
-        ftp.cwd(&format!("/{}", FTP_BASE_DIR)).ok();
-    }
+        ftp.quit().ok();
 
-    // 断开 FTP 连接
-    ftp.quit().ok();
+        Ok(results)
+    })
+    .await
+    .map_err(|e| format!("FTP 上传线程异常: {}", e))??;
 
     Ok(results)
 }
