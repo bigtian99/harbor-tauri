@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>漫蛙 - 官方下载</title>
+  <meta name="description" content="漫蛙 - 海量高清漫画，每日更新，沉浸式阅读体验。" />
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --card: #1a1a25;
+      --primary: #6366f1;
+      --primary-light: #818cf8;
+      --accent: #f472b6;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --gradient-1: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+      --gradient-2: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      --shadow-glow: 0 0 60px rgba(99, 102, 241, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+      min-width: 1200px;
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background:
+        radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(236, 72, 153, 0.08) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+    }
+
+    /* Header */
+    .header {
+      width: 100%;
+      height: 80px;
+      background: rgba(10, 10, 15, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-title {
+      font-size: 28px;
+      font-weight: 700;
+      background: var(--gradient-1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 2px;
+    }
+
+    /* Hero Section */
+    .hero {
+      min-height: calc(100vh - 80px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 40px;
+      gap: 80px;
+    }
+
+    .hero-visual {
+      flex: 0 0 45%;
+      position: relative;
+    }
+
+    .hero-visual::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 400px;
+      height: 400px;
+      background: var(--gradient-1);
+      border-radius: 50%;
+      filter: blur(100px);
+      opacity: 0.4;
+      animation: pulse 4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
+      50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.6; }
+    }
+
+    .hero-visual img {
+      width: 100%;
+      max-width: 500px;
+      height: auto;
+      border-radius: 24px;
+      box-shadow: var(--shadow-glow);
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-content {
+      flex: 0 0 40%;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .app-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 100px;
+      width: fit-content;
+    }
+
+    .app-badge .icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--card);
+    }
+
+    .app-badge .icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .app-badge span {
+      font-size: 14px;
+      color: var(--primary-light);
+      font-weight: 500;
+    }
+
+    .hero-title {
+      font-size: 48px;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -1px;
+    }
+
+    .hero-title span {
+      background: var(--gradient-1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-subtitle {
+      font-size: 18px;
+      color: var(--text-muted);
+      line-height: 1.8;
+    }
+
+    .download-buttons {
+      display: flex;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .download-buttons a {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 32px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+
+    .download-buttons a.btn-primary {
+      background: var(--gradient-1);
+      color: #fff;
+      box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4);
+    }
+
+    .download-buttons a.btn-primary:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px rgba(99, 102, 241, 0.5);
+    }
+
+    .download-buttons a.btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .download-buttons a.btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-3px);
+    }
+
+    /* QR Code Section */
+    .qr-section {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 24px;
+      padding: 16px 20px;
+      background: var(--card);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      width: fit-content;
+    }
+
+    .qr-code {
+      background: #ffffff;
+      padding: 8px;
+      border-radius: 12px;
+      display: inline-flex;
+    }
+
+    .qr-code canvas {
+      display: block;
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+    }
+
+    .qr-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .qr-info .title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .qr-info .desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Features Section */
+    .features {
+      padding: 100px 40px;
+      background: var(--surface);
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    .section-tag {
+      display: inline-block;
+      padding: 6px 16px;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 100px;
+      font-size: 13px;
+      color: var(--primary-light);
+      font-weight: 500;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 40px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .section-desc {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .feature-card {
+      background: var(--card);
+      border-radius: 20px;
+      padding: 32px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.3s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-5px);
+      border-color: rgba(99, 102, 241, 0.3);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .feature-icon {
+      width: 56px;
+      height: 56px;
+      background: var(--gradient-1);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    .feature-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .feature-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    /* Gallery Section */
+    .gallery {
+      padding: 100px 40px;
+      overflow: hidden;
+    }
+
+    .gallery-track {
+      display: flex;
+      gap: 20px;
+      animation: scroll 40s linear infinite;
+    }
+
+    .gallery-track:hover {
+      animation-play-state: paused;
+    }
+
+    @keyframes scroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    .gallery-item {
+      flex: 0 0 280px;
+      aspect-ratio: 3/4;
+      border-radius: 16px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .gallery-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.5s ease;
+    }
+
+    .gallery-item:hover img {
+      transform: scale(1.1);
+    }
+
+    .gallery-item::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 50%;
+      background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+      pointer-events: none;
+    }
+
+    /* Footer */
+    .footer {
+      padding: 60px 40px;
+      background: var(--surface);
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      text-align: center;
+    }
+
+    .footer-logo {
+      font-size: 24px;
+      font-weight: 700;
+      background: var(--gradient-1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 16px;
+    }
+
+    .footer-text {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      body {
+        min-width: 0;
+      }
+
+      .header {
+        height: 60px;
+        backdrop-filter: blur(10px);
+      }
+
+      .header-title {
+        font-size: 22px;
+      }
+
+      .hero {
+        flex-direction: column;
+        padding: 40px 20px;
+        gap: 40px;
+        min-height: auto;
+      }
+
+      .hero-visual {
+        flex: none;
+        width: 100%;
+        order: 2;
+      }
+
+      .hero-visual::before {
+        width: 250px;
+        height: 250px;
+      }
+
+      .hero-visual img {
+        max-width: 100%;
+        border-radius: 16px;
+      }
+
+      .hero-content {
+        flex: none;
+        width: 100%;
+        order: 1;
+        text-align: center;
+        align-items: center;
+      }
+
+      .hero-title {
+        font-size: 32px;
+      }
+
+      .hero-subtitle {
+        font-size: 16px;
+      }
+
+      .download-buttons {
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .download-buttons a {
+        justify-content: center;
+        padding: 14px 24px;
+      }
+
+      .qr-section {
+        margin: 0 auto;
+      }
+
+      .features {
+        padding: 60px 20px;
+      }
+
+      .section-title {
+        font-size: 28px;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      .feature-card {
+        padding: 24px;
+      }
+
+      .gallery {
+        padding: 60px 20px;
+      }
+
+      .gallery-item {
+        flex: 0 0 200px;
+      }
+
+      .footer {
+        padding: 40px 20px;
+      }
+    }
+  </style>
+  <script>
+    var _hmt = _hmt || [];
+    (function() {
+      var hm = document.createElement("script");
+      hm.src = "https://hm.baidu.com/hm.js?18a922494803d95971926aa51224a01d";
+      var s = document.getElementsByTagName("script")[0];
+      s.parentNode.insertBefore(hm, s);
+    })();
+  </script>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <span class="header-title"><span>漫蛙</span></span>
+    </div>
+
+    <!-- Hero Section -->
+    <div class="hero">
+      <div class="hero-visual">
+        <img src="./image/Group610.png" alt="漫蛙展示图">
+      </div>
+      <div class="hero-content">
+        <div class="app-badge">
+          <div class="icon">
+            <img src="./image/logo.png" alt="漫蛙图标">
+          </div>
+          <span>官方正版 · 安全下载</span>
+        </div>
+        <h1 class="hero-title">
+          <span>漫蛙</span><br>
+          沉浸式漫画体验
+        </h1>
+        <p class="hero-subtitle">
+          最快最全的动漫内容，让你一次看过瘾。<br>
+          高清画质，流畅阅读，每日更新精彩内容。
+        </p>
+        <div class="download-buttons">
+          <a id="ios-download-btn" href="javascript:void(0);" class="btn-primary" aria-label="iOS下载">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+            iOS 下载
+          </a>
+          <a id="android-download-btn" href="javascript:void(0);" class="btn-secondary" aria-label="安卓下载" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V7H6v11zM3.5 7C2.67 7 2 7.67 2 8.5v7c0 .83.67 1.5 1.5 1.5S5 16.33 5 15.5v-7C5 7.67 4.33 7 3.5 7zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C6.97 3.26 6 5.01 6 7h12c0-1.99-.97-3.75-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/></svg>
+            Android 下载
+          </a>
+        </div>
+        <div class="qr-section">
+          <div class="qr-code" id="qrcode-container"></div>
+          <div class="qr-info">
+            <span class="title">扫码下载 Android 版</span>
+            <span class="desc">或点击上方按钮直接下载</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="features">
+      <div class="section-header">
+        <span class="section-tag">核心功能</span>
+        <h2 class="section-title">为什么选择漫蛙</h2>
+        <p class="section-desc">我们致力于为你提供最好的漫画阅读体验</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📚</div>
+          <h3 class="feature-title">海量资源</h3>
+          <p class="feature-desc">收录全网热门漫画，涵盖各种题材类型，总有一部适合你。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎨</div>
+          <h3 class="feature-title">超清画质</h3>
+          <p class="feature-desc">高清无损画质，细腻线条清晰呈现，阅读更舒适。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3 class="feature-title">极速更新</h3>
+          <p class="feature-desc">每日更新精彩内容，第一时间追更你喜爱的作品。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🌙</div>
+          <h3 class="feature-title">夜间模式</h3>
+          <p class="feature-desc">护眼夜间模式，深夜阅读也不伤眼。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💾</div>
+          <h3 class="feature-title">离线缓存</h3>
+          <p class="feature-desc">支持下载缓存，没网络也能畅享阅读。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎯</div>
+          <h3 class="feature-title">智能推荐</h3>
+          <p class="feature-desc">AI 智能推荐，发现更多你可能喜欢的作品。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gallery Section -->
+    <div class="gallery">
+      <div class="section-header">
+        <span class="section-tag">精选内容</span>
+        <h2 class="section-title">热门作品推荐</h2>
+        <p class="section-desc">精选高分优质漫画，精彩不容错过</p>
+      </div>
+      <div class="gallery-track">
+        <div class="gallery-item"><img src="./image/slices/Rectangle8.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle21.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle22.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle23.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle24.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle25.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle30.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle31.jpg" alt="漫画推荐"></div>
+        <!-- Duplicate for infinite scroll -->
+        <div class="gallery-item"><img src="./image/slices/Rectangle8.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle21.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle22.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle23.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle24.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle25.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle30.jpg" alt="漫画推荐"></div>
+        <div class="gallery-item"><img src="./image/slices/Rectangle31.jpg" alt="漫画推荐"></div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="footer-logo">漫蛙</div>
+      <p class="footer-text">© 2024 漫蛙 All Rights Reserved.</p>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    // 安卓下载链接
+    var androidDownloadUrl = "https://comic-short.tiankongshuyu.cn/tksy/3096-9812-f3698922668946dfbbc9be6672f8fd72.apk";
+
+    // 按钮交互
+    var iosBtn = document.getElementById("ios-download-btn");
+    var androidBtn = document.getElementById("android-download-btn");
+
+    if (iosBtn) {
+      iosBtn.addEventListener("click", function(event) {
+        event.preventDefault();
+        alert("iOS 版本开发中，敬请期待。");
+      });
+    }
+
+    if (androidBtn) {
+      androidBtn.setAttribute("href", androidDownloadUrl);
+      androidBtn.setAttribute("target", "_blank");
+      androidBtn.setAttribute("rel", "noopener noreferrer");
+    }
+
+    // ===================== 二维码生成 =====================
+    var qrContainer = document.getElementById("qrcode-container");
+    if (qrContainer) {
+      var canvas = document.createElement("canvas");
+      canvas.width = 80;
+      canvas.height = 80;
+      qrContainer.appendChild(canvas);
+
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js';
+      script.onload = function() {
+        QRCode.toCanvas(canvas, androidDownloadUrl, {
+          width: 80,
+          margin: 1,
+          color: {
+            dark: "#000",
+            light: "#fff"
+          }
+        }, function(err) {
+          if (err) console.error("生成失败", err);
+        });
+      };
+      document.head.appendChild(script);
+    }
+  })();
+</script>
+</body>
+</html>

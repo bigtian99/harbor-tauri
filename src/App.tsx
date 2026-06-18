@@ -112,7 +112,7 @@ function App() {
 
   // ==================== 落地页状态 ====================
   const landingApiUrl = "https://tksyadmin.tiankongshuyu.cn";
-  const [landingTemplateBase, setLandingTemplateBase] = useState("/Users/daijunxiong/Desktop/tksy-h5-app");
+  const [landingTemplateBase, setLandingTemplateBase] = useState("");
   const [landingIds, setLandingIds] = useState("");
   const [landingOutputDir, setLandingOutputDir] = useState("");
   const [landingPreviewData, setLandingPreviewData] = useState<SubChannelData[]>([]);
@@ -814,12 +814,21 @@ function App() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === "landing" && isTauriRuntime() && !landingOutputDir) {
-      invoke<string>("get_temp_dir").then((dir) => {
-        setLandingOutputDir(dir);
-      }).catch(() => {});
+    if (activeTab === "landing" && isTauriRuntime()) {
+      // 获取打包的模板目录
+      if (!landingTemplateBase) {
+        invoke<string>("get_bundled_templates_dir").then((dir) => {
+          setLandingTemplateBase(dir);
+        }).catch(() => {});
+      }
+      // 获取临时输出目录
+      if (!landingOutputDir) {
+        invoke<string>("get_temp_dir").then((dir) => {
+          setLandingOutputDir(dir);
+        }).catch(() => {});
+      }
     }
-  }, [activeTab, landingOutputDir]);
+  }, [activeTab, landingOutputDir, landingTemplateBase]);
 
   useEffect(() => {
     if (landingDebounceRef.current !== null) {

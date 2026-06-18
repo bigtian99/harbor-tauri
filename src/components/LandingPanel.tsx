@@ -107,17 +107,6 @@ export function LandingPanel({
       <h2><Globe size={20} /> 生成落地页</h2>
 
       <div className="form-group">
-        <label>模板目录 (tksy-h5-app)</label>
-        <input
-          type="text"
-          className="form-input"
-          value={landingTemplateBase}
-          onChange={(e) => setLandingTemplateBase(e.target.value)}
-          placeholder="/Users/daijunxiong/Desktop/tksy-h5-app"
-        />
-      </div>
-
-      <div className="form-group">
         <label>子渠道 IDs（逗号分隔）</label>
         <input
           type="text"

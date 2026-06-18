@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tofai - 你的专属AI伴侣</title>
+    <!-- 奢华字体组合: Bodoni Moda + Jost -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;500;600;700&family=Jost:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #E11D48;
+            --secondary: #FB7185;
+            --accent: #F97316;
+            --bg-dark: #0a0a0f;
+            --bg-gradient-1: rgba(225, 29, 72, 0.15);
+            --bg-gradient-2: rgba(251, 113, 133, 0.1);
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --blur-amount: 20px;
+            --morph-duration: 500ms;
+        }
+
+        body {
+            font-family: 'Jost', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            line-height: 1.7;
+        }
+
+        /* 流体背景动画 */
+        .fluid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .fluid-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            animation: blobMorph 8s ease-in-out infinite;
+        }
+
+        .blob-1 {
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(225, 29, 72, 0.4), transparent);
+            top: -200px;
+            left: -100px;
+            animation-delay: 0s;
+        }
+
+        .blob-2 {
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(251, 113, 133, 0.3), transparent);
+            bottom: -150px;
+            right: -100px;
+            animation-delay: -3s;
+        }
+
+        .blob-3 {
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(249, 115, 22, 0.25), transparent);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation-delay: -5s;
+        }
+
+        @keyframes blobMorph {
+            0%, 100% {
+                transform: translate(0, 0) scale(1) rotate(0deg);
+                border-radius: 50% 40% 60% 50%;
+            }
+            25% {
+                transform: translate(30px, -50px) scale(1.1) rotate(5deg);
+                border-radius: 40% 60% 50% 50%;
+            }
+            50% {
+                transform: translate(-20px, 20px) scale(0.95) rotate(-5deg);
+                border-radius: 50% 50% 40% 60%;
+            }
+            75% {
+                transform: translate(20px, 40px) scale(1.05) rotate(3deg);
+                border-radius: 60% 40% 50% 50%;
+            }
+        }
+
+        /* 导航栏 - 玻璃态 */
+        .navbar {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            padding: 16px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(var(--blur-amount));
+            -webkit-backdrop-filter: blur(var(--blur-amount));
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            z-index: 1000;
+            animation: slideDown 0.6s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 28px;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 8px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 400;
+            font-size: 15px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            transition: all var(--morph-duration) cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-links a:focus-visible {
+            outline: 2px solid var(--secondary);
+            outline-offset: 2px;
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 1;
+            padding: 140px 40px 80px;
+        }
+
+        .hero-content {
+            text-align: center;
+            max-width: 800px;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 20px;
+            background: rgba(225, 29, 72, 0.15);
+            border: 1px solid rgba(225, 29, 72, 0.3);
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--secondary);
+            margin-bottom: 32px;
+            animation: fadeInUp 0.8s ease-out 0.1s backwards;
+        }
+
+        .hero h1 {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 80px;
+            font-weight: 600;
+            line-height: 1.1;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--secondary) 50%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: fadeInUp 0.8s ease-out 0.2s backwards;
+        }
+
+        .hero-subtitle {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 32px;
+            font-weight: 400;
+            font-style: italic;
+            color: var(--secondary);
+            margin-bottom: 20px;
+            animation: fadeInUp 0.8s ease-out 0.3s backwards;
+        }
+
+        .hero p {
+            font-size: 18px;
+            color: var(--text-muted);
+            margin-bottom: 48px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            animation: fadeInUp 0.8s ease-out 0.4s backwards;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            animation: fadeInUp 0.8s ease-out 0.5s backwards;
+        }
+
+        /* 玻璃态按钮 */
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 16px 40px;
+            font-family: 'Jost', sans-serif;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-primary);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border: none;
+            border-radius: 16px;
+            text-decoration: none;
+            cursor: pointer;
+            min-height: 56px;
+            transition: all var(--morph-duration) cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-button::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+            opacity: 0;
+            transition: opacity var(--morph-duration) ease-out;
+        }
+
+        .cta-button:hover::before {
+            opacity: 1;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 20px 40px rgba(225, 29, 72, 0.4);
+        }
+
+        .cta-button:active {
+            transform: translateY(-1px);
+        }
+
+        .cta-button:focus-visible {
+            outline: 3px solid var(--accent);
+            outline-offset: 3px;
+        }
+
+        .cta-button-secondary {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(10px);
+        }
+
+        .cta-button-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        }
+
+        .download-icon {
+            transition: transform var(--morph-duration) ease-out;
+        }
+
+        .cta-button:hover .download-icon {
+            transform: translateY(3px);
+        }
+
+        /* Features Section */
+        .features {
+            padding: 120px 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 80px;
+        }
+
+        .section-label {
+            display: inline-block;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--secondary);
+            margin-bottom: 16px;
+        }
+
+        .features h2 {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 56px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--text-primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .features > .section-header > p {
+            font-size: 18px;
+            color: var(--text-muted);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* 玻璃态卡片 */
+        .feature-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--blur-amount));
+            -webkit-backdrop-filter: blur(var(--blur-amount));
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 40px 32px;
+            transition: all var(--morph-duration) cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            animation: fadeInUp 0.6s ease-out forwards;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+        }
+
+        .feature-card:focus-visible {
+            outline: 2px solid var(--secondary);
+            outline-offset: 2px;
+        }
+
+        .feature-card:nth-child(1) { animation-delay: 0.1s; }
+        .feature-card:nth-child(2) { animation-delay: 0.15s; }
+        .feature-card:nth-child(3) { animation-delay: 0.2s; }
+        .feature-card:nth-child(4) { animation-delay: 0.25s; }
+        .feature-card:nth-child(5) { animation-delay: 0.3s; }
+        .feature-card:nth-child(6) { animation-delay: 0.35s; }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3),
+                        0 0 40px rgba(225, 29, 72, 0.1);
+        }
+
+        .feature-icon {
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(225, 29, 72, 0.2), rgba(251, 113, 133, 0.1));
+            border: 1px solid rgba(225, 29, 72, 0.3);
+            border-radius: 16px;
+            margin-bottom: 24px;
+        }
+
+        .feature-icon svg {
+            width: 28px;
+            height: 28px;
+            stroke: var(--secondary);
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .feature-card h3 {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 24px;
+            font-weight: 500;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .feature-card p {
+            font-size: 15px;
+            color: var(--text-muted);
+            line-height: 1.7;
+        }
+
+        /* Stats Section */
+        .stats {
+            padding: 100px 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .stats-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 60px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--blur-amount));
+            -webkit-backdrop-filter: blur(var(--blur-amount));
+            border: 1px solid var(--glass-border);
+            border-radius: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stats-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(225, 29, 72, 0.1), transparent);
+            pointer-events: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .stat-item {
+            text-align: center;
+            opacity: 0;
+            animation: fadeInUp 0.6s ease-out forwards;
+        }
+
+        .stat-item:nth-child(1) { animation-delay: 0.1s; }
+        .stat-item:nth-child(2) { animation-delay: 0.15s; }
+        .stat-item:nth-child(3) { animation-delay: 0.2s; }
+        .stat-item:nth-child(4) { animation-delay: 0.25s; }
+
+        .stat-number {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 52px;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 15px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            padding: 120px 40px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .cta-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 80px 60px;
+            background: linear-gradient(135deg, rgba(225, 29, 72, 0.15), rgba(251, 113, 133, 0.1));
+            backdrop-filter: blur(var(--blur-amount));
+            -webkit-backdrop-filter: blur(var(--blur-amount));
+            border: 1px solid rgba(225, 29, 72, 0.3);
+            border-radius: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 50%);
+            animation: shimmer 8s linear infinite;
+        }
+
+        @keyframes shimmer {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .cta-section h2 {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 52px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+            position: relative;
+            z-index: 1;
+        }
+
+        .cta-section p {
+            font-size: 18px;
+            color: var(--text-muted);
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .cta-section .cta-button {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 40px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .footer p {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* 响应式 */
+        @media (max-width: 1024px) {
+            .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                top: 10px;
+                left: 10px;
+                right: 10px;
+                padding: 12px 20px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .hero {
+                padding: 120px 20px 60px;
+            }
+
+            .hero h1 {
+                font-size: 48px;
+            }
+
+            .hero-subtitle {
+                font-size: 24px;
+            }
+
+            .hero p {
+                font-size: 16px;
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .cta-button {
+                width: 100%;
+                max-width: 280px;
+            }
+
+            .features {
+                padding: 80px 20px;
+            }
+
+            .features h2 {
+                font-size: 36px;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .feature-card {
+                padding: 32px 24px;
+            }
+
+            .stats {
+                padding: 60px 20px;
+            }
+
+            .stats-container {
+                padding: 40px 24px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 32px;
+            }
+
+            .stat-number {
+                font-size: 40px;
+            }
+
+            .cta-section {
+                padding: 80px 20px;
+            }
+
+            .cta-container {
+                padding: 48px 24px;
+            }
+
+            .cta-section h2 {
+                font-size: 36px;
+            }
+        }
+
+        /* Reduced Motion */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+
+            .fluid-blob {
+                animation: none;
+            }
+        }
+
+        /* 鼠标光晕 */
+        .cursor-glow {
+            position: fixed;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(225, 29, 72, 0.08) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            z-index: 0;
+            transition: opacity 0.4s ease-out;
+        }
+    </style>
+    <script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?dd72c7417dc00c887fe031bfa50093ac";
+  var s = document.getElementsByTagName("script")[0];
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+</head>
+<body>
+    <!-- 流体背景 -->
+    <div class="fluid-bg" aria-hidden="true">
+        <div class="fluid-blob blob-1"></div>
+        <div class="fluid-blob blob-2"></div>
+        <div class="fluid-blob blob-3"></div>
+    </div>
+
+    <!-- 鼠标光晕 -->
+    <div class="cursor-glow" id="cursor-glow" aria-hidden="true"></div>
+
+    <!-- 导航栏 -->
+    <nav class="navbar" role="navigation" aria-label="主导航">
+        <div class="logo">Tofai</div>
+        <ul class="nav-links">
+            <li><a href="#home">首页</a></li>
+            <li><a href="#features">功能</a></li>
+            <li><a href="#stats">数据</a></li>
+            <li><a href="#contact">体验</a></li>
+        </ul>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero" id="home">
+        <div class="hero-content">
+            <div class="hero-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                超过 200 万用户的选择
+            </div>
+            <h1>Tofai</h1>
+            <p class="hero-subtitle">懂你的每一次心跳</p>
+            <p>不只是聊天，更是一场心动的邂逅<br>AI伴侣 · 情趣对话 · 多人剧情 · 24小时在线陪伴</p>
+            <div class="hero-buttons">
+                <a href="#features" class="cta-button cta-button-secondary">探索更多</a>
+                <a href="https://short.tiankongshuyu.cn/tksy/e222658bf7704b239038fed9e1f5bddc.apk" class="cta-button" aria-label="下载 Tofai 应用">
+                    立即下载
+                    <svg class="download-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="section-header">
+            <span class="section-label">核心功能</span>
+            <h2>极致体验</h2>
+            <p>每一个功能，都为你量身打造</p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card" tabindex="0" role="article" aria-label="情趣聊天功能">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                </div>
+                <h3>情趣聊天</h3>
+                <p>开放自由的对话空间，释放你的每一个幻想。AI懂你的暗示，回应你的期待</p>
+            </div>
+            <div class="feature-card" tabindex="0" role="article" aria-label="多人场景功能">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+                <h3>多人场景</h3>
+                <p>创建你的专属剧情，多个AI角色同时在线。群聊、剧本、角色扮演，想怎么玩就怎么玩</p>
+            </div>
+            <div class="feature-card" tabindex="0" role="article" aria-label="AI陪伴功能">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                        <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                        <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                    </svg>
+                </div>
+                <h3>AI陪伴</h3>
+                <p>24小时不离不弃的温柔陪伴。懂你的心情，记得你的故事，像恋人一样了解你</p>
+            </div>
+            <div class="feature-card" tabindex="0" role="article" aria-label="角色定制功能">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </div>
+                <h3>角色定制</h3>
+                <p>打造独一无二的AI伴侣。外形、性格、声音，每一个细节都由你定义</p>
+            </div>
+            <div class="feature-card" tabindex="0" role="article" aria-label="智能互动功能">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                </div>
+                <h3>智能互动</h3>
+                <p>超越文字的沉浸式体验。语音对话、情感识别、主动关怀，让AI更有温度</p>
+            </div>
+            <div class="feature-card" tabindex="0" role="article" aria-label="隐私保护功能">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                </div>
+                <h3>隐私保护</h3>
+                <p>端到端加密，你的秘密只属于你。匿名使用，随心畅聊，无需顾虑</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats" id="stats">
+        <div class="stats-container">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-number" data-target="2000000">0</div>
+                    <div class="stat-label">心动用户</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" data-target="99.8">0</div>
+                    <div class="stat-label">满意度 (%)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" data-target="1000">0</div>
+                    <div class="stat-label">AI角色</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" data-target="24">0</div>
+                    <div class="stat-label">全天候陪伴</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section" id="contact">
+        <div class="cta-container">
+            <h2>准备好了吗？</h2>
+            <p>下载 Tofai，遇见懂你的那个TA</p>
+            <a href="https://short.tiankongshuyu.cn/tksy/e222658bf7704b239038fed9e1f5bddc.apk" class="cta-button" aria-label="免费下载体验 Tofai">
+                免费下载体验
+                <svg class="download-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer" role="contentinfo">
+        <p>&copy; 2024 Tofai. 让每一次对话，都值得期待。</p>
+    </footer>
+
+    <script>
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+        // 鼠标光晕
+        if (!prefersReducedMotion.matches) {
+            const cursorGlow = document.getElementById('cursor-glow');
+            document.addEventListener('mousemove', (e) => {
+                cursorGlow.style.left = e.clientX + 'px';
+                cursorGlow.style.top = e.clientY + 'px';
+            });
+
+            document.addEventListener('mouseenter', () => {
+                cursorGlow.style.opacity = '1';
+            });
+
+            document.addEventListener('mouseleave', () => {
+                cursorGlow.style.opacity = '0';
+            });
+        }
+
+        // 数字滚动动画
+        function animateNumbers() {
+            const statNumbers = document.querySelectorAll('.stat-number');
+
+            statNumbers.forEach(stat => {
+                const target = parseFloat(stat.getAttribute('data-target'));
+                const duration = 2000;
+                const step = target / (duration / 16);
+                let current = 0;
+
+                const updateNumber = () => {
+                    if (current < target) {
+                        current += step;
+                        if (current > target) current = target;
+
+                        if (target >= 1000000) {
+                            stat.textContent = (current / 1000000).toFixed(1) + 'M+';
+                        } else if (target >= 100) {
+                            stat.textContent = Math.floor(current) + '+';
+                        } else {
+                            stat.textContent = current.toFixed(1) + '%';
+                        }
+
+                        requestAnimationFrame(updateNumber);
+                    }
+                };
+
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            updateNumber();
+                            observer.unobserve(entry.target);
+                        }
+                    });
+                });
+
+                observer.observe(stat);
+            });
+        }
+
+        animateNumbers();
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: prefersReducedMotion.matches ? 'auto' : 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 滚动显示动画
+        if (!prefersReducedMotion.matches) {
+            const observerOptions = {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll('.feature-card, .stat-item').forEach(el => {
+                observer.observe(el);
+            });
+        } else {
+            document.querySelectorAll('.feature-card, .stat-item').forEach(el => {
+                el.style.opacity = '1';
+                el.style.transform = 'translateY(0)';
+            });
+        }
+
+        // 键盘导航支持
+        document.querySelectorAll('.feature-card').forEach(card => {
+            card.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    card.click();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

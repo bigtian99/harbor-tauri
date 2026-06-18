@@ -1694,27 +1694,19 @@ async fn preview_landing_page(path: String, template_index: Option<usize>) -> Re
 }
 
 #[tauri::command]
-async fn sync_template_dir(source_dir: String) -> Result<String, String> {
-    let source = PathBuf::from(&source_dir);
-    if !source.is_dir() {
-        return Err(format!("源目录不存在: {}", source_dir));
-    }
-
-    // 获取应用数据目录
-    let app_data_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("jarporter")
+async fn get_bundled_templates_dir() -> Result<String, String> {
+    // 开发环境：直接使用项目内的 templates 目录
+    let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or(&PathBuf::from("."))
         .join("templates");
 
-    fs::create_dir_all(&app_data_dir)
-        .map_err(|e| format!("创建模板目录失败: {}", e))?;
+    if dev_dir.exists() {
+        eprintln!("[JarPorter] 📁 模板目录: {}", dev_dir.display());
+        return Ok(dev_dir.to_string_lossy().to_string());
+    }
 
-    // 复制模板目录
-    copy_dir_recursive(&source, &app_data_dir)
-        .map_err(|e| format!("复制模板失败: {}", e))?;
-
-    eprintln!("[JarPorter] ✅ 模板已同步到: {}", app_data_dir.display());
-    Ok(app_data_dir.to_string_lossy().to_string())
+    Err("找不到模板目录".to_string())
 }
 
 #[tauri::command]
@@ -3296,7 +3288,8 @@ pub fn run() {
             generate_landing_pages,
             upload_landing_to_ftp,
             get_temp_dir,
-            preview_landing_page
+            preview_landing_page,
+            get_bundled_templates_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
