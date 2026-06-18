@@ -1628,6 +1628,15 @@ async fn open_directory(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn get_temp_dir() -> Result<String, String> {
+    let temp_dir = std::env::temp_dir()
+        .join("jarporter-landing-pages")
+        .to_string_lossy()
+        .to_string();
+    Ok(temp_dir)
+}
+
+#[tauri::command]
 async fn preview_landing_page(path: String) -> Result<(), String> {
     let html_path = PathBuf::from(&path).join("index.html");
     if !html_path.exists() {
@@ -2930,6 +2939,7 @@ pub fn run() {
             delete_artifact_path,
             fetch_sub_channels,
             generate_landing_pages,
+            get_temp_dir,
             preview_landing_page
         ])
         .run(tauri::generate_context!())

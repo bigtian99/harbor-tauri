@@ -253,7 +253,7 @@ function App() {
   const [showImageConfig, setShowImageConfig] = useState(false);
 
   // 落地页生成状态
-  const [landingApiUrl, setLandingApiUrl] = useState("https://tksyadmin.tiankongshuyu.cn");
+  const landingApiUrl = "https://tksyadmin.tiankongshuyu.cn";
   const [landingTemplateBase, setLandingTemplateBase] = useState("/Users/daijunxiong/Desktop/tksy-h5-app");
   const [landingIds, setLandingIds] = useState("");
   const [landingOutputDir, setLandingOutputDir] = useState("");
@@ -400,6 +400,15 @@ function App() {
       loadBuildHistory();
     }
   }, [activeTab]);
+
+  // 切换到落地页tab时自动生成临时目录
+  useEffect(() => {
+    if (activeTab === "landing" && isTauriRuntime() && !landingOutputDir) {
+      invoke<string>("get_temp_dir").then((dir) => {
+        setLandingOutputDir(dir);
+      }).catch(() => {});
+    }
+  }, [activeTab, landingOutputDir]);
 
   // 检测分支是否有自定义 Dockerfile
   async function checkBranchDockerfile() {
@@ -2021,72 +2030,39 @@ function App() {
             </div>
 
             <div className="form-group">
-              <label>输出目录（临时文件夹）</label>
+              <label>输出目录（自动生成到临时文件夹）</label>
               <div className="input-with-button">
                 <input
                   type="text"
                   className="form-input"
                   value={landingOutputDir}
-                  onChange={(e) => setLandingOutputDir(e.target.value)}
-                  placeholder="选择或输入临时输出目录"
+                  readOnly
+                  placeholder="自动生成到系统临时文件夹..."
                 />
-                <button
-                  className="modal-trigger-btn"
-                  onClick={async () => {
-                    if (!isTauriRuntime()) return;
-                    try {
-                      const selected = await open({ directory: true });
-                      if (selected) setLandingOutputDir(selected as string);
-                    } catch (e) {
-                      console.error(e);
-                    }
-                  }}
-                >
-                  <FolderOpen size={14} /> 选择
-                </button>
               </div>
             </div>
 
             <div className="landing-actions">
               <button
-                className="modal-trigger-btn"
-                disabled={!landingIds || isFetchingPreview}
+                className="save-btn"
+                disabled={!landingIds || isFetchingPreview || isGenerating}
                 onClick={async () => {
                   if (!isTauriRuntime() || !landingIds.trim()) return;
                   setIsFetchingPreview(true);
                   setLandingPreviewData([]);
+                  setLandingGenerated({});
+                  setLog("");
+                  setProgress(0);
                   try {
+                    // Step 1: 获取渠道数据
                     const data = await invoke<SubChannelData[]>("fetch_sub_channels", {
                       apiUrl: landingApiUrl,
                       ids: landingIds.trim(),
                     });
                     setLandingPreviewData(data);
-                    showToast(`获取到 ${data.length} 条渠道数据`);
-                  } catch (e: any) {
-                    showToast(`获取失败: ${e}`);
-                  } finally {
-                    setIsFetchingPreview(false);
-                  }
-                }}
-              >
-                {isFetchingPreview ? (
-                  <Loader2 size={14} className="spinning" />
-                ) : (
-                  <Search size={14} />
-                )}
-                预览数据
-              </button>
 
-              <button
-                className="save-btn"
-                disabled={!landingIds || !landingOutputDir || isGenerating}
-                onClick={async () => {
-                  if (!isTauriRuntime() || !landingIds.trim() || !landingOutputDir.trim()) return;
-                  setIsGenerating(true);
-                  setLandingGenerated({});
-                  setLog("");
-                  setProgress(0);
-                  try {
+                    // Step 2: 自动生成落地页
+                    setIsGenerating(true);
                     const results = await invoke<LandingPageResult[]>("generate_landing_pages", {
                       apiUrl: landingApiUrl,
                       ids: landingIds.trim(),
@@ -2101,18 +2077,19 @@ function App() {
                     const success = results.filter((r) => r.status === "success").length;
                     showToast(`生成完成: 成功 ${success} / ${results.length}`);
                   } catch (e: any) {
-                    showToast(`生成失败: ${e}`);
+                    showToast(`操作失败: ${e}`);
                   } finally {
+                    setIsFetchingPreview(false);
                     setIsGenerating(false);
                   }
                 }}
               >
-                {isGenerating ? (
+                {isFetchingPreview || isGenerating ? (
                   <Loader2 size={14} className="spinning" />
                 ) : (
                   <Rocket size={14} />
                 )}
-                生成落地页
+                预览数据
               </button>
             </div>
 
@@ -2177,17 +2154,6 @@ function App() {
                             }}
                           >
                             <Eye size={14} /> 预览
-                          </button>
-                          <button
-                            className="modal-trigger-btn"
-                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-                            onClick={() => {
-                              if (isTauriRuntime()) {
-                                invoke("open_directory", { path: landingGenerated[item.id]!.output_dir });
-                              }
-                            }}
-                          >
-                            <ExternalLink size={12} /> 打开目录
                           </button>
                         </div>
                       )}
