@@ -2081,7 +2081,7 @@ body::before {
 }
 
 .lt-col-template {
-  width: 90px;
+  width: 160px;
   flex-shrink: 0;
   justify-content: center;
   padding-right: 16px;
@@ -2091,7 +2091,6 @@ body::before {
 .lt-iframe-container {
   position: relative;
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
 }
 
@@ -2116,25 +2115,39 @@ body::before {
   transform-origin: center center;
 }
 
-/* iframe 导航箭头 - 在 iframe 外面 */
+/* iframe 导航箭头 - 在 iframe 两侧 */
 .lt-iframe-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  gap: 4px;
-  margin-top: 4px;
+  align-items: center;
   opacity: 0;
   transition: opacity 0.2s ease;
+  pointer-events: none;
 }
 
 .lt-iframe-container:hover .lt-iframe-nav {
   opacity: 1;
+  pointer-events: auto;
+}
+
+.lt-iframe-nav.nav-left {
+  right: 100%;
+  margin-right: 4px;
+}
+
+.lt-iframe-nav.nav-right {
+  left: 100%;
+  margin-left: 4px;
 }
 
 .lt-iframe-nav-btn {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: 1px solid rgba(100, 255, 218, 0.3);
-  background: rgba(15, 52, 96, 0.8);
+  background: rgba(15, 52, 96, 0.9);
   color: #64ffda;
   display: flex;
   align-items: center;
@@ -2145,16 +2158,19 @@ body::before {
 }
 
 .lt-iframe-nav-btn:hover {
-  background: rgba(100, 255, 218, 0.2);
+  background: rgba(100, 255, 218, 0.3);
   border-color: rgba(100, 255, 218, 0.6);
   transform: scale(1.1);
 }
 
 .lt-iframe-nav-info {
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 10px;
   color: #8892b0;
-  min-width: 24px;
-  text-align: center;
+  white-space: nowrap;
 }
 
 .lt-iframe-wrapper {
@@ -2217,20 +2233,20 @@ body::before {
 }
 
 .lt-logo {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
   object-fit: cover;
   flex-shrink: 0;
 }
 
 .lt-logo-placeholder {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
   background: rgba(100, 255, 218, 0.15);
   color: #64ffda;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   display: flex;
   align-items: center;

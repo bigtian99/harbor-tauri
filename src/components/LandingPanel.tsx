@@ -183,6 +183,20 @@ export function LandingPanel({
                   <span className="lt-col lt-col-template">
                     {genResult?.status === "success" ? (
                       <div className="lt-iframe-container">
+                        {hasMultipleTemplates && (
+                          <div className="lt-iframe-nav nav-left">
+                            <button
+                              className="lt-iframe-nav-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                switchTemplate(item.id, 'prev');
+                              }}
+                              title="上一个模板"
+                            >
+                              <ChevronLeft size={14} />
+                            </button>
+                          </div>
+                        )}
                         <div
                           className="lt-iframe-carousel"
                           onClick={() => {
@@ -205,31 +219,23 @@ export function LandingPanel({
                           </div>
                         </div>
                         {hasMultipleTemplates && (
-                          <div className="lt-iframe-nav">
-                            <button
-                              className="lt-iframe-nav-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                switchTemplate(item.id, 'prev');
-                              }}
-                              title="上一个模板"
-                            >
-                              <ChevronLeft size={14} />
-                            </button>
+                          <>
+                            <div className="lt-iframe-nav nav-right">
+                              <button
+                                className="lt-iframe-nav-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  switchTemplate(item.id, 'next');
+                                }}
+                                title="下一个模板"
+                              >
+                                <ChevronRight size={14} />
+                              </button>
+                            </div>
                             <span className="lt-iframe-nav-info">
                               {currentTemplateIndex + 1}/{genResult.template_dirs.length}
                             </span>
-                            <button
-                              className="lt-iframe-nav-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                switchTemplate(item.id, 'next');
-                              }}
-                              title="下一个模板"
-                            >
-                              <ChevronRight size={14} />
-                            </button>
-                          </div>
+                          </>
                         )}
                       </div>
                     ) : (
