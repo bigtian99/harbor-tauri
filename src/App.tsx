@@ -7,7 +7,7 @@ import {
   Container, Upload, Settings, Rocket, Package, FileText, CheckCircle, Copy,
   AlertCircle, Loader2, Eye, EyeOff, GitBranch, FolderOpen, ExternalLink,
   History, List, Pin, Search, User, Folder, BookOpen, BookMarked, Trash2,
-  ChevronLeft, ChevronRight, Archive, RefreshCw, XCircle
+  ChevronLeft, ChevronRight, Archive, RefreshCw, XCircle, Coffee, Wrench
 } from "lucide-react";
 import { SearchableDropdown } from "./components/SearchableDropdown";
 import { Modal } from "./components/Modal";
@@ -87,6 +87,7 @@ interface PackageFromBranchResult {
   worktree_path: string;
   build_script: string;
   log: string;
+  dockerfile_path?: string;
 }
 
 interface GitBranchOption {
@@ -195,6 +196,8 @@ function App() {
   const [branchProjectType, setBranchProjectType] = useState<BranchProjectType>("maven");
   const [log, setLog] = useState<string>("");
   const [worktreePath, setWorktreePath] = useState<string>("");
+  const [customDockerfile, setCustomDockerfile] = useState<string>("");
+  const [branchHasDockerfile, setBranchHasDockerfile] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const [autoPushImage, setAutoPushImage] = useState<boolean>(false);
   const [packageWithBackend, setPackageWithBackend] = useState<boolean>(false);
@@ -365,6 +368,27 @@ function App() {
       loadBuildHistory();
     }
   }, [activeTab]);
+
+  // 检测分支是否有自定义 Dockerfile
+  async function checkBranchDockerfile() {
+    if (!isTauriRuntime() || !repoPath || !branchName.trim()) {
+      setBranchHasDockerfile(false);
+      return;
+    }
+    try {
+      const has = await invoke<boolean>("check_dockerfile", {
+        repoPath,
+        branch: branchName.trim(),
+      });
+      setBranchHasDockerfile(has);
+    } catch {
+      setBranchHasDockerfile(false);
+    }
+  }
+
+  useEffect(() => {
+    checkBranchDockerfile();
+  }, [repoPath, branchName]);
 
   async function loadConfig() {
     if (!isTauriRuntime()) {
@@ -785,6 +809,13 @@ function App() {
     }
   }
 
+  async function handleCancelBuild() {
+    try {
+      await invoke("cancel_build");
+    } catch { /* 忽略取消错误 */ }
+    setIsBuilding(false);
+  }
+
   async function handlePackageFromBranch() {
     if (!isTauriRuntime()) {
       setLog("❌ 当前是浏览器预览环境，分支打包请在 Tauri 桌面窗口中操作");
@@ -808,6 +839,7 @@ function App() {
     setArtifactPath("");
     setBackendArtifactPath("");
     setWorktreePath("");
+    setCustomDockerfile("");
     setBranchFullImage("");
 
     try {
@@ -825,6 +857,7 @@ function App() {
       setArtifactPath(result.artifact_path);
       setBackendArtifactPath(result.backend_artifact_path || "");
       setWorktreePath(result.worktree_path);
+      setCustomDockerfile(result.dockerfile_path || "");
       // 打包成功后保存设置
       await saveBranchSettings();
       await loadBuildHistory();
@@ -848,11 +881,23 @@ function App() {
             setProgress(60);
             setProgressMessage(hasBackend ? "🚀 前端+后端打包完成，推送后端 JAR 镜像..." : "🚀 打包完成，开始推送镜像...");
             try {
+              // 如果用户没有自定义标签，加上分支信息方便区分
+              const branchSafeName = branchName.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+              const now = new Date();
+              const yy = String(now.getFullYear()).slice(-2);
+              const mm = String(now.getMonth() + 1).padStart(2, '0');
+              const dd = String(now.getDate()).padStart(2, '0');
+              const hh = String(now.getHours()).padStart(2, '0');
+              const mi = String(now.getMinutes()).padStart(2, '0');
+              const branchImageTag = (imageTag && imageTag !== "latest")
+                ? imageTag
+                : `${branchSafeName}-v.${yy}.${mm}.${dd}.${hh}.${mi}`;
               const pushResult = await invoke<string>("build_and_push", {
                 jarPath: pushPath,
                 imageName: finalImageName,
-                imageTag: imageTag || "latest",
+                imageTag: branchImageTag,
                 artifactType,
+                dockerfilePath: result.dockerfile_path || null,
               });
               // 从推送结果中提取完整镜像地址
               const imageMatch = pushResult.match(/完整镜像:\s*(.+)/);
@@ -1160,6 +1205,12 @@ function App() {
               </div>
             )}
 
+            {isBuilding && (
+              <button className="cancel-btn" onClick={handleCancelBuild}>
+                <XCircle size={16} /> 取消构建
+              </button>
+            )}
+
             {log && (
               <div className="log-section">
                 <button
@@ -1451,6 +1502,11 @@ function App() {
                     <span>{showAdvancedSettings ? '▼' : '▶'}</span>
                     <span>高级设置</span>
                     <span className="template-hint" style={{ marginLeft: '8px' }}>可选：自定义镜像名称和标签</span>
+                    {branchHasDockerfile && (
+                      <span className="dockerfile-badge" title="检测到项目根目录有 Dockerfile，将使用自定义 Dockerfile 构建">
+                        <FileText size={12} /> 自定义 Dockerfile
+                      </span>
+                    )}
                   </div>
                   {showAdvancedSettings && (
                     <>
@@ -1470,9 +1526,9 @@ function App() {
                           type="text"
                           value={imageTag}
                           onChange={(e) => setImageTag(e.target.value)}
-                          placeholder="latest"
+                          placeholder="留空自动生成"
                         />
-                        <p className="template-hint">留空则使用时间戳格式 v.YY.MM.DD.HH.MM</p>
+                        <p className="template-hint">留空则自动生成 分支名-v.YY.MM.DD.HH.MM</p>
                       </div>
                     </>
                   )}
@@ -1603,7 +1659,27 @@ function App() {
                     </button>
                   </div>
                 )}
+                {customDockerfile && (
+                  <div className="path-link-item dockerfile-indicator">
+                    <span className="path-link-label">
+                      <FileText size={14} /> 使用项目 Dockerfile:
+                    </span>
+                    <button
+                      type="button"
+                      className="path-link-btn"
+                      onClick={() => handleOpenDirectory(customDockerfile)}
+                    >
+                      {customDockerfile}
+                    </button>
+                  </div>
+                )}
               </div>
+            )}
+
+            {isBuilding && (
+              <button className="cancel-btn" onClick={handleCancelBuild}>
+                <XCircle size={16} /> 取消构建
+              </button>
             )}
 
             {log && (
@@ -1741,28 +1817,28 @@ function App() {
                                       <span className="history-time">{record.timestamp}</span>
                                       <span className="history-branch">{record.branch}</span>
                                       <span className={`history-project-type ${record.project_type.toLowerCase()}`}>
-                                        {record.project_type.toLowerCase() === 'maven' ? '后端' : '前端'}
+                                        {record.project_type.toLowerCase() === 'maven' ? '后端' : record.package_with_backend ? '前端+后端' : '前端'}
                                       </span>
                                       <span className="history-meta">耗时: {(record.duration_ms / 1000).toFixed(1)}s</span>
                                       {/* 打包配置标签 */}
-                                      {record.package_manager && (
+                                      {record.project_type.toLowerCase() !== 'maven' && record.package_manager && (
                                         <span className="history-config-tag" title="包管理器">
-                                          📦 {record.package_manager}
+                                          <Package size={12} /> {record.package_manager}
                                         </span>
                                       )}
-                                      {record.spring_profile && (
+                                      {(record.project_type.toLowerCase() === 'maven' || record.package_with_backend) && record.spring_profile && (
                                         <span className="history-config-tag" title="Spring Profile">
-                                          ☕ {record.spring_profile}
+                                          <Coffee size={12} /> {record.spring_profile}
                                         </span>
                                       )}
                                       {record.package_with_backend && (
                                         <span className="history-config-tag" title="包含后端">
-                                          🔧 含后端
+                                          <Wrench size={12} /> 含后端
                                         </span>
                                       )}
-                                      {record.frontend_dir && (
+                                      {record.project_type.toLowerCase() !== 'maven' && record.frontend_dir && (
                                         <span className="history-config-tag" title="前端目录">
-                                          📁 {record.frontend_dir}
+                                          <Folder size={12} /> {record.frontend_dir}
                                         </span>
                                       )}
                                       {record.image_tag && (
@@ -1783,7 +1859,7 @@ function App() {
                                     </div>
                                     <div className="modal-history-item-path">
                                       <div className="path-item">
-                                        <span className="path-label">{record.project_type.toLowerCase() === 'maven' ? '后端' : '前端'}</span>
+                                        <span className="path-label">{record.project_type.toLowerCase() === 'maven' ? '后端' : record.package_with_backend ? '前端+后端' : '前端'}</span>
                                         <button
                                           className="path-link-btn"
                                           onClick={() => openArtifactPath(record.artifact_path)}

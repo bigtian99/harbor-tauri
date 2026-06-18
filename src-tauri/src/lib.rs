@@ -2,9 +2,14 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
+
+static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
+static CURRENT_PID: Mutex<Option<u32>> = Mutex::new(None);
 
 const APP_CONFIG_DIR: &str = "jarporter";
 const LEGACY_CONFIG_DIR: &str = "jar-to-harbor";
@@ -86,6 +91,7 @@ struct PackageFromBranchResult {
     worktree_path: String,
     build_script: String,
     log: String,
+    dockerfile_path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -650,6 +656,10 @@ fn find_maven_path() -> Option<String> {
 }
 
 fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<String, String> {
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        return Err("构建已取消".to_string());
+    }
+
     // 对 mvn 命令特殊处理，查找完整路径
     let actual_command = if command == "mvn" {
         find_maven_path().unwrap_or_else(|| "mvn".to_string())
@@ -657,24 +667,48 @@ fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<Strin
         command.to_string()
     };
 
-    // 先尝试直接执行，失败则通过 shell 执行（解决 nvm/pyenv 等 PATH 问题）
-    let output = match Command::new(&actual_command)
+    // 使用 spawn 替代 output，以便追踪 PID 支持取消
+    let mut child = match Command::new(&actual_command)
         .args(args)
         .current_dir(current_dir)
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
     {
-        Ok(output) => output,
+        Ok(c) => {
+            *CURRENT_PID.lock().unwrap() = Some(c.id());
+            c
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // 通过 login shell 执行，确保加载 nvm/pyenv 等环境
             let full_cmd = format!("{} {}", actual_command, args.join(" "));
-            Command::new("sh")
+            match Command::new("sh")
                 .args(["-l", "-c", &full_cmd])
                 .current_dir(current_dir)
-                .output()
-                .map_err(|e2| format!("启动命令失败 {}: {}", actual_command, e2))?
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+            {
+                Ok(c) => {
+                    *CURRENT_PID.lock().unwrap() = Some(c.id());
+                    c
+                }
+                Err(e2) => return Err(format!("启动命令失败 {}: {}", actual_command, e2)),
+            }
         }
         Err(e) => return Err(format!("启动命令失败 {}: {}", actual_command, e)),
     };
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("等待命令结束失败: {}", e))?;
+
+    *CURRENT_PID.lock().unwrap() = None;
+
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        return Err("构建已取消".to_string());
+    }
+
     let details = command_output_text(&output);
 
     if output.status.success() {
@@ -795,6 +829,79 @@ fn find_npm_artifact(worktree_path: &Path) -> Result<PathBuf, String> {
             "npm 打包完成但未找到 dist/index.html: {}",
             index_path.display()
         ))
+    }
+}
+
+fn prepare_custom_docker_context(
+    config: &HarborConfig,
+    artifact_path: &Path,
+    artifact_type: ArtifactType,
+    dockerfile_content: &str,
+    image_name: &str,
+    image_tag: &str,
+    full_image: &str,
+) -> Result<DockerBuildContext, String> {
+    let context_dir = create_temp_build_dir()?;
+
+    let replacements = [
+        ("BASE_IMAGE", config.base_image.clone()),
+        ("EXPOSE_PORT", config.expose_port.clone()),
+        ("FRONTEND_BASE_IMAGE", config.frontend_base_image.clone()),
+        ("FRONTEND_EXPOSE_PORT", config.frontend_expose_port.clone()),
+        ("IMAGE_NAME", image_name.to_string()),
+        ("IMAGE_TAG", image_tag.to_string()),
+        ("FULL_IMAGE", full_image.to_string()),
+    ];
+
+    match artifact_type {
+        ArtifactType::Jar => {
+            // 复制 JAR 到构建上下文目录
+            let jar_name = artifact_path
+                .file_name()
+                .ok_or("无法获取JAR文件名")?
+                .to_string_lossy()
+                .to_string();
+            let dest_jar = context_dir.join(&jar_name);
+            fs::copy(artifact_path, &dest_jar)
+                .map_err(|e| format!("复制JAR到构建上下文失败: {}", e))?;
+
+            // 渲染并写入自定义 Dockerfile
+            let rendered = render_template(dockerfile_content, &replacements);
+            let df_path = context_dir.join("Dockerfile");
+            fs::write(&df_path, rendered)
+                .map_err(|e| format!("写入Dockerfile失败: {}", e))?;
+
+            Ok(DockerBuildContext {
+                context_dir: context_dir.clone(),
+                dockerfile_path: df_path,
+                cleanup_file: None,
+                cleanup_dir: Some(context_dir),
+            })
+        }
+        ArtifactType::FrontendDist => {
+            // 复制 dist 内容到 public/ 目录
+            let public_dir = context_dir.join("public");
+            copy_dir_contents(artifact_path, &public_dir)?;
+
+            // 生成 nginx 配置
+            let nginx_path = context_dir.join("nginx.conf");
+            let nginx_content = render_template(&config.frontend_nginx_template, &replacements);
+            fs::write(&nginx_path, nginx_content)
+                .map_err(|e| format!("写入nginx配置失败: {}", e))?;
+
+            // 渲染并写入自定义 Dockerfile
+            let rendered = render_template(dockerfile_content, &replacements);
+            let df_path = context_dir.join("Dockerfile");
+            fs::write(&df_path, rendered)
+                .map_err(|e| format!("写入Dockerfile失败: {}", e))?;
+
+            Ok(DockerBuildContext {
+                context_dir: context_dir.clone(),
+                dockerfile_path: df_path,
+                cleanup_file: None,
+                cleanup_dir: Some(context_dir),
+            })
+        }
     }
 }
 
@@ -1478,6 +1585,39 @@ async fn open_directory(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn check_dockerfile(repo_path: String, branch: String) -> Result<bool, String> {
+    let repo_path = PathBuf::from(repo_path);
+    if !repo_path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+    }
+    let branch = branch.trim().to_string();
+    if branch.is_empty() {
+        return Ok(false);
+    }
+
+    let repo_path_clone = repo_path.clone();
+    let branch_clone = branch.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path_clone)?;
+        // 用 git show 检查分支上是否有 Dockerfile（大小写都试）
+        for name in &["Dockerfile", "dockerfile"] {
+            let ref_name = format!("{}:{}", branch_clone, name);
+            let output = Command::new("git")
+                .args(["show", &ref_name])
+                .current_dir(&repo_root)
+                .output()
+                .map_err(|e| format!("git show 失败: {}", e))?;
+            if output.status.success() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    })
+    .await
+    .map_err(|e| format!("检测线程异常: {}", e))?
+}
+
+#[tauri::command]
 async fn package_from_branch(
     app: tauri::AppHandle,
     repo_path: String,
@@ -1489,6 +1629,7 @@ async fn package_from_branch(
     spring_profile: Option<String>,
     package_with_backend: Option<bool>,
 ) -> Result<PackageFromBranchResult, String> {
+    reset_cancel_flag();
     let project_type = PackageProjectType::from_string(project_type)?;
     let branch = branch.trim().to_string();
     if branch.is_empty() {
@@ -1954,6 +2095,41 @@ async fn package_from_branch(
     };
 
     // 清理 worktree — 只保留产物，删除源码
+    // 清理前先检查是否有自定义 Dockerfile（支持大小写，检查 worktree 根目录和构建子目录）
+    let dockerfile_path: Option<String> = {
+        let dockerfile_names = ["Dockerfile", "dockerfile"];
+        let search_dirs = vec![worktree_path.clone(), actual_build_path.clone()];
+        let mut found = false;
+        let mut result = None;
+
+        for search_dir in &search_dirs {
+            for name in &dockerfile_names {
+                let df_in_worktree = search_dir.join(name);
+                if df_in_worktree.is_file() {
+                    let dest = artifact_dir.join("Dockerfile");
+                    match fs::copy(&df_in_worktree, &dest) {
+                        Ok(_) => {
+                            eprintln!("[JarPorter] 📄 检测到自定义 Dockerfile: {} → {}", df_in_worktree.display(), dest.display());
+                            found = true;
+                            result = Some(dest.to_string_lossy().to_string());
+                            break;
+                        }
+                        Err(e) => {
+                            eprintln!("[JarPorter] ⚠️ 复制自定义 Dockerfile 失败: {}", e);
+                        }
+                    }
+                }
+            }
+            if found {
+                break;
+            }
+        }
+        if !found {
+            eprintln!("[JarPorter] 未检测到自定义 Dockerfile（已检查: {:?}）", search_dirs);
+        }
+        result
+    };
+
     app.emit(
         "build-progress",
         serde_json::json!({
@@ -2023,6 +2199,7 @@ async fn package_from_branch(
         worktree_path: artifact_dir.to_string_lossy().to_string(),
         build_script,
         log,
+        dockerfile_path,
     })
 }
 
@@ -2097,13 +2274,31 @@ async fn detect_spring_profiles(repo_path: String, branch: String) -> Result<Vec
 }
 
 #[tauri::command]
+fn cancel_build() -> Result<(), String> {
+    CANCEL_FLAG.store(true, Ordering::SeqCst);
+    // 杀掉当前运行的子进程
+    if let Some(pid) = *CURRENT_PID.lock().unwrap() {
+        eprintln!("[JarPorter] 🛑 取消构建，终止进程 PID={}", pid);
+        let _ = Command::new("kill").arg(pid.to_string()).output();
+    }
+    Ok(())
+}
+
+fn reset_cancel_flag() {
+    CANCEL_FLAG.store(false, Ordering::SeqCst);
+    *CURRENT_PID.lock().unwrap() = None;
+}
+
+#[tauri::command]
 async fn build_and_push(
     app: tauri::AppHandle,
     jar_path: String,
     image_name: String,
     image_tag: String,
     artifact_type: Option<String>,
+    dockerfile_path: Option<String>,
 ) -> Result<String, String> {
+    reset_cancel_flag();
     let config = load_config()?;
     let artifact_type = ArtifactType::from_option(artifact_type)?;
 
@@ -2144,15 +2339,35 @@ async fn build_and_push(
     )
     .ok();
 
-    let build_context = match artifact_type {
-        ArtifactType::Jar => prepare_jar_context(&config, &artifact_path)?,
-        ArtifactType::FrontendDist => prepare_frontend_dist_context(
-            &config,
-            &artifact_path,
-            &image_name_lower,
-            &final_tag,
-            &full_image,
-        )?,
+    let build_context = if let Some(ref df_path) = dockerfile_path {
+        let df = PathBuf::from(df_path);
+        if df.is_file() {
+            let custom_content = fs::read_to_string(&df)
+                .map_err(|e| format!("读取自定义Dockerfile失败: {}", e))?;
+            eprintln!("[JarPorter] 使用自定义Dockerfile: {}", df_path);
+            prepare_custom_docker_context(
+                &config,
+                &artifact_path,
+                artifact_type,
+                &custom_content,
+                &image_name_lower,
+                &final_tag,
+                &full_image,
+            )?
+        } else {
+            return Err(format!("自定义Dockerfile不存在: {}", df_path));
+        }
+    } else {
+        match artifact_type {
+            ArtifactType::Jar => prepare_jar_context(&config, &artifact_path)?,
+            ArtifactType::FrontendDist => prepare_frontend_dist_context(
+                &config,
+                &artifact_path,
+                &image_name_lower,
+                &final_tag,
+                &full_image,
+            )?,
+        }
     };
 
     // 步骤2: docker build (阻塞操作放到线程池)
@@ -2172,7 +2387,10 @@ async fn build_and_push(
     let cleanup_dir = build_context.cleanup_dir.clone();
 
     let build_result = tauri::async_runtime::spawn_blocking(move || {
-        let output = Command::new("docker")
+        if CANCEL_FLAG.load(Ordering::SeqCst) {
+            return Err("构建已取消".to_string());
+        }
+        let mut child = Command::new("docker")
             .args([
                 "build",
                 "--platform",
@@ -2184,19 +2402,31 @@ async fn build_and_push(
                 ".",
             ])
             .current_dir(&context_dir)
-            .output();
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("启动docker build失败: {}", e))?;
+
+        *CURRENT_PID.lock().unwrap() = Some(child.id());
+
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("docker build失败: {}", e))?;
+
+        *CURRENT_PID.lock().unwrap() = None;
+
         if let Some(path) = cleanup_file {
             fs::remove_file(path).ok();
         }
         if let Some(path) = cleanup_dir {
             fs::remove_dir_all(path).ok();
         }
-        output
+        Ok(output)
     })
     .await
     .map_err(|e| format!("构建线程异常: {}", e))?;
 
-    let build_output = build_result.map_err(|e| format!("执行docker build失败: {}", e))?;
+    let build_output = build_result?;
     if !build_output.status.success() {
         let stderr = String::from_utf8_lossy(&build_output.stderr);
         let stdout = String::from_utf8_lossy(&build_output.stdout);
@@ -2329,6 +2559,8 @@ pub fn run() {
             list_npm_scripts,
             detect_frontend_dir,
             detect_spring_profiles,
+            check_dockerfile,
+            cancel_build,
             package_from_branch,
             build_and_push,
             open_directory,

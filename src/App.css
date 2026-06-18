@@ -549,6 +549,30 @@ body::before {
   background: rgba(15, 52, 96, 0.5);
 }
 
+.cancel-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  background: rgba(255, 80, 80, 0.12);
+  color: #ff6464;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.25s ease;
+}
+
+.cancel-btn:hover {
+  background: rgba(255, 80, 80, 0.22);
+  border-color: rgba(255, 100, 100, 0.5);
+  color: #ff8080;
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }
@@ -793,6 +817,18 @@ body::before {
 
 .path-link-label svg {
   flex-shrink: 0;
+}
+
+.dockerfile-indicator {
+  background: rgba(100, 255, 218, 0.06);
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 2px;
+}
+
+.dockerfile-indicator .path-link-label {
+  color: #64ffda;
 }
 
 .path-link-btn {
@@ -1379,6 +1415,9 @@ body::before {
   padding: 1px 5px;
   border-radius: 3px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 /* Commit list styles */
@@ -1867,6 +1906,21 @@ body::before {
   font-size: 0.7em;
   width: 12px;
   text-align: center;
+}
+
+.dockerfile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64ffda;
+  background: rgba(100, 255, 218, 0.1);
+  border: 1px solid rgba(100, 255, 218, 0.25);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
 /* 历史记录面板 */
