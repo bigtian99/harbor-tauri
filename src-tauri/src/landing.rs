@@ -1,5 +1,5 @@
 use crate::models::{FtpUploadItem, FtpUploadResult, LandingPageResult, SubChannelApiResponse, SubChannelData};
-use crate::utils::copy_dir_recursive;
+use crate::utils::{copy_dir_recursive, render_template};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -32,88 +32,6 @@ pub async fn fetch_sub_channels(api_url: String, ids: String) -> Result<Vec<SubC
     }
 
     Ok(api_response.data.unwrap_or_default())
-}
-
-/// 替换落地页模板内容
-pub(crate) fn replace_landing_page_content(
-    content: &str,
-    sub_channel: &SubChannelData,
-) -> String {
-    let name = &sub_channel.sub_channel_name;
-    let logo = sub_channel.sub_channel_logo.as_deref().unwrap_or("");
-    let download_link = sub_channel.sub_channel_link.as_deref().unwrap_or("");
-
-    let mut result = content.to_string();
-
-    // 替换 <title> 标签内容
-    if let Some(title_start) = result.find("<title>") {
-        if let Some(title_end) = result[title_start..].find("</title>") {
-            let new_title = format!("<title>{} - 官方下载</title>", name);
-            result.replace_range(title_start..title_start + title_end + "</title>".len(), &new_title);
-        }
-    }
-
-    // 替换 logo 图片路径
-    if !logo.is_empty() {
-        result = result
-            .replace("src=\"logo.jpg\"", &format!("src=\"{}\"", logo))
-            .replace("src=\"白鸽软件库.jpg\"", &format!("src=\"{}\"", logo))
-            .replace("src=\"./image/logo.png\"", &format!("src=\"{}\"", logo))
-            .replace("src='./image/logo.png'", &format!("src='{}'", logo));
-    }
-
-    // 替换 APK 下载链接（替换所有 tiankongshuyu 域名下的 .apk 链接）
-    if !download_link.is_empty() {
-        result = replace_apk_links(&result, download_link);
-    }
-
-    // 替换页面中的名称文本
-    let known_names = [
-        "白鸽软件库", "游戏库预览链接", "短剧融合影视",
-        "短剧影视", "异次元 · 高清动漫阅读", "笔书阁", "Tofai", "漫蛙",
-        "白鸽", "游戏库",
-    ];
-    for known in &known_names {
-        // 替换 Nav brand 中的名称
-        result = result.replace(&format!(">{}</span>", known), &format!(">{}</span>", name));
-        // 替换 vis-card name
-        result = result.replace(&format!(">{}</div>", known), &format!(">{}</div>", name));
-        // 替换 header-title
-        result = result.replace(&format!(">{}</span>", known), &format!(">{}</span>", name));
-        // 替换 item-title
-        result = result.replace(&format!("<span>{}</span>", known), &format!("<span>{}</span>", name));
-        // 替换 H1 中的名称
-        result = result.replace(known, name);
-    }
-
-    result
-}
-
-/// 替换所有 APK 下载链接（匹配 tiankongshuyu 域名 + .apk 后缀）
-pub(crate) fn replace_apk_links(content: &str, new_link: &str) -> String {
-    // 查找 .apk 链接的特征模式并替换
-    let mut result = content.to_string();
-    let patterns: &[&str] = &["https://"];
-    for pattern in patterns {
-        let mut search_start = 0;
-        while let Some(pos) = result[search_start..].find(pattern) {
-            let abs_pos = search_start + pos;
-            let _link_start = abs_pos;
-            // 找到链接结束位置（空格、引号、换行等）
-            if let Some(link_end) = result[abs_pos..].find(|c: char| c == '"' || c == '\'' || c == ' ' || c == '\n' || c == '>') {
-                let link = &result[abs_pos..abs_pos + link_end];
-                if link.contains(".apk") {
-                    result.replace_range(abs_pos..abs_pos + link_end, new_link);
-                    search_start = abs_pos + new_link.len();
-                } else {
-                    search_start = abs_pos + link_end;
-                }
-            } else {
-                break;
-            }
-        }
-    }
-    result
 }
 
 #[tauri::command]
@@ -251,7 +169,11 @@ pub async fn generate_landing_pages(
 
             match fs::read_to_string(&html_path) {
                 Ok(content) => {
-                    let new_content = replace_landing_page_content(&content, channel);
+                    let new_content = render_template(&content, &[
+                        ("NAME", channel.sub_channel_name.clone()),
+                        ("LOGO", channel.sub_channel_logo.clone().unwrap_or_default()),
+                        ("DOWNLOAD_URL", channel.sub_channel_link.clone().unwrap_or_default()),
+                    ]);
                     if let Err(e) = fs::write(&html_path, &new_content) {
                         all_success = false;
                         error_message = format!("写入模板 {} 文件失败: {}", idx, e);

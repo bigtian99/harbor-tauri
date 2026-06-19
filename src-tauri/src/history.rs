@@ -1,6 +1,6 @@
 use crate::config_cmd::load_config_sync;
 use crate::models::BuildRecord;
-use crate::utils::{copy_artifact_to_output_internal, get_config_path};
+use crate::utils::get_config_path;
 use std::fs;
 use std::path::PathBuf;
 
@@ -81,14 +81,4 @@ pub(crate) fn save_build_record_direct(record: BuildRecord) -> Result<(), String
     eprintln!("[JarPorter] 构建记录数量: {}", config.build_history.len());
     fs::write(&path, &content).map_err(|e| format!("写入配置文件失败: {}", e))?;
     Ok(())
-}
-
-#[tauri::command]
-pub async fn copy_artifact_to_output(
-    artifact_path: String,
-    output_dir: String,
-) -> Result<String, String> {
-    let src = PathBuf::from(&artifact_path);
-    let dst_dir = PathBuf::from(&output_dir);
-    copy_artifact_to_output_internal(&src, &dst_dir)
 }

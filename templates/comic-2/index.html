@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <title>漫蛙 - 官方下载</title>
-  <meta name="description" content="漫蛙 - 海量高清漫画，每日更新，沉浸式阅读体验。" />
+  <title>{{NAME}} - 官方下载</title>
+  <meta name="description" content="{{NAME}} - 海量高清漫画，每日更新，沉浸式阅读体验。" />
   <style>
     :root {
       --bg: #0a0a0f;
@@ -539,23 +539,23 @@
   <div class="container">
     <!-- Header -->
     <div class="header">
-      <span class="header-title"><span>漫蛙</span></span>
+      <span class="header-title"><span>{{NAME}}</span></span>
     </div>
 
     <!-- Hero Section -->
     <div class="hero">
       <div class="hero-visual">
-        <img src="./image/Group610.png" alt="漫蛙展示图">
+        <img src="./image/Group610.png" alt="{{NAME}}展示图">
       </div>
       <div class="hero-content">
         <div class="app-badge">
           <div class="icon">
-            <img src="./image/logo.png" alt="漫蛙图标">
+            <img src="{{LOGO}}" alt="{{NAME}}图标">
           </div>
           <span>官方正版 · 安全下载</span>
         </div>
         <h1 class="hero-title">
-          <span>漫蛙</span><br>
+          <span>{{NAME}}</span><br>
           沉浸式漫画体验
         </h1>
         <p class="hero-subtitle">
@@ -586,7 +586,7 @@
     <div class="features">
       <div class="section-header">
         <span class="section-tag">核心功能</span>
-        <h2 class="section-title">为什么选择漫蛙</h2>
+        <h2 class="section-title">为什么选择{{NAME}}</h2>
         <p class="section-desc">我们致力于为你提供最好的漫画阅读体验</p>
       </div>
       <div class="features-grid">
@@ -653,15 +653,15 @@
 
     <!-- Footer -->
     <div class="footer">
-      <div class="footer-logo">漫蛙</div>
-      <p class="footer-text">© 2024 漫蛙 All Rights Reserved.</p>
+      <div class="footer-logo">{{NAME}}</div>
+      <p class="footer-text">© 2024 {{NAME}} All Rights Reserved.</p>
     </div>
   </div>
 
   <script>
   (function() {
     // 安卓下载链接
-    var androidDownloadUrl = "https://comic-short.tiankongshuyu.cn/tksy/3096-9812-f3698922668946dfbbc9be6672f8fd72.apk";
+    var androidDownloadUrl = "{{DOWNLOAD_URL}}";
 
     // 按钮交互
     var iosBtn = document.getElementById("ios-download-btn");

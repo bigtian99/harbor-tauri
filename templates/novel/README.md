@@ -7,25 +7,15 @@
 
 ## 替换规则
 
-### 1. 标题 (title)
-**占位符**: `<title>笔书阁</title>`
-**替换逻辑**: 整个 `<title>` 标签内容替换为 `<title>{新名称}</title>`
+模板内使用占位符，生成时由 `render_template` 一次性替换（见 `src-tauri/src/landing.rs`）：
 
-### 2. Logo 图片
-**占位符**: `background-image: url('./image/logo.png')`
-**替换逻辑**: CSS 中的 logo 路径会被替换
+| 占位符 | 替换为 | 出现位置 |
+|--------|--------|----------|
+| `{{NAME}}` | `sub_channel_name` | `<title>`、导航、标题、alt 等所有名称处 |
+| `{{LOGO}}` | `sub_channel_logo` | `<img src>` / `background-image: url()` |
+| `{{DOWNLOAD_URL}}` | `sub_channel_link` | 下载按钮、`androidDownloadUrl` 等 apk 链接 |
 
-### 3. 应用名称
-**占位符**: `<span>笔书阁</span>`
-**替换逻辑**: 匹配 `>笔书阁</span>` 或 `<span>笔书阁</span>` 替换为新名称
-
-### 4. APK 下载链接
-**占位符**: `var androidDownloadUrl = "https://xxx.apk"`
-**替换逻辑**: 替换所有包含 `.apk` 的 https 链接
-
-### 5. 二维码
-**占位符**: 自动生成，基于 `androidDownloadUrl`
-**替换逻辑**: 无需手动替换，JS 自动根据下载链接生成
+二维码由模板 JS 基于渲染后的下载链接自动生成，无需手动处理。
 
 ## 数据来源
 
@@ -47,6 +37,6 @@ novel/
 ```
 
 ## 注意事项
-1. Logo 使用 CSS background-image 展示
-2. APK 链接必须以 `.apk` 结尾
-3. 模板会自动处理移动端响应式
+1. `{{LOGO}}` 渲染为完整 https URL
+2. `{{DOWNLOAD_URL}}` 渲染为 .apk 下载链接
+3. 模板自动处理移动端响应式

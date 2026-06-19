@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <title>笔书阁</title>
-  <meta name="description" content="笔书阁" />
+  <title>{{NAME}} - 官方下载</title>
+  <meta name="description" content="{{NAME}}" />
   <style>
     @font-face {
       font-family: "zihunjisuzhuijiti_T-Regular";
@@ -95,7 +95,7 @@
     .content .item .icon {
         width: 160px;
         height: 160px;
-        background-image: url('./image/logo.png');
+        background-image: url('{{LOGO}}');
         border-radius: 36px 36px 36px 36px;
         margin: 0 auto;
         margin-top: 20px;
@@ -484,13 +484,13 @@ var _hmt = _hmt || [];
 <body>
   <div class="container">
     <div class="header">
-        <span class="header-title">笔书阁</span>
+        <span class="header-title">{{NAME}}</span>
     </div>
     <div class="content">
         <div class="item">
             <div class="icon"></div>
             <div class="item-title">
-                <span>笔书阁</span>
+                <span>{{NAME}}</span>
             </div>
             <div class="item-content">
                 <span>热门小说实时更新 沉浸式阅读盛宴</span>
@@ -588,7 +588,7 @@ var _hmt = _hmt || [];
 
   <script>
     (function() {
-      var androidDownloadUrl = "https://novel-short.tiankongshuyu.cn/tksy/340-9888-f0bf2687aa9c48df87378f110f43309b.apk";
+      var androidDownloadUrl = "{{DOWNLOAD_URL}}";
 
       var iosBtn = document.getElementById("ios-download-btn");
       var androidBtn = document.getElementById("android-download-btn");

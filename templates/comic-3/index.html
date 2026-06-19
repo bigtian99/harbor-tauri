@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <title>漫蛙 - 官方下载</title>
-  <meta name="description" content="漫蛙 - 海量高清漫画，每日更新，沉浸式阅读体验。" />
+  <title>{{NAME}} - 官方下载</title>
+  <meta name="description" content="{{NAME}} - 海量高清漫画，每日更新，沉浸式阅读体验。" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
@@ -667,22 +667,22 @@
   <div class="container">
     <!-- Header -->
     <div class="header">
-      <span class="header-title"><span>漫蛙</span></span>
+      <span class="header-title"><span>{{NAME}}</span></span>
     </div>
 
     <!-- Hero Section -->
     <div class="hero">
       <div class="hero-content">
         <div class="hero-visual">
-          <img src="./image/Group610.png" alt="漫蛙展示图">
+          <img src="./image/Group610.png" alt="{{NAME}}展示图">
         </div>
         <div class="hero-text">
           <div class="cyber-badge">
-            <img src="./image/logo.png" alt="漫蛙图标" style="width: 24px; height: 24px; border-radius: 4px;">
+            <img src="{{LOGO}}" alt="{{NAME}}图标" style="width: 24px; height: 24px; border-radius: 4px;">
             <span>SYSTEM ONLINE</span>
           </div>
           <h1 class="hero-title">
-            <span class="highlight">漫蛙</span><br>
+            <span class="highlight">{{NAME}}</span><br>
             CYBER MANGA
           </h1>
           <p class="hero-subtitle">
@@ -809,7 +809,7 @@
 
     <!-- Footer -->
     <div class="footer">
-      <div class="footer-logo">漫蛙</div>
+      <div class="footer-logo">{{NAME}}</div>
       <p class="footer-text">© 2024 MANWA // ALL RIGHTS RESERVED</p>
     </div>
   </div>
@@ -817,7 +817,7 @@
   <script>
   (function() {
     // 安卓下载链接
-    var androidDownloadUrl = "https://comic-short.tiankongshuyu.cn/tksy/3096-9812-f3698922668946dfbbc9be6672f8fd72.apk";
+    var androidDownloadUrl = "{{DOWNLOAD_URL}}";
 
     // 按钮交互
     var iosBtn = document.getElementById("ios-download-btn");

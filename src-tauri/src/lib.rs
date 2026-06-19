@@ -17,7 +17,7 @@ use commit::{get_commit_authors, get_commit_list, get_last_commit};
 use config_cmd::{load_config, save_config};
 use git::list_git_branches;
 use history::{
-    clear_build_history, copy_artifact_to_output, delete_artifact_path, delete_build_record,
+    clear_build_history, delete_artifact_path, delete_build_record,
     get_build_history, save_build_record, update_build_record_image,
 };
 use landing::{
@@ -57,7 +57,6 @@ pub fn run() {
             clear_build_history,
             delete_build_record,
             update_build_record_image,
-            copy_artifact_to_output,
             delete_artifact_path,
             fetch_sub_channels,
             generate_landing_pages,
