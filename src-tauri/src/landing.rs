@@ -551,13 +551,15 @@ pub async fn upload_landing_to_ftp(
     Ok(results)
 }
 
+/// 落地页生成的临时输出根目录。
+/// 预览服务器（preview_server）与本命令共用这一处定义，避免根目录出现两个真相源导致 404。
+pub(crate) fn landing_temp_root() -> PathBuf {
+    std::env::temp_dir().join("jarporter-landing-pages")
+}
+
 #[tauri::command]
 pub async fn get_temp_dir() -> Result<String, String> {
-    let temp_dir = std::env::temp_dir()
-        .join("jarporter-landing-pages")
-        .to_string_lossy()
-        .to_string();
-    Ok(temp_dir)
+    Ok(landing_temp_root().to_string_lossy().to_string())
 }
 
 #[tauri::command]

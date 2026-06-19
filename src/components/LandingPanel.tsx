@@ -77,8 +77,15 @@ export function LandingPanel({
   const getTemplateIframeSrc = useCallback((genResult: LandingPageResult, templateIdx: number) => {
     const idx = genResult.template_dirs && genResult.template_dirs.length > 0 ? templateIdx : 0;
     // 优先走本地 HTTP 预览服务器：相对路径与 FTP 部署一致，本地图片/字体能正常加载
-    if (previewBaseUrl && landingOutputDir && genResult.output_dir.startsWith(landingOutputDir)) {
-      let rel = genResult.output_dir.slice(landingOutputDir.length).replace(/^\/+|\/+$/g, "");
+    // 额外校验 output_dir 在 base 之后紧跟 '/'，避免同前缀目录（如 ...pages2_x）误判
+    const base = landingOutputDir;
+    if (
+      previewBaseUrl &&
+      base &&
+      genResult.output_dir.startsWith(base) &&
+      genResult.output_dir[base.length] === "/"
+    ) {
+      let rel = genResult.output_dir.slice(base.length).replace(/^\/+|\/+$/g, "");
       const file = `${rel}/template_${idx}/index.html`;
       const encoded = file.split("/").map(encodeURIComponent).join("/");
       return `${previewBaseUrl}/${encoded}`;

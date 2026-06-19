@@ -7,6 +7,9 @@
 //! 解决方案：在应用内起一个只监听 127.0.0.1 的静态服务器，把生成的落地页输出目录作为根目录，
 //! iframe 直接用 `http://127.0.0.1:port/.../index.html` 加载——加载环境与 FTP 部署完全一致，
 //! 相对路径自然好使。**只读不改文件**，FTP 上传的内容一字不变。
+//!
+//! 注意：本服务器**有意不下发 CSP 头**，让预览页与真实 HTTP 部署一致（内联脚本、远程字体
+//! 等都正常加载）。服务器只监听 127.0.0.1、只读本地模板目录，且仅响应 GET/HEAD，风险可控。
 
 use serde::Serialize;
 use std::fs;
@@ -30,9 +33,9 @@ pub struct PreviewServerState {
     pub info: PreviewServerInfo,
 }
 
-/// 落地页输出根目录（与 landing.rs::get_temp_dir 保持一致）
+/// 落地页输出根目录——复用 landing 模块的单一真相源，避免两处硬编码漂移。
 fn preview_root() -> PathBuf {
-    std::env::temp_dir().join("jarporter-landing-pages")
+    crate::landing::landing_temp_root()
 }
 
 /// 在应用启动时启动预览服务器，并把状态托管到 app 上。
@@ -83,6 +86,13 @@ pub fn get_preview_server_info(state: tauri::State<PreviewServerState>) -> Previ
 }
 
 fn handle_request(request: tiny_http::Request, root: &Path) {
+    // 预览只读，仅允许 GET/HEAD，其余一律 405
+    let method = request.method().as_str();
+    if method != "GET" && method != "HEAD" {
+        let _ = request.respond(Response::empty(405));
+        return;
+    }
+
     let raw_url = request.url();
     let path_only = raw_url.split('?').next().unwrap_or(raw_url);
     let decoded = percent_decode(path_only);
