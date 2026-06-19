@@ -16,8 +16,7 @@ import "./App.css";
 import type {
   ArtifactType, BranchProjectType, TabType, HarborConfig,
   PackageFromBranchResult, GitBranchOption, LastCommitInfo,
-  CommitInfo, CommitListResult, AuthorInfo, BuildRecord,
-  SubChannelData, LandingPageResult, FtpUploadResult
+  CommitInfo, CommitListResult, AuthorInfo, BuildRecord
 } from "./types";
 import {
   DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE, DEFAULT_FRONTEND_NGINX_TEMPLATE,
@@ -145,6 +144,15 @@ function App() {
     }, duration);
   }
 
+  // ==================== 落地页（状态与逻辑封装在 hook） ====================
+  const landing = useLanding({
+    activeTab,
+    setLog,
+    setProgress,
+    setProgressMessage,
+    showToast,
+  });
+
   function renderLog(text: string) {
     const imageMatch = text.match(/完整镜像:\s*(.+)/);
     if (imageMatch) {
@@ -261,6 +269,7 @@ function App() {
       }
     } catch (e) {
       console.error("选择产物失败:", e);
+      showToast(`选择产物失败: ${e}`);
     }
   }
 
@@ -650,6 +659,7 @@ function App() {
       setConfig(updatedConfig);
     } catch (e) {
       console.error("保存分支设置失败:", e);
+      showToast(`保存分支设置失败: ${e}`);
     }
   }
 
@@ -679,6 +689,7 @@ function App() {
       setBuildHistory(prev => prev.filter(r => r.id !== record.id));
     } catch (e) {
       console.error("[Delete Record] 删除失败:", e);
+      showToast(`删除记录失败: ${e}`);
     }
   }
 
@@ -695,6 +706,7 @@ function App() {
       setBuildHistory([]);
     } catch (e) {
       console.error("[Clear History] 清空失败:", e);
+      showToast(`清空历史失败: ${e}`);
     }
   }
 
@@ -727,6 +739,7 @@ function App() {
       setTimeout(() => setCopied(false), 2000);
     } catch (e) {
       console.error("复制失败:", e);
+      showToast(`复制失败: ${e}`);
     }
   }
 
@@ -1005,21 +1018,23 @@ function App() {
 
         {activeTab === "landing" && (
           <LandingPanel
-            landingIds={landingIds}
-            landingPreviewData={landingPreviewData}
-            landingGenerated={landingGenerated}
-            ftpUploadResults={ftpUploadResults}
-            templateIndices={templateIndices}
-            isFetchingPreview={isFetchingPreview}
-            isGenerating={isGenerating}
-            isUploadingToFtp={isUploadingToFtp}
+            landingIds={landing.landingIds}
+            landingPreviewData={landing.landingPreviewData}
+            landingGenerated={landing.landingGenerated}
+            ftpUploadResults={landing.ftpUploadResults}
+            templateIndices={landing.templateIndices}
+            isFetchingPreview={landing.isFetchingPreview}
+            isGenerating={landing.isGenerating}
+            isUploadingToFtp={landing.isUploadingToFtp}
             progress={progress}
             progressMessage={progressMessage}
-            setLandingIds={setLandingIds}
-            setTemplateIndices={setTemplateIndices}
-            onPreview={handleLandingPreview}
-            onFtpUpload={handleFtpUpload}
-            onCopyAllLinks={handleCopyAllLinks}
+            landingOutputDir={landing.landingOutputDir}
+            previewBaseUrl={landing.previewBaseUrl}
+            setLandingIds={landing.setLandingIds}
+            setTemplateIndices={landing.setTemplateIndices}
+            onPreview={landing.handleLandingPreview}
+            onFtpUpload={landing.handleFtpUpload}
+            onCopyAllLinks={landing.handleCopyAllLinks}
           />
         )}
 

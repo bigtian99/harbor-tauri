@@ -4,6 +4,7 @@ import {
   GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle
 } from "lucide-react";
 import { SearchableDropdown } from "./SearchableDropdown";
+import "./Modal.css";
 import type {
   BranchProjectType, HarborConfig,
   GitBranchOption, LastCommitInfo, CommitInfo, AuthorInfo
@@ -67,7 +68,7 @@ interface BranchPanelProps {
   onAutoPushImageChange: (checked: boolean) => void;
   onRememberSettingsChange: (checked: boolean) => void;
   setShowCommitListModal: (show: boolean) => void;
-  loadCommitList: (repoPath: string, branch: string, page: number) => void;
+  loadCommitList: (repoPath: string, branch: string, page: number, authorFilter?: string, messageFilter?: string) => void;
   loadCommitAuthors: (repoPath: string, branch: string) => void;
   commitAuthors: AuthorInfo[];
   isLoadingCommitList: boolean;
@@ -148,7 +149,7 @@ export function BranchPanel({
               onClick={onRefreshBranches}
               disabled={!repoPath || isLoadingBranches}
             >
-              <GitBranch size={16} /> {isLoadingBranches ? "读取中" : "刷新分支"}
+              {isLoadingBranches ? <Loader2 size={16} className="spin" /> : <GitBranch size={16} />} {isLoadingBranches ? "读取中" : "刷新分支"}
             </button>
           </div>
           {repoPath && <p className="template-hint">当前选择：{repoPath}</p>}
@@ -249,7 +250,7 @@ export function BranchPanel({
             onClick={() => {
               setShowCommitListModal(true);
               if (commitList.length === 0) {
-                loadCommitList(repoPath, branchName, 1);
+                loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter);
               }
               if (commitAuthors.length === 0) {
                 loadCommitAuthors(repoPath, branchName);
@@ -529,7 +530,7 @@ export function BranchPanel({
                   onChange={(e) => setCommitMessageFilter(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      loadCommitList(repoPath, branchName, 1);
+                      loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter);
                     }
                   }}
                 />
@@ -540,7 +541,7 @@ export function BranchPanel({
                   value={commitAuthorFilter}
                   onChange={(e) => {
                     setCommitAuthorFilter(e.target.value);
-                    loadCommitList(repoPath, branchName, 1);
+                    loadCommitList(repoPath, branchName, 1, e.target.value, commitMessageFilter);
                   }}
                 >
                   <option value="">全部作者</option>
@@ -553,7 +554,7 @@ export function BranchPanel({
               </div>
               <button
                 className="commit-search-btn"
-                onClick={() => loadCommitList(repoPath, branchName, 1)}
+                onClick={() => loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter)}
               >
                 搜索
               </button>
@@ -563,7 +564,7 @@ export function BranchPanel({
                   onClick={() => {
                     setCommitAuthorFilter("");
                     setCommitMessageFilter("");
-                    loadCommitList(repoPath, branchName, 1);
+                    loadCommitList(repoPath, branchName, 1, "", "");
                   }}
                 >
                   清除
@@ -607,7 +608,7 @@ export function BranchPanel({
               <button
                 className="pagination-btn"
                 disabled={commitListPage <= 1 || isLoadingCommitList}
-                onClick={() => loadCommitList(repoPath, branchName, commitListPage - 1)}
+                onClick={() => loadCommitList(repoPath, branchName, commitListPage - 1, commitAuthorFilter, commitMessageFilter)}
               >
                 上一页
               </button>
@@ -617,7 +618,7 @@ export function BranchPanel({
               <button
                 className="pagination-btn"
                 disabled={isLoadingCommitList}
-                onClick={() => loadCommitList(repoPath, branchName, commitListPage + 1)}
+                onClick={() => loadCommitList(repoPath, branchName, commitListPage + 1, commitAuthorFilter, commitMessageFilter)}
               >
                 下一页
               </button>

@@ -18,6 +18,8 @@ interface LandingPanelProps {
   isUploadingToFtp: boolean;
   progress: number;
   progressMessage: string;
+  landingOutputDir: string;
+  previewBaseUrl: string;
   setLandingIds: (value: string) => void;
   setTemplateIndices: (value: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void;
   onPreview: () => void;
@@ -31,6 +33,7 @@ export function LandingPanel({
   templateIndices, setTemplateIndices,
   isFetchingPreview, isGenerating, isUploadingToFtp,
   progress, progressMessage,
+  landingOutputDir, previewBaseUrl,
   setLandingIds,
   onPreview, onFtpUpload, onCopyAllLinks,
 }: LandingPanelProps) {
@@ -72,11 +75,17 @@ export function LandingPanel({
   }, [landingGenerated]);
 
   const getTemplateIframeSrc = useCallback((genResult: LandingPageResult, templateIdx: number) => {
-    if (!genResult.template_dirs || genResult.template_dirs.length === 0) {
-      return convertFileSrc(`${genResult.output_dir}/template_0/index.html`);
+    const idx = genResult.template_dirs && genResult.template_dirs.length > 0 ? templateIdx : 0;
+    // 优先走本地 HTTP 预览服务器：相对路径与 FTP 部署一致，本地图片/字体能正常加载
+    if (previewBaseUrl && landingOutputDir && genResult.output_dir.startsWith(landingOutputDir)) {
+      let rel = genResult.output_dir.slice(landingOutputDir.length).replace(/^\/+|\/+$/g, "");
+      const file = `${rel}/template_${idx}/index.html`;
+      const encoded = file.split("/").map(encodeURIComponent).join("/");
+      return `${previewBaseUrl}/${encoded}`;
     }
-    return convertFileSrc(`${genResult.output_dir}/template_${templateIdx}/index.html`);
-  }, []);
+    // 兜底：预览服务未就绪时退回 asset 协议（旧逻辑）
+    return convertFileSrc(`${genResult.output_dir}/template_${idx}/index.html`);
+  }, [previewBaseUrl, landingOutputDir]);
 
   // 获取轮播中三个位置的模板索引
   const getCarouselIndices = useCallback((id: string, total: number) => {

@@ -1,0 +1,244 @@
+use crate::models::{AuthorInfo, CommitInfo, CommitListResult, LastCommitInfo};
+use crate::utils::{git_output, repo_root_for};
+use std::path::PathBuf;
+
+/// 将 git remote URL 转换为 commit 页面 URL
+pub(crate) fn remote_url_to_commit_url(remote_url: &str, commit_hash: &str) -> Option<String> {
+    // 移除 .git 后缀
+    let url = remote_url.trim_end_matches(".git");
+
+    // 处理 SSH 格式: git@gitee.com:user/repo.git
+    if url.starts_with("git@") {
+        let without_prefix = url.strip_prefix("git@")?;
+        let parts: Vec<&str> = without_prefix.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            let host = parts[0];
+            let path = parts[1].trim_start_matches('/');
+            return Some(format!("https://{}/{}/commit/{}", host, path, commit_hash));
+        }
+    }
+
+    // 处理 HTTPS 格式: https://gitee.com/user/repo.git
+    if url.starts_with("https://") || url.starts_with("http://") {
+        let without_protocol = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))?;
+        return Some(format!(
+            "https://{}/commit/{}",
+            without_protocol, commit_hash
+        ));
+    }
+
+    None
+}
+
+#[tauri::command]
+pub async fn get_last_commit(
+    repo_path: String,
+    branch: Option<String>,
+) -> Result<LastCommitInfo, String> {
+    let repo_path = PathBuf::from(repo_path);
+    if !repo_path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+    }
+
+    let branch = branch.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+        let rev = if branch.trim().is_empty() {
+            "HEAD".to_string()
+        } else {
+            branch.trim().to_string()
+        };
+        let output = git_output(
+            &repo_root,
+            &["log", "-1", "--format=%H%n%s%n%an%n%ai", &rev],
+        )?;
+        let lines: Vec<&str> = output.lines().collect();
+        if lines.len() < 4 {
+            return Err("无法解析提交信息".to_string());
+        }
+        // 将 ISO 8601 日期转换为本地时间格式
+        let date_str = lines[3].to_string();
+        let formatted_date = chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
+            .map(|dt| {
+                let local: chrono::DateTime<chrono::Local> = dt.with_timezone(&chrono::Local);
+                local.format("%Y-%m-%d %H:%M:%S").to_string()
+            })
+            .unwrap_or(date_str);
+        // 获取远程仓库 URL 并生成提交链接
+        let commit_url = git_output(&repo_root, &["remote", "get-url", "origin"])
+            .ok()
+            .and_then(|url| remote_url_to_commit_url(&url.trim(), &lines[0]));
+        Ok(LastCommitInfo {
+            hash: lines[0].to_string(),
+            short_hash: lines[0][..8.min(lines[0].len())].to_string(),
+            message: lines[1].to_string(),
+            author: lines[2].to_string(),
+            date: formatted_date,
+            url: commit_url,
+        })
+    })
+    .await
+    .map_err(|e| format!("读取提交信息线程异常: {}", e))?
+}
+
+#[tauri::command]
+pub async fn get_commit_authors(
+    repo_path: String,
+    branch: Option<String>,
+) -> Result<Vec<AuthorInfo>, String> {
+    let repo_path = PathBuf::from(repo_path);
+    if !repo_path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+    }
+
+    let branch = branch.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+        let rev = if branch.trim().is_empty() {
+            "HEAD".to_string()
+        } else {
+            branch.trim().to_string()
+        };
+
+        // 获取所有提交的作者信息
+        let output = git_output(&repo_root, &["log", "--format=%an", &rev])?;
+
+        // 统计每个作者的提交次数
+        let mut author_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for line in output.lines() {
+            let author = line.trim().to_string();
+            if !author.is_empty() {
+                *author_counts.entry(author).or_insert(0) += 1;
+            }
+        }
+
+        // 转换为 AuthorInfo 列表并按提交次数排序
+        let mut authors: Vec<AuthorInfo> = author_counts
+            .into_iter()
+            .map(|(name, count)| AuthorInfo { name, count })
+            .collect();
+        authors.sort_by(|a, b| b.count.cmp(&a.count));
+
+        Ok(authors)
+    })
+    .await
+    .map_err(|e| format!("获取提交者列表线程异常: {}", e))?
+}
+
+#[tauri::command]
+pub async fn get_commit_list(
+    repo_path: String,
+    branch: Option<String>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+    author_filter: Option<String>,
+    message_filter: Option<String>,
+) -> Result<CommitListResult, String> {
+    let repo_path = PathBuf::from(repo_path);
+    if !repo_path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+    }
+
+    let branch = branch.unwrap_or_default();
+    let author_filter = author_filter.unwrap_or_default();
+    let message_filter = message_filter.unwrap_or_default();
+    let page = page.unwrap_or(1).max(1);
+    let page_size = page_size.unwrap_or(10).max(1).min(50);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+        let rev = if branch.trim().is_empty() {
+            "HEAD".to_string()
+        } else {
+            branch.trim().to_string()
+        };
+
+        // 构建 git log 命令，支持搜索
+        let mut git_args = vec![
+            "log".to_string(),
+            "--format=%H%n%s%n%an%n%ai".to_string(),
+            rev.clone(),
+        ];
+
+        // 添加作者过滤
+        if !author_filter.trim().is_empty() {
+            git_args.push(format!("--author={}", author_filter.trim()));
+        }
+
+        // 添加提交信息过滤
+        if !message_filter.trim().is_empty() {
+            git_args.push(format!("--grep={}", message_filter.trim()));
+        }
+
+        // 获取过滤后的总提交数
+        let mut count_args = vec!["rev-list".to_string(), "--count".to_string()];
+        count_args.extend(git_args.iter().skip(2).cloned());
+        let count_output = git_output(
+            &repo_root,
+            &count_args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        )?;
+        let total: usize = count_output.trim().parse().unwrap_or(0);
+
+        // 获取远程仓库 URL
+        let remote_url = git_output(&repo_root, &["remote", "get-url", "origin"])
+            .ok()
+            .map(|u| u.trim().to_string());
+
+        // 添加分页参数
+        let skip = (page - 1) * page_size;
+        git_args.insert(1, format!("-{}", page_size));
+        git_args.insert(2, format!("--skip={}", skip));
+
+        let output = git_output(
+            &repo_root,
+            &git_args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        )?;
+
+        let mut commits = Vec::new();
+        let lines: Vec<&str> = output.lines().collect();
+        for chunk in lines.chunks(4) {
+            if chunk.len() < 4 {
+                continue;
+            }
+            let hash = chunk[0].to_string();
+            let short_hash = hash[..8.min(hash.len())].to_string();
+            let message = chunk[1].to_string();
+            let author = chunk[2].to_string();
+            let date_str = chunk[3].to_string();
+
+            let formatted_date =
+                chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
+                    .map(|dt| {
+                        let local: chrono::DateTime<chrono::Local> =
+                            dt.with_timezone(&chrono::Local);
+                        local.format("%Y-%m-%d %H:%M:%S").to_string()
+                    })
+                    .unwrap_or(date_str);
+
+            let url = remote_url
+                .as_ref()
+                .and_then(|u| remote_url_to_commit_url(u, &hash));
+
+            commits.push(CommitInfo {
+                hash,
+                short_hash,
+                message,
+                author,
+                date: formatted_date,
+                url,
+            });
+        }
+
+        Ok(CommitListResult {
+            commits,
+            total,
+            page,
+            page_size,
+        })
+    })
+    .await
+    .map_err(|e| format!("读取提交列表线程异常: {}", e))?
+}

@@ -23,6 +23,7 @@ export function useLanding(deps: UseLandingDeps) {
   const [landingTemplateBase, setLandingTemplateBase] = useState("");
   const [landingIds, setLandingIds] = useState("");
   const [landingOutputDir, setLandingOutputDir] = useState("");
+  const [previewBaseUrl, setPreviewBaseUrl] = useState("");
   const [landingPreviewData, setLandingPreviewData] = useState<SubChannelData[]>([]);
   const [landingGenerated, setLandingGenerated] = useState<Record<string, LandingPageResult>>({});
   const [isFetchingPreview, setIsFetchingPreview] = useState(false);
@@ -125,7 +126,7 @@ export function useLanding(deps: UseLandingDeps) {
     showToast(`已复制 ${urls.length} 个链接`);
   }
 
-  // 进入落地页标签时获取模板目录与临时输出目录
+  // 进入落地页标签时获取模板目录、临时输出目录与本地预览服务地址
   useEffect(() => {
     if (activeTab === "landing" && isTauriRuntime()) {
       if (!landingTemplateBase) {
@@ -138,8 +139,13 @@ export function useLanding(deps: UseLandingDeps) {
           setLandingOutputDir(dir);
         }).catch(() => {});
       }
+      if (!previewBaseUrl) {
+        invoke<{ base_url: string }>("get_preview_server_info").then((info) => {
+          setPreviewBaseUrl(info.base_url);
+        }).catch(() => {});
+      }
     }
-  }, [activeTab, landingOutputDir, landingTemplateBase]);
+  }, [activeTab, landingOutputDir, landingTemplateBase, previewBaseUrl]);
 
   // 输入 IDs 后防抖自动预览
   useEffect(() => {
@@ -175,6 +181,8 @@ export function useLanding(deps: UseLandingDeps) {
     isFetchingPreview,
     isGenerating,
     isUploadingToFtp,
+    landingOutputDir,
+    previewBaseUrl,
     handleLandingPreview,
     handleFtpUpload,
     handleCopyAllLinks,

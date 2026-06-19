@@ -431,3 +431,83 @@
 .project-group-items {
   margin-top: 8px;
 }
+
+/* 提交记录弹窗（BranchPanel 专用） */
+.commit-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: modal-overlay-in 0.2s ease;
+}
+
+.commit-modal {
+  background: linear-gradient(135deg, #1a1f3a 0%, #0f1629 100%);
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 720px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: modal-content-in 0.2s ease;
+}
+
+.commit-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.commit-modal-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #64ffda;
+  margin: 0;
+}
+
+.commit-modal-close {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  color: #888;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.commit-modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* 提交记录弹窗内部搜索栏紧贴 header，去掉底部多余间距 */
+.commit-modal .commit-search-bar {
+  padding: 16px 20px 0;
+  margin-bottom: 12px;
+}
+
+/* 提交记录弹窗内部列表区域留出左右内边距 */
+.commit-modal .modal-list-wrapper {
+  padding: 0 20px;
+}
+
+/* 提交记录弹窗内部分页贴底 */
+.commit-modal .modal-pagination {
+  margin-top: 0;
+}
