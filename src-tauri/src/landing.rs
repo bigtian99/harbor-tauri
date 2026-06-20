@@ -546,3 +546,123 @@ pub async fn get_bundled_templates_dir() -> Result<String, String> {
 
     Err("找不到模板目录".to_string())
 }
+
+// ========== 模板管理功能 ==========
+
+/// 获取 templates 根目录（与 get_bundled_templates_dir 一致）
+pub(crate) fn templates_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or(&PathBuf::from("."))
+        .join("templates")
+}
+
+#[tauri::command]
+pub async fn list_template_dirs() -> Result<Vec<String>, String> {
+    let root = templates_root();
+    let mut dirs: Vec<String> = Vec::new();
+    if let Ok(entries) = fs::read_dir(&root) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') {
+                    continue;
+                }
+                dirs.push(name);
+            }
+        }
+    }
+    dirs.sort();
+    Ok(dirs)
+}
+
+#[tauri::command]
+pub async fn upload_template_zip(zip_path: String) -> Result<Vec<serde_json::Value>, String> {
+    let zip_file = fs::File::open(&zip_path)
+        .map_err(|e| format!("无法打开 zip 文件: {}", e))?;
+    let mut archive = zip::ZipArchive::new(zip_file)
+        .map_err(|e| format!("无法解析 zip 文件: {}", e))?;
+
+    let root = templates_root();
+    // 确保 templates 目录存在
+    fs::create_dir_all(&root).map_err(|e| format!("创建模板目录失败: {}", e))?;
+
+    let mut extracted_dirs: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)
+            .map_err(|e| format!("读取 zip entry {} 失败: {}", i, e))?;
+        let name = entry.name().to_string();
+
+        // 跳过不需要的路径
+        let first_component = name.split('/').next().unwrap_or("");
+        if first_component.is_empty()
+            || first_component == "__MACOSX"
+            || first_component.starts_with('.')
+        {
+            continue;
+        }
+
+        let rel_path = if let Some(idx) = name.find('/') {
+            &name[(idx + 1)..]
+        } else {
+            continue; // 跳过根目录 entry（没有文件内容）
+        };
+
+        if rel_path.is_empty() {
+            continue;
+        }
+
+        let dest = root.join(&name);
+
+        if entry.is_dir() {
+            fs::create_dir_all(&dest).ok();
+        } else {
+            // 只解压非排除文件
+            let file_name = std::path::Path::new(rel_path)
+                .file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_default();
+            if file_name == "README.md" || file_name == ".DS_Store" {
+                continue;
+            }
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent).ok();
+            }
+            let mut out = fs::File::create(&dest)
+                .map_err(|e| format!("创建文件 {} 失败: {}", dest.display(), e))?;
+            std::io::copy(&mut entry, &mut out)
+                .map_err(|e| format!("解压文件 {} 失败: {}", dest.display(), e))?;
+            *extracted_dirs.entry(first_component.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    if extracted_dirs.is_empty() {
+        return Err("zip 中没有找到有效的模板目录".to_string());
+    }
+
+    let results: Vec<serde_json::Value> = extracted_dirs
+        .into_iter()
+        .map(|(dir_name, file_count)| {
+            serde_json::json!({
+                "dir_name": dir_name,
+                "file_count": file_count,
+            })
+        })
+        .collect();
+
+    eprintln!("[JarPorter] ✅ 模板上传完成: {:?}", results);
+    Ok(results)
+}
+
+#[tauri::command]
+pub async fn delete_template_dir(dir_name: String) -> Result<(), String> {
+    let target = templates_root().join(&dir_name);
+    if !target.exists() {
+        return Err(format!("模板目录 '{}' 不存在", dir_name));
+    }
+    fs::remove_dir_all(&target)
+        .map_err(|e| format!("删除模板目录 '{}' 失败: {}", dir_name, e))?;
+    eprintln!("[JarPorter] 🗑 已删除模板: {}", dir_name);
+    Ok(())
+}

@@ -23,6 +23,7 @@ use history::{
 use landing::{
     fetch_sub_channels, generate_landing_pages, get_bundled_templates_dir, get_temp_dir,
     preview_landing_page, upload_landing_to_ftp,
+    list_template_dirs, upload_template_zip, delete_template_dir,
 };
 use preview_server::get_preview_server_info;
 
@@ -64,7 +65,10 @@ pub fn run() {
             get_temp_dir,
             preview_landing_page,
             get_bundled_templates_dir,
-            get_preview_server_info
+            get_preview_server_info,
+            list_template_dirs,
+            upload_template_zip,
+            delete_template_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

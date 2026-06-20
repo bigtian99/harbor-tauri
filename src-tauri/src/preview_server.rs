@@ -98,8 +98,17 @@ fn handle_request(request: tiny_http::Request, root: &Path) {
     let decoded = percent_decode(path_only);
     let rel = decoded.trim_start_matches('/');
 
-    let full = root.join(rel);
-    let root_canon = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    // __templates__/ 前缀映射到项目 templates 目录（模板预览），其余走落地页输出根目录。
+    // 两者复用同一套路径穿越防护。
+    let (base_root, rel) = match rel.strip_prefix("__templates__/") {
+        Some(stripped) => (crate::landing::templates_root(), stripped),
+        None => (root.to_path_buf(), rel),
+    };
+
+    let full = base_root.join(rel);
+    let root_canon = base_root
+        .canonicalize()
+        .unwrap_or_else(|_| base_root.to_path_buf());
 
     // 路径穿越防护：解析后的真实路径必须在根目录之内
     let canon = match full.canonicalize() {

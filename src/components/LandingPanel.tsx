@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   Globe, Rocket, ExternalLink, Copy, Loader2, Eye,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, FolderOpen, Trash2, Package, ChevronDown, ChevronUp
 } from "lucide-react";
 import type { SubChannelData, LandingPageResult, FtpUploadResult } from "../types";
 import { isTauriRuntime } from "../types";
@@ -25,6 +26,7 @@ interface LandingPanelProps {
   onPreview: () => void;
   onFtpUpload: () => void;
   onCopyAllLinks: () => void;
+  showToast: (message: string, duration?: number) => void;
 }
 
 export function LandingPanel({
@@ -36,9 +38,101 @@ export function LandingPanel({
   landingOutputDir, previewBaseUrl,
   setLandingIds,
   onPreview, onFtpUpload, onCopyAllLinks,
+  showToast,
 }: LandingPanelProps) {
   const [animatingCards, setAnimatingCards] = useState<Record<string, string>>({});
   const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 模板管理状态
+  const [templateDirs, setTemplateDirs] = useState<string[]>([]);
+  const [templatesBaseDir, setTemplatesBaseDir] = useState("");
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // 按去掉末尾 -数字 后缀的 base 名分组：comic / comic-1 / comic-2 → "comic"
+  const templateGroups = (() => {
+    const groups: Record<string, string[]> = {};
+    for (const dir of templateDirs) {
+      const base = dir.replace(/-\d+$/, "");
+      (groups[base] ||= []).push(dir);
+    }
+    return Object.entries(groups)
+      .map(([base, dirs]) => ({ base, dirs: dirs.sort() }))
+      .sort((a, b) => a.base.localeCompare(b.base));
+  })();
+
+  const toggleGroup = useCallback((base: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      next.has(base) ? next.delete(base) : next.add(base);
+      return next;
+    });
+  }, []);
+
+  // 模板预览：优先走本地 HTTP 预览服务器（相对路径图片/字体能正常加载），兜底 asset 协议
+  const getTemplatePreviewSrc = useCallback((dir: string) => {
+    if (previewBaseUrl) {
+      return `${previewBaseUrl}/__templates__/${encodeURIComponent(dir)}/index.html`;
+    }
+    if (templatesBaseDir) {
+      return convertFileSrc(`${templatesBaseDir}/${dir}/index.html`);
+    }
+    return "";
+  }, [previewBaseUrl, templatesBaseDir]);
+
+  const loadTemplateDirs = useCallback(async () => {
+    if (!isTauriRuntime()) return;
+    try {
+      const dirs = await invoke<string[]>("list_template_dirs");
+      setTemplateDirs(dirs);
+      if (!templatesBaseDir) {
+        const base = await invoke<string>("get_bundled_templates_dir");
+        setTemplatesBaseDir(base);
+      }
+    } catch { /* 忽略 */ }
+  }, [templatesBaseDir]);
+
+  // 展开模板管理时刷新列表
+  useEffect(() => {
+    if (showTemplateManager) {
+      loadTemplateDirs();
+    }
+  }, [showTemplateManager, loadTemplateDirs]);
+
+  const handleUploadTemplateZip = useCallback(async () => {
+    if (!isTauriRuntime()) return;
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "ZIP 文件", extensions: ["zip"] }],
+      });
+      if (!selected) return;
+      setIsUploadingTemplate(true);
+      const results = await invoke<{ dir_name: string; file_count: number }[]>("upload_template_zip", {
+        zipPath: selected as string,
+      });
+      const names = results.map((r) => r.dir_name).join(", ");
+      showToast(`模板上传完成: ${names}`);
+      await loadTemplateDirs();
+    } catch (e) {
+      showToast(`上传失败: ${e}`);
+    } finally {
+      setIsUploadingTemplate(false);
+    }
+  }, [loadTemplateDirs, showToast]);
+
+  const handleDeleteTemplate = useCallback(async (dirName: string) => {
+    if (!confirm(`确认删除模板 "${dirName}"？此操作不可撤销。`)) return;
+    if (!isTauriRuntime()) return;
+    try {
+      await invoke("delete_template_dir", { dirName });
+      showToast(`已删除模板: ${dirName}`);
+      await loadTemplateDirs();
+    } catch (e) {
+      showToast(`删除失败: ${e}`);
+    }
+  }, [loadTemplateDirs, showToast]);
 
   const getTemplateIndex = useCallback((id: string) => {
     return templateIndices[id] || 0;
@@ -374,6 +468,92 @@ export function LandingPanel({
           </div>
         </div>
       )}
+
+      {/* ========== 模板管理 ========== */}
+      <div className="template-manager">
+        <button
+          className="template-manager-toggle"
+          onClick={() => setShowTemplateManager(prev => !prev)}
+        >
+          <Package size={14} />
+          管理模板
+          {showTemplateManager ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+
+        {showTemplateManager && (
+          <div className="template-manager-body">
+            <div className="landing-actions" style={{ marginBottom: 8 }}>
+              <button
+                className="save-btn"
+                onClick={handleUploadTemplateZip}
+                disabled={isUploadingTemplate}
+              >
+                {isUploadingTemplate ? (
+                  <Loader2 size={14} className="spin" />
+                ) : (
+                  <FolderOpen size={14} />
+                )}
+                上传模板 zip
+              </button>
+            </div>
+
+            {templateDirs.length === 0 ? (
+              <p className="template-manager-empty">暂无模板目录</p>
+            ) : (
+              <div className="template-group-list">
+                {templateGroups.map(({ base, dirs }) => {
+                  const expanded = expandedGroups.has(base);
+                  return (
+                    <div key={base} className="template-group">
+                      <button
+                        className="template-group-header"
+                        onClick={() => toggleGroup(base)}
+                      >
+                        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        <span className="template-group-name">{base}</span>
+                        <span className="template-group-count">{dirs.length} 个</span>
+                      </button>
+                      {expanded && (
+                        <div className="template-group-items">
+                          {dirs.map((dir) => (
+                            <div key={dir} className="template-card">
+                              <div className="template-card-preview">
+                                {(() => {
+                                  const src = getTemplatePreviewSrc(dir);
+                                  return src ? (
+                                    <iframe
+                                      src={src}
+                                      className="template-preview-iframe"
+                                      loading="lazy"
+                                      title={dir}
+                                    />
+                                  ) : (
+                                    <div className="template-preview-empty">…</div>
+                                  );
+                                })()}
+                              </div>
+                              <div className="template-card-footer">
+                                <span className="template-card-name" title={dir}>{dir}</span>
+                                <button
+                                  className="template-delete-btn"
+                                  onClick={() => handleDeleteTemplate(dir)}
+                                  title={`删除 ${dir}`}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

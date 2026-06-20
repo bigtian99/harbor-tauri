@@ -1035,6 +1035,7 @@ function App() {
             onPreview={landing.handleLandingPreview}
             onFtpUpload={landing.handleFtpUpload}
             onCopyAllLinks={landing.handleCopyAllLinks}
+            showToast={showToast}
           />
         )}
 
