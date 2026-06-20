@@ -478,6 +478,7 @@ export function LandingPanel({
 
         <div className={`template-manager-body-wrap${showTemplateManager ? " open" : ""}`}>
           <div className="template-manager-body">
+            <div className="template-manager-body-inner">
             <div className="landing-actions" style={{ marginBottom: 8 }}>
               <button
                 className="save-btn"
@@ -512,7 +513,7 @@ export function LandingPanel({
                       {expanded && (
                         <div className="template-group-items">
                           {dirs.map((dir) => (
-                            <div key={dir} className="template-card">
+                            <div key={dir} className="template-card" title={dir}>
                               <div className="template-card-preview">
                                 {(() => {
                                   const src = getTemplatePreviewSrc(dir);
@@ -528,16 +529,13 @@ export function LandingPanel({
                                   );
                                 })()}
                               </div>
-                              <div className="template-card-footer">
-                                <span className="template-card-name" title={dir}>{dir}</span>
-                                <button
-                                  className="template-delete-btn"
-                                  onClick={() => handleDeleteTemplate(dir)}
-                                  title={`删除 ${dir}`}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
+                              <button
+                                className="template-delete-btn"
+                                onClick={() => handleDeleteTemplate(dir)}
+                                title={`删除 ${dir}`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -547,6 +545,7 @@ export function LandingPanel({
                 })}
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>
