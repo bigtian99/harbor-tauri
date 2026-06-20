@@ -1,9 +1,9 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Globe, Rocket, ExternalLink, Copy, Loader2, Eye,
-  ChevronLeft, ChevronRight, FolderOpen, Trash2, Package, ChevronDown, ChevronUp
+  ChevronLeft, ChevronRight, FolderOpen, Trash2, Package, ChevronDown, X, Maximize2
 } from "lucide-react";
 import type { SubChannelData, LandingPageResult, FtpUploadResult, TemplateInfo } from "../types";
 import { isTauriRuntime } from "../types";
@@ -50,6 +50,12 @@ export function LandingPanel({
   const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
+  // 预览浮层状态
+  const [previewOverlay, setPreviewOverlay] = useState<{
+    src: string;
+    title: string;
+  } | null>(null);
+
   // 按中文分类分组（来自各模板 index.html 预埋的 template-category），同一分类下的目录再排序
   const templateGroups = (() => {
     const groups: Record<string, string[]> = {};
@@ -89,12 +95,11 @@ export function LandingPanel({
     } catch { /* 忽略 */ }
   }, [templatesBaseDir]);
 
-  // 展开模板管理时刷新列表
-  useEffect(() => {
-    if (showTemplateManager) {
-      loadTemplateInfos();
-    }
-  }, [showTemplateManager, loadTemplateInfos]);
+  // 打开模板管理时刷新列表
+  const handleOpenTemplateManager = useCallback(() => {
+    setShowTemplateManager(true);
+    loadTemplateInfos();
+  }, [loadTemplateInfos]);
 
   const handleUploadTemplateZip = useCallback(async () => {
     if (!isTauriRuntime()) return;
@@ -205,6 +210,22 @@ export function LandingPanel({
     return indices;
   }, [getTemplateIndex]);
 
+  // 在应用内打开模板预览浮层
+  const openInAppPreview = useCallback((src: string, title: string) => {
+    setPreviewOverlay({ src, title });
+  }, []);
+
+  // 关闭预览浮层
+  const closePreviewOverlay = useCallback(() => {
+    setPreviewOverlay(null);
+  }, []);
+
+  // 关闭模板管理弹窗
+  const closeTemplateManager = useCallback(() => {
+    setShowTemplateManager(false);
+    setExpandedGroup(null);
+  }, []);
+
   return (
     <div className="landing-panel">
       <h2><Globe size={20} /> 生成落地页</h2>
@@ -255,6 +276,11 @@ export function LandingPanel({
             复制所有链接
           </button>
         )}
+        {/* 管理模板按钮 — 更显眼 */}
+        <button className="save-btn" onClick={handleOpenTemplateManager} style={{ marginLeft: 'auto' }}>
+          <Package size={14} />
+          管理模板
+        </button>
       </div>
 
       {isUploadingToFtp && (
@@ -343,12 +369,10 @@ export function LandingPanel({
                                 className={`lt-iframe-card ${isCenter ? 'card-center' : 'card-side'} ${isCenter && animatingCards[item.id] ? animatingCards[item.id] : ''}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (isTauriRuntime()) {
-                                    invoke("preview_landing_page", {
-                                      path: genResult.output_dir,
-                                      templateIndex: tempIdx
-                                    });
-                                  }
+                                  openInAppPreview(
+                                    getTemplateIframeSrc(genResult, tempIdx),
+                                    `${item.subChannelName || ""} - 模板${tempIdx + 1}`
+                                  );
                                 }}
                                 title={`模板 ${tempIdx + 1}`}
                               >
@@ -367,12 +391,10 @@ export function LandingPanel({
                           <div
                             className="lt-iframe-card card-center"
                             onClick={() => {
-                              if (isTauriRuntime()) {
-                                invoke("preview_landing_page", {
-                                  path: genResult.output_dir,
-                                  templateIndex: 0
-                                });
-                              }
+                              openInAppPreview(
+                                getTemplateIframeSrc(genResult, 0),
+                                `${item.subChannelName || ""} - 模板`
+                              );
                             }}
                             title="点击放大预览"
                           >
@@ -442,14 +464,12 @@ export function LandingPanel({
                       <button
                         className="lt-preview-btn"
                         onClick={() => {
-                          if (isTauriRuntime()) {
-                            invoke("preview_landing_page", {
-                              path: genResult.output_dir,
-                              templateIndex: currentTemplateIndex
-                            });
-                          }
+                          openInAppPreview(
+                            getTemplateIframeSrc(genResult, currentTemplateIndex),
+                            `${item.subChannelName || ""} - 模板${currentTemplateIndex + 1}`
+                          );
                         }}
-                        title="在浏览器中预览"
+                        title="在应用内预览"
                       >
                         <Eye size={13} /> 预览
                       </button>
@@ -465,90 +485,162 @@ export function LandingPanel({
         </div>
       )}
 
-      {/* ========== 模板管理 ========== */}
-      <div className="template-manager">
-        <button
-          className="template-manager-toggle"
-          onClick={() => setShowTemplateManager(prev => !prev)}
-        >
-          <Package size={14} />
-          管理模板
-          {showTemplateManager ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </button>
-
-        <div className={`template-manager-body-wrap${showTemplateManager ? " open" : ""}`}>
-          <div className="template-manager-body">
-            <div className="template-manager-body-inner">
-            <div className="landing-actions" style={{ marginBottom: 8 }}>
-              <button
-                className="save-btn"
-                onClick={handleUploadTemplateZip}
-                disabled={isUploadingTemplate}
-              >
-                {isUploadingTemplate ? (
-                  <Loader2 size={14} className="spin" />
-                ) : (
-                  <FolderOpen size={14} />
-                )}
-                上传模板 zip
+      {/* ========== 模板管理弹窗 ========== */}
+      {showTemplateManager && (
+        <div className="modal-overlay" onClick={closeTemplateManager}>
+          <div
+            className="template-manager-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 className="modal-title">
+                <Package size={16} /> 管理模板
+              </h3>
+              <button className="modal-close" onClick={closeTemplateManager} title="关闭">
+                <X size={16} />
               </button>
             </div>
 
-            {templateInfos.length === 0 ? (
-              <p className="template-manager-empty">暂无模板目录</p>
-            ) : (
-              <div className="template-group-list">
-                {templateGroups.map(({ category, dirs }) => {
-                  const expanded = expandedGroup === category;
-                  return (
-                    <div key={category} className="template-group">
-                      <button
-                        className="template-group-header"
-                        onClick={() => toggleGroup(category)}
-                      >
-                        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        <span className="template-group-name">{category}</span>
-                        <span className="template-group-count">{dirs.length} 个</span>
-                      </button>
-                      {expanded && (
-                        <div className="template-group-items">
-                          {dirs.map((dir) => (
-                            <div key={dir} className="template-card" title={dir}>
-                              <div className="template-card-preview">
-                                {(() => {
-                                  const src = getTemplatePreviewSrc(dir);
-                                  return src ? (
-                                    <iframe
-                                      src={src}
-                                      className="template-preview-iframe"
-                                      loading="lazy"
-                                      title={dir}
-                                    />
-                                  ) : (
-                                    <div className="template-preview-empty">…</div>
-                                  );
-                                })()}
-                              </div>
-                              <button
-                                className="template-delete-btn"
-                                onClick={() => handleDeleteTemplate(dir)}
-                                title={`删除 ${dir}`}
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+            <div className="template-manager-modal-body">
+              <div className="landing-actions" style={{ marginBottom: 12 }}>
+                <button
+                  className="save-btn"
+                  onClick={handleUploadTemplateZip}
+                  disabled={isUploadingTemplate}
+                >
+                  {isUploadingTemplate ? (
+                    <Loader2 size={14} className="spin" />
+                  ) : (
+                    <FolderOpen size={14} />
+                  )}
+                  上传模板 zip
+                </button>
               </div>
-            )}
+
+              {templateInfos.length === 0 ? (
+                <p className="template-manager-empty">暂无模板目录</p>
+              ) : (
+                <div className="template-group-list">
+                  {templateGroups.map(({ category, dirs }) => {
+                    const expanded = expandedGroup === category;
+                    return (
+                      <div key={category} className="template-group">
+                        <button
+                          className="template-group-header"
+                          onClick={() => toggleGroup(category)}
+                        >
+                          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          <span className="template-group-name">{category}</span>
+                          <span className="template-group-count">{dirs.length} 个</span>
+                        </button>
+                        {expanded && (
+                          <div className="template-group-items">
+                            {dirs.map((dir) => (
+                              <div
+                                key={dir}
+                                className="template-card"
+                                title={`点击预览 ${dir}`}
+                                onClick={() => {
+                                  const src = getTemplatePreviewSrc(dir);
+                                  if (src) {
+                                    openInAppPreview(src, `模板: ${dir}`);
+                                  }
+                                }}
+                              >
+                                <div className="template-card-preview">
+                                  {(() => {
+                                    const src = getTemplatePreviewSrc(dir);
+                                    return src ? (
+                                      <iframe
+                                        src={src}
+                                        className="template-preview-iframe"
+                                        loading="lazy"
+                                        title={dir}
+                                      />
+                                    ) : (
+                                      <div className="template-preview-empty">…</div>
+                                    );
+                                  })()}
+                                </div>
+                                {/* 放大预览按钮 */}
+                                <button
+                                  className="template-maximize-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const src = getTemplatePreviewSrc(dir);
+                                    if (src) {
+                                      openInAppPreview(src, `模板: ${dir}`);
+                                    }
+                                  }}
+                                  title={`放大预览 ${dir}`}
+                                >
+                                  <Maximize2 size={13} />
+                                </button>
+                                {/* 删除按钮 */}
+                                <button
+                                  className="template-delete-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteTemplate(dir);
+                                  }}
+                                  title={`删除 ${dir}`}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ========== 应用内预览浮层 ========== */}
+      {previewOverlay && (
+        <div className="preview-overlay" onClick={closePreviewOverlay}>
+          <div
+            className="preview-overlay-content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="preview-overlay-header">
+              <span className="preview-overlay-title">{previewOverlay.title}</span>
+              <div className="preview-overlay-actions">
+                {/* 同时提供外部分浏览器按钮作为备选 */}
+                <button
+                  className="preview-overlay-external-btn"
+                  title="在外部浏览器打开"
+                  onClick={() => {
+                    window.open(previewOverlay.src, '_blank');
+                  }}
+                  title="在外部浏览器打开"
+                >
+                  <ExternalLink size={14} />
+                </button>
+                <button
+                  className="preview-overlay-close"
+                  onClick={closePreviewOverlay}
+                  title="关闭预览"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="preview-overlay-body">
+              <iframe
+                src={previewOverlay.src}
+                className="preview-overlay-iframe"
+                title={previewOverlay.title}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
