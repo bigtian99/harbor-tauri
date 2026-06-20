@@ -100,9 +100,9 @@ fn handle_request(request: tiny_http::Request, root: &Path) {
 
     // __templates__/ 前缀映射到项目 templates 目录（模板预览），其余走落地页输出根目录。
     // 两者复用同一套路径穿越防护。
-    let (base_root, rel) = match rel.strip_prefix("__templates__/") {
-        Some(stripped) => (crate::landing::templates_root(), stripped),
-        None => (root.to_path_buf(), rel),
+    let (base_root, rel, is_template_preview) = match rel.strip_prefix("__templates__/") {
+        Some(stripped) => (crate::landing::templates_root(), stripped, true),
+        None => (root.to_path_buf(), rel, false),
     };
 
     let full = base_root.join(rel);
@@ -136,7 +136,41 @@ fn handle_request(request: tiny_http::Request, root: &Path) {
         canon
     };
 
-    serve_file(request, &target);
+    // 模板预览：原始模板的 index.html 含未替换占位符，直接看是 {{NAME}} 字面量。
+    // 在内存中用示例值渲染后返回（不写磁盘、不影响 FTP 上传内容）。
+    if is_template_preview
+        && target.extension().and_then(|e| e.to_str()) == Some("html")
+    {
+        serve_template_html(request, &target);
+    } else {
+        serve_file(request, &target);
+    }
+}
+
+/// 占位 LOGO（base64 svg，离线可用，不受 CSP 影响）
+const PREVIEW_PLACEHOLDER_LOGO: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIj48cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgcng9IjI0IiBmaWxsPSIjNjRmZmRhIi8+PHRleHQgeD0iNjAiIHk9IjcwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyMiIgZmlsbD0iIzBhMTkyZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TE9HTzwvdGV4dD48L3N2Zz4=";
+
+/// 读取模板 html，用示例值渲染占位符后返回（仅用于模板预览，不写回磁盘）
+fn serve_template_html(request: tiny_http::Request, path: &Path) {
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => {
+            let _ = request.respond(Response::empty(404));
+            return;
+        }
+    };
+    let rendered = crate::utils::render_template(
+        &content,
+        &[
+            ("NAME", "示例应用".to_string()),
+            ("LOGO", PREVIEW_PLACEHOLDER_LOGO.to_string()),
+            ("DOWNLOAD_URL", "#".to_string()),
+        ],
+    );
+    let resp = Response::from_string(rendered).with_header(
+        Header::from_bytes("Content-Type", "text/html; charset=utf-8").expect("valid header"),
+    );
+    let _ = request.respond(resp);
 }
 
 fn serve_file(request: tiny_http::Request, path: &Path) {

@@ -5,7 +5,7 @@ import {
   Globe, Rocket, ExternalLink, Copy, Loader2, Eye,
   ChevronLeft, ChevronRight, FolderOpen, Trash2, Package, ChevronDown, ChevronUp
 } from "lucide-react";
-import type { SubChannelData, LandingPageResult, FtpUploadResult } from "../types";
+import type { SubChannelData, LandingPageResult, FtpUploadResult, TemplateInfo } from "../types";
 import { isTauriRuntime } from "../types";
 
 interface LandingPanelProps {
@@ -44,30 +44,26 @@ export function LandingPanel({
   const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 模板管理状态
-  const [templateDirs, setTemplateDirs] = useState<string[]>([]);
+  const [templateInfos, setTemplateInfos] = useState<TemplateInfo[]>([]);
   const [templatesBaseDir, setTemplatesBaseDir] = useState("");
   const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
-  // 按去掉末尾 -数字 后缀的 base 名分组：comic / comic-1 / comic-2 → "comic"
+  // 按中文分类分组（来自各模板 index.html 预埋的 template-category），同一分类下的目录再排序
   const templateGroups = (() => {
     const groups: Record<string, string[]> = {};
-    for (const dir of templateDirs) {
-      const base = dir.replace(/-\d+$/, "");
-      (groups[base] ||= []).push(dir);
+    for (const info of templateInfos) {
+      (groups[info.category] ||= []).push(info.dir);
     }
     return Object.entries(groups)
-      .map(([base, dirs]) => ({ base, dirs: dirs.sort() }))
-      .sort((a, b) => a.base.localeCompare(b.base));
+      .map(([category, dirs]) => ({ category, dirs: dirs.sort() }))
+      .sort((a, b) => a.category.localeCompare(b.category, "zh-Hans-CN"));
   })();
 
-  const toggleGroup = useCallback((base: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      next.has(base) ? next.delete(base) : next.add(base);
-      return next;
-    });
+  // 手风琴：一次只展开一个分组，切换时上一个自动关闭（卸载其 iframe，避免多页面同时渲染卡死）
+  const toggleGroup = useCallback((category: string) => {
+    setExpandedGroup(prev => (prev === category ? null : category));
   }, []);
 
   // 模板预览：优先走本地 HTTP 预览服务器（相对路径图片/字体能正常加载），兜底 asset 协议
@@ -81,11 +77,11 @@ export function LandingPanel({
     return "";
   }, [previewBaseUrl, templatesBaseDir]);
 
-  const loadTemplateDirs = useCallback(async () => {
+  const loadTemplateInfos = useCallback(async () => {
     if (!isTauriRuntime()) return;
     try {
-      const dirs = await invoke<string[]>("list_template_dirs");
-      setTemplateDirs(dirs);
+      const infos = await invoke<TemplateInfo[]>("list_template_infos");
+      setTemplateInfos(infos);
       if (!templatesBaseDir) {
         const base = await invoke<string>("get_bundled_templates_dir");
         setTemplatesBaseDir(base);
@@ -96,9 +92,9 @@ export function LandingPanel({
   // 展开模板管理时刷新列表
   useEffect(() => {
     if (showTemplateManager) {
-      loadTemplateDirs();
+      loadTemplateInfos();
     }
-  }, [showTemplateManager, loadTemplateDirs]);
+  }, [showTemplateManager, loadTemplateInfos]);
 
   const handleUploadTemplateZip = useCallback(async () => {
     if (!isTauriRuntime()) return;
@@ -114,13 +110,13 @@ export function LandingPanel({
       });
       const names = results.map((r) => r.dir_name).join(", ");
       showToast(`模板上传完成: ${names}`);
-      await loadTemplateDirs();
+      await loadTemplateInfos();
     } catch (e) {
       showToast(`上传失败: ${e}`);
     } finally {
       setIsUploadingTemplate(false);
     }
-  }, [loadTemplateDirs, showToast]);
+  }, [loadTemplateInfos, showToast]);
 
   const handleDeleteTemplate = useCallback(async (dirName: string) => {
     if (!confirm(`确认删除模板 "${dirName}"？此操作不可撤销。`)) return;
@@ -128,11 +124,11 @@ export function LandingPanel({
     try {
       await invoke("delete_template_dir", { dirName });
       showToast(`已删除模板: ${dirName}`);
-      await loadTemplateDirs();
+      await loadTemplateInfos();
     } catch (e) {
       showToast(`删除失败: ${e}`);
     }
-  }, [loadTemplateDirs, showToast]);
+  }, [loadTemplateInfos, showToast]);
 
   const getTemplateIndex = useCallback((id: string) => {
     return templateIndices[id] || 0;
@@ -480,7 +476,7 @@ export function LandingPanel({
           {showTemplateManager ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         </button>
 
-        {showTemplateManager && (
+        <div className={`template-manager-body-wrap${showTemplateManager ? " open" : ""}`}>
           <div className="template-manager-body">
             <div className="landing-actions" style={{ marginBottom: 8 }}>
               <button
@@ -497,20 +493,20 @@ export function LandingPanel({
               </button>
             </div>
 
-            {templateDirs.length === 0 ? (
+            {templateInfos.length === 0 ? (
               <p className="template-manager-empty">暂无模板目录</p>
             ) : (
               <div className="template-group-list">
-                {templateGroups.map(({ base, dirs }) => {
-                  const expanded = expandedGroups.has(base);
+                {templateGroups.map(({ category, dirs }) => {
+                  const expanded = expandedGroup === category;
                   return (
-                    <div key={base} className="template-group">
+                    <div key={category} className="template-group">
                       <button
                         className="template-group-header"
-                        onClick={() => toggleGroup(base)}
+                        onClick={() => toggleGroup(category)}
                       >
-                        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        <span className="template-group-name">{base}</span>
+                        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        <span className="template-group-name">{category}</span>
                         <span className="template-group-count">{dirs.length} 个</span>
                       </button>
                       {expanded && (
@@ -552,7 +548,7 @@ export function LandingPanel({
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

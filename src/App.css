@@ -3108,6 +3108,10 @@ body::before {
   border-top: 1px solid rgba(100, 255, 218, 0.1);
   padding-top: 16px;
   margin-top: 4px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .template-manager-toggle {
@@ -3134,6 +3138,27 @@ body::before {
   background: rgba(15, 52, 96, 0.15);
   border: 1px solid rgba(100, 255, 218, 0.12);
   border-radius: 8px;
+}
+
+/* 顶层“管理模板”展开/收起动画：grid 0fr→1fr，高度自适应 */
+.template-manager-body-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+  flex: 1;
+  min-height: 0;
+}
+.template-manager-body-wrap.open {
+  grid-template-rows: 1fr;
+}
+.template-manager-body-wrap > .template-manager-body {
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.template-manager-body-wrap.open > .template-manager-body {
+  overflow-y: auto;
 }
 
 .template-manager-empty {
@@ -3184,10 +3209,17 @@ body::before {
 
 .template-group-items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, 180px);
+  justify-content: start;
   gap: 10px;
   padding: 10px;
   background: rgba(15, 52, 96, 0.15);
+  animation: groupExpand 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes groupExpand {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .template-card {
@@ -3199,17 +3231,18 @@ body::before {
 
 .template-card-preview {
   position: relative;
-  width: 100%;
-  height: 200px;
+  width: 180px;
+  height: 320px;
   overflow: hidden;
   background: #0a192f;
 }
 
+/* 模拟手机视口 375x667，缩放 180/375 = 0.48 精确填满卡片宽度 */
 .template-preview-iframe {
   width: 375px;
   height: 667px;
   border: none;
-  transform: scale(0.373);
+  transform: scale(0.48);
   transform-origin: top left;
   pointer-events: none;
 }

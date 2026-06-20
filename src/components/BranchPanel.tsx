@@ -1,7 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   FileText, Package, CheckCircle, Copy, Loader2, Eye, EyeOff,
-  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle
+  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User
 } from "lucide-react";
 import { SearchableDropdown } from "./SearchableDropdown";
 import "./Modal.css";
@@ -522,6 +522,7 @@ export function BranchPanel({
             </div>
             <div className="commit-search-bar">
               <div className="commit-search-input-wrapper">
+                <Search size={15} className="commit-search-icon" />
                 <input
                   type="text"
                   className="commit-search-input"
@@ -536,6 +537,7 @@ export function BranchPanel({
                 />
               </div>
               <div className="commit-author-select-wrapper">
+                <User size={15} className="commit-author-icon" />
                 <select
                   className="commit-author-select"
                   value={commitAuthorFilter}

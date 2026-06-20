@@ -576,6 +576,102 @@ pub async fn list_template_dirs() -> Result<Vec<String>, String> {
     Ok(dirs)
 }
 
+/// 单个模板信息：目录名 + 中文分类（来自 index.html 预埋的 `<meta name="template-category">`）
+#[derive(serde::Serialize)]
+pub struct TemplateInfo {
+    pub dir: String,
+    pub category: String,
+}
+
+/// 去掉文件夹名末尾的 `-数字` 后缀：comic-1 → comic，comic → comic
+fn strip_numeric_suffix(name: &str) -> String {
+    if let Some(idx) = name.rfind('-') {
+        let suffix = &name[idx + 1..];
+        if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) {
+            return name[..idx].to_string();
+        }
+    }
+    name.to_string()
+}
+
+/// 从单个标签字符串里提取某个属性的值（兼容单/双引号和无引号写法）
+fn extract_attr_value(tag: &str, attr: &str) -> Option<String> {
+    let key = format!("{}=", attr);
+    let idx = tag.find(&key)?;
+    let after = &tag[idx + key.len()..];
+    let bytes = after.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+    match bytes[0] {
+        b'"' | b'\'' => {
+            let quote = bytes[0] as char;
+            let rest = &after[1..];
+            let end = rest.find(quote)?;
+            Some(rest[..end].to_string())
+        }
+        _ => {
+            // 无引号：取到下一个空白或标签结束符
+            let end = after
+                .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
+                .unwrap_or(after.len());
+            Some(after[..end].to_string())
+        }
+    }
+}
+
+/// 从 index.html 中提取 `<meta name="template-category" content="...">` 的值
+fn extract_template_category(html: &str) -> Option<String> {
+    for pos in html.match_indices("template-category") {
+        // 定位「template-category」所在的标签范围 <...>
+        let tag_start = html[..pos.0].rfind('<').unwrap_or(0);
+        let tag_end = html[tag_start..].find('>').map(|e| tag_start + e + 1)?;
+        let tag = &html[tag_start..tag_end];
+        // 确认 name 属性确实是 template-category（避免正文里恰好出现该词）
+        if extract_attr_value(tag, "name").as_deref() != Some("template-category") {
+            continue;
+        }
+        if let Some(content) = extract_attr_value(tag, "content") {
+            let trimmed = content.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// 读取模板目录下 index.html 预埋的中文分类，缺失或读不到返回 None
+fn read_template_category(dir: &Path) -> Option<String> {
+    let html = fs::read_to_string(dir.join("index.html")).ok()?;
+    extract_template_category(&html)
+}
+
+/// 列出所有模板目录及其中文分类（前端按 category 折叠分组展示）
+#[tauri::command]
+pub async fn list_template_infos() -> Result<Vec<TemplateInfo>, String> {
+    let root = templates_root();
+    let mut infos: Vec<TemplateInfo> = Vec::new();
+    if let Ok(entries) = fs::read_dir(&root) {
+        for entry in entries.flatten() {
+            if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            // 优先用 index.html 预埋的中文分类，缺失则回退到英文文件夹名（去 -数字 后缀）
+            let category = read_template_category(&entry.path())
+                .unwrap_or_else(|| strip_numeric_suffix(&name));
+            infos.push(TemplateInfo { dir: name, category });
+        }
+    }
+    // 先按分类、再按目录名排序
+    infos.sort_by(|a, b| a.category.cmp(&b.category).then_with(|| a.dir.cmp(&b.dir)));
+    Ok(infos)
+}
+
 #[tauri::command]
 pub async fn upload_template_zip(zip_path: String) -> Result<Vec<serde_json::Value>, String> {
     let zip_file = fs::File::open(&zip_path)

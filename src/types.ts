@@ -136,6 +136,11 @@ export interface FtpUploadItem {
   remote_dir: string;
 }
 
+export interface TemplateInfo {
+  dir: string;
+  category: string;
+}
+
 // ==================== 常量 ====================
 
 export const DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE = `FROM {{BASE_IMAGE}}
