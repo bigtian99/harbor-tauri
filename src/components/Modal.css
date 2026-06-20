@@ -455,6 +455,7 @@
   border-radius: 12px;
   width: 90%;
   max-width: 720px;
+  height: 80vh;
   max-height: 80vh;
   display: flex;
   flex-direction: column;

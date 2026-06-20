@@ -615,7 +615,8 @@ export function BranchPanel({
                 上一页
               </button>
               <span className="modal-pagination-info">
-                第 {commitListPage} 页
+                {/* ponytail: pageSize 写死 10，与 App.tsx loadCommitList 与后端默认保持一致；改分页大小需三处同步 */}
+                第 {commitListPage} / {Math.max(1, Math.ceil(commitListTotal / 10))} 页
               </span>
               <button
                 className="pagination-btn"
