@@ -26,6 +26,7 @@
   border: 1px solid rgba(100, 255, 218, 0.2);
   border-radius: 12px;
   width: 90%;
+  height: 80vh;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -456,7 +457,6 @@
   width: 90%;
   max-width: 720px;
   height: 80vh;
-  max-height: 80vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);

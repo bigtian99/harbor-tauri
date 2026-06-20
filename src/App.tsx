@@ -90,6 +90,7 @@ function App() {
   const [commitList, setCommitList] = useState<CommitInfo[]>([]);
   const [commitListTotal, setCommitListTotal] = useState(0);
   const [commitListPage, setCommitListPage] = useState(1);
+  const [commitListPageSize, setCommitListPageSize] = useState(10);
   const [commitAuthorFilter, setCommitAuthorFilter] = useState("");
   const [commitMessageFilter, setCommitMessageFilter] = useState("");
   const [commitAuthors, setCommitAuthors] = useState<AuthorInfo[]>([]);
@@ -393,6 +394,7 @@ function App() {
       setCommitList(result.commits);
       setCommitListTotal(result.total);
       setCommitListPage(result.page);
+      setCommitListPageSize(result.page_size);
     } catch (e) {
       console.error("[Commit List] 获取失败:", e);
       setCommitList([]);
@@ -985,6 +987,7 @@ function App() {
             commitAuthors={commitAuthors}
             isLoadingCommitList={loading.commitList}
             commitListPage={commitListPage}
+            commitListPageSize={commitListPageSize}
             commitAuthorFilter={commitAuthorFilter}
             commitMessageFilter={commitMessageFilter}
             setCommitAuthorFilter={setCommitAuthorFilter}

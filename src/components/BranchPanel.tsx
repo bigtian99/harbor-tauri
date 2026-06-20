@@ -73,6 +73,7 @@ interface BranchPanelProps {
   commitAuthors: AuthorInfo[];
   isLoadingCommitList: boolean;
   commitListPage: number;
+  commitListPageSize: number;
   commitAuthorFilter: string;
   commitMessageFilter: string;
   setCommitAuthorFilter: (filter: string) => void;
@@ -101,7 +102,7 @@ export function BranchPanel({
   onBranchChange, onFrontendDirChange, onSelectedBuildScriptChange,
   onPackageWithBackendChange, onSpringProfileChange, onAutoPushImageChange,
   onRememberSettingsChange, setShowCommitListModal, loadCommitList, loadCommitAuthors,
-  commitAuthors, isLoadingCommitList, commitListPage,
+  commitAuthors, isLoadingCommitList, commitListPage, commitListPageSize,
   commitAuthorFilter, commitMessageFilter, setCommitAuthorFilter, setCommitMessageFilter,
   onPackageFromBranch, onCancelBuild, onOpenDirectory, onCopyImage,
   setImageName, setImageTag, setShowAdvancedSettings, setShowBuildLog,
@@ -606,26 +607,28 @@ export function BranchPanel({
                 </div>
               </div>
             )}
-            <div className="modal-pagination">
-              <button
-                className="pagination-btn"
-                disabled={commitListPage <= 1 || isLoadingCommitList}
-                onClick={() => loadCommitList(repoPath, branchName, commitListPage - 1, commitAuthorFilter, commitMessageFilter)}
-              >
-                上一页
-              </button>
-              <span className="modal-pagination-info">
-                {/* ponytail: pageSize 写死 10，与 App.tsx loadCommitList 与后端默认保持一致；改分页大小需三处同步 */}
-                第 {commitListPage} / {Math.max(1, Math.ceil(commitListTotal / 10))} 页
-              </span>
-              <button
-                className="pagination-btn"
-                disabled={isLoadingCommitList}
-                onClick={() => loadCommitList(repoPath, branchName, commitListPage + 1, commitAuthorFilter, commitMessageFilter)}
-              >
-                下一页
-              </button>
-            </div>
+            {commitListTotal > 0 && (
+              <div className="modal-pagination">
+                <button
+                  className="pagination-btn"
+                  disabled={commitListPage <= 1 || isLoadingCommitList}
+                  onClick={() => loadCommitList(repoPath, branchName, commitListPage - 1, commitAuthorFilter, commitMessageFilter)}
+                >
+                  上一页
+                </button>
+                <span className="modal-pagination-info">
+                  {/* ponytail: 总页数 = 总记录 / 后端 page_size */}
+                  第 {commitListPage} / {Math.ceil(commitListTotal / commitListPageSize)} 页
+                </span>
+                <button
+                  className="pagination-btn"
+                  disabled={isLoadingCommitList}
+                  onClick={() => loadCommitList(repoPath, branchName, commitListPage + 1, commitAuthorFilter, commitMessageFilter)}
+                >
+                  下一页
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
