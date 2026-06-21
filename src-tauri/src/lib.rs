@@ -27,6 +27,13 @@ use landing::{
 };
 use preview_server::get_preview_server_info;
 
+/// 编译时注入：`OPS_MODE=true tauri build` 构建的版本返回 true，
+/// 前端据此动态隐藏非运营菜单。
+#[tauri::command]
+fn is_ops_mode() -> bool {
+    option_env!("OPS_MODE").is_some()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -39,6 +46,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            is_ops_mode,
             load_config,
             save_config,
             list_git_branches,

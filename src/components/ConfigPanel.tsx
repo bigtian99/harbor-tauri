@@ -122,6 +122,40 @@ export function ConfigPanel({
                 placeholder="例如: 8181"
               />
             </div>
+            <div className="form-group">
+              <label><FolderOpen size={14} /> tools 目录 (--build-context)</label>
+              <div className="path-picker-row">
+                <input
+                  type="text"
+                  value={config.custom_docker_extras_dir}
+                  onChange={(e) => onConfigChange("custom_docker_extras_dir", e.target.value)}
+                  placeholder="例如: /Users/daijunxiong/code/packingmachine/tools"
+                />
+                <button
+                  type="button"
+                  className="path-picker-btn"
+                  onClick={async () => {
+                    if (!isTauriRuntime()) return;
+                    try {
+                      const selected = await open({
+                        multiple: false,
+                        directory: true,
+                        recursive: false,
+                        title: "选择 tools 目录",
+                      });
+                      if (selected) {
+                        onConfigChange("custom_docker_extras_dir", selected as string);
+                      }
+                    } catch (e) {
+                      console.error("选择目录失败:", e);
+                    }
+                  }}
+                >
+                  <FolderOpen size={16} /> 选择
+                </button>
+              </div>
+              <p className="template-hint">填 tools/ 的绝对路径，jarporter 通过 <code>--build-context tools=</code> 注入。Dockerfile 里用 <code>COPY --from=tools ./ /opt/tools/</code> 获取。</p>
+            </div>
           </>
         )}
 

@@ -618,7 +618,6 @@ export function LandingPanel({
                   onClick={() => {
                     window.open(previewOverlay.src, '_blank');
                   }}
-                  title="在外部浏览器打开"
                 >
                   <ExternalLink size={14} />
                 </button>

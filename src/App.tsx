@@ -34,6 +34,7 @@ function App() {
   // ==================== 核心状态 ====================
   const [activeTab, setActiveTab] = useState<TabType>("upload");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [opsMode, setOpsMode] = useState(false);
   const [config, setConfig] = useState<HarborConfig>({
     harbor_url: "dockerhub.kubekey.local",
     username: "",
@@ -57,6 +58,7 @@ function App() {
     npm_package_manager: "npm",
     npm_registry: "",
     artifact_output_dir: "",
+    custom_docker_extras_dir: "",
     build_history: [],
   });
 
@@ -770,6 +772,14 @@ function App() {
     loadConfig();
     if (!isTauriRuntime()) return;
 
+    // 检查是否为运营版构建（编译时注入 OPS_MODE=true）
+    invoke<boolean>("is_ops_mode").then((ops) => {
+      if (ops) {
+        setOpsMode(true);
+        setActiveTab("landing");
+      }
+    }).catch(() => {/* 非 Tauri 环境忽略 */});
+
     const appWindow = getCurrentWindow();
     const unlistenProgress = appWindow.listen<{ percent: number; message: string }>(
       "build-progress",
@@ -901,6 +911,7 @@ function App() {
       <Sidebar
         activeTab={activeTab}
         sidebarCollapsed={sidebarCollapsed}
+        opsMode={opsMode}
         onTabChange={setActiveTab}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />

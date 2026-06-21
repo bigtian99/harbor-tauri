@@ -7,17 +7,22 @@ import type { TabType } from "../types";
 interface SidebarProps {
   activeTab: TabType;
   sidebarCollapsed: boolean;
+  opsMode: boolean;
   onTabChange: (tab: TabType) => void;
   onToggleCollapse: () => void;
 }
 
-export function Sidebar({ activeTab, sidebarCollapsed, onTabChange, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onToggleCollapse }: SidebarProps) {
   const navItems: { tab: TabType; icon: React.ReactNode; label: string }[] = [
     { tab: "upload", icon: <Upload size={18} />, label: "上传推送" },
     { tab: "branch", icon: <GitBranch size={18} />, label: "分支打包" },
     { tab: "history", icon: <History size={18} />, label: "历史记录" },
     { tab: "landing", icon: <Globe size={18} />, label: "生成落地页" },
   ];
+
+  const visibleItems = opsMode
+    ? navItems.filter(i => i.tab === "landing")
+    : navItems;
 
   return (
     <>
@@ -26,8 +31,9 @@ export function Sidebar({ activeTab, sidebarCollapsed, onTabChange, onToggleColl
           <Container size={24} className="header-icon" />
           {!sidebarCollapsed && <h1>JarPorter</h1>}
         </div>
+
         <nav className="sidebar-nav">
-          {navItems.map(({ tab, icon, label }) => (
+          {visibleItems.map(({ tab, icon, label }) => (
             <button
               key={tab}
               className={`sidebar-item ${activeTab === tab ? "active" : ""}`}
@@ -43,20 +49,22 @@ export function Sidebar({ activeTab, sidebarCollapsed, onTabChange, onToggleColl
             </button>
           ))}
         </nav>
-        <div className="sidebar-footer">
-          <button
-            className="sidebar-item settings-item"
-            onClick={() => onTabChange("config")}
-            data-label="Harbor配置"
-            onMouseEnter={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              document.documentElement.style.setProperty('--tooltip-top', `${rect.top + rect.height / 2}px`);
-            }}
-          >
-            <Settings size={18} />
-            {!sidebarCollapsed && <span>Harbor配置</span>}
-          </button>
-        </div>
+        {!opsMode && (
+          <div className="sidebar-footer">
+            <button
+              className="sidebar-item settings-item"
+              onClick={() => onTabChange("config")}
+              data-label="Harbor配置"
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-top', `${rect.top + rect.height / 2}px`);
+              }}
+            >
+              <Settings size={18} />
+              {!sidebarCollapsed && <span>Harbor配置</span>}
+            </button>
+          </div>
+        )}
       </aside>
 
       <button

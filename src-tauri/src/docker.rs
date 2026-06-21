@@ -3,6 +3,16 @@ use crate::utils::{copy_dir_contents, create_temp_build_dir, docker_json_string,
 use std::fs;
 use std::path::Path;
 
+/// 拼接 tools 的 --build-context 片段（如 `--build-context tools=/path/tools`），未配置则返回空
+pub(crate) fn tools_dir_build_args(custom_docker_extras_dir: &str) -> Vec<String> {
+    let trimmed = custom_docker_extras_dir.trim();
+    if trimmed.is_empty() {
+        Vec::new()
+    } else {
+        vec!["--build-context".to_string(), format!("tools={}", trimmed)]
+    }
+}
+
 pub(crate) fn prepare_custom_docker_context(
     config: &HarborConfig,
     artifact_path: &Path,
