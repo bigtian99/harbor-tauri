@@ -347,6 +347,10 @@ function App() {
         branch: branch.trim(),
       });
       setSpringProfiles(profiles);
+      // ponytail: 检测到 test profile 时自动选中，仅在用户尚未手动选过时生效
+      if (profiles.includes("test")) {
+        setSpringProfile(prev => prev || "test");
+      }
     } catch (e) {
       console.error("[Spring Profiles] 检测失败:", e);
       setSpringProfiles([]);
