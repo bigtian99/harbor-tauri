@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { notifications } from "@mantine/notifications";
 import type { SubChannelData, LandingPageResult, FtpUploadResult, TabType } from "../types";
 import { isTauriRuntime } from "../types";
 
@@ -10,15 +11,15 @@ interface UseLandingDeps {
   setLog: (value: string) => void;
   setProgress: (value: number) => void;
   setProgressMessage: (value: string) => void;
-  showToast: (message: string, duration?: number) => void;
 }
 
 /**
  * 落地页生成与 FTP 上传的全部状态与逻辑。
  * progress / progressMessage 由 App 持有并传入（构建流程也复用）。
+ * 通知使用 Mantine Notifications 系统。
  */
 export function useLanding(deps: UseLandingDeps) {
-  const { activeTab, setLog, setProgress, setProgressMessage, showToast } = deps;
+  const { activeTab, setLog, setProgress, setProgressMessage } = deps;
 
   const [landingTemplateBase, setLandingTemplateBase] = useState("");
   const [landingIds, setLandingIds] = useState("");
@@ -60,14 +61,21 @@ export function useLanding(deps: UseLandingDeps) {
       if (showDoneToast) {
         const success = results.filter((r) => r.status === "success").length;
         const failed = results.length - success;
-        showToast(
-          failed > 0
+        notifications.show({
+          message: failed > 0
             ? `生成完成: 成功 ${success} 个, 失败 ${failed} 个`
-            : `生成完成: 成功 ${success} 个`
-        );
+            : `生成完成: 成功 ${success} 个`,
+          color: failed > 0 ? "yellow" : "teal",
+          autoClose: 3000,
+        });
       }
     } catch (e) {
-      showToast(`操作失败: ${e}`);
+      notifications.show({
+        title: "操作失败",
+        message: String(e),
+        color: "red",
+        autoClose: 5000,
+      });
     } finally {
       setIsFetchingPreview(false);
       setIsGenerating(false);
@@ -98,7 +106,11 @@ export function useLanding(deps: UseLandingDeps) {
           };
         });
       if (items.length === 0) {
-        showToast("没有可上传的已成功生成的落地页");
+        notifications.show({
+          message: "没有可上传的已成功生成的落地页",
+          color: "yellow",
+          autoClose: 3000,
+        });
         return;
       }
       const results = await invoke<FtpUploadResult[]>("upload_landing_to_ftp", { items });
@@ -106,9 +118,18 @@ export function useLanding(deps: UseLandingDeps) {
       for (const r of results) { map[r.id] = r; }
       setFtpUploadResults(map);
       const success = results.filter((r) => r.status === "success").length;
-      showToast(`FTP 上传完成: 成功 ${success} / ${results.length}`);
+      notifications.show({
+        message: `FTP 上传完成: 成功 ${success} / ${results.length}`,
+        color: success === results.length ? "teal" : "yellow",
+        autoClose: 3000,
+      });
     } catch (e) {
-      showToast(`FTP 上传失败: ${e}`);
+      notifications.show({
+        title: "FTP 上传失败",
+        message: String(e),
+        color: "red",
+        autoClose: 5000,
+      });
     } finally {
       setIsUploadingToFtp(false);
     }
@@ -119,11 +140,19 @@ export function useLanding(deps: UseLandingDeps) {
       .filter((r) => r.status === "success")
       .map((r) => r.url);
     if (urls.length === 0) {
-      showToast("没有可复制的链接");
+      notifications.show({
+        message: "没有可复制的链接",
+        color: "yellow",
+        autoClose: 3000,
+      });
       return;
     }
     await navigator.clipboard.writeText(urls.join("\n"));
-    showToast(`已复制 ${urls.length} 个链接`);
+    notifications.show({
+      message: `已复制 ${urls.length} 个链接`,
+      color: "teal",
+      autoClose: 2000,
+    });
   }
 
   // 进入落地页标签时获取模板目录、临时输出目录与本地预览服务地址

@@ -1,5 +1,5 @@
 use crate::models::{ArtifactType, DockerBuildContext, HarborConfig};
-use crate::utils::{copy_dir_contents, create_temp_build_dir, docker_json_string, render_template};
+use crate::utils::{copy_dir_contents, create_temp_build_dir, docker_json_string, find_project_nginx, render_template};
 use std::fs;
 use std::path::Path;
 
@@ -68,7 +68,9 @@ pub(crate) fn prepare_custom_docker_context(
 
             // 生成 nginx 配置
             let nginx_path = context_dir.join("nginx.conf");
-            let nginx_content = render_template(&config.frontend_nginx_template, &replacements);
+            // nginx.conf 优先级：项目自带 > 兜底模板
+            let nginx_content = find_project_nginx(artifact_path)
+                .unwrap_or_else(|| render_template(&config.frontend_nginx_template, &replacements));
             fs::write(&nginx_path, nginx_content)
                 .map_err(|e| format!("写入nginx配置失败: {}", e))?;
 
@@ -171,7 +173,12 @@ pub(crate) fn prepare_frontend_dist_context(
     let dockerfile_path = context_dir.join("Dockerfile");
     let nginx_path = context_dir.join("nginx.conf");
     let dockerfile_content = render_template(&config.frontend_dockerfile_template, &replacements);
-    let nginx_content = render_template(&config.frontend_nginx_template, &replacements);
+
+    // nginx.conf 优先级：项目自带 > 兜底模板
+    let nginx_content = find_project_nginx(artifact_path)
+        .unwrap_or_else(|| {
+            render_template(&config.frontend_nginx_template, &replacements)
+        });
 
     if let Err(error) = fs::write(&dockerfile_path, dockerfile_content) {
         fs::remove_dir_all(&context_dir).ok();

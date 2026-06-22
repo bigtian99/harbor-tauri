@@ -1,9 +1,37 @@
 import { useState, useCallback, useRef } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { notifications } from "@mantine/notifications";
 import {
-  Globe, Rocket, ExternalLink, Copy, Loader2, Eye,
-  ChevronLeft, ChevronRight, FolderOpen, Trash2, Package, ChevronDown, X, Maximize2
+  TextInput,
+  Button,
+  Group,
+  Stack,
+  Table,
+  Badge,
+  Text,
+  Title,
+  Progress,
+  Modal,
+  Accordion,
+  ActionIcon,
+  Tooltip,
+  Paper,
+  Box,
+} from "@mantine/core";
+import {
+  Globe,
+  Rocket,
+  ExternalLink,
+  Copy,
+  Loader2,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  FolderOpen,
+  Trash2,
+  Package,
+  Maximize2,
 } from "lucide-react";
 import type { SubChannelData, LandingPageResult, FtpUploadResult, TemplateInfo } from "../types";
 import { isTauriRuntime } from "../types";
@@ -26,7 +54,6 @@ interface LandingPanelProps {
   onPreview: () => void;
   onFtpUpload: () => void;
   onCopyAllLinks: () => void;
-  showToast: (message: string, duration?: number) => void;
 }
 
 export function LandingPanel({
@@ -38,7 +65,6 @@ export function LandingPanel({
   landingOutputDir, previewBaseUrl,
   setLandingIds,
   onPreview, onFtpUpload, onCopyAllLinks,
-  showToast,
 }: LandingPanelProps) {
   const [animatingCards, setAnimatingCards] = useState<Record<string, string>>({});
   const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -48,7 +74,6 @@ export function LandingPanel({
   const [templatesBaseDir, setTemplatesBaseDir] = useState("");
   const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   // 预览浮层状态
   const [previewOverlay, setPreviewOverlay] = useState<{
@@ -56,7 +81,7 @@ export function LandingPanel({
     title: string;
   } | null>(null);
 
-  // 按中文分类分组（来自各模板 index.html 预埋的 template-category），同一分类下的目录再排序
+  // 按中文分类分组
   const templateGroups = (() => {
     const groups: Record<string, string[]> = {};
     for (const info of templateInfos) {
@@ -67,12 +92,7 @@ export function LandingPanel({
       .sort((a, b) => a.category.localeCompare(b.category, "zh-Hans-CN"));
   })();
 
-  // 手风琴：一次只展开一个分组，切换时上一个自动关闭（卸载其 iframe，避免多页面同时渲染卡死）
-  const toggleGroup = useCallback((category: string) => {
-    setExpandedGroup(prev => (prev === category ? null : category));
-  }, []);
-
-  // 模板预览：优先走本地 HTTP 预览服务器（相对路径图片/字体能正常加载），兜底 asset 协议
+  // 模板预览：优先走本地 HTTP 预览服务器
   const getTemplatePreviewSrc = useCallback((dir: string) => {
     if (previewBaseUrl) {
       return `${previewBaseUrl}/__templates__/${encodeURIComponent(dir)}/index.html`;
@@ -95,7 +115,6 @@ export function LandingPanel({
     } catch { /* 忽略 */ }
   }, [templatesBaseDir]);
 
-  // 打开模板管理时刷新列表
   const handleOpenTemplateManager = useCallback(() => {
     setShowTemplateManager(true);
     loadTemplateInfos();
@@ -114,48 +133,46 @@ export function LandingPanel({
         zipPath: selected as string,
       });
       const names = results.map((r) => r.dir_name).join(", ");
-      showToast(`模板上传完成: ${names}`);
+      notifications.show({ message: `模板上传完成: ${names}`, color: "teal", autoClose: 3000 });
       await loadTemplateInfos();
     } catch (e) {
-      showToast(`上传失败: ${e}`);
+      notifications.show({ title: "上传失败", message: String(e), color: "red", autoClose: 5000 });
     } finally {
       setIsUploadingTemplate(false);
     }
-  }, [loadTemplateInfos, showToast]);
+  }, [loadTemplateInfos]);
 
   const handleDeleteTemplate = useCallback(async (dirName: string) => {
-    if (!confirm(`确认删除模板 "${dirName}"？此操作不可撤销。`)) return;
+    if (!window.confirm(`确认删除模板 "${dirName}"？此操作不可撤销。`)) return;
     if (!isTauriRuntime()) return;
     try {
       await invoke("delete_template_dir", { dirName });
-      showToast(`已删除模板: ${dirName}`);
+      notifications.show({ message: `已删除模板: ${dirName}`, color: "teal", autoClose: 3000 });
       await loadTemplateInfos();
     } catch (e) {
-      showToast(`删除失败: ${e}`);
+      notifications.show({ title: "删除失败", message: String(e), color: "red", autoClose: 5000 });
     }
-  }, [loadTemplateInfos, showToast]);
+  }, [loadTemplateInfos]);
 
   const getTemplateIndex = useCallback((id: string) => {
     return templateIndices[id] || 0;
   }, [templateIndices]);
 
-  const switchTemplate = useCallback((id: string, direction: 'prev' | 'next') => {
+  const switchTemplate = useCallback((id: string, direction: "prev" | "next") => {
     const result = landingGenerated[id];
     if (!result || !result.template_dirs || result.template_dirs.length <= 1) return;
 
-    // 清除之前的动画定时器
     if (animationTimerRef.current) {
       clearTimeout(animationTimerRef.current);
     }
 
-    // 设置动画类名
-    const animClass = direction === 'prev' ? 'animating-left' : 'animating-right';
+    const animClass = direction === "prev" ? "animating-left" : "animating-right";
     setAnimatingCards(prev => ({ ...prev, [id]: animClass }));
 
     setTemplateIndices(prev => {
       const currentIndex = prev[id] || 0;
       let newIndex: number;
-      if (direction === 'prev') {
+      if (direction === "prev") {
         newIndex = currentIndex > 0 ? currentIndex - 1 : result.template_dirs.length - 1;
       } else {
         newIndex = currentIndex < result.template_dirs.length - 1 ? currentIndex + 1 : 0;
@@ -163,16 +180,13 @@ export function LandingPanel({
       return { ...prev, [id]: newIndex };
     });
 
-    // 动画完成后移除动画类名
     animationTimerRef.current = setTimeout(() => {
-      setAnimatingCards(prev => ({ ...prev, [id]: '' }));
+      setAnimatingCards(prev => ({ ...prev, [id]: "" }));
     }, 400);
   }, [landingGenerated]);
 
   const getTemplateIframeSrc = useCallback((genResult: LandingPageResult, templateIdx: number) => {
     const idx = genResult.template_dirs && genResult.template_dirs.length > 0 ? templateIdx : 0;
-    // 优先走本地 HTTP 预览服务器：相对路径与 FTP 部署一致，本地图片/字体能正常加载
-    // 额外校验 output_dir 在 base 之后紧跟 '/'，避免同前缀目录（如 ...pages2_x）误判
     const base = landingOutputDir;
     if (
       previewBaseUrl &&
@@ -185,11 +199,9 @@ export function LandingPanel({
       const encoded = file.split("/").map(encodeURIComponent).join("/");
       return `${previewBaseUrl}/${encoded}`;
     }
-    // 兜底：预览服务未就绪时退回 asset 协议（旧逻辑）
     return convertFileSrc(`${genResult.output_dir}/template_${idx}/index.html`);
   }, [previewBaseUrl, landingOutputDir]);
 
-  // 获取轮播中三个位置的模板索引
   const getCarouselIndices = useCallback((id: string, total: number) => {
     const current = getTemplateIndex(id);
     const indices: number[] = [];
@@ -199,447 +211,629 @@ export function LandingPanel({
     } else if (total === 2) {
       indices.push(0, 1);
     } else {
-      // 左边
       indices.push(current > 0 ? current - 1 : total - 1);
-      // 中间
       indices.push(current);
-      // 右边
       indices.push(current < total - 1 ? current + 1 : 0);
     }
 
     return indices;
   }, [getTemplateIndex]);
 
-  // 在应用内打开模板预览浮层
   const openInAppPreview = useCallback((src: string, title: string) => {
     setPreviewOverlay({ src, title });
   }, []);
 
-  // 关闭预览浮层
   const closePreviewOverlay = useCallback(() => {
     setPreviewOverlay(null);
   }, []);
 
-  // 关闭模板管理弹窗
   const closeTemplateManager = useCallback(() => {
     setShowTemplateManager(false);
-    setExpandedGroup(null);
   }, []);
 
+  // 是否有已生成的结果
+  const hasGeneratedResults = Object.keys(landingGenerated).length > 0;
+  const hasFtpResults = Object.keys(ftpUploadResults).length > 0;
+
   return (
-    <div className="landing-panel">
-      <h2><Globe size={20} /> 生成落地页</h2>
+    <Box style={{ padding: "32px 40px" }}>
+        <Stack gap="md">
+          {/* 标题 */}
+          <Group gap="xs">
+            <Globe size={22} />
+            <Title order={3}>生成落地页</Title>
+          </Group>
 
-      <div className="form-group">
-        <label>子渠道 IDs（逗号分隔）</label>
-        <input
-          type="text"
-          className="form-input"
-          value={landingIds}
-          onChange={(e) => setLandingIds(e.target.value)}
-          placeholder="例如: 154,155,156"
-        />
-      </div>
+          {/* 子渠道 IDs */}
+          <TextInput
+            value={landingIds}
+            onChange={(e) => setLandingIds(e.currentTarget.value)}
+            placeholder="例如: 154,155,156"
+            label="子渠道 IDs（逗号分隔）"
+          />
 
-      <div className="landing-actions">
-        {Object.keys(landingGenerated).length === 0 && (
-          <button
-            className="save-btn"
-            disabled={!landingIds || isFetchingPreview || isGenerating}
-            onClick={onPreview}
-          >
-            {isFetchingPreview || isGenerating ? (
-              <Loader2 size={14} className="spin" />
-            ) : (
-              <Rocket size={14} />
+          {/* 操作按钮 */}
+          <Group gap="sm">
+            {!hasGeneratedResults && (
+              <Button
+                leftSection={isFetchingPreview || isGenerating ? <Loader2 size={14} className="spin" /> : <Rocket size={14} />}
+                disabled={!landingIds || isFetchingPreview || isGenerating}
+                onClick={onPreview}
+                variant="gradient"
+                gradient={{ from: "teal", to: "cyan" }}
+              >
+                预览数据
+              </Button>
             )}
-            预览数据
-          </button>
-        )}
-        {Object.keys(landingGenerated).length > 0 && !isGenerating && (
-          <button
-            className="save-btn"
-            disabled={isUploadingToFtp}
-            onClick={onFtpUpload}
-          >
-            {isUploadingToFtp ? (
-              <Loader2 size={14} className="spin" />
-            ) : (
-              <ExternalLink size={14} />
+            {hasGeneratedResults && !isGenerating && (
+              <Button
+                leftSection={isUploadingToFtp ? <Loader2 size={14} className="spin" /> : <ExternalLink size={14} />}
+                disabled={isUploadingToFtp}
+                onClick={onFtpUpload}
+                color="blue"
+              >
+                上传到 FTP
+              </Button>
             )}
-            上传到 FTP
-          </button>
-        )}
-        {Object.keys(ftpUploadResults).length > 0 && !isGenerating && (
-          <button className="save-btn" onClick={onCopyAllLinks}>
-            <Copy size={14} />
-            复制所有链接
-          </button>
-        )}
-        {/* 管理模板按钮 — 更显眼 */}
-        <button className="save-btn" onClick={handleOpenTemplateManager} style={{ marginLeft: 'auto' }}>
-          <Package size={14} />
-          管理模板
-        </button>
-      </div>
+            {hasFtpResults && !isGenerating && (
+              <Button
+                leftSection={<Copy size={14} />}
+                onClick={onCopyAllLinks}
+                variant="outline"
+                color="gray"
+              >
+                复制所有链接
+              </Button>
+            )}
+            <Button
+              leftSection={<Package size={14} />}
+              onClick={handleOpenTemplateManager}
+              variant="light"
+              color="gray"
+              style={{ marginLeft: "auto" }}
+            >
+              管理模板
+            </Button>
+          </Group>
 
-      {isUploadingToFtp && (
-        <div className="build-progress">
-          <div className="progress-info">
-            <p className="progress-message">{progressMessage}</p>
-            <span className="progress-percent">{progress}%</span>
-          </div>
-          <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${progress}%` }} />
-          </div>
-        </div>
-      )}
+          {/* FTP 上传进度 */}
+          {isUploadingToFtp && (
+            <Paper p="sm" withBorder>
+              <Group justify="space-between" mb={4}>
+                <Text size="sm">{progressMessage}</Text>
+                <Text size="sm" fw={600}>{progress}%</Text>
+              </Group>
+              <Progress value={progress} animated color="blue" size="sm" />
+            </Paper>
+          )}
 
-      {landingPreviewData.length > 0 && (
-        <div className="landing-section">
-          <div className="landing-table">
-            <div className="landing-table-header">
-              <span className="lt-col lt-col-logo"></span>
-              <span className="lt-col lt-col-name">名称</span>
-              <span className="lt-col lt-col-type">类型</span>
-              <span className="lt-col lt-col-product">产品</span>
-              <span className="lt-col lt-col-template">模板</span>
-              <span className="lt-col lt-col-id">ID</span>
-              <span className="lt-col lt-col-status">状态</span>
-              <span className="lt-col lt-col-action">操作</span>
-            </div>
-            {landingPreviewData.map((item, idx) => {
-              const genResult = landingGenerated[item.id];
-              const ftpResult = ftpUploadResults[item.id];
-              const currentTemplateIndex = getTemplateIndex(item.id);
-              const hasMultipleTemplates = genResult?.template_dirs && genResult.template_dirs.length > 1;
-              return (
-                <div key={item.id || idx} className="landing-table-row">
-                  <span className="lt-col lt-col-logo">
-                    {item.subChannelLogo ? (
-                      <img
-                        src={item.subChannelLogo}
-                        alt={item.subChannelName || ""}
-                        className="lt-logo"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="lt-logo-placeholder">
-                        {(item.subChannelName || "?").charAt(0)}
-                      </div>
-                    )}
-                  </span>
-                  <span className="lt-col lt-col-name" title={item.subChannelName || ""}>
-                    {item.subChannelName || "(未命名)"}
-                  </span>
-                  <span className="lt-col lt-col-type">
-                    <span className="item-badge">{item.typeCode || "-"}</span>
-                  </span>
-                  <span className="lt-col lt-col-product">
-                    {item.productName && (
-                      <span className="item-badge item-badge-product">{item.productName}</span>
-                    )}
-                  </span>
-                  <span className="lt-col lt-col-template">
-                    {genResult?.status === "success" ? (
-                      <div className="lt-iframe-carousel">
-                        {hasMultipleTemplates && (
-                          <div className="lt-iframe-nav">
-                            <button
-                              className="lt-iframe-nav-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                switchTemplate(item.id, 'prev');
-                              }}
-                              title="上一个模板"
-                            >
-                              <ChevronLeft size={14} />
-                            </button>
-                          </div>
-                        )}
-
-                        {hasMultipleTemplates ? (
-                          getCarouselIndices(item.id, genResult.template_dirs.length).map((tempIdx, pos) => {
-                            const isCenter = pos === 1 || genResult.template_dirs.length < 3;
-                            return (
-                              <div
-                                key={tempIdx}
-                                className={`lt-iframe-card ${isCenter ? 'card-center' : 'card-side'} ${isCenter && animatingCards[item.id] ? animatingCards[item.id] : ''}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openInAppPreview(
-                                    getTemplateIframeSrc(genResult, tempIdx),
-                                    `${item.subChannelName || ""} - 模板${tempIdx + 1}`
-                                  );
+          {/* 数据表格 */}
+          {landingPreviewData.length > 0 && (
+            <Paper withBorder radius="md" style={{ overflow: "hidden" }}>
+              <Box style={{ overflowX: "auto" }}>
+                <Table highlightOnHover verticalSpacing="sm" horizontalSpacing="sm" style={{ tableLayout: "fixed", minWidth: 1000 }}>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th style={{ width: 46, textAlign: "center" }}></Table.Th>
+                      <Table.Th style={{ width: 140 }}>名称</Table.Th>
+                      <Table.Th style={{ width: 120 }}>类型</Table.Th>
+                      <Table.Th style={{ width: 300 }}>产品</Table.Th>
+                      <Table.Th style={{ width: 200, textAlign: "center" }}>模板</Table.Th>
+                      <Table.Th style={{ width: 80 }}>ID</Table.Th>
+                      <Table.Th style={{ width: 110, textAlign: "center" }}>状态</Table.Th>
+                      <Table.Th style={{ width: 100, textAlign: "right" }}>操作</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {landingPreviewData.map((item, idx) => {
+                      const genResult = landingGenerated[item.id];
+                      const ftpResult = ftpUploadResults[item.id];
+                      const currentTemplateIndex = getTemplateIndex(item.id);
+                      const hasMultipleTemplates = genResult?.template_dirs && genResult.template_dirs.length > 1;
+                      return (
+                        <Table.Tr key={item.id || idx}>
+                          {/* Logo */}
+                          <Table.Td style={{ textAlign: "center" }}>
+                            {item.subChannelLogo ? (
+                              <img
+                                src={item.subChannelLogo}
+                                alt={item.subChannelName || ""}
+                                style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover" }}
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = "none";
                                 }}
-                                title={`模板 ${tempIdx + 1}`}
-                              >
-                                <div className="lt-iframe-wrapper">
-                                  <iframe
-                                    src={getTemplateIframeSrc(genResult, tempIdx)}
-                                    className="lt-iframe"
-                                    loading="lazy"
-                                    title={`${item.subChannelName || ""} - 模板${tempIdx + 1}`}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div
-                            className="lt-iframe-card card-center"
-                            onClick={() => {
-                              openInAppPreview(
-                                getTemplateIframeSrc(genResult, 0),
-                                `${item.subChannelName || ""} - 模板`
-                              );
-                            }}
-                            title="点击放大预览"
-                          >
-                            <div className="lt-iframe-wrapper">
-                              <iframe
-                                src={getTemplateIframeSrc(genResult, 0)}
-                                className="lt-iframe"
-                                loading="lazy"
-                                title={item.subChannelName || ""}
                               />
-                            </div>
-                          </div>
-                        )}
+                            ) : (
+                              <Box
+                                w={36} h={36}
+                                style={{
+                                  borderRadius: 6,
+                                  background: "rgba(100,255,218,0.15)",
+                                  color: "#64ffda",
+                                  fontSize: 14,
+                                  fontWeight: 700,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                {(item.subChannelName || "?").charAt(0)}
+                              </Box>
+                            )}
+                          </Table.Td>
 
-                        {hasMultipleTemplates && (
-                          <div className="lt-iframe-nav">
-                            <button
-                              className="lt-iframe-nav-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                switchTemplate(item.id, 'next');
-                              }}
-                              title="下一个模板"
+                          {/* 名称 */}
+                          <Table.Td>
+                            <Text size="sm" fw={500} lineClamp={1}>
+                              {item.subChannelName || "(未命名)"}
+                            </Text>
+                          </Table.Td>
+
+                          {/* 类型 */}
+                          <Table.Td>
+                            <Badge
+                              variant="light"
+                              color="teal"
+                              size="sm"
+                              style={{ textTransform: "none" }}
                             >
-                              <ChevronRight size={14} />
-                            </button>
-                          </div>
-                        )}
+                              {item.typeCode || "-"}
+                            </Badge>
+                          </Table.Td>
 
-                        {hasMultipleTemplates && (
-                          <span className="lt-iframe-nav-info">
-                            {currentTemplateIndex + 1}/{genResult.template_dirs.length}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="lt-iframe-empty">
-                        {item.subChannelLogo ? (
-                          <img
-                            src={item.subChannelLogo}
-                            alt=""
-                            className="lt-iframe-empty-logo"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <span>{(item.subChannelName || "?").charAt(0)}</span>
-                        )}
-                      </div>
-                    )}
-                  </span>
-                  <span className="lt-col lt-col-id">{item.id}</span>
-                  <span className="lt-col lt-col-status">
-                    {genResult?.status === "success" && (
-                      <span className="item-badge item-badge-success" style={{ borderRadius: 999, padding: "3px 12px", marginRight: 0 }}>✓ 已生成</span>
-                    )}
-                    {genResult?.status === "error" && (
-                      <span className="item-badge item-badge-error" title={genResult.message} style={{ borderRadius: 999, padding: "3px 12px", marginRight: 0 }}>✗ 失败</span>
-                    )}
-                    {ftpResult?.status === "success" && (
-                      <span className="item-badge item-badge-ftp" style={{ borderRadius: 999, padding: "3px 12px", marginRight: 0 }}>↑ 已上传</span>
-                    )}
-                  </span>
-                  <span className="lt-col lt-col-action">
-                    {genResult?.status === "success" && (
-                      <button
-                        className="lt-preview-btn"
-                        onClick={() => {
-                          openInAppPreview(
-                            getTemplateIframeSrc(genResult, currentTemplateIndex),
-                            `${item.subChannelName || ""} - 模板${currentTemplateIndex + 1}`
-                          );
-                        }}
-                        title="在应用内预览"
-                      >
-                        <Eye size={13} /> 预览
-                      </button>
-                    )}
-                    {genResult?.status === "error" && (
-                      <span className="lt-error-text" title={genResult.message}>失败</span>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                          {/* 产品 */}
+                          <Table.Td>
+                            {item.productName ? (
+                              <Badge
+                                variant="light"
+                                color="yellow"
+                                size="sm"
+                                style={{ textTransform: "none" }}
+                              >
+                                {item.productName}
+                              </Badge>
+                            ) : null}
+                          </Table.Td>
+
+                          {/* 模板（带 iframe 轮播） */}
+                          <Table.Td>
+                            {genResult?.status === "success" ? (
+                              <Group gap={4} justify="center" style={{ height: 90, position: "relative" }}>
+                                {hasMultipleTemplates && (
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="teal"
+                                    size="sm"
+                                    onClick={(e) => { e.stopPropagation(); switchTemplate(item.id, "prev"); }}
+                                    title="上一个模板"
+                                  >
+                                    <ChevronLeft size={14} />
+                                  </ActionIcon>
+                                )}
+
+                                {/* 轮播卡片 */}
+                                {(() => {
+                                  const total = genResult.template_dirs.length;
+                                  const indices = getCarouselIndices(item.id, total);
+                                  if (total === 1) {
+                                    const s = getTemplateIframeSrc(genResult, 0);
+                                    return (
+                                      <TemplatePreviewCard
+                                        iframeSrc={s}
+                                        animationClass=""
+                                        isCenter={true}
+                                        onClick={() => openInAppPreview(s, `${item.subChannelName || ""} - 模板`)}
+                                      />
+                                    );
+                                  }
+                                  return indices.map((tempIdx, pos) => {
+                                    const isCenter = pos === 1 || total < 3;
+                                    const s = getTemplateIframeSrc(genResult, tempIdx);
+                                    return (
+                                      <TemplatePreviewCard
+                                        key={tempIdx}
+                                        iframeSrc={s}
+                                        animationClass={isCenter ? animatingCards[item.id] || "" : ""}
+                                        isCenter={isCenter}
+                                        onClick={() => openInAppPreview(s, `${item.subChannelName || ""} - 模板${tempIdx + 1}`)}
+                                      />
+                                    );
+                                  });
+                                })()}
+
+                                {hasMultipleTemplates && (
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="teal"
+                                    size="sm"
+                                    onClick={(e) => { e.stopPropagation(); switchTemplate(item.id, "next"); }}
+                                    title="下一个模板"
+                                  >
+                                    <ChevronRight size={14} />
+                                  </ActionIcon>
+                                )}
+
+                                {hasMultipleTemplates && (
+                                  <Text
+                                    size="xs"
+                                    c="dimmed"
+                                    style={{ position: "absolute", bottom: -2, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap" }}
+                                  >
+                                    {currentTemplateIndex + 1}/{genResult.template_dirs.length}
+                                  </Text>
+                                )}
+                              </Group>
+                            ) : (
+                              <Box
+                                w={56} h={72}
+                                style={{
+                                  borderRadius: 6,
+                                  border: "1px solid rgba(100,255,218,0.08)",
+                                  background: "rgba(15,52,96,0.3)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {item.subChannelLogo ? (
+                                  <img
+                                    src={item.subChannelLogo}
+                                    alt=""
+                                    style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.4 }}
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                  />
+                                ) : (
+                                  <Text size="sm" c="dimmed">
+                                    {(item.subChannelName || "?").charAt(0)}
+                                  </Text>
+                                )}
+                              </Box>
+                            )}
+                          </Table.Td>
+
+                          {/* ID */}
+                          <Table.Td>
+                            <Text size="xs" c="dimmed" style={{ fontFamily: 'var(--mantine-font-family-monospace)' }}>
+                              {item.id}
+                            </Text>
+                          </Table.Td>
+
+                          {/* 状态 */}
+                          <Table.Td>
+                            <Group gap={4} justify="center" wrap="nowrap">
+                              {genResult?.status === "success" && (
+                                <Badge variant="light" color="green" size="sm" radius="xl">✓ 已生成</Badge>
+                              )}
+                              {genResult?.status === "error" && (
+                                <Tooltip label={genResult.message}>
+                                  <Badge variant="light" color="red" size="sm" radius="xl">✗ 失败</Badge>
+                                </Tooltip>
+                              )}
+                              {ftpResult?.status === "success" && (
+                                <Badge variant="light" color="blue" size="sm" radius="xl">↑ 已上传</Badge>
+                              )}
+                            </Group>
+                          </Table.Td>
+
+                          {/* 操作 */}
+                          <Table.Td>
+                            <Group gap={4} justify="flex-end">
+                              {genResult?.status === "success" && (
+                                <Button
+                                  variant="light"
+                                  color="teal"
+                                  size="compact-xs"
+                                  leftSection={<Eye size={13} />}
+                                  onClick={() => {
+                                    openInAppPreview(
+                                      getTemplateIframeSrc(genResult, currentTemplateIndex),
+                                      `${item.subChannelName || ""} - 模板${currentTemplateIndex + 1}`
+                                    );
+                                  }}
+                                >
+                                  预览
+                                </Button>
+                              )}
+                              {genResult?.status === "error" && (
+                                <Text size="xs" c="red" title={genResult.message}>失败</Text>
+                              )}
+                            </Group>
+                          </Table.Td>
+                        </Table.Tr>
+                      );
+                    })}
+                  </Table.Tbody>
+                </Table>
+              </Box>
+            </Paper>
+          )}
+        </Stack>
 
       {/* ========== 模板管理弹窗 ========== */}
-      {showTemplateManager && (
-        <div className="modal-overlay" onClick={closeTemplateManager}>
-          <div
-            className="template-manager-modal"
-            onClick={(e) => e.stopPropagation()}
+      <Modal
+        opened={showTemplateManager}
+        onClose={closeTemplateManager}
+        title={
+          <Group gap="xs">
+            <Package size={16} />
+            <Text fw={600}>管理模板</Text>
+          </Group>
+        }
+        size="lg"
+      >
+        <Group mb="md">
+          <Button
+            leftSection={isUploadingTemplate ? <Loader2 size={14} className="spin" /> : <FolderOpen size={14} />}
+            onClick={handleUploadTemplateZip}
+            loading={isUploadingTemplate}
+            variant="light"
           >
-            <div className="modal-header">
-              <h3 className="modal-title">
-                <Package size={16} /> 管理模板
-              </h3>
-              <button className="modal-close" onClick={closeTemplateManager} title="关闭">
-                <X size={16} />
-              </button>
-            </div>
+            上传模板 zip
+          </Button>
+        </Group>
 
-            <div className="template-manager-modal-body">
-              <div className="landing-actions" style={{ marginBottom: 12 }}>
-                <button
-                  className="save-btn"
-                  onClick={handleUploadTemplateZip}
-                  disabled={isUploadingTemplate}
-                >
-                  {isUploadingTemplate ? (
-                    <Loader2 size={14} className="spin" />
-                  ) : (
-                    <FolderOpen size={14} />
-                  )}
-                  上传模板 zip
-                </button>
-              </div>
-
-              {templateInfos.length === 0 ? (
-                <p className="template-manager-empty">暂无模板目录</p>
-              ) : (
-                <div className="template-group-list">
-                  {templateGroups.map(({ category, dirs }) => {
-                    const expanded = expandedGroup === category;
-                    return (
-                      <div key={category} className="template-group">
-                        <button
-                          className="template-group-header"
-                          onClick={() => toggleGroup(category)}
+        {templateInfos.length === 0 ? (
+          <Text c="dimmed" size="sm" ta="center" py="xl">暂无模板目录</Text>
+        ) : (
+          <>
+          <style>{`
+            .accordion-chevron { transition: transform 0.2s ease; }
+            [data-expanded] .accordion-chevron { transform: rotate(90deg) !important; }
+          `}</style>
+          <Accordion
+            variant="separated"
+            radius="sm"
+            chevron={<ChevronRight size={16} className="accordion-chevron" />}
+          >
+            {templateGroups.map(({ category, dirs }) => (
+              <Accordion.Item key={category} value={category}>
+                <Accordion.Control>
+                  <Group gap="xs">
+                    <Text size="sm" fw={600} style={{ fontFamily: 'var(--mantine-font-family-monospace)' }}>
+                      {category}
+                    </Text>
+                    <Badge variant="light" color="gray" size="xs">{dirs.length} 个</Badge>
+                  </Group>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <Box
+                    style={{
+                      overflowX: "auto",
+                      padding: "10px 4px",
+                    }}
+                  >
+                    <Box
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        width: "max-content",
+                      }}
+                    >
+                    {dirs.map((dir) => {
+                      const previewSrc = getTemplatePreviewSrc(dir);
+                      return (
+                        <Box
+                          key={dir}
+                          style={{
+                            position: "relative",
+                            width: 180,
+                            height: 320,
+                            overflow: "hidden",
+                            borderRadius: 6,
+                            border: "1px solid rgba(100,255,218,0.12)",
+                            cursor: "pointer",
+                            background: "#0a192f",
+                          }}
+                          className="tpl-root"
+                          onClick={() => {
+                            if (previewSrc) openInAppPreview(previewSrc, `模板: ${dir}`);
+                          }}
                         >
-                          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                          <span className="template-group-name">{category}</span>
-                          <span className="template-group-count">{dirs.length} 个</span>
-                        </button>
-                        {expanded && (
-                          <div className="template-group-items">
-                            {dirs.map((dir) => (
-                              <div
-                                key={dir}
-                                className="template-card"
-                                title={`点击预览 ${dir}`}
-                                onClick={() => {
-                                  const src = getTemplatePreviewSrc(dir);
-                                  if (src) {
-                                    openInAppPreview(src, `模板: ${dir}`);
-                                  }
+                          {/* iframe 预览 */}
+                          <Box style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+                            {previewSrc ? (
+                              <Box
+                                style={{
+                                  width: 375,
+                                  height: 667,
+                                  transform: "scale(0.48)",
+                                  transformOrigin: "top left",
+                                  pointerEvents: "none",
                                 }}
                               >
-                                <div className="template-card-preview">
-                                  {(() => {
-                                    const src = getTemplatePreviewSrc(dir);
-                                    return src ? (
-                                      <iframe
-                                        src={src}
-                                        className="template-preview-iframe"
-                                        loading="lazy"
-                                        title={dir}
-                                      />
-                                    ) : (
-                                      <div className="template-preview-empty">…</div>
-                                    );
-                                  })()}
-                                </div>
-                                {/* 放大预览按钮 */}
-                                <button
-                                  className="template-maximize-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const src = getTemplatePreviewSrc(dir);
-                                    if (src) {
-                                      openInAppPreview(src, `模板: ${dir}`);
-                                    }
-                                  }}
-                                  title={`放大预览 ${dir}`}
-                                >
-                                  <Maximize2 size={13} />
-                                </button>
-                                {/* 删除按钮 */}
-                                <button
-                                  className="template-delete-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteTemplate(dir);
-                                  }}
-                                  title={`删除 ${dir}`}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+                                <iframe
+                                  src={previewSrc}
+                                  style={{ width: 375, height: 667, border: "none" }}
+                                  loading="lazy"
+                                  title={dir}
+                                />
+                              </Box>
+                            ) : (
+                              <Box style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+                                <Text c="dimmed" size="sm">…</Text>
+                              </Box>
+                            )}
+                          </Box>
 
-      {/* ========== 应用内预览浮层 ========== */}
-      {previewOverlay && (
-        <div className="preview-overlay" onClick={closePreviewOverlay}>
-          <div
-            className="preview-overlay-content"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="preview-overlay-header">
-              <span className="preview-overlay-title">{previewOverlay.title}</span>
-              <div className="preview-overlay-actions">
-                {/* 同时提供外部分浏览器按钮作为备选 */}
-                <button
-                  className="preview-overlay-external-btn"
-                  title="在外部浏览器打开"
-                  onClick={() => {
-                    window.open(previewOverlay.src, '_blank');
-                  }}
-                >
-                  <ExternalLink size={14} />
-                </button>
-                <button
-                  className="preview-overlay-close"
-                  onClick={closePreviewOverlay}
-                  title="关闭预览"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-            <div className="preview-overlay-body">
-              <iframe
-                src={previewOverlay.src}
-                className="preview-overlay-iframe"
-                title={previewOverlay.title}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+                          {/* 放大预览按钮 */}
+                          <ActionIcon
+                            variant="light"
+                            color="teal"
+                            size="sm"
+                            style={{
+                              position: "absolute",
+                              top: 6,
+                              right: 38,
+                              zIndex: 2,
+                              transition: "opacity 0.18s ease",
+                            }}
+                            className="tpl-hover-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (previewSrc) openInAppPreview(previewSrc, `模板: ${dir}`);
+                            }}
+                          >
+                            <Maximize2 size={13} />
+                          </ActionIcon>
+
+                          {/* 删除按钮 */}
+                          <ActionIcon
+                            variant="filled"
+                            color="red"
+                            size="sm"
+                            style={{
+                              position: "absolute",
+                              top: 6,
+                              right: 6,
+                              zIndex: 2,
+                              transition: "opacity 0.18s ease",
+                            }}
+                            className="tpl-hover-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTemplate(dir);
+                            }}
+                          >
+                            <Trash2 size={13} />
+                          </ActionIcon>
+
+                          <style>{`
+                            .tpl-hover-btn { opacity: 0; transition: opacity 0.18s ease; }
+                            .tpl-root:hover .tpl-hover-btn { opacity: 1 !important; }
+                          `}</style>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                  </Box>
+                </Accordion.Panel>
+              </Accordion.Item>
+            ))}
+          </Accordion>
+          </>
+        )}
+      </Modal>
+
+      {/* ========== 全屏预览浮层 ========== */}
+      <Modal
+        opened={!!previewOverlay}
+        onClose={closePreviewOverlay}
+        title={
+          previewOverlay ? (
+            <Group gap="xs">
+              <Text size="sm" fw={600} c="teal" lineClamp={1} style={{ flex: 1 }}>
+                {previewOverlay.title}
+              </Text>
+              <Button
+                variant="light"
+                color="gray"
+                size="compact-xs"
+                leftSection={<ExternalLink size={14} />}
+                onClick={() => window.open(previewOverlay.src, "_blank")}
+              >
+                外部浏览器
+              </Button>
+            </Group>
+          ) : null
+        }
+        fullScreen
+      >
+        {previewOverlay && (
+          <iframe
+            src={previewOverlay.src}
+            style={{
+              width: "100%",
+              height: "calc(100vh - 60px)",
+              border: "none",
+              display: "block",
+              background: "#fff",
+            }}
+            title={previewOverlay.title}
+          />
+        )}
+      </Modal>
+    </Box>
+  );
+}
+
+// ========== 模板预览卡片子组件 ==========
+function TemplatePreviewCard({
+  iframeSrc,
+  animationClass,
+  isCenter,
+  onClick,
+}: {
+  iframeSrc: string;
+  animationClass: string;
+  isCenter: boolean;
+  onClick: () => void;
+}) {
+  const cardWidth = isCenter ? 60 : 40;
+  const cardHeight = isCenter ? 80 : 56;
+  const wrapperScale = isCenter ? 0.16 : 0.107;
+
+  return (
+    <Box
+      onClick={onClick}
+      title="点击放大预览"
+      style={{
+        position: "relative",
+        borderRadius: 8,
+        border: `1px solid ${isCenter ? "rgba(100,255,218,0.6)" : "rgba(100,255,218,0.15)"}`,
+        overflow: "hidden",
+        cursor: "pointer",
+        background: "#fff",
+        flexShrink: 0,
+        width: cardWidth,
+        height: cardHeight,
+        opacity: isCenter ? 1 : 0.5,
+        transform: isCenter ? "scale(1)" : "scale(0.92)",
+        boxShadow: isCenter ? "0 4px 20px rgba(100,255,218,0.35)" : "none",
+        zIndex: isCenter ? 2 : 1,
+        transition: "all 0.4s cubic-bezier(0.25,0.46,0.45,0.94)",
+        animation: animationClass === "animating-left"
+          ? "slideInFromLeft 0.35s cubic-bezier(0.25,0.46,0.45,0.94) forwards"
+          : animationClass === "animating-right"
+            ? "slideInFromRight 0.35s cubic-bezier(0.25,0.46,0.45,0.94) forwards"
+            : "none",
+      }}
+      onMouseEnter={(e) => {
+        if (isCenter) {
+          e.currentTarget.style.borderColor = "rgba(100,255,218,0.8)";
+          e.currentTarget.style.boxShadow = "0 6px 24px rgba(100,255,218,0.45)";
+          e.currentTarget.style.transform = "scale(1.08)";
+        } else {
+          e.currentTarget.style.opacity = "0.75";
+          e.currentTarget.style.transform = "scale(0.96)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (isCenter) {
+          e.currentTarget.style.borderColor = "rgba(100,255,218,0.6)";
+          e.currentTarget.style.boxShadow = "0 4px 20px rgba(100,255,218,0.35)";
+          e.currentTarget.style.transform = "scale(1)";
+        } else {
+          e.currentTarget.style.opacity = "0.5";
+          e.currentTarget.style.transform = "scale(0.92)";
+        }
+      }}
+    >
+      <Box
+        style={{
+          width: 375,
+          height: 812,
+          transform: `scale(${wrapperScale})`,
+          transformOrigin: "top left",
+          pointerEvents: "none",
+        }}
+      >
+        <iframe
+          src={iframeSrc}
+          style={{ width: 375, height: 812, border: "none", pointerEvents: "none" }}
+          loading="lazy"
+        />
+      </Box>
+    </Box>
   );
 }

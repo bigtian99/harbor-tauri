@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub(crate) static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
 pub(crate) static CURRENT_PID: Mutex<Option<u32>> = Mutex::new(None);
@@ -427,6 +427,68 @@ pub(crate) fn find_maven_path() -> Option<String> {
     }
 
     None
+}
+
+/// 查找 Docker 可执行文件路径
+pub(crate) fn find_docker_path() -> Option<String> {
+    // 1. 直接从 PATH 查找（终端启动时有效）
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in path.split(':') {
+            let candidate = PathBuf::from(dir).join("docker");
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    // 2. Homebrew (Apple Silicon)
+    let brew_arm = PathBuf::from("/opt/homebrew/bin/docker");
+    if brew_arm.exists() {
+        return Some(brew_arm.to_string_lossy().to_string());
+    }
+    // 3. Homebrew (Intel)
+    let brew_intel = PathBuf::from("/usr/local/bin/docker");
+    if brew_intel.exists() {
+        return Some(brew_intel.to_string_lossy().to_string());
+    }
+    // 4. Docker.app bundle 内部路径
+    let bundle = PathBuf::from("/Applications/Docker.app/Contents/Resources/bin/docker");
+    if bundle.exists() {
+        return Some(bundle.to_string_lossy().to_string());
+    }
+
+    None
+}
+
+/// macOS 专用：隐藏 Docker Desktop 窗口，防止弹出抢焦点
+/// 在 docker 命令执行前调用，可阻止 Docker Desktop 弹出 UI
+#[cfg(target_os = "macos")]
+pub(crate) fn hide_docker_desktop() {
+    // 先尝试隐藏窗口，再切回 Finder 让 Docker Desktop 不再保持前台
+    Command::new("osascript")
+        .args(["-e", r#"tell application "System Events" to set visible of process "Docker Desktop" to false"#])
+        .output()
+        .ok();
+    // 让出一瞬间，确保窗口管理器处理完毕
+    std::thread::sleep(Duration::from_millis(200));
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn hide_docker_desktop() {
+    // 非 macOS 平台无操作
+}
+
+/// 从 dist 目录的直接父目录（即项目根目录）查找 nginx.conf
+/// 只查一层，避免误用上级目录中宝塔面板等服务器配置
+pub(crate) fn find_project_nginx(artifact_path: &Path) -> Option<String> {
+    let project_dir = artifact_path.parent()?;
+    let candidate = project_dir.join("nginx.conf");
+    if candidate.is_file() {
+        eprintln!("[JarPorter] 检测到项目 nginx.conf: {}", candidate.display());
+        Some(fs::read_to_string(&candidate).ok()?)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<String, String> {

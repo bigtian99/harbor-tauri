@@ -5,8 +5,9 @@ use crate::history::save_build_record_direct;
 use crate::models::{ArtifactType, BuildRecord, DockerBuildContext, PackageFromBranchResult, PackageProjectType};
 use crate::utils::{
     cleanup_old_temp_dirs, command_output_text, copy_artifact_to_output_internal,
-    detect_npm_build_script, lock_file_hash, repo_root_for, run_command,
-    save_node_modules_to_cache, try_restore_node_modules, CANCEL_FLAG, CURRENT_PID,
+    detect_npm_build_script, find_docker_path, hide_docker_desktop, lock_file_hash,
+    repo_root_for, run_command, save_node_modules_to_cache, try_restore_node_modules,
+    CANCEL_FLAG, CURRENT_PID,
 };
 use std::fs;
 use std::io::Write;
@@ -994,11 +995,14 @@ pub async fn build_and_push(
     let cleanup_file = build_context.cleanup_file.clone();
     let cleanup_dir = build_context.cleanup_dir.clone();
 
+    hide_docker_desktop();
     let build_result = tauri::async_runtime::spawn_blocking(move || {
         if CANCEL_FLAG.load(Ordering::SeqCst) {
             return Err("构建已取消".to_string());
         }
-        let child = Command::new("docker")
+        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+        hide_docker_desktop();
+        let child = Command::new(&docker_bin)
             .args([
                 "build",
                 "--platform",
@@ -1029,6 +1033,7 @@ pub async fn build_and_push(
         if let Some(path) = cleanup_dir {
             fs::remove_dir_all(path).ok();
         }
+        hide_docker_desktop();
         Ok(output)
     })
     .await
@@ -1058,8 +1063,10 @@ pub async fn build_and_push(
     let username = config.username.clone();
     let password = config.password.clone();
 
+    hide_docker_desktop();
     let login_result = tauri::async_runtime::spawn_blocking(move || {
-        let mut child = Command::new("docker")
+        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+        let mut child = Command::new(&docker_bin)
             .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -1098,7 +1105,9 @@ pub async fn build_and_push(
 
     let full_image_push = full_image.clone();
     let push_result = tauri::async_runtime::spawn_blocking(move || {
-        Command::new("docker")
+        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+        hide_docker_desktop();
+        Command::new(&docker_bin)
             .args(["push", &full_image_push])
             .output()
     })
@@ -1122,8 +1131,10 @@ pub async fn build_and_push(
     .ok();
 
     let full_image_remove = full_image.clone();
+    hide_docker_desktop();
     let remove_result = tauri::async_runtime::spawn_blocking(move || {
-        Command::new("docker")
+        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+        Command::new(&docker_bin)
             .args(["rmi", &full_image_remove])
             .output()
     })
