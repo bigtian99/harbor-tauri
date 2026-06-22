@@ -520,20 +520,39 @@ export function LandingPanel({
                           <Table.Td>
                             <Group gap={4} justify="flex-end">
                               {genResult?.status === "success" && (
-                                <Button
-                                  variant="light"
-                                  color="teal"
-                                  size="compact-xs"
-                                  leftSection={<Eye size={13} />}
-                                  onClick={() => {
-                                    openInAppPreview(
-                                      getTemplateIframeSrc(genResult, currentTemplateIndex),
-                                      `${item.subChannelName || ""} - 模板${currentTemplateIndex + 1}`
-                                    );
-                                  }}
-                                >
-                                  预览
-                                </Button>
+                                <>
+                                  <Tooltip label="打开当前模板路径">
+                                    <ActionIcon
+                                      variant="light"
+                                      color="gray"
+                                      size="sm"
+                                      onClick={async () => {
+                                        try {
+                                          const templatePath = `${genResult.output_dir}/template_${currentTemplateIndex}`;
+                                          await invoke("open_directory", { path: templatePath });
+                                        } catch (e) {
+                                          notifications.show({ title: "打开失败", message: String(e), color: "red", autoClose: 3000 });
+                                        }
+                                      }}
+                                    >
+                                      <FolderOpen size={14} />
+                                    </ActionIcon>
+                                  </Tooltip>
+                                  <Button
+                                    variant="light"
+                                    color="teal"
+                                    size="compact-xs"
+                                    leftSection={<Eye size={13} />}
+                                    onClick={() => {
+                                      openInAppPreview(
+                                        getTemplateIframeSrc(genResult, currentTemplateIndex),
+                                        `${item.subChannelName || ""} - 模板${currentTemplateIndex + 1}`
+                                      );
+                                    }}
+                                  >
+                                    预览
+                                  </Button>
+                                </>
                               )}
                               {genResult?.status === "error" && (
                                 <Text size="xs" c="red" title={genResult.message}>失败</Text>
