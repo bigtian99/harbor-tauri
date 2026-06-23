@@ -78,7 +78,7 @@ jobs:
           # tauri-action appends `build`; use the CLI directly instead of
           # the package `tauri` script, which is reserved for `tauri dev`.
           tauriScript: pnpm exec tauri
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} ${{ matrix.platform == 'windows-latest' && '--bundles nsis' || '' }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
