@@ -187,6 +187,7 @@ impl Default for HarborConfig {
     fn default() -> Self {
         let default_output_dir = dirs::desktop_dir()
             .unwrap_or_else(|| PathBuf::from("."))
+            .join("tksy")
             .to_string_lossy()
             .to_string();
         Self {

@@ -23,11 +23,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-14'
+          - platform: 'macos-latest'
             target: 'aarch64-apple-darwin'
             label: 'macOS ARM64'
             ops: false
-          - platform: 'macos-13'
+          - platform: 'macos-latest'
             target: 'x86_64-apple-darwin'
             label: 'macOS x64'
             ops: false
@@ -39,7 +39,7 @@ jobs:
             target: 'x86_64-pc-windows-msvc'
             label: 'Windows x64'
             ops: false
-          - platform: 'macos-14'
+          - platform: 'macos-latest'
             target: 'aarch64-apple-darwin'
             label: 'macOS ARM64 OPS'
             ops: true

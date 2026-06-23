@@ -533,15 +533,10 @@ pub async fn preview_landing_page(path: String, template_index: Option<usize>) -
 
 #[tauri::command]
 pub async fn get_bundled_templates_dir() -> Result<String, String> {
-    // 开发环境：直接使用项目内的 templates 目录
-    let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap_or(&PathBuf::from("."))
-        .join("templates");
-
-    if dev_dir.exists() {
-        eprintln!("[JarPorter] 📁 模板目录: {}", dev_dir.display());
-        return Ok(dev_dir.to_string_lossy().to_string());
+    let root = templates_root();
+    if root.exists() {
+        eprintln!("[JarPorter] 📁 模板目录: {}", root.display());
+        return Ok(root.to_string_lossy().to_string());
     }
 
     Err("找不到模板目录".to_string())
@@ -549,8 +544,34 @@ pub async fn get_bundled_templates_dir() -> Result<String, String> {
 
 // ========== 模板管理功能 ==========
 
-/// 获取 templates 根目录（与 get_bundled_templates_dir 一致）
+/// 获取 templates 根目录
+/// 打包后根据可执行文件位置定位 resources 目录（templates/**/* 在 tauri.conf.json resources 中声明），
+/// 开发环境下回退到 CARGO_MANIFEST_DIR/../templates。
 pub(crate) fn templates_root() -> PathBuf {
+    // 打包后：从可执行文件位置推断资源目录
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            // Windows: resources 与 .exe 同目录
+            let win = exe_dir.join("templates");
+            if win.exists() {
+                return win;
+            }
+            // macOS: .app/Contents/Resources/templates
+            let mac = exe_dir.join("../Resources/templates");
+            if let Ok(canonical) = mac.canonicalize().or_else(|_| win.canonicalize()) {
+                if canonical.exists() {
+                    return canonical;
+                }
+            }
+            // Linux (AppImage/deb): 相对于二进制的上级目录
+            let linux = exe_dir.join("../share/templates");
+            if linux.exists() {
+                return linux;
+            }
+        }
+    }
+
+    // 开发环境：直接使用项目内的 templates 目录
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap_or(&PathBuf::from("."))

@@ -1,7 +1,7 @@
 {
   "name": "jarporter",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,12 +15,12 @@
     "tauri:build:ops": "OPS_MODE=true tauri build --target aarch64-apple-darwin",
     "tauri:build:ops:win64": "OPS_MODE=true tauri build --target x86_64-pc-windows-msvc",
     "tauri:build:all": "pnpm tauri:build:arm64 && pnpm tauri:build:x64",
-    "release": "git tag -a v$npm_package_version -m 'v$npm_package_version' && git push origin v$npm_package_version"
+    "release": "node -e \"const v=require('./package.json').version;const e=require('child_process').execSync;e('git tag -a v'+v+' -m v'+v,{stdio:'inherit'});e('git push origin v'+v,{stdio:'inherit'})\""
   },
   "dependencies": {
-    "@mantine/core": "^9.3.2",
-    "@mantine/hooks": "^9.3.2",
-    "@mantine/notifications": "^9.3.2",
+    "@mantine/core": "^9.4.0",
+    "@mantine/hooks": "^9.4.0",
+    "@mantine/notifications": "^9.4.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2",
