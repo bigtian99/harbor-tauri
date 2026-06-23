@@ -1,7 +1,0 @@
-allowBuilds:
-  esbuild: set this to true or false
-minimumReleaseAgeExclude:
-  - '@mantine/core@9.4.0'
-  - '@mantine/hooks@9.4.0'
-  - '@mantine/notifications@9.4.0'
-  - '@mantine/store@9.4.0'
