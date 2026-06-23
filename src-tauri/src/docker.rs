@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 /// 拼接 tools 的 --build-context 片段（如 `--build-context tools=/path/tools`），未配置则返回空
+#[allow(dead_code)]
 pub(crate) fn tools_dir_build_args(custom_docker_extras_dir: &str) -> Vec<String> {
     let trimmed = custom_docker_extras_dir.trim();
     if trimmed.is_empty() {
