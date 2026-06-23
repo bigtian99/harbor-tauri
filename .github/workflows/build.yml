@@ -23,33 +23,45 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
+          - platform: 'macos-14'
             target: 'aarch64-apple-darwin'
             label: 'macOS ARM64'
-          - platform: 'macos-latest'
+            ops: false
+          - platform: 'macos-13'
             target: 'x86_64-apple-darwin'
             label: 'macOS x64'
+            ops: false
           - platform: 'ubuntu-22.04'
             target: 'x86_64-unknown-linux-gnu'
             label: 'Linux x64'
+            ops: false
           - platform: 'windows-latest'
             target: 'x86_64-pc-windows-msvc'
             label: 'Windows x64'
+            ops: false
+          - platform: 'macos-14'
+            target: 'aarch64-apple-darwin'
+            label: 'macOS ARM64 OPS'
+            ops: true
+          - platform: 'windows-latest'
+            target: 'x86_64-pc-windows-msvc'
+            label: 'Windows x64 OPS'
+            ops: true
 
     runs-on: ${{ matrix.platform }}
     name: Build ${{ matrix.label }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9
 
@@ -73,19 +85,18 @@ jobs:
         run: pnpm install
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPS_MODE: ${{ matrix.ops && 'true' || '' }}
         with:
-          # tauri-action appends `build`; use the CLI directly instead of
-          # the package `tauri` script, which is reserved for `tauri dev`.
           tauriScript: pnpm exec tauri
           args: --target ${{ matrix.target }} ${{ matrix.platform == 'windows-latest' && '--bundles nsis' || '' }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
-          name: release-${{ matrix.platform }}-${{ matrix.target }}
+          name: ${{ matrix.label }}
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app
@@ -104,7 +115,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Resolve release tag
         id: release_tag
@@ -132,7 +143,7 @@ jobs:
           echo "Release tag: $tag"
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts
           merge-multiple: true
