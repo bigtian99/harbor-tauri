@@ -576,7 +576,7 @@ function App() {
         frontendDir: branchProjectType === "npm" ? (frontendDir.trim() || null) : null,
         buildScript: branchProjectType === "npm" ? selectedBuildScript : null,
         packageManager: config.npm_package_manager || "npm",
-        springProfile: branchProjectType === "maven" && springProfile.trim() ? springProfile.trim() : null,
+        springProfile: (branchProjectType === "maven" || packageWithBackend) && springProfile.trim() ? springProfile.trim() : null,
         packageWithBackend: branchProjectType === "npm" ? packageWithBackend : false,
       });
       setArtifactPath(result.artifact_path);
@@ -592,46 +592,111 @@ function App() {
           setLog(`⚠️ 分支打包成功，但 Harbor 配置不完整，无法推送镜像\n\n请在"推送配置" tab 中完善 Harbor 配置后重试\n\n${result.log}`);
         } else {
           const hasBackend = !!result.backend_artifact_path;
-          const artType = hasBackend ? "jar" : (branchProjectType === "npm" ? "frontend_dist" : "jar");
-          const pushPath = hasBackend ? result.backend_artifact_path! : result.artifact_path;
-          const finalImageName = imageName || inferImageName(pushPath, artType);
-          if (!finalImageName.trim()) {
+          const branchSafeName = branchName.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+          const now = new Date();
+          const yy = String(now.getFullYear()).slice(-2);
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const dd = String(now.getDate()).padStart(2, '0');
+          const hh = String(now.getHours()).padStart(2, '0');
+          const mi = String(now.getMinutes()).padStart(2, '0');
+          const branchImageTag = (imageTag && imageTag !== "latest")
+            ? imageTag
+            : `${branchSafeName}-v.${yy}.${mm}.${dd}.${hh}.${mi}`;
+
+          if (!imageName.trim()) {
             setLog(`⚠️ 分支打包成功，但未设置镜像名称，跳过推送\n\n${result.log}`);
           } else {
-            setProgress(60);
-            setProgressMessage(hasBackend ? "🚀 前端+后端打包完成，推送后端 JAR 镜像..." : "🚀 打包完成，开始推送镜像...");
+            const pushLogs: string[] = [];
+            const imageList: string[] = [];
+
             try {
-              const branchSafeName = branchName.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
-              const now = new Date();
-              const yy = String(now.getFullYear()).slice(-2);
-              const mm = String(now.getMonth() + 1).padStart(2, '0');
-              const dd = String(now.getDate()).padStart(2, '0');
-              const hh = String(now.getHours()).padStart(2, '0');
-              const mi = String(now.getMinutes()).padStart(2, '0');
-              const branchImageTag = (imageTag && imageTag !== "latest")
-                ? imageTag
-                : `${branchSafeName}-v.${yy}.${mm}.${dd}.${hh}.${mi}`;
-              const pushResult = await invoke<string>("build_and_push", {
-                jarPath: pushPath,
-                imageName: finalImageName,
+              // ===== Maven 项目：只推 JAR =====
+              if (branchProjectType === "maven") {
+                setProgress(60);
+                setProgressMessage("🚀 推送镜像...");
+                const resultStr = await invoke<string>("build_and_push", {
+                  jarPath: result.artifact_path,
+                  imageName: imageName.trim(),
+                  imageTag: branchImageTag,
+                  artifactType: "jar",
+                  dockerfilePath: null,
+                  dockerfileContext: null,
+                });
+                pushLogs.push(`📦: ${resultStr}`);
+                const imgMatch = resultStr.match(/完整镜像:\s*(.+)/);
+                if (imgMatch) {
+                  imageList.push(imgMatch[1].trim());
+                  try {
+                    await invoke("update_build_record_image", {
+                      imageName: imageName.trim(),
+                      imageTag: imgMatch[1].trim(),
+                    });
+                    await loadBuildHistory();
+                  } catch { /* 忽略 */ }
+                }
+                setBranchFullImage(imageList.join("\n"));
+                setLog(`✅ 分支打包并推送镜像完成\n\n${result.log}\n\n${pushLogs.join("\n")}`);
+                setActiveTab("branch");
+                return;
+              }
+
+              // ===== NPM 项目：先推前端 =====
+              setProgress(60);
+              setProgressMessage("🚀 推送前端镜像...");
+              const feResult = await invoke<string>("build_and_push", {
+                jarPath: result.artifact_path,
+                imageName: imageName.trim(),
                 imageTag: branchImageTag,
-                artifactType: artType,
-                dockerfilePath: result.dockerfile_path || null,
-                dockerfileContext: result.dockerfile_context || null,
+                artifactType: "frontend_dist",
+                dockerfilePath: null,
+                dockerfileContext: null,
               });
-              const imageMatch = pushResult.match(/完整镜像:\s*(.+)/);
-              if (imageMatch) {
-                const fullImage = imageMatch[1].trim();
-                setBranchFullImage(fullImage);
+              pushLogs.push(`📦 前端: ${feResult}`);
+              const feMatch = feResult.match(/完整镜像:\s*(.+)/);
+              if (feMatch) {
+                imageList.push(`前端: ${feMatch[1].trim()}`);
                 try {
                   await invoke("update_build_record_image", {
-                    imageName: finalImageName,
-                    imageTag: fullImage,
+                    imageName: imageName.trim(),
+                    imageTag: feMatch[1].trim(),
                   });
                   await loadBuildHistory();
-                } catch { /* 更新记录失败不影响主流程 */ }
+                } catch { /* 忽略 */ }
               }
-              setLog(`✅ 分支打包并推送镜像完成\n\n${result.log}\n\n📦 镜像推送: ${pushResult}`);
+
+              // ===== 有后端时再接续推后端 =====
+              if (hasBackend) {
+                setProgress(80);
+                setProgressMessage("🚀 推送后端 JAR 镜像...");
+                try {
+                  const beResult = await invoke<string>("build_and_push", {
+                    jarPath: result.backend_artifact_path,
+                    imageName: `${imageName.trim()}-backend`,
+                    imageTag: branchImageTag,
+                    artifactType: "jar",
+                    dockerfilePath: null,
+                    dockerfileContext: null,
+                  });
+                  pushLogs.push(`📦 后端: ${beResult}`);
+                  const beMatch = beResult.match(/完整镜像:\s*(.+)/);
+                  if (beMatch) imageList.push(`后端: ${beMatch[1].trim()}`);
+                } catch (beErr) {
+                  pushLogs.push(`❌ 后端推送失败: ${beErr}`);
+                }
+              }
+
+              // 设置展示用的镜像地址
+              setBranchFullImage(imageList.join("\n"));
+
+              // 判断整体是否成功
+              const feFailed = pushLogs.some(l => l.startsWith("❌ 前端"));
+              if (feFailed) {
+                setLog(`❌ 前端镜像推送失败:\n${pushLogs.join("\n")}\n\n${result.log}`);
+              } else if (hasBackend && pushLogs.some(l => l.startsWith("❌ 后端"))) {
+                setLog(`⚠️ 前端推送成功，但后端推送失败:\n${pushLogs.join("\n")}\n\n${result.log}`);
+              } else {
+                setLog(`✅ 分支打包并推送镜像完成\n\n${result.log}\n\n${pushLogs.join("\n")}`);
+              }
               setActiveTab("branch");
             } catch (pushErr) {
               setLog(`⚠️ 分支打包成功，但镜像推送失败:\n${pushErr}\n\n${result.log}`);

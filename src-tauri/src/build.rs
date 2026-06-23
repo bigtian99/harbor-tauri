@@ -457,7 +457,16 @@ pub async fn package_from_branch(
                     let backend_handle: Option<std::thread::JoinHandle<Result<(String, String), String>>> =
                         if package_with_backend.unwrap_or(false) && worktree_root_for_backend.join("pom.xml").is_file() {
                             let root = worktree_root_for_backend.clone();
-                            logs.push("☕ 启动后端并行构建: mvn clean package -DskipTests".to_string());
+                            let sp = spring_profile_clone.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+                            if let Some(ref profile) = sp {
+                                logs.push(format!("☕ Spring Profile: {}", profile));
+                            }
+                            let mvn_base = if let Some(ref profile) = sp {
+                                format!("clean package -DskipTests -Dspring.profiles.active={}", profile)
+                            } else {
+                                "clean package -DskipTests".to_string()
+                            };
+                            logs.push(format!("☕ 启动后端并行构建: mvn {}", mvn_base));
                             app_for_build.emit(
                                 "build-progress",
                                 serde_json::json!({
@@ -466,7 +475,8 @@ pub async fn package_from_branch(
                                 }),
                             ).ok();
                             Some(std::thread::spawn(move || {
-                                let mvn_log = run_command(&root, "mvn", &["clean", "package", "-DskipTests"])
+                                let mvn_args: Vec<&str> = mvn_base.split_whitespace().collect();
+                                let mvn_log = run_command(&root, "mvn", &mvn_args)
                                     .map_err(|e| format!("后端 Maven 打包失败: {}", e))?;
                                 let jar = find_maven_artifact(&root)?;
                                 Ok((jar.to_string_lossy().to_string(), mvn_log))

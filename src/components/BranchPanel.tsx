@@ -411,10 +411,14 @@ export function BranchPanel({
           {branchFullImage && (
             <div className="path-link-item image-url-row">
               <span className="path-link-label">🐳 完整镜像:</span>
-              <span className="image-url-value" title={branchFullImage}>{branchFullImage}</span>
+              <span className="image-url-value">
+                {branchFullImage.split('\n').map((line, i) => (
+                  <span key={i} style={{ display: 'block' }} title={line}>{line}</span>
+                ))}
+              </span>
               <button
                 className={`copy-btn ${copied ? "copied" : ""}`}
-                onClick={() => onCopyImage(branchFullImage)}
+                onClick={() => onCopyImage(branchFullImage.replace(/\n/g, '  '))}
                 title="复制镜像地址"
               >
                 {copied ? (
