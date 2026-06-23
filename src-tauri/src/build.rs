@@ -160,8 +160,10 @@ pub async fn open_directory(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer")
-            .arg(target)
+        // 使用 cmd /c start 避免 explorer 路径解析异常（如跳到文档文件夹）
+        let path_str = target.to_string_lossy().to_string();
+        Command::new("cmd")
+            .args(["/C", "start", "", &path_str])
             .output()
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
