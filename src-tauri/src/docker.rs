@@ -115,8 +115,8 @@ pub(crate) fn prepare_jar_context(
     let dockerfile_path = jar_dir.join(".Dockerfile.tmp");
     let escaped_jar_filename = docker_json_string(&jar_filename);
     let dockerfile_content = format!(
-        "FROM {}\nCOPY [\"{}\", \"/app/app.jar\"]\nWORKDIR /app\nEXPOSE {}\nENTRYPOINT [\"java\", \"-jar\", \"app.jar\"]",
-        config.base_image, escaped_jar_filename, config.expose_port
+        "FROM {}\nCOPY [\"{}\", \"/app/app.jar\"]\nWORKDIR /app\nEXPOSE {}\nENTRYPOINT [\"java\", \"-jar\", \"app.jar\", \"--server.port={}\"]",
+        config.base_image, escaped_jar_filename, config.expose_port, config.expose_port
     );
 
     fs::write(&dockerfile_path, dockerfile_content)
