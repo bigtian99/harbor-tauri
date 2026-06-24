@@ -28,8 +28,7 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
     <>
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
-          <Container size={24} className="header-icon" />
-          {!sidebarCollapsed && <h1>JarPorter</h1>}
+          <img src="/logo.png" alt="ShipForge" className="header-logo" />
         </div>
 
         <nav className="sidebar-nav">
@@ -54,14 +53,14 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
             <button
               className="sidebar-item settings-item"
               onClick={() => onTabChange("config")}
-              data-label="Harbor配置"
+              data-label="设置"
               onMouseEnter={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 document.documentElement.style.setProperty('--tooltip-top', `${rect.top + rect.height / 2}px`);
               }}
             >
               <Settings size={18} />
-              {!sidebarCollapsed && <span>Harbor配置</span>}
+              {!sidebarCollapsed && <span>设置</span>}
             </button>
           </div>
         )}

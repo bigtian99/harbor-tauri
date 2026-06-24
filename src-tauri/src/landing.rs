@@ -531,51 +531,85 @@ pub async fn preview_landing_page(path: String, template_index: Option<usize>) -
     Ok(())
 }
 
-#[tauri::command]
-pub async fn get_bundled_templates_dir() -> Result<String, String> {
-    let root = templates_root();
-    if root.exists() {
-        eprintln!("[JarPorter] 📁 模板目录: {}", root.display());
-        return Ok(root.to_string_lossy().to_string());
+// ========== 模板目录解析 ==========
+
+/// 模板目录查找策略：
+/// 1. 打包后：通过可执行文件路径推算资源目录
+/// 2. 开发时：`{CARGO_MANIFEST_DIR}/../templates/`
+fn find_templates_dir() -> Option<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            // Windows: resources 与 .exe 同目录
+            let win = exe_dir.join("templates");
+            if win.exists() {
+                return Some(win);
+            }
+            // macOS: .app/Contents/Resources/templates
+            let mac = exe_dir.join("../Resources/templates");
+            if let Ok(canonical) = mac.canonicalize() {
+                if canonical.exists() {
+                    return Some(canonical);
+                }
+            }
+            // Linux (AppImage/deb): 相对于二进制的上级目录
+            let linux = exe_dir.join("../share/templates");
+            if linux.exists() {
+                return Some(linux);
+            }
+        }
     }
 
+    // 开发环境：源码目录
+    let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or(&PathBuf::from("."))
+        .join("templates");
+    if dev_dir.exists() {
+        return Some(dev_dir);
+    }
+
+    None
+}
+
+/// 获取模板可写目录（用于上传、删除等写操作）
+/// 打包后资源目录只读，写操作需回退到用户可写的缓存目录
+fn writable_templates_root() -> PathBuf {
+    // 优先使用开发环境源码目录（可写）
+    let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or(&PathBuf::from("."))
+        .join("templates");
+    if dev_dir.exists() || dev_dir.parent().map(|p| p.exists()).unwrap_or(false) {
+        return dev_dir;
+    }
+
+    // 打包后：使用 ~/.config/jarporter/templates 作为可写目录
+    if let Some(home) = dirs::home_dir() {
+        home.join(".config").join("jarporter").join("templates")
+    } else {
+        dev_dir
+    }
+}
+
+#[tauri::command]
+pub async fn get_bundled_templates_dir() -> Result<String, String> {
+    if let Some(dir) = find_templates_dir() {
+        eprintln!("[JarPorter] 📁 模板目录: {}", dir.display());
+        return Ok(dir.to_string_lossy().to_string());
+    }
     Err("找不到模板目录".to_string())
 }
 
 // ========== 模板管理功能 ==========
 
 /// 获取 templates 根目录
-/// 打包后根据可执行文件位置定位 resources 目录（templates/**/* 在 tauri.conf.json resources 中声明），
-/// 开发环境下回退到 CARGO_MANIFEST_DIR/../templates。
 pub(crate) fn templates_root() -> PathBuf {
-    // 打包后：从可执行文件位置推断资源目录
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            // Windows: resources 与 .exe 同目录
-            let win = exe_dir.join("templates");
-            if win.exists() {
-                return win;
-            }
-            // macOS: .app/Contents/Resources/templates
-            let mac = exe_dir.join("../Resources/templates");
-            if let Ok(canonical) = mac.canonicalize().or_else(|_| win.canonicalize()) {
-                if canonical.exists() {
-                    return canonical;
-                }
-            }
-            // Linux (AppImage/deb): 相对于二进制的上级目录
-            let linux = exe_dir.join("../share/templates");
-            if linux.exists() {
-                return linux;
-            }
-        }
-    }
-
-    // 开发环境：直接使用项目内的 templates 目录
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap_or(&PathBuf::from("."))
-        .join("templates")
+    find_templates_dir().unwrap_or_else(|| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap_or(&PathBuf::from("."))
+            .join("templates")
+    })
 }
 
 #[tauri::command]
@@ -700,7 +734,7 @@ pub async fn upload_template_zip(zip_path: String) -> Result<Vec<serde_json::Val
     let mut archive = zip::ZipArchive::new(zip_file)
         .map_err(|e| format!("无法解析 zip 文件: {}", e))?;
 
-    let root = templates_root();
+    let root = writable_templates_root();
     // 确保 templates 目录存在
     fs::create_dir_all(&root).map_err(|e| format!("创建模板目录失败: {}", e))?;
 
@@ -774,7 +808,7 @@ pub async fn upload_template_zip(zip_path: String) -> Result<Vec<serde_json::Val
 
 #[tauri::command]
 pub async fn delete_template_dir(dir_name: String) -> Result<(), String> {
-    let target = templates_root().join(&dir_name);
+    let target = writable_templates_root().join(&dir_name);
     if !target.exists() {
         return Err(format!("模板目录 '{}' 不存在", dir_name));
     }

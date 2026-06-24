@@ -121,28 +121,20 @@ body::before {
 }
 
 .sidebar-header {
-  padding: 20px 16px;
+  padding: 16px;
   border-bottom: 1px solid rgba(100, 255, 218, 0.08);
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
 }
 
-.sidebar-header h1 {
-  font-size: 20px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #fff 0%, #64ffda 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: -0.5px;
-}
-
-
-.header-icon {
-  color: #64ffda;
-  filter: drop-shadow(0 0 12px rgba(100, 255, 218, 0.5));
-  -webkit-text-fill-color: initial;
+.header-logo {
+  width: 100%;
+  height: auto;
+  max-height: 60px;
+  object-fit: contain;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 12px rgba(100, 255, 218, 0.3));
 }
 
 .sidebar-nav {
