@@ -28,7 +28,8 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
     <>
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
-          <img src="/logo.png" alt="ShipForge" className="header-logo" />
+          <Container size={24} className="header-icon" />
+          {!sidebarCollapsed && <h1>ShipForge</h1>}
         </div>
 
         <nav className="sidebar-nav">

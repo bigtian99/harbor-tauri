@@ -121,20 +121,28 @@ body::before {
 }
 
 .sidebar-header {
-  padding: 16px;
+  padding: 20px 16px;
   border-bottom: 1px solid rgba(100, 255, 218, 0.08);
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 10px;
 }
 
-.header-logo {
-  width: 100%;
-  height: auto;
-  max-height: 60px;
-  object-fit: contain;
-  mix-blend-mode: screen;
-  filter: drop-shadow(0 0 12px rgba(100, 255, 218, 0.3));
+.sidebar-header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #fff 0%, #64ffda 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+
+
+.header-icon {
+  color: #64ffda;
+  filter: drop-shadow(0 0 12px rgba(100, 255, 218, 0.5));
+  -webkit-text-fill-color: initial;
 }
 
 .sidebar-nav {
@@ -157,6 +165,11 @@ body::before {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 13px;
   font-weight: 600;
+}
+
+.sidebar-item svg {
+  color: #8892b0;
+  flex-shrink: 0;
 }
 
 .sidebar-item:hover {
