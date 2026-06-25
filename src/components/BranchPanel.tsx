@@ -110,6 +110,15 @@ export function BranchPanel({
   setImageName, setImageTag, setExposePort, setShowAdvancedSettings, setShowBuildLog,
   renderLog,
 }: BranchPanelProps) {
+  // 分支名映射：显示时去掉 origin/ 前缀，值保持完整 ref
+  const branchDisplayMap = Object.fromEntries(
+    branchOptions.map((b) => {
+      const display = b.name.includes('/') ? b.name.substring(b.name.indexOf('/') + 1) : b.name;
+      return [display, b.name];
+    })
+  );
+  const branchDisplayNames = Object.keys(branchDisplayMap);
+  const currentBranchDisplay = branchDisplayMap[branchName] || branchName;
   return (
     <div className="branch-panel">
       <div className="artifact-type-selector">
@@ -215,9 +224,9 @@ export function BranchPanel({
         <div className="form-group">
           <label>目标分支</label>
           <SearchableDropdown
-            value={branchName}
-            options={branchOptions.map((b) => b.name)}
-            onChange={onBranchChange}
+            value={currentBranchDisplay}
+            options={branchDisplayNames}
+            onChange={(display) => onBranchChange(branchDisplayMap[display] || display)}
             placeholder={isLoadingBranches ? "加载中..." : branchOptions.length === 0 ? "请先选择仓库" : "搜索或选择分支..."}
             disabled={!repoPath || branchOptions.length === 0}
             loading={isLoadingBranches}

@@ -13,17 +13,18 @@ pub(crate) fn list_known_git_branches(repo_root: &Path) -> Result<Vec<GitBranchO
             "refs/remotes",
         ],
     )?;
-    let mut seen = std::collections::BTreeSet::new();
-    for raw in output.lines() {
-        let name = raw.trim();
-        if name.is_empty() || name.ends_with("/HEAD") {
-            continue;
-        }
-        // 去掉远程前缀（如 origin/develop → develop），多个远程同名分支只保留一个
-        let stripped = name.split_once('/').map(|(_, rest)| rest).unwrap_or(name);
-        seen.insert(stripped.to_string());
-    }
-    Ok(seen.into_iter().map(|name| GitBranchOption { name }).collect())
+    let mut branches = output
+        .lines()
+        .map(str::trim)
+        .filter(|name| !name.is_empty() && !name.ends_with("/HEAD"))
+        .map(|name| name.to_string())
+        .collect::<Vec<_>>();
+    branches.sort();
+    branches.dedup();
+    Ok(branches
+        .into_iter()
+        .map(|name| GitBranchOption { name })
+        .collect())
 }
 
 pub(crate) fn cleanup_worktree(repo_path: &Path, worktree_path: &Path) {
