@@ -1,4 +1,4 @@
-use crate::models::GitBranchOption;
+use crate::models::{GitBranchOption, LocalMergeCheck};
 use crate::utils::{git_output, repo_root_for};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -216,4 +216,234 @@ pub async fn clone_repo(url: String) -> Result<String, String> {
     })
     .await
     .map_err(|e| format!("克隆线程异常: {}", e))?
+}
+
+// ========== 本地分支合并 ==========
+
+/// 列出远程分支（refs/remotes/*，含 origin/ 前缀），用于远程分支合并的源/目标选择。
+/// 先 fetch 同步远程引用，再复用 list_known_git_branches。
+#[tauri::command]
+pub async fn list_remote_branches(repo_path: String) -> Result<Vec<GitBranchOption>, String> {
+    let repo_path = PathBuf::from(repo_path);
+    if !repo_path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+        // 先 fetch 获取远程最新分支
+        let _ = Command::new("git")
+            .args(["fetch", "--all", "--prune"])
+            .current_dir(&repo_root)
+            .output();
+        list_known_git_branches(&repo_root)
+    })
+    .await
+    .map_err(|e| format!("读取远程分支线程异常: {e}"))?
+}
+
+/// 在仓库目录执行 git 命令，捕获 stdout/stderr 与退出码。
+fn run_git_capture(repo_root: &PathBuf, args: &[&str]) -> (bool, String, String) {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(repo_root)
+        .output();
+    match out {
+        Ok(o) => (
+            o.status.success(),
+            String::from_utf8_lossy(&o.stdout).to_string(),
+            String::from_utf8_lossy(&o.stderr).to_string(),
+        ),
+        Err(e) => (false, String::new(), format!("启动 git 失败: {e}")),
+    }
+}
+
+/// 预检把远程 source 合并进远程 target 是否会冲突。不改动工作区。
+///
+/// source / target 形如 `origin/feature`、`origin/master`。用 `git merge-tree --write-tree target source`
+/// （Git ≥ 2.38）直接对远程引用求值：
+/// - 无冲突：退出码 0，stdout 输出 tree SHA。
+/// - 有冲突：退出码 1，stdout 依次输出 tree SHA、空行、冲突文件列表。
+///
+/// 对老版本 Git（不识别 --write-tree），回退到 `git merge-tree $(git merge-base target source) target source`，
+/// 解析输出中是否含冲突标记来判定。
+#[tauri::command]
+pub async fn check_remote_merge(
+    repo_path: String,
+    source: String,
+    target: String,
+) -> Result<LocalMergeCheck, String> {
+    let repo_path = PathBuf::from(repo_path);
+    let source = source.trim().to_string();
+    let target = target.trim().to_string();
+    if source.is_empty() || target.is_empty() {
+        return Err("源分支和目标分支都不能为空".to_string());
+    }
+    if source == target {
+        return Err("源分支和目标分支不能相同".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+
+        // 优先用新语法 --write-tree，直接对远程引用求值
+        let (ok, stdout, stderr) = run_git_capture(
+            &repo_root,
+            &["merge-tree", "--write-tree", "--no-messages", &target, &source],
+        );
+        if stderr.contains("unknown option") || stderr.contains("usage:") {
+            // 老版本回退
+            let (base_ok, base_out, _) = run_git_capture(&repo_root, &["merge-base", &target, &source]);
+            if !base_ok {
+                return Ok(LocalMergeCheck {
+                    can_merge: false,
+                    conflict_files: Vec::new(),
+                    message: format!("无法计算 {} 与 {} 的共同祖先", target, source),
+                });
+            }
+            let base = base_out.trim();
+            let (_, tree_out, _) = run_git_capture(&repo_root, &["merge-tree", base, &target, &source]);
+            let has_conflict = tree_out.contains("<<<<<<<") || tree_out.contains("=======") || tree_out.contains(">>>>>>>");
+            return Ok(LocalMergeCheck {
+                can_merge: !has_conflict,
+                conflict_files: Vec::new(),
+                message: if has_conflict {
+                    "存在冲突".to_string()
+                } else {
+                    "无冲突，可直接合并".to_string()
+                },
+            });
+        }
+
+        if ok {
+            Ok(LocalMergeCheck {
+                can_merge: true,
+                conflict_files: Vec::new(),
+                message: "无冲突，可直接合并".to_string(),
+            })
+        } else {
+            let conflict_files = parse_merge_tree_conflicts(&stdout);
+            let message = if conflict_files.is_empty() {
+                "存在冲突".to_string()
+            } else {
+                format!("存在冲突，涉及 {} 个文件", conflict_files.len())
+            };
+            Ok(LocalMergeCheck {
+                can_merge: false,
+                conflict_files,
+                message,
+            })
+        }
+    })
+    .await
+    .map_err(|e| format!("合并预检线程异常: {e}"))?
+}
+
+/// 解析 `git merge-tree --write-tree` 有冲突时的 stdout，提取冲突文件路径。
+fn parse_merge_tree_conflicts(stdout: &str) -> Vec<String> {
+    let mut files: Vec<String> = Vec::new();
+    let mut past_tree = false;
+    for line in stdout.lines() {
+        let line = line.trim_end();
+        if !past_tree {
+            past_tree = true;
+            continue;
+        }
+        if let Some(pos) = line.rfind('\t') {
+            let path = line[pos + 1..].trim().to_string();
+            if !path.is_empty() && !files.contains(&path) {
+                files.push(path);
+            }
+        }
+    }
+    files
+}
+
+/// 把远程 source 合并进远程 target。
+///
+/// target 形如 `origin/master`。从 target 提取本地分支名（去掉 `origin/` 前缀），
+/// checkout 该本地分支（不存在则 git 自动从 origin/target 建跟踪分支，已存在则 pull 同步），
+/// 然后 `git merge --no-ff origin/source`。冲突时 abort 回滚；成功按需 push 本地分支到远程。
+#[tauri::command]
+pub async fn merge_remote_branches(
+    repo_path: String,
+    source: String,
+    target: String,
+    push: bool,
+) -> Result<String, String> {
+    let repo_path = PathBuf::from(repo_path);
+    let source = source.trim().to_string();
+    let target = target.trim().to_string();
+    if source.is_empty() || target.is_empty() {
+        return Err("源分支和目标分支都不能为空".to_string());
+    }
+    if source == target {
+        return Err("源分支和目标分支不能相同".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+
+        // target 形如 origin/master，取本地分支名 master
+        let local_target = target
+            .strip_prefix("origin/")
+            .unwrap_or(&target)
+            .to_string();
+
+        // checkout 本地目标分支。若本地不存在，git 会自动从 origin/<target> 创建跟踪分支。
+        let (co_ok, _, co_err) = run_git_capture(&repo_root, &["checkout", &local_target]);
+        if !co_ok {
+            // 本地无该分支时，尝试显式从远程创建跟踪分支
+            let (track_ok, _, track_err) = run_git_capture(
+                &repo_root,
+                &["checkout", "-b", &local_target, "--track", &target],
+            );
+            if !track_ok {
+                return Err(format!(
+                    "切换到目标分支 {} 失败：{}{}",
+                    local_target,
+                    co_err.trim(),
+                    if track_err.trim().is_empty() { String::new() } else { format!("\n{}", track_err.trim()) }
+                ));
+            }
+        } else {
+            // 已存在本地分支，pull 同步到远程最新
+            let _ = run_git_capture(&repo_root, &["pull", "--ff-only", "origin", &local_target]);
+        }
+
+        // 合并远程源分支（--no-ff 保留合并节点）
+        let (m_ok, m_out, m_err) = run_git_capture(&repo_root, &["merge", "--no-ff", "--no-edit", &source]);
+        if !m_ok {
+            // 冲突或失败：abort 回滚，保持工作区干净
+            let _ = Command::new("git")
+                .args(["merge", "--abort"])
+                .current_dir(&repo_root)
+                .output();
+            let detail = if m_err.contains("CONFLICT") || m_err.contains("conflict") {
+                format!("合并 {} → {} 存在冲突，已自动中止合并。\n{}", source, target, m_err.trim())
+            } else {
+                format!("合并失败：{}", m_err.trim())
+            };
+            let conflicts: Vec<&str> = m_err.lines().filter(|l| l.contains("CONFLICT")).collect();
+            let extra = if conflicts.is_empty() {
+                String::new()
+            } else {
+                format!("\n冲突详情：\n{}", conflicts.join("\n"))
+            };
+            return Err(format!("{}{}", detail, extra));
+        }
+
+        let mut log = format!("✅ 已将 {} 合并进 {}\n{}", source, target, m_out.trim());
+
+        // 可选：推送本地目标分支到远程
+        if push {
+            let (p_ok, _, p_err) = run_git_capture(&repo_root, &["push", "origin", &local_target]);
+            if p_ok {
+                log.push_str(&format!("\n\n📤 已推送 {} 到远程 origin", local_target));
+            } else {
+                log.push_str(&format!("\n\n⚠️ 本地合并成功，但推送到远程失败：{}", p_err.trim()));
+            }
+        }
+
+        Ok(log)
+    })
+    .await
+    .map_err(|e| format!("合并线程异常: {e}"))?
 }

@@ -2676,5 +2676,91 @@ body::before {
   }
 }
 
+/* ==================== PR 合并面板 ==================== */
 
+.merge-panel {
+  max-width: 900px;
+  margin: 0 auto;
+}
 
+.merge-branch-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.merge-arrow {
+  display: flex;
+  align-items: center;
+  height: 42px;
+  color: var(--primary, #64ffda);
+  flex-shrink: 0;
+}
+
+.merge-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0;
+  margin-bottom: 8px;
+  border-top: 1px solid rgba(100, 255, 218, 0.1);
+  border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+}
+
+.merge-result {
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  border: 1px solid transparent;
+}
+
+.merge-result.can-merge {
+  border-color: rgba(100, 255, 218, 0.45);
+  background: rgba(100, 255, 218, 0.08);
+}
+
+.merge-result.has-conflict {
+  border-color: rgba(255, 107, 107, 0.45);
+  background: rgba(255, 107, 107, 0.06);
+}
+
+.merge-conflict-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.conflict-file-list {
+  margin: 4px 0 0;
+  padding-left: 22px;
+  font-size: 0.82em;
+  color: #ff6b6b;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.conflict-file-list li {
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.pr-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.pr-state-ok {
+  color: #64ffda;
+  background: rgba(100, 255, 218, 0.1);
+}
+
+.pr-state-conflict {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+}

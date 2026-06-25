@@ -2,7 +2,7 @@
 
 export type ArtifactType = "jar" | "frontend_dist";
 export type BranchProjectType = "maven" | "npm";
-export type TabType = "upload" | "branch" | "config" | "history" | "landing";
+export type TabType = "upload" | "branch" | "config" | "history" | "landing" | "merge";
 
 export interface HarborConfig {
   harbor_url: string;
@@ -143,6 +143,14 @@ export interface FtpUploadItem {
 export interface TemplateInfo {
   dir: string;
   category: string;
+}
+
+// ==================== 本地分支合并 ====================
+
+export interface LocalMergeCheck {
+  canMerge: boolean;
+  conflictFiles: string[];
+  message: string;
 }
 
 // ==================== 常量 ====================

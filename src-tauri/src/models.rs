@@ -303,3 +303,16 @@ impl PackageProjectType {
         }
     }
 }
+
+// ========== 本地分支合并 ==========
+
+/// 本地合并预检结果：能否干净合并 + 冲突文件列表。
+#[derive(Debug, Serialize, Clone)]
+pub(crate) struct LocalMergeCheck {
+    /// true 表示无冲突可直接合并
+    pub(crate) can_merge: bool,
+    /// 冲突文件路径列表（无冲突时为空）
+    pub(crate) conflict_files: Vec<String>,
+    /// 中文提示
+    pub(crate) message: String,
+}

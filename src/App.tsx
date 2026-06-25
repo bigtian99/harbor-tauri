@@ -9,6 +9,7 @@ import { UploadPanel } from "./components/UploadPanel";
 import { BranchPanel } from "./components/BranchPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { LandingPanel } from "./components/LandingPanel";
+import { MergePanel } from "./components/MergePanel";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { useLanding } from "./hooks/useLanding";
 import "./App.css";
@@ -1176,6 +1177,13 @@ function App() {
             onDeleteRecord={deleteBuildRecord}
             onOpenArtifact={openArtifactPath}
             onCopyImage={handleCopyImage}
+          />
+        )}
+
+        {activeTab === "merge" && (
+          <MergePanel
+            config={config}
+            onOpenDirectory={openArtifactPath}
           />
         )}
 
