@@ -88,6 +88,8 @@ function App() {
   const [packageWithBackend, setPackageWithBackend] = useState<boolean>(false);
   const [branchExposePort, setBranchExposePort] = useState<string>("");
   const [branchFullImage, setBranchFullImage] = useState<string>("");
+  // 上传推送菜单：推送成功后的镜像地址，独立展示，不依赖构建日志折叠框
+  const [uploadFullImage, setUploadFullImage] = useState<string>("");
   const [springProfile, setSpringProfile] = useState<string>("");
   const [springProfiles, setSpringProfiles] = useState<string[]>([]);
 
@@ -541,6 +543,7 @@ function App() {
     setProgress(0);
     setProgressMessage("🚀 开始构建和推送镜像...");
     setLog("");
+    setUploadFullImage("");
     const uploadPort = artifactType === "jar" ? (uploadExposePort.trim() || config.expose_port.trim()) : "";
     const uploadImageName = uploadPort ? `${imageName}-${uploadPort}` : imageName;
     try {
@@ -552,6 +555,11 @@ function App() {
         exposePort: uploadExposePort || null,
       });
       setLog(result);
+      // 提取推送成功的镜像地址，独立展示在日志折叠框之外
+      const imgMatch = result.match(/完整镜像:\s*(.+)/);
+      if (imgMatch) {
+        setUploadFullImage(imgMatch[1].trim());
+      }
       setArtifactPath("");
       setImageTag("latest");
       // 推送成功后保存 JAR 端口到 SQLite
@@ -1055,6 +1063,9 @@ function App() {
             progress={progress}
             progressMessage={progressMessage}
             log={log}
+            fullImage={uploadFullImage}
+            copied={copied}
+            onCopyImage={handleCopyImage}
             onArtifactTypeChange={handleArtifactTypeChange}
             onSelectFile={handleSelectFile}
             onBuildAndPush={handleBuildAndPush}

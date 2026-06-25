@@ -1,6 +1,6 @@
 import {
   Rocket, Package, FileText,
-  Loader2, Eye, EyeOff, XCircle
+  Loader2, Eye, EyeOff, XCircle, CheckCircle, Copy
 } from "lucide-react";
 import type { ArtifactType } from "../types";
 import { getPathName } from "../types";
@@ -18,6 +18,10 @@ interface UploadPanelProps {
   progress: number;
   progressMessage: string;
   log: string;
+  // 推送成功后的镜像地址（独立展示，不依赖日志折叠框）
+  fullImage: string;
+  copied: boolean;
+  onCopyImage: (imageUrl: string) => void;
   onArtifactTypeChange: (type: ArtifactType) => void;
   onSelectFile: () => void;
   onBuildAndPush: () => void;
@@ -37,6 +41,7 @@ export function UploadPanel({
   artifactType, artifactPath, imageName, imageTag, exposePort,
   isDragOver, isBuilding, showImageConfig, showBuildLog,
   progress, progressMessage, log,
+  fullImage, copied, onCopyImage,
   onArtifactTypeChange, onSelectFile, onBuildAndPush, onCancelBuild,
   onDragOver, onDragLeave, onDrop,
   setImageName, setImageTag, setExposePort, setShowImageConfig, setShowBuildLog,
@@ -169,6 +174,34 @@ export function UploadPanel({
         <button className="cancel-btn" onClick={onCancelBuild}>
           <XCircle size={16} /> 取消构建
         </button>
+      )}
+
+      {fullImage && (
+        <div className="path-links">
+          <div className="path-link-item image-url-row">
+            <span className="path-link-label">🐳 完整镜像:</span>
+            <span className="image-url-value">
+              {fullImage.split('\n').map((line, i) => (
+                <span key={i} style={{ display: 'block' }} title={line}>{line}</span>
+              ))}
+            </span>
+            <button
+              className={`copy-btn ${copied ? "copied" : ""}`}
+              onClick={() => onCopyImage(fullImage.replace(/\n/g, '  '))}
+              title="复制镜像地址"
+            >
+              {copied ? (
+                <>
+                  <CheckCircle size={14} /> 已复制
+                </>
+              ) : (
+                <>
+                  <Copy size={14} /> 复制
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       )}
 
       {log && (
