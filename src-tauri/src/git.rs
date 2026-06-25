@@ -9,15 +9,22 @@ pub(crate) fn list_known_git_branches(repo_root: &Path) -> Result<Vec<GitBranchO
         repo_root,
         &[
             "for-each-ref",
-            "--format=%(refname:short)",
+            "--format=%(refname)",
             "refs/remotes",
         ],
     )?;
     let mut branches = output
         .lines()
         .map(str::trim)
-        .filter(|name| !name.is_empty() && !name.ends_with("/HEAD"))
-        .map(|name| name.to_string())
+        .filter_map(|line| {
+            // 形如 refs/remotes/origin/master
+            // refs/remotes/origin/HEAD 是指向默认分支的 symbolic ref，非真实分支，需剔除
+            let name = line.strip_prefix("refs/remotes/")?;
+            if name.is_empty() || name.ends_with("/HEAD") {
+                return None;
+            }
+            Some(name.to_string())
+        })
         .collect::<Vec<_>>();
     branches.sort();
     branches.dedup();
