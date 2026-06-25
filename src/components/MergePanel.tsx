@@ -332,9 +332,9 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
           <div className="merge-diff-section">
             <div className="merge-diff-header">
               <GitCommit size={15} />
-              <span>合并将带入的提交（{isLoadingDiff ? "加载中..." : diffCommits.length}）</span>
+              <span>源分支需要合并到目标分支的提交（{isLoadingDiff ? "加载中..." : diffCommits.length}）</span>
               <span className="template-hint" style={{ marginLeft: 8 }}>
-                {sourceBranch} 相对 {targetBranch} 多出的提交
+                {sourceBranch} → {targetBranch}
               </span>
             </div>
             {isLoadingDiff ? (
@@ -347,7 +347,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
               <p className="template-hint" style={{ padding: "8px 0" }}>
                 {sourceBranch === targetBranch
                   ? "两个分支相同，没有差异提交"
-                  : `没有差异提交，${sourceBranch} 没有比 ${targetBranch} 多出的提交`}
+                  : `${sourceBranch} 没有需要合并到 ${targetBranch} 的新提交`}
               </p>
             ) : (
               <div className="merge-diff-list">
