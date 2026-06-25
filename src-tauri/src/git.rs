@@ -1,4 +1,4 @@
-use crate::models::{GitBranchOption, LocalMergeCheck};
+use crate::models::{GitBranchOption, LocalMergeCheck, RemoteBranchListResult};
 use crate::utils::{git_output, repo_root_for};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -183,59 +183,85 @@ pub async fn list_git_branches_from_url(url: String) -> Result<Vec<GitBranchOpti
 #[tauri::command]
 pub async fn clone_repo(url: String) -> Result<String, String> {
     let url = url.trim().to_string();
-    let name = repo_name_from_url(&url);
+    tauri::async_runtime::spawn_blocking(move || ensure_cloned_repo(&url).map(|p| p.to_string_lossy().to_string()))
+        .await
+        .map_err(|e| format!("克隆线程异常: {}", e))?
+}
+
+/// 同步版：确保远程 URL 对应的本地缓存仓库存在（存在则 fetch 更新，不存在则浅克隆），返回缓存目录。
+pub(crate) fn ensure_cloned_repo(url: &str) -> Result<PathBuf, String> {
+    let name = repo_name_from_url(url);
     let cache_dir = dirs::cache_dir()
         .unwrap_or_else(|| std::env::temp_dir())
         .join("jarporter")
         .join("repos")
         .join(&name);
 
-    tauri::async_runtime::spawn_blocking(move || {
-        if cache_dir.exists() {
-            // 已存在，fetch 更新
-            Command::new("git")
-                .args(["fetch", "--all", "--prune"])
-                .current_dir(&cache_dir)
-                .output()
-                .map_err(|e| format!("git fetch 失败: {}", e))?;
-        } else {
-            // 浅克隆，包含所有远程分支
-            let output = Command::new("git")
-                .args(["clone", "--depth", "1", "--no-single-branch", &url])
-                .arg(&cache_dir)
-                .output()
-                .map_err(|e| format!("git clone 失败: {}", e))?;
-
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(format!("克隆仓库失败: {}", stderr.trim()));
-            }
+    if cache_dir.exists() {
+        Command::new("git")
+            .args(["fetch", "--all", "--prune"])
+            .current_dir(&cache_dir)
+            .output()
+            .map_err(|e| format!("git fetch 失败: {}", e))?;
+    } else {
+        let output = Command::new("git")
+            .args(["clone", "--depth", "1", "--no-single-branch", url])
+            .arg(&cache_dir)
+            .output()
+            .map_err(|e| format!("git clone 失败: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("克隆仓库失败: {}", stderr.trim()));
         }
-
-        Ok(cache_dir.to_string_lossy().to_string())
-    })
-    .await
-    .map_err(|e| format!("克隆线程异常: {}", e))?
+    }
+    Ok(cache_dir)
 }
 
 // ========== 本地分支合并 ==========
 
-/// 列出远程分支（refs/remotes/*，含 origin/ 前缀），用于远程分支合并的源/目标选择。
-/// 先 fetch 同步远程引用，再复用 list_known_git_branches。
-#[tauri::command]
-pub async fn list_remote_branches(repo_path: String) -> Result<Vec<GitBranchOption>, String> {
-    let repo_path = PathBuf::from(repo_path);
-    if !repo_path.is_dir() {
-        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
+/// 把用户输入（本地目录或 Git URL）解析成本地仓库根路径。
+/// - Git URL：调 ensure_cloned_repo 克隆/更新到缓存目录后返回。
+/// - 本地目录：直接 repo_root_for。
+fn resolve_repo_root(input: &str) -> Result<PathBuf, String> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Err("仓库路径不能为空".to_string());
     }
+    if is_git_url(input) {
+        return ensure_cloned_repo(input);
+    }
+    let path = PathBuf::from(input);
+    if !path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", path.display()));
+    }
+    repo_root_for(&path)
+}
+
+/// 列出远程分支（refs/remotes/*，含 origin/ 前缀），用于远程分支合并的源/目标选择。
+///
+/// 支持两种输入：
+/// - 本地仓库目录：直接在该目录 fetch 后列分支。
+/// - Git URL：自动克隆到缓存目录（存在则 fetch 更新），返回缓存路径与分支列表。
+///
+/// 返回 RemoteBranchListResult，其中 repo_path 为实际使用的本地路径，
+/// 前端后续 check/merge 操作应使用该路径（URL 输入时是缓存目录，不是原始 URL）。
+#[tauri::command]
+pub async fn list_remote_branches(repo_path: String) -> Result<RemoteBranchListResult, String> {
+    let repo_root = tauri::async_runtime::spawn_blocking(move || resolve_repo_root(&repo_path))
+        .await
+        .map_err(|e| format!("解析仓库线程异常: {e}"))??;
+
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = repo_root_for(&repo_path)?;
-        // 先 fetch 获取远程最新分支
+        // fetch 同步远程引用
         let _ = Command::new("git")
             .args(["fetch", "--all", "--prune"])
             .current_dir(&repo_root)
             .output();
-        list_known_git_branches(&repo_root)
+        let branches = list_known_git_branches(&repo_root)?;
+        Ok(RemoteBranchListResult {
+            repo_path: repo_root.to_string_lossy().to_string(),
+            branches,
+        })
     })
     .await
     .map_err(|e| format!("读取远程分支线程异常: {e}"))?
@@ -272,7 +298,6 @@ pub async fn check_remote_merge(
     source: String,
     target: String,
 ) -> Result<LocalMergeCheck, String> {
-    let repo_path = PathBuf::from(repo_path);
     let source = source.trim().to_string();
     let target = target.trim().to_string();
     if source.is_empty() || target.is_empty() {
@@ -282,7 +307,7 @@ pub async fn check_remote_merge(
         return Err("源分支和目标分支不能相同".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = repo_root_for(&repo_path)?;
+        let repo_root = resolve_repo_root(&repo_path)?;
 
         // 优先用新语法 --write-tree，直接对远程引用求值
         let (ok, stdout, stderr) = run_git_capture(
@@ -369,7 +394,6 @@ pub async fn merge_remote_branches(
     target: String,
     push: bool,
 ) -> Result<String, String> {
-    let repo_path = PathBuf::from(repo_path);
     let source = source.trim().to_string();
     let target = target.trim().to_string();
     if source.is_empty() || target.is_empty() {
@@ -379,7 +403,7 @@ pub async fn merge_remote_branches(
         return Err("源分支和目标分支不能相同".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = repo_root_for(&repo_path)?;
+        let repo_root = resolve_repo_root(&repo_path)?;
 
         // target 形如 origin/master，取本地分支名 master
         let local_target = target

@@ -88,7 +88,7 @@ pub(crate) struct PackageFromBranchResult {
     pub(crate) dockerfile_context: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub(crate) struct GitBranchOption {
     pub(crate) name: String,
 }
@@ -308,6 +308,7 @@ impl PackageProjectType {
 
 /// 本地合并预检结果：能否干净合并 + 冲突文件列表。
 #[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct LocalMergeCheck {
     /// true 表示无冲突可直接合并
     pub(crate) can_merge: bool,
@@ -315,4 +316,14 @@ pub(crate) struct LocalMergeCheck {
     pub(crate) conflict_files: Vec<String>,
     /// 中文提示
     pub(crate) message: String,
+}
+
+/// 列分支的返回：解析后的本地仓库路径（Git URL 会克隆到缓存目录）+ 远程分支列表。
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RemoteBranchListResult {
+    /// 实际使用的本地仓库路径（URL 输入时为缓存克隆目录，目录输入时为仓库根）
+    pub(crate) repo_path: String,
+    /// 远程分支列表
+    pub(crate) branches: Vec<GitBranchOption>,
 }

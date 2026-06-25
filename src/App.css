@@ -2674,19 +2674,55 @@ body::before {
     justify-content: flex-end;
     margin-top: 8px;
   }
+
+  /* 分支合并：窄屏下源/目标分支各占一行，隐藏中间箭头 */
+  .merge-branch-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .merge-branch-row > .form-group {
+    flex: none !important;
+    width: 100%;
+  }
+
+  .merge-arrow {
+    display: none;
+  }
+
+  .merge-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .merge-toolbar > .checkbox-label {
+    width: 100%;
+  }
+
+  .merge-toolbar > button {
+    width: 100%;
+  }
 }
 
-/* ==================== PR 合并面板 ==================== */
+/* ==================== 分支合并面板 ==================== */
 
 .merge-panel {
-  max-width: 900px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .merge-branch-row {
   display: flex;
   align-items: flex-end;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.merge-branch-row > .form-group {
+  flex: 1;
+  min-width: 200px;
 }
 
 .merge-arrow {
@@ -2763,4 +2799,83 @@ body::before {
 .pr-state-conflict {
   color: #ff6b6b;
   background: rgba(255, 107, 107, 0.1);
+}
+
+/* 分支差异提交列表 */
+.merge-diff-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.12);
+  background: rgba(100, 255, 218, 0.04);
+}
+
+.merge-diff-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88em;
+  color: var(--text, #e6f1ff);
+  font-weight: 600;
+}
+
+.merge-diff-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted, #8892b0);
+  font-size: 0.85em;
+  padding: 4px 0;
+}
+
+.merge-diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.merge-diff-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(15, 52, 96, 0.24);
+  border: 1px solid rgba(100, 255, 218, 0.08);
+}
+
+.merge-diff-item-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.merge-diff-item-main .commit-hash {
+  color: var(--primary, #64ffda);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82em;
+}
+
+.merge-diff-item-main .commit-message {
+  color: var(--text, #e6f1ff);
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.merge-diff-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.76em;
+  color: var(--muted, #8892b0);
+  flex-shrink: 0;
 }

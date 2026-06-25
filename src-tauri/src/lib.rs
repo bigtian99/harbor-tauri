@@ -14,7 +14,7 @@ use build::{
     build_and_push, cancel_build, check_dockerfile, detect_frontend_dir, detect_spring_profiles,
     list_npm_scripts, open_directory, package_from_branch,
 };
-use commit::{get_commit_authors, get_commit_list, get_last_commit};
+use commit::{get_commit_authors, get_commit_list, get_last_commit, list_branch_diff_commits};
 use config_cmd::{load_config, save_config};
 use git::{list_git_branches, list_git_branches_from_url, clone_repo, list_remote_branches, check_remote_merge, merge_remote_branches};
 use history::{
@@ -60,6 +60,7 @@ pub fn run() {
             get_last_commit,
             get_commit_list,
             get_commit_authors,
+            list_branch_diff_commits,
             list_npm_scripts,
             detect_frontend_dir,
             detect_spring_profiles,

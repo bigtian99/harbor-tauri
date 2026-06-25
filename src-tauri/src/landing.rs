@@ -539,14 +539,27 @@ pub async fn preview_landing_page(path: String, template_index: Option<usize>) -
 fn find_templates_dir() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
-            // Windows: resources 与 .exe 同目录
+            // Windows: resources 与 .exe 同目录。
+            // tauri.conf.json 使用 map: "../templates" -> "templates" 后，模板位于 exe_dir/templates。
             let win = exe_dir.join("templates");
             if win.exists() {
                 return Some(win);
             }
+            // 兼容旧包：数组资源 "../templates/**/*" 在 Tauri v2 中会把 "../" 规范化为 "_up_"。
+            let win_legacy = exe_dir.join("_up_").join("templates");
+            if win_legacy.exists() {
+                return Some(win_legacy);
+            }
             // macOS: .app/Contents/Resources/templates
             let mac = exe_dir.join("../Resources/templates");
             if let Ok(canonical) = mac.canonicalize() {
+                if canonical.exists() {
+                    return Some(canonical);
+                }
+            }
+            // 兼容旧包：.app/Contents/Resources/_up_/templates
+            let mac_legacy = exe_dir.join("../Resources/_up_/templates");
+            if let Ok(canonical) = mac_legacy.canonicalize() {
                 if canonical.exists() {
                     return Some(canonical);
                 }

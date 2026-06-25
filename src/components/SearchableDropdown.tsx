@@ -4,6 +4,7 @@ interface SearchableDropdownProps {
   value: string;
   options: string[];
   onChange: (value: string) => void;
+  onBlur?: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
   loading?: boolean;
@@ -13,6 +14,7 @@ export function SearchableDropdown({
   value,
   options,
   onChange,
+  onBlur,
   placeholder = "请选择...",
   disabled = false,
   loading = false,
@@ -72,6 +74,18 @@ export function SearchableDropdown({
     }
   };
 
+  // blur 时延迟回调，让下拉项的点击先于 blur 完成（点击会先 onChange 更新值）
+  const handleInputBlur = () => {
+    window.setTimeout(() => {
+      const finalValue = inputRef.current?.value ?? value;
+      setIsOpen(false);
+      setSearchTerm("");
+      if (onBlur) {
+        onBlur(finalValue);
+      }
+    }, 150);
+  };
+
   const displayValue = isOpen ? searchTerm : value || "";
 
   return (
@@ -83,6 +97,7 @@ export function SearchableDropdown({
         value={displayValue}
         onChange={handleInputChange}
         onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
         onKeyDown={handleKeyDown}
         placeholder={loading ? "加载中..." : placeholder}
         disabled={disabled || loading}

@@ -153,6 +153,12 @@ export interface LocalMergeCheck {
   message: string;
 }
 
+export interface RemoteBranchListResult {
+  /** 实际使用的本地仓库路径（Git URL 输入时为缓存克隆目录） */
+  repoPath: string;
+  branches: GitBranchOption[];
+}
+
 // ==================== 常量 ====================
 
 export const DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE = `FROM {{BASE_IMAGE}}

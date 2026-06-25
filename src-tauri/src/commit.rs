@@ -1,6 +1,7 @@
 use crate::models::{AuthorInfo, CommitInfo, CommitListResult, LastCommitInfo};
 use crate::utils::{git_output, repo_root_for};
 use std::path::PathBuf;
+use std::process::Command;
 
 /// 将 git remote URL 转换为 commit 页面 URL
 pub(crate) fn remote_url_to_commit_url(remote_url: &str, commit_hash: &str) -> Option<String> {
@@ -241,4 +242,80 @@ pub async fn get_commit_list(
     })
     .await
     .map_err(|e| format!("读取提交列表线程异常: {}", e))?
+}
+
+/// 列出 source 分支相对 target 分支多出的提交（git log target..source）。
+/// 用于分支合并面板展示"合并会带入哪些提交"。最多返回 50 条。
+#[tauri::command]
+pub async fn list_branch_diff_commits(
+    repo_path: String,
+    source: String,
+    target: String,
+) -> Result<Vec<CommitInfo>, String> {
+    let repo_path = PathBuf::from(repo_path);
+    let source = source.trim().to_string();
+    let target = target.trim().to_string();
+    if source.is_empty() || target.is_empty() {
+        return Err("源分支和目标分支都不能为空".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+        // URL 合并场景可能来自浅克隆缓存仓库。差异提交需要完整历史，否则 target..source
+        // 可能少算甚至返回空。这里先确保远程引用和历史完整。
+        let is_shallow = git_output(&repo_root, &["rev-parse", "--is-shallow-repository"])
+            .map(|s| s.trim() == "true")
+            .unwrap_or(false);
+        let fetch_args = if is_shallow {
+            vec!["fetch", "--all", "--prune", "--unshallow"]
+        } else {
+            vec!["fetch", "--all", "--prune"]
+        };
+        let _ = Command::new("git")
+            .args(fetch_args)
+            .current_dir(&repo_root)
+            .output();
+
+        let rev_range = format!("{target}..{source}");
+        let output = git_output(
+            &repo_root,
+            &["log", "-50", "--format=%H%n%s%n%an%n%ai", &rev_range],
+        )?;
+        let remote_url = git_output(&repo_root, &["remote", "get-url", "origin"])
+            .ok()
+            .map(|u| u.trim().to_string());
+
+        let mut commits = Vec::new();
+        let lines: Vec<&str> = output.lines().collect();
+        for chunk in lines.chunks(4) {
+            if chunk.len() < 4 {
+                continue;
+            }
+            let hash = chunk[0].to_string();
+            let short_hash = hash[..8.min(hash.len())].to_string();
+            let message = chunk[1].to_string();
+            let author = chunk[2].to_string();
+            let date_str = chunk[3].to_string();
+            let formatted_date =
+                chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
+                    .map(|dt| {
+                        let local: chrono::DateTime<chrono::Local> = dt.with_timezone(&chrono::Local);
+                        local.format("%Y-%m-%d %H:%M:%S").to_string()
+                    })
+                    .unwrap_or(date_str);
+            let url = remote_url
+                .as_ref()
+                .and_then(|u| remote_url_to_commit_url(u, &hash));
+            commits.push(CommitInfo {
+                hash,
+                short_hash,
+                message,
+                author,
+                date: formatted_date,
+                url,
+            });
+        }
+        Ok(commits)
+    })
+    .await
+    .map_err(|e| format!("读取分支差异提交线程异常: {e}"))?
 }
