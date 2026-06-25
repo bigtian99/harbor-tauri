@@ -583,6 +583,10 @@ function App() {
       setBackendArtifactPath(result.backend_artifact_path || "");
       setWorktreePath(result.worktree_path);
       setCustomDockerfile(result.dockerfile_path || "");
+      // 分支打包时自动从产物路径推断镜像名称（setState 异步，用局部变量保证后续逻辑可用）
+      const effectiveImageName = imageName.trim()
+        || inferImageName(result.artifact_path, branchProjectType === "npm" ? "frontend_dist" : "jar");
+      setImageName(effectiveImageName);
       await saveBranchSettings();
       await loadBuildHistory();
       setActiveTab("branch");
@@ -603,7 +607,7 @@ function App() {
             ? imageTag
             : `${branchSafeName}-v.${yy}.${mm}.${dd}.${hh}.${mi}`;
 
-          if (!imageName.trim()) {
+          if (!effectiveImageName) {
             setLog(`⚠️ 分支打包成功，但未设置镜像名称，跳过推送\n\n${result.log}`);
           } else {
             const pushLogs: string[] = [];
@@ -616,7 +620,7 @@ function App() {
                 setProgressMessage("🚀 推送镜像...");
                 const resultStr = await invoke<string>("build_and_push", {
                   jarPath: result.artifact_path,
-                  imageName: imageName.trim(),
+                  imageName: effectiveImageName,
                   imageTag: branchImageTag,
                   artifactType: "jar",
                   dockerfilePath: null,
@@ -628,7 +632,7 @@ function App() {
                   imageList.push(imgMatch[1].trim());
                   try {
                     await invoke("update_build_record_image", {
-                      imageName: imageName.trim(),
+                      imageName: effectiveImageName,
                       imageTag: imgMatch[1].trim(),
                     });
                     await loadBuildHistory();
@@ -645,7 +649,7 @@ function App() {
               setProgressMessage("🚀 推送前端镜像...");
               const feResult = await invoke<string>("build_and_push", {
                 jarPath: result.artifact_path,
-                imageName: imageName.trim(),
+                imageName: effectiveImageName,
                 imageTag: branchImageTag,
                 artifactType: "frontend_dist",
                 dockerfilePath: null,
