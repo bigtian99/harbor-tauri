@@ -1,6 +1,7 @@
 mod build;
 mod commit;
 mod config_cmd;
+mod db;
 mod docker;
 mod git;
 mod history;
@@ -41,6 +42,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // 初始化 SQLite 数据库
+            if let Err(e) = db::init_db() {
+                eprintln!("[JarPorter] 初始化数据库失败: {}", e);
+            }
             // 启动本地静态预览服务器（仅 127.0.0.1），用于落地页预览
             preview_server::start(app);
             Ok(())
@@ -80,6 +85,8 @@ pub fn run() {
             list_template_infos,
             upload_template_zip,
             delete_template_dir,
+            db::get_jar_port,
+            db::save_jar_port,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

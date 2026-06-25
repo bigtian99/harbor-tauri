@@ -28,5 +28,6 @@ dirs = "6"
 chrono = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
 tiny_http = "0.12"
+rusqlite = { version = "0.31", features = ["bundled"] }
 zip = "2"
 

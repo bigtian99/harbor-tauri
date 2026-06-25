@@ -26,7 +26,6 @@ export interface HarborConfig {
   last_package_with_backend: boolean;
   last_spring_profile: string;
   last_expose_port: string;
-  last_upload_expose_port: string;
   repo_path_history: string[];
   npm_package_manager: string;
   npm_registry: string;

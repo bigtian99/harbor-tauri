@@ -56,7 +56,6 @@ function App() {
     last_package_with_backend: false,
     last_spring_profile: "",
     last_expose_port: "",
-    last_upload_expose_port: "",
     repo_path_history: [],
     npm_package_manager: "npm",
     npm_registry: "",
@@ -217,7 +216,6 @@ function App() {
         if (savedConfig.last_package_with_backend !== undefined) setPackageWithBackend(savedConfig.last_package_with_backend);
         if (savedConfig.last_spring_profile) setSpringProfile(savedConfig.last_spring_profile);
         if (savedConfig.last_expose_port !== undefined) setBranchExposePort(savedConfig.last_expose_port);
-        if (savedConfig.last_upload_expose_port) setUploadExposePort(savedConfig.last_upload_expose_port);
         if (savedConfig.last_repo_path) {
           await loadGitBranches(savedConfig.last_repo_path, savedConfig.last_branch || undefined);
           if (savedConfig.last_branch) {
@@ -285,7 +283,14 @@ function App() {
 
   function handleArtifactPathSelected(path: string, type = artifactType) {
     setArtifactPath(path);
-    setImageName(inferImageName(path, type));
+    const inferred = inferImageName(path, type);
+    setImageName(inferred);
+    // 从 SQLite 查上次对这个 JAR 用的端口
+    if (type === "jar" && isTauriRuntime()) {
+      invoke<string | null>("get_jar_port", { jarName: inferred }).then((port) => {
+        if (port) setUploadExposePort(port);
+      }).catch(() => {});
+    }
   }
 
   function handleArtifactTypeChange(type: ArtifactType) {
@@ -549,10 +554,10 @@ function App() {
       setLog(result);
       setArtifactPath("");
       setImageTag("latest");
-      // 推送成功后保存上传端口的配置
-      if (uploadExposePort) {
-        const updatedConfig = { ...config, last_upload_expose_port: uploadExposePort };
-        invoke("save_config", { config: updatedConfig }).then(() => setConfig(updatedConfig)).catch(() => {});
+      // 推送成功后保存 JAR 端口到 SQLite
+      const jarName = artifactType === "jar" ? inferImageName(artifactPath, "jar") : null;
+      if (jarName && uploadExposePort && isTauriRuntime()) {
+        invoke("save_jar_port", { jarName, port: uploadExposePort }).catch(() => {});
       }
     } catch (e) {
       setLog(`❌ 推送失败:\n${e}`);
