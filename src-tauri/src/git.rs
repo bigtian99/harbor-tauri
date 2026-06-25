@@ -10,7 +10,6 @@ pub(crate) fn list_known_git_branches(repo_root: &Path) -> Result<Vec<GitBranchO
         &[
             "for-each-ref",
             "--format=%(refname:short)",
-            "refs/heads",
             "refs/remotes",
         ],
     )?;
