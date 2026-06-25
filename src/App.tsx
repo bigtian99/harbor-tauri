@@ -554,7 +554,9 @@ function App() {
         artifactType,
         exposePort: uploadExposePort || null,
       });
-      setLog(result);
+      // 追加最终结果到已累积的过程日志之后（过程日志由 build-progress 事件实时累积进 log），
+      // 这样"展开构建日志"能看到完整的 构建上下文→构建镜像→登录→推送→成功 链路。
+      setLog((prev) => (prev ? `${prev}\n\n${result}` : result));
       // 提取推送成功的镜像地址，独立展示在日志折叠框之外
       const imgMatch = result.match(/完整镜像:\s*(.+)/);
       if (imgMatch) {
@@ -911,6 +913,9 @@ function App() {
       (event) => {
         setProgress(event.payload.percent);
         setProgressMessage(event.payload.message);
+        // 累积构建/推送过程日志，让"展开构建日志"能看到打包镜像、推送镜像等过程，
+        // 而不是只看到最终一句成功提示。各流程结束时仍会 setLog 覆盖/追加最终结果。
+        setLog((prev) => (prev ? `${prev}\n${event.payload.message}` : event.payload.message));
       }
     );
 
