@@ -50,9 +50,19 @@ export function SearchableDropdown({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
+    const newValue = e.target.value;
+    setSearchTerm(newValue);
+    onChange(newValue);
     if (!isOpen) {
       setIsOpen(true);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && searchTerm && !options.includes(searchTerm)) {
+      onChange(searchTerm);
+      setIsOpen(false);
+      setSearchTerm("");
     }
   };
 
@@ -73,6 +83,7 @@ export function SearchableDropdown({
         value={displayValue}
         onChange={handleInputChange}
         onFocus={handleInputFocus}
+        onKeyDown={handleKeyDown}
         placeholder={loading ? "加载中..." : placeholder}
         disabled={disabled || loading}
         autoComplete="off"
@@ -89,10 +100,15 @@ export function SearchableDropdown({
                 {option}
               </div>
             ))
-          ) : (
-            <div className="searchable-dropdown-empty">
-              {searchTerm ? "没有匹配的选项" : "暂无可用选项"}
+          ) : searchTerm ? (
+            <div
+              className="searchable-dropdown-item searchable-dropdown-custom"
+              onClick={() => handleSelect(searchTerm)}
+            >
+              使用: {searchTerm}
             </div>
+          ) : (
+            <div className="searchable-dropdown-empty">暂无可用选项</div>
           )}
         </div>
       )}

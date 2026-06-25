@@ -131,7 +131,7 @@ export function BranchPanel({
 
       <div className="branch-card">
         <div className="form-group">
-          <label>Git 仓库目录</label>
+          <label>Git 仓库</label>
           <div className="path-picker-row">
             <div className="searchable-dropdown-wrapper">
               <SearchableDropdown
@@ -140,7 +140,7 @@ export function BranchPanel({
                 onChange={(value) => {
                   onRepoPathChange(value);
                 }}
-                placeholder="选择或输入 Git 仓库目录"
+                placeholder="输入 Git 地址或选择本地目录"
               />
             </div>
             <button type="button" className="path-picker-btn" onClick={onSelectRepo}>
@@ -155,7 +155,13 @@ export function BranchPanel({
               {isLoadingBranches ? <Loader2 size={16} className="spin" /> : <GitBranch size={16} />} {isLoadingBranches ? "读取中" : "刷新分支"}
             </button>
           </div>
-          {repoPath && <p className="template-hint">当前选择：{repoPath}</p>}
+          {repoPath && (
+            <p className="template-hint">
+              {repoPath.startsWith("http://") || repoPath.startsWith("https://") || repoPath.startsWith("git@")
+                ? "远程 Git 地址，打包时自动克隆"
+                : "当前选择：" + repoPath}
+            </p>
+          )}
         </div>
 
         {branchProjectType === "npm" && (
