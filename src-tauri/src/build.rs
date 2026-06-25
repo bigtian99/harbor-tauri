@@ -231,10 +231,18 @@ pub async fn package_from_branch(
         return Err("请输入目标分支".to_string());
     }
 
-    let repo_path = PathBuf::from(repo_path);
-    if !repo_path.is_dir() {
-        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
-    }
+    // 如果是 URL，先克隆到本地缓存目录
+    let repo_path_str = repo_path.trim().to_string();
+    let repo_path = if crate::git::is_git_url(&repo_path_str) {
+        let local = crate::git::clone_repo(repo_path_str).await?;
+        PathBuf::from(local)
+    } else {
+        let p = PathBuf::from(&repo_path_str);
+        if !p.is_dir() {
+            return Err(format!("仓库路径不是目录: {}", p.display()));
+        }
+        p
+    };
 
     // 每次打包前清理之前的临时 worktree/build 残留目录
     cleanup_old_temp_dirs();
@@ -899,9 +907,15 @@ pub async fn build_and_push(
     artifact_type: Option<String>,
     dockerfile_path: Option<String>,
     dockerfile_context: Option<String>,
+    expose_port: Option<String>,
 ) -> Result<String, String> {
     reset_cancel_flag();
-    let config = load_config_sync()?;
+    let mut config = load_config_sync()?;
+    if let Some(port) = expose_port {
+        if !port.trim().is_empty() {
+            config.expose_port = port.trim().to_string();
+        }
+    }
     let artifact_type = ArtifactType::from_option(artifact_type)?;
 
     if config.harbor_url.is_empty()

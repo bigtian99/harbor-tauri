@@ -24,6 +24,9 @@ export interface HarborConfig {
   last_project_type: string;
   last_auto_push_image: boolean;
   last_package_with_backend: boolean;
+  last_spring_profile: string;
+  last_expose_port: string;
+  last_upload_expose_port: string;
   repo_path_history: string[];
   npm_package_manager: string;
   npm_registry: string;
@@ -209,4 +212,8 @@ export function inferImageName(path: string, type: ArtifactType) {
     ? parts[parts.length - 2]
     : lastName;
   return directoryName.toLowerCase();
+}
+
+export function isGitUrl(s: string) {
+  return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("git@") || s.endsWith(".git");
 }

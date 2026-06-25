@@ -45,6 +45,7 @@ interface BranchPanelProps {
   branchFullImage: string;
   imageName: string;
   imageTag: string;
+  exposePort: string;
   // 高级设置
   showAdvancedSettings: boolean;
   // 配置
@@ -84,6 +85,7 @@ interface BranchPanelProps {
   onCopyImage: (url: string) => void;
   setImageName: (name: string) => void;
   setImageTag: (tag: string) => void;
+  setExposePort: (port: string) => void;
   setShowAdvancedSettings: (show: boolean) => void;
   setShowBuildLog: (show: boolean) => void;
   renderLog: (text: string) => React.ReactNode;
@@ -95,7 +97,7 @@ export function BranchPanel({
   springProfile, springProfiles, isLoadingProfiles,
   lastCommit, isLoadingCommit, commitList, commitListTotal, showCommitListModal,
   artifactPath, backendArtifactPath, worktreePath, customDockerfile, branchHasDockerfile,
-  isBuilding, autoPushImage, branchFullImage, imageName, imageTag,
+  isBuilding, autoPushImage, branchFullImage, imageName, imageTag, exposePort,
   showAdvancedSettings, config,
   progress, progressMessage, log, showBuildLog, copied,
   onBranchProjectTypeChange, onRepoPathChange, onSelectRepo, onRefreshBranches,
@@ -105,7 +107,7 @@ export function BranchPanel({
   commitAuthors, isLoadingCommitList, commitListPage, commitListPageSize,
   commitAuthorFilter, commitMessageFilter, setCommitAuthorFilter, setCommitMessageFilter,
   onPackageFromBranch, onCancelBuild, onOpenDirectory, onCopyImage,
-  setImageName, setImageTag, setShowAdvancedSettings, setShowBuildLog,
+  setImageName, setImageTag, setExposePort, setShowAdvancedSettings, setShowBuildLog,
   renderLog,
 }: BranchPanelProps) {
   return (
@@ -346,6 +348,16 @@ export function BranchPanel({
                     placeholder={branchProjectType === "npm" ? "例如: my-frontend（小写）" : "例如: tksy-admin（小写）"}
                   />
                   <p className="template-hint">留空则自动从{branchProjectType === "npm" ? "目录名" : "JAR 文件名"}推断</p>
+                </div>
+                <div className="form-group">
+                  <label>JAR 暴露端口</label>
+                  <input
+                    type="text"
+                    value={exposePort}
+                    onChange={(e) => setExposePort(e.target.value)}
+                    placeholder={config.expose_port || "例如: 8181"}
+                  />
+                  <p className="template-hint">留空则使用配置中的默认端口 {config.expose_port || "8181"}</p>
                 </div>
                 <div className="form-group">
                   <label>镜像标签</label>

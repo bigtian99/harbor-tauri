@@ -120,3 +120,93 @@ pub async fn list_git_branches(repo_path: String) -> Result<Vec<GitBranchOption>
     .await
     .map_err(|e| format!("读取分支线程异常: {}", e))?
 }
+
+/// 判断字符串是否为 Git URL
+pub(crate) fn is_git_url(s: &str) -> bool {
+    s.starts_with("http://")
+        || s.starts_with("https://")
+        || s.starts_with("git@")
+        || s.ends_with(".git")
+}
+
+/// 从 Git URL 提取仓库名（去掉 .git 后缀，取最后一段）
+pub(crate) fn repo_name_from_url(url: &str) -> String {
+    let last = url.split('/').next_back().unwrap_or("repo");
+    last.strip_suffix(".git").unwrap_or(last).to_string()
+}
+
+/// 通过 git ls-remote 获取远程仓库的分支列表（无需克隆）
+#[tauri::command]
+pub async fn list_git_branches_from_url(url: String) -> Result<Vec<GitBranchOption>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = Command::new("git")
+            .args(["ls-remote", "--heads", url.trim()])
+            .output()
+            .map_err(|e| format!("执行 git ls-remote 失败: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("获取远程分支失败: {}", stderr.trim()));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut branches: Vec<GitBranchOption> = stdout
+            .lines()
+            .filter_map(|line| {
+                let parts: Vec<&str> = line.splitn(2, '\t').collect();
+                if parts.len() == 2 {
+                    let ref_name = parts[1].trim();
+                    // refs/heads/xxx → xxx
+                    ref_name.strip_prefix("refs/heads/").map(|name| GitBranchOption {
+                        name: name.to_string(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        branches.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(branches)
+    })
+    .await
+    .map_err(|e| format!("读取远程分支线程异常: {}", e))?
+}
+
+/// 将 Git URL 浅克隆到缓存目录，返回本地路径
+#[tauri::command]
+pub async fn clone_repo(url: String) -> Result<String, String> {
+    let url = url.trim().to_string();
+    let name = repo_name_from_url(&url);
+    let cache_dir = dirs::cache_dir()
+        .unwrap_or_else(|| std::env::temp_dir())
+        .join("jarporter")
+        .join("repos")
+        .join(&name);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        if cache_dir.exists() {
+            // 已存在，fetch 更新
+            Command::new("git")
+                .args(["fetch", "--all", "--prune"])
+                .current_dir(&cache_dir)
+                .output()
+                .map_err(|e| format!("git fetch 失败: {}", e))?;
+        } else {
+            // 浅克隆，包含所有远程分支
+            let output = Command::new("git")
+                .args(["clone", "--depth", "1", "--no-single-branch", &url])
+                .arg(&cache_dir)
+                .output()
+                .map_err(|e| format!("git clone 失败: {}", e))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(format!("克隆仓库失败: {}", stderr.trim()));
+            }
+        }
+
+        Ok(cache_dir.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| format!("克隆线程异常: {}", e))?
+}

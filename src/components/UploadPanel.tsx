@@ -10,6 +10,7 @@ interface UploadPanelProps {
   artifactPath: string;
   imageName: string;
   imageTag: string;
+  exposePort: string;
   isDragOver: boolean;
   isBuilding: boolean;
   showImageConfig: boolean;
@@ -26,18 +27,19 @@ interface UploadPanelProps {
   onDrop: (e: React.DragEvent) => void;
   setImageName: (name: string) => void;
   setImageTag: (tag: string) => void;
+  setExposePort: (port: string) => void;
   setShowImageConfig: (show: boolean) => void;
   setShowBuildLog: (show: boolean) => void;
   renderLog: (text: string) => React.ReactNode;
 }
 
 export function UploadPanel({
-  artifactType, artifactPath, imageName, imageTag,
+  artifactType, artifactPath, imageName, imageTag, exposePort,
   isDragOver, isBuilding, showImageConfig, showBuildLog,
   progress, progressMessage, log,
   onArtifactTypeChange, onSelectFile, onBuildAndPush, onCancelBuild,
   onDragOver, onDragLeave, onDrop,
-  setImageName, setImageTag, setShowImageConfig, setShowBuildLog,
+  setImageName, setImageTag, setExposePort, setShowImageConfig, setShowBuildLog,
   renderLog,
 }: UploadPanelProps) {
   return (
@@ -116,6 +118,18 @@ export function UploadPanel({
                 placeholder="留空则自动生成 v.YY.MM.DD.HH.MM"
               />
             </div>
+            {artifactType === "jar" && (
+              <div className="form-group">
+                <label>JAR 暴露端口</label>
+                <input
+                  type="text"
+                  value={exposePort}
+                  onChange={(e) => setExposePort(e.target.value)}
+                  placeholder="默认: 8181"
+                />
+                <p className="template-hint">留空则使用配置中的默认端口</p>
+              </div>
+            )}
           </>
         )}
       </div>

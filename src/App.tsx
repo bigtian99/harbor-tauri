@@ -20,7 +20,7 @@ import type {
 } from "./types";
 import {
   DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE, DEFAULT_FRONTEND_NGINX_TEMPLATE,
-  isTauriRuntime, inferImageName
+  isTauriRuntime, inferImageName, isGitUrl
 } from "./types";
 
 // 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
@@ -39,7 +39,7 @@ function App() {
     harbor_url: "dockerhub.kubekey.local",
     username: "",
     password: "",
-    project: "tksy-admin",
+    project: "",
     base_image: "eclipse-temurin:21-jre-alpine",
     expose_port: "8181",
     frontend_base_image: "nginx:alpine",
@@ -54,6 +54,9 @@ function App() {
     last_project_type: "maven",
     last_auto_push_image: false,
     last_package_with_backend: false,
+    last_spring_profile: "",
+    last_expose_port: "",
+    last_upload_expose_port: "",
     repo_path_history: [],
     npm_package_manager: "npm",
     npm_registry: "",
@@ -68,6 +71,7 @@ function App() {
   const [backendArtifactPath, setBackendArtifactPath] = useState<string>("");
   const [imageName, setImageName] = useState<string>("");
   const [imageTag, setImageTag] = useState<string>("latest");
+  const [uploadExposePort, setUploadExposePort] = useState<string>("");
   const [isDragOver, setIsDragOver] = useState(false);
 
   // ==================== 分支打包状态 ====================
@@ -83,6 +87,7 @@ function App() {
   const [branchHasDockerfile, setBranchHasDockerfile] = useState(false);
   const [autoPushImage, setAutoPushImage] = useState<boolean>(false);
   const [packageWithBackend, setPackageWithBackend] = useState<boolean>(false);
+  const [branchExposePort, setBranchExposePort] = useState<string>("");
   const [branchFullImage, setBranchFullImage] = useState<string>("");
   const [springProfile, setSpringProfile] = useState<string>("");
   const [springProfiles, setSpringProfiles] = useState<string[]>([]);
@@ -210,8 +215,11 @@ function App() {
         if (savedConfig.last_build_script) setSelectedBuildScript(savedConfig.last_build_script);
         if (savedConfig.last_auto_push_image !== undefined) setAutoPushImage(savedConfig.last_auto_push_image);
         if (savedConfig.last_package_with_backend !== undefined) setPackageWithBackend(savedConfig.last_package_with_backend);
+        if (savedConfig.last_spring_profile) setSpringProfile(savedConfig.last_spring_profile);
+        if (savedConfig.last_expose_port !== undefined) setBranchExposePort(savedConfig.last_expose_port);
+        if (savedConfig.last_upload_expose_port) setUploadExposePort(savedConfig.last_upload_expose_port);
         if (savedConfig.last_repo_path) {
-          await loadGitBranches(savedConfig.last_repo_path);
+          await loadGitBranches(savedConfig.last_repo_path, savedConfig.last_branch || undefined);
           if (savedConfig.last_branch) {
             await loadSpringProfiles(savedConfig.last_repo_path, savedConfig.last_branch);
             loadLastCommit(savedConfig.last_repo_path, savedConfig.last_branch);
@@ -277,9 +285,7 @@ function App() {
 
   function handleArtifactPathSelected(path: string, type = artifactType) {
     setArtifactPath(path);
-    if (!imageName) {
-      setImageName(inferImageName(path, type));
-    }
+    setImageName(inferImageName(path, type));
   }
 
   function handleArtifactTypeChange(type: ArtifactType) {
@@ -289,10 +295,12 @@ function App() {
   }
 
   // ==================== Git 操作 ====================
-  async function loadGitBranches(path: string) {
+  async function loadGitBranches(path: string, preserveBranch?: string) {
     const nextRepoPath = path.trim();
     setBranchOptions([]);
-    setBranchName("");
+    if (!preserveBranch) {
+      setBranchName("");
+    }
     if (!nextRepoPath) return;
     if (!isTauriRuntime()) {
       setLog("⚠️ 当前是浏览器预览环境，无法读取本机 Git 分支；请在 Tauri 桌面窗口中操作");
@@ -301,21 +309,28 @@ function App() {
     updateLoading('branches', true);
     setLog("");
     try {
-      const branches = await invoke<GitBranchOption[]>("list_git_branches", { repoPath: nextRepoPath });
+      // 判断是 Git URL 还是本地路径
+      const isUrl = isGitUrl(nextRepoPath);
+      const branches = isUrl
+        ? await invoke<GitBranchOption[]>("list_git_branches_from_url", { url: nextRepoPath })
+        : await invoke<GitBranchOption[]>("list_git_branches", { repoPath: nextRepoPath });
       setBranchOptions(branches);
-      const firstBranch = branches[0]?.name ?? "";
-      setBranchName(firstBranch);
-      if (branchProjectType === "maven" && firstBranch) {
-        await loadSpringProfiles(nextRepoPath, firstBranch);
+      // 刷新时优先保持之前选中的分支，不存在则选第一个
+      const targetBranch = preserveBranch && branches.some((b) => b.name === preserveBranch)
+        ? preserveBranch
+        : branches[0]?.name ?? "";
+      setBranchName(targetBranch);
+      if (branchProjectType === "maven" && targetBranch && !isUrl) {
+        await loadSpringProfiles(nextRepoPath, targetBranch);
       }
-      if (firstBranch) {
-        loadLastCommit(nextRepoPath, firstBranch);
-        loadCommitList(nextRepoPath, firstBranch, 1);
+      if (targetBranch && !isUrl) {
+        loadLastCommit(nextRepoPath, targetBranch);
+        loadCommitList(nextRepoPath, targetBranch, 1);
       }
       if (branches.length === 0) {
         setLog("⚠️ 没有读取到可用分支");
       }
-      if (branchProjectType === "npm") {
+      if (branchProjectType === "npm" && !isUrl) {
         try {
           const detectedDir = await invoke<string | null>("detect_frontend_dir", { repoPath: nextRepoPath });
           if (detectedDir) {
@@ -482,6 +497,8 @@ function App() {
       if (selected) {
         const selectedPath = selected as string;
         setRepoPath(selectedPath);
+        // 切换仓库时清空镜像名称，打包时自动从产物推断
+        setImageName("");
         await loadGitBranches(selectedPath);
         if (config.remember_branch_settings) {
           const newHistory = prependPathHistory(config.repo_path_history, selectedPath);
@@ -519,16 +536,24 @@ function App() {
     setProgress(0);
     setProgressMessage("🚀 开始构建和推送镜像...");
     setLog("");
+    const uploadPort = artifactType === "jar" ? (uploadExposePort.trim() || config.expose_port.trim()) : "";
+    const uploadImageName = uploadPort ? `${imageName}-${uploadPort}` : imageName;
     try {
       const result = await invoke<string>("build_and_push", {
         jarPath: artifactPath,
-        imageName,
+        imageName: uploadImageName,
         imageTag,
         artifactType,
+        exposePort: uploadExposePort || null,
       });
       setLog(result);
       setArtifactPath("");
       setImageTag("latest");
+      // 推送成功后保存上传端口的配置
+      if (uploadExposePort) {
+        const updatedConfig = { ...config, last_upload_expose_port: uploadExposePort };
+        invoke("save_config", { config: updatedConfig }).then(() => setConfig(updatedConfig)).catch(() => {});
+      }
     } catch (e) {
       setLog(`❌ 推送失败:\n${e}`);
     } finally {
@@ -586,9 +611,22 @@ function App() {
       // 分支打包时自动推断镜像名称（setState 异步，用局部变量保证后续逻辑可用）
       const baseName = inferImageName(result.artifact_path, branchProjectType === "npm" ? "frontend_dist" : "jar");
       const effectiveImageName = imageName.trim() || baseName;
-      const frontendImageName = (branchProjectType === "npm" && result.backend_artifact_path)
-        ? `${effectiveImageName}-frontend`
-        : effectiveImageName;
+      const branchSafeName = branchName.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+      // 前端镜像名称：拼接分支和构建命令（如 myapp-frontend-develop-build_prod）
+      const scriptSafeName = selectedBuildScript.replace(/[^a-zA-Z0-9._-]/g, '-');
+      const frontendDistSuffix = branchProjectType === "npm"
+        ? `-frontend-${branchSafeName}-${scriptSafeName}`
+        : "";
+      const frontendImageName = `${effectiveImageName}${frontendDistSuffix}`;
+      // 后端镜像名称：拼接端口号和 Spring Profile（如 myapp-8181-test、myapp-backend-8181-test）
+      const effectivePort = branchExposePort.trim() || config.expose_port.trim();
+      const portSuffix = effectivePort ? `-${effectivePort}` : "";
+      const profileSuffix = springProfile.trim() ? `-${springProfile.trim()}` : "";
+      const backendImageName = (branchProjectType === "npm" && result.backend_artifact_path)
+        ? `${effectiveImageName}-backend${portSuffix}${profileSuffix}`
+        : branchProjectType === "maven"
+          ? `${effectiveImageName}${portSuffix}${profileSuffix}`
+          : effectiveImageName;
       setImageName(effectiveImageName);
       await saveBranchSettings();
       await loadBuildHistory();
@@ -599,7 +637,6 @@ function App() {
           setLog(`⚠️ 分支打包成功，但 Harbor 配置不完整，无法推送镜像\n\n请在"推送配置" tab 中完善 Harbor 配置后重试\n\n${result.log}`);
         } else {
           const hasBackend = !!result.backend_artifact_path;
-          const branchSafeName = branchName.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
           const now = new Date();
           const yy = String(now.getFullYear()).slice(-2);
           const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -623,11 +660,12 @@ function App() {
                 setProgressMessage("🚀 推送镜像...");
                 const resultStr = await invoke<string>("build_and_push", {
                   jarPath: result.artifact_path,
-                  imageName: effectiveImageName,
+                  imageName: backendImageName,
                   imageTag: branchImageTag,
                   artifactType: "jar",
                   dockerfilePath: null,
                   dockerfileContext: null,
+                  exposePort: branchExposePort || null,
                 });
                 pushLogs.push(`📦: ${resultStr}`);
                 const imgMatch = resultStr.match(/完整镜像:\s*(.+)/);
@@ -635,7 +673,7 @@ function App() {
                   imageList.push(imgMatch[1].trim());
                   try {
                     await invoke("update_build_record_image", {
-                      imageName: effectiveImageName,
+                      imageName: backendImageName,
                       imageTag: imgMatch[1].trim(),
                     });
                     await loadBuildHistory();
@@ -678,11 +716,12 @@ function App() {
                 try {
                   const beResult = await invoke<string>("build_and_push", {
                     jarPath: result.backend_artifact_path,
-                    imageName: `${effectiveImageName}-backend`,
+                    imageName: backendImageName,
                     imageTag: branchImageTag,
                     artifactType: "jar",
                     dockerfilePath: null,
                     dockerfileContext: null,
+                    exposePort: branchExposePort || null,
                   });
                   pushLogs.push(`📦 后端: ${beResult}`);
                   const beMatch = beResult.match(/完整镜像:\s*(.+)/);
@@ -732,6 +771,8 @@ function App() {
         last_project_type: branchProjectType,
         last_auto_push_image: autoPushImage,
         last_package_with_backend: packageWithBackend,
+        last_spring_profile: springProfile,
+        last_expose_port: branchExposePort,
         repo_path_history: newHistory,
       };
       await invoke("save_config", { config: updatedConfig });
@@ -869,6 +910,8 @@ function App() {
         if (activeTab === "branch") {
           if (paths[0]) {
             setRepoPath(paths[0]);
+            // 切换仓库时清空镜像名称，打包时自动从产物推断
+            setImageName("");
             loadGitBranches(paths[0]);
           } else {
             setLog("⚠️ 请拖入 Git 仓库目录");
@@ -932,10 +975,13 @@ function App() {
   function handleRepoPathChange(value: string) {
     setRepoPath(value);
     if (value.trim()) {
+      // 切换仓库时清空镜像名称，打包时自动从产物推断
+      setImageName("");
       loadGitBranches(value);
     } else {
       setBranchOptions([]);
       setBranchName("");
+      setImageName("");
     }
   }
 
@@ -968,6 +1014,8 @@ function App() {
         last_project_type: branchProjectType,
         last_auto_push_image: autoPushImage,
         last_package_with_backend: packageWithBackend,
+        last_spring_profile: springProfile,
+        last_expose_port: branchExposePort,
         repo_path_history: newHistory,
       };
       invoke("save_config", { config: updatedConfig }).then(() => {
@@ -994,6 +1042,7 @@ function App() {
             artifactPath={artifactPath}
             imageName={imageName}
             imageTag={imageTag}
+            exposePort={uploadExposePort}
             isDragOver={isDragOver}
             isBuilding={isBuilding}
             showImageConfig={ui.showImageConfig}
@@ -1010,6 +1059,7 @@ function App() {
             onDrop={handleDragEvents}
             setImageName={setImageName}
             setImageTag={setImageTag}
+            setExposePort={setUploadExposePort}
             setShowImageConfig={(v: boolean) => updateUi('showImageConfig', v)}
             setShowBuildLog={(v: boolean) => updateUi('showBuildLog', v)}
             renderLog={renderLog}
@@ -1046,6 +1096,7 @@ function App() {
             branchFullImage={branchFullImage}
             imageName={imageName}
             imageTag={imageTag}
+            exposePort={branchExposePort}
             showAdvancedSettings={ui.showAdvancedSettings}
             config={config}
             progress={progress}
@@ -1056,7 +1107,7 @@ function App() {
             onBranchProjectTypeChange={handleBranchProjectTypeChange}
             onRepoPathChange={handleRepoPathChange}
             onSelectRepo={handleSelectRepo}
-            onRefreshBranches={() => loadGitBranches(repoPath)}
+            onRefreshBranches={() => loadGitBranches(repoPath, branchName)}
             onBranchChange={handleBranchChange}
             onFrontendDirChange={(dir) => {
               setFrontendDir(dir);
@@ -1084,6 +1135,7 @@ function App() {
             onCopyImage={handleCopyImage}
             setImageName={setImageName}
             setImageTag={setImageTag}
+            setExposePort={setBranchExposePort}
             setShowAdvancedSettings={(v: boolean) => updateUi('showAdvancedSettings', v)}
             setShowBuildLog={(v: boolean) => updateUi('showBuildLog', v)}
             renderLog={renderLog}
