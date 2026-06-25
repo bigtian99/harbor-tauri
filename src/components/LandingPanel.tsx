@@ -188,16 +188,18 @@ export function LandingPanel({
   const getTemplateIframeSrc = useCallback((genResult: LandingPageResult, templateIdx: number) => {
     const idx = genResult.template_dirs && genResult.template_dirs.length > 0 ? templateIdx : 0;
     const base = landingOutputDir;
-    if (
-      previewBaseUrl &&
-      base &&
-      genResult.output_dir.startsWith(base) &&
-      genResult.output_dir[base.length] === "/"
-    ) {
-      let rel = genResult.output_dir.slice(base.length).replace(/^\/+|\/+$/g, "");
-      const file = `${rel}/template_${idx}/index.html`;
-      const encoded = file.split("/").map(encodeURIComponent).join("/");
-      return `${previewBaseUrl}/${encoded}`;
+    if (previewBaseUrl && base) {
+      // Windows 路径分隔符是 \，后端 output_dir / landingOutputDir 在 Windows 上都是反斜杠。
+      // 这里统一归一化成正斜杠再做前缀判断，否则 startsWith + [len] === "/" 永远不成立，
+      // 会回退到 convertFileSrc（asset 协议），iframe 里本地相对路径图片/字体加载不出来。
+      const normOut = genResult.output_dir.replace(/\\/g, "/").replace(/\/+$/, "");
+      const normBase = base.replace(/\\/g, "/").replace(/\/+$/, "");
+      if (normOut.startsWith(normBase) && normOut[normBase.length] === "/") {
+        const rel = normOut.slice(normBase.length).replace(/^\/+|\/+$/g, "");
+        const file = `${rel}/template_${idx}/index.html`;
+        const encoded = file.split("/").map(encodeURIComponent).join("/");
+        return `${previewBaseUrl}/${encoded}`;
+      }
     }
     return convertFileSrc(`${genResult.output_dir}/template_${idx}/index.html`);
   }, [previewBaseUrl, landingOutputDir]);
