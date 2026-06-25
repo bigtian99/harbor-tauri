@@ -554,14 +554,15 @@ function App() {
         artifactType,
         exposePort: uploadExposePort || null,
       });
-      // 追加最终结果到已累积的过程日志之后（过程日志由 build-progress 事件实时累积进 log），
-      // 这样"展开构建日志"能看到完整的 构建上下文→构建镜像→登录→推送→成功 链路。
-      setLog((prev) => (prev ? `${prev}\n\n${result}` : result));
       // 提取推送成功的镜像地址，独立展示在日志折叠框之外
       const imgMatch = result.match(/完整镜像:\s*(.+)/);
       if (imgMatch) {
         setUploadFullImage(imgMatch[1].trim());
       }
+      // 完整镜像已在上方提取并独立展示，日志里不再重复显示完整镜像行，
+      // 只保留成功提示 + 过程日志（过程日志由 build-progress 事件实时累积进 log）。
+      const logResult = result.replace(/完整镜像:.*(\n|$)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+      setLog((prev) => (prev ? `${prev}\n\n${logResult}` : logResult));
       setArtifactPath("");
       setImageTag("latest");
       // 推送成功后保存 JAR 端口到 SQLite

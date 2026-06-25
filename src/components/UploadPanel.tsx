@@ -177,7 +177,10 @@ export function UploadPanel({
       )}
 
       {fullImage && (
-        <div className="path-links">
+        <div
+          className="path-links"
+          style={{ marginTop: 10, border: 'none', background: 'transparent', padding: 0 }}
+        >
           <div className="path-link-item image-url-row">
             <span className="path-link-label">🐳 完整镜像:</span>
             <span className="image-url-value">
