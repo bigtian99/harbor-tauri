@@ -85,6 +85,9 @@ jobs:
       - name: Install frontend dependencies
         # 偶发 ERR_PNPM_BAD_PACKAGE_JSON：某个 package.json 被写成空文件（pnpm 在 GHA 上的已知写入竞态，
         # 见 pnpm/pnpm#6627）。frozen-lockfile 让失败更快更可预测；失败时清空残留后重试一次即可恢复。
+        # 显式 shell: bash —— Windows runner 默认是 PowerShell，不认 bash 的 || ( ... ) 子 shell，
+        # 会被当作 PowerShell 语法解析而报 Missing closing ')'。三平台 runner 均预装 bash。
+        shell: bash
         run: |
           pnpm install --frozen-lockfile || (
             echo "::warning::首次 pnpm install 失败，清理 node_modules 与 store 缓存后重试"
