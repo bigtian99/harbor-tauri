@@ -23,7 +23,7 @@ use history::{
 };
 use landing::{
     fetch_sub_channels, generate_landing_pages, get_bundled_templates_dir, get_temp_dir,
-    preview_landing_page, upload_landing_to_ftp,
+    get_templates_diagnostic_log_path, preview_landing_page, upload_landing_to_ftp,
     list_template_dirs, list_template_infos, upload_template_zip, delete_template_dir,
 };
 use preview_server::get_preview_server_info;
@@ -42,6 +42,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            landing::init_bundled_templates_dir(app.handle());
             // 初始化 SQLite 数据库
             if let Err(e) = db::init_db() {
                 eprintln!("[JarPorter] 初始化数据库失败: {}", e);
@@ -81,6 +82,7 @@ pub fn run() {
             get_temp_dir,
             preview_landing_page,
             get_bundled_templates_dir,
+            get_templates_diagnostic_log_path,
             get_preview_server_info,
             list_template_dirs,
             list_template_infos,

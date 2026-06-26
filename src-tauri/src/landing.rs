@@ -1,9 +1,13 @@
 use crate::models::{FtpUploadItem, FtpUploadResult, LandingPageResult, SubChannelApiResponse, SubChannelData};
 use crate::utils::{copy_dir_recursive, render_template};
+use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::Emitter;
+use std::sync::{Mutex, OnceLock};
+use tauri::path::BaseDirectory;
+use tauri::{AppHandle, Emitter, Manager};
 
 const FTP_HOST: &str = "120.77.204.231";
 const FTP_USER: &str = "admin";
@@ -66,6 +70,16 @@ pub async fn generate_landing_pages(
 
     let total = sub_channels.len();
     eprintln!("[JarPorter] 开始生成 {} 个落地页", total);
+    let gen_base = if template_base.trim().is_empty() {
+        templates_root()
+    } else {
+        PathBuf::from(template_base.trim())
+    };
+    templates_log(&format!(
+        "generate_landing_pages base={} — {}",
+        gen_base.display(),
+        summarize_templates_dir(&gen_base)
+    ));
 
     // 确保输出目录存在
     let output_base = Path::new(&output_dir);
@@ -87,7 +101,12 @@ pub async fn generate_landing_pages(
         ).ok();
 
         // 查找所有匹配的模板目录（以 type_code 开头的目录）
-        let template_base_path = Path::new(&template_base);
+        let base = if template_base.trim().is_empty() {
+            templates_root()
+        } else {
+            PathBuf::from(template_base.trim())
+        };
+        let template_base_path = base.as_path();
         let mut template_dirs: Vec<PathBuf> = Vec::new();
         if let Ok(entries) = fs::read_dir(template_base_path) {
             for entry in entries.flatten() {
@@ -102,6 +121,18 @@ pub async fn generate_landing_pages(
         template_dirs.sort();
 
         if template_dirs.is_empty() {
+            let available = list_template_subdirs(template_base_path);
+            templates_log(&format!(
+                "生成失败 channel={} type_code={} base={} — 无匹配模板；当前 base 下可用: [{}]",
+                channel.sub_channel_name,
+                channel.type_code,
+                template_base_path.display(),
+                if available.is_empty() {
+                    "无".to_string()
+                } else {
+                    available.join(", ")
+                }
+            ));
             results.push(LandingPageResult {
                 id: channel.id.clone(),
                 type_code: channel.type_code.clone(),
@@ -532,110 +563,321 @@ pub async fn preview_landing_page(path: String, template_index: Option<usize>) -
 }
 
 // ========== 模板目录解析 ==========
+//
+// 与 tauri.conf.json → bundle.resources 中的 `"../templates/**/*"` 对应；
+// 必须通过 PathResolver 解析，禁止按 exe 路径手工猜测。
 
-/// 模板目录查找策略：
-/// 1. 打包后：通过可执行文件路径推算资源目录
-/// 2. 开发时：`{CARGO_MANIFEST_DIR}/../templates/`
-fn find_templates_dir() -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            // Windows: resources 与 .exe 同目录。
-            // tauri.conf.json 使用 map: "../templates" -> "templates" 后，模板位于 exe_dir/templates。
-            let win = exe_dir.join("templates");
-            if win.exists() {
-                return Some(win);
-            }
-            // 兼容旧包：数组资源 "../templates/**/*" 在 Tauri v2 中会把 "../" 规范化为 "_up_"。
-            let win_legacy = exe_dir.join("_up_").join("templates");
-            if win_legacy.exists() {
-                return Some(win_legacy);
-            }
-            // macOS: .app/Contents/Resources/templates
-            let mac = exe_dir.join("../Resources/templates");
-            if let Ok(canonical) = mac.canonicalize() {
-                if canonical.exists() {
-                    return Some(canonical);
-                }
-            }
-            // 兼容旧包：.app/Contents/Resources/_up_/templates
-            let mac_legacy = exe_dir.join("../Resources/_up_/templates");
-            if let Ok(canonical) = mac_legacy.canonicalize() {
-                if canonical.exists() {
-                    return Some(canonical);
-                }
-            }
-            // Linux (AppImage/deb): 相对于二进制的上级目录
-            let linux = exe_dir.join("../share/templates");
-            if linux.exists() {
-                return Some(linux);
+/// bundle.resources 里声明的模板根路径（与 tauri.conf.json 保持一致）
+const BUNDLE_TEMPLATES_RESOURCE: &str = "../templates";
+
+static BUNDLED_TEMPLATES_DIR: OnceLock<PathBuf> = OnceLock::new();
+static TEMPLATES_LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
+static TEMPLATES_LOG_LOCK: Mutex<()> = Mutex::new(());
+
+/// 打包后 GUI 无控制台，诊断日志同时写入此文件（app_log_dir/templates-diagnostic.log）。
+fn init_templates_log_file(app: &AppHandle) -> PathBuf {
+    let log_dir = app
+        .path()
+        .app_log_dir()
+        .ok()
+        .or_else(|| dirs::config_dir().map(|d| d.join("jarporter").join("logs")))
+        .unwrap_or_else(|| std::env::temp_dir().join("jarporter-logs"));
+
+    let _ = fs::create_dir_all(&log_dir);
+    let log_path = log_dir.join("templates-diagnostic.log");
+    let _ = TEMPLATES_LOG_FILE.set(log_path.clone());
+    log_path
+}
+
+pub(crate) fn templates_diagnostic_log_path() -> Option<PathBuf> {
+    TEMPLATES_LOG_FILE.get().cloned()
+}
+
+fn templates_log(message: impl AsRef<str>) {
+    let line = format!("[JarPorter][templates] {}", message.as_ref());
+    eprintln!("{line}");
+    if let Some(path) = TEMPLATES_LOG_FILE.get() {
+        if let Ok(_guard) = TEMPLATES_LOG_LOCK.lock() {
+            if let Ok(mut file) = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+            {
+                let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+                let _ = writeln!(file, "[{ts}] {line}");
             }
         }
     }
+}
 
-    // 开发环境：源码目录
-    let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap_or(&PathBuf::from("."))
-        .join("templates");
-    if dev_dir.exists() {
-        return Some(dev_dir);
+fn list_template_subdirs(root: &Path) -> Vec<String> {
+    let mut dirs: Vec<String> = Vec::new();
+    if let Ok(entries) = fs::read_dir(root) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if !name.starts_with('.') {
+                    dirs.push(name);
+                }
+            }
+        }
+    }
+    dirs.sort();
+    dirs
+}
+
+/// 描述某目录下的模板子目录数量与名称（用于诊断日志）
+fn summarize_templates_dir(path: &Path) -> String {
+    if !path.exists() {
+        return "目录不存在".to_string();
+    }
+    if !path.is_dir() {
+        return format!("存在但不是目录 (is_file={})", path.is_file());
+    }
+    match fs::read_dir(path) {
+        Err(e) => return format!("无法读取目录: {e}"),
+        Ok(_) => {}
+    }
+    let dirs = list_template_subdirs(path);
+    if dirs.is_empty() {
+        return "目录可读但无模板子目录".to_string();
+    }
+    let preview: Vec<String> = dirs.iter().take(10).cloned().collect();
+    let suffix = if dirs.len() > 10 {
+        format!(", ... 共 {} 个", dirs.len())
+    } else {
+        String::new()
+    };
+    format!("子目录 {} 个: [{}]{suffix}", dirs.len(), preview.join(", "))
+}
+
+fn log_templates_startup_diagnostics(app: &AppHandle) {
+    templates_log("========== 启动诊断 ==========");
+    templates_log(&format!(
+        "build={} resource_key=\"{}\"",
+        if cfg!(debug_assertions) { "debug" } else { "release" },
+        BUNDLE_TEMPLATES_RESOURCE
+    ));
+
+    match std::env::current_exe() {
+        Ok(exe) => templates_log(&format!("current_exe={}", exe.display())),
+        Err(e) => templates_log(&format!("current_exe=读取失败: {e}")),
     }
 
-    None
+    match app.path().resource_dir() {
+        Ok(dir) => templates_log(&format!("resource_dir={}", dir.display())),
+        Err(e) => templates_log(&format!("resource_dir=解析失败: {e}")),
+    }
+
+    match app
+        .path()
+        .resolve(BUNDLE_TEMPLATES_RESOURCE, BaseDirectory::Resource)
+    {
+        Ok(path) => {
+            templates_log(&format!(
+                "resolve(\"{}\")={} exists={} is_dir={}",
+                BUNDLE_TEMPLATES_RESOURCE,
+                path.display(),
+                path.exists(),
+                path.is_dir()
+            ));
+            templates_log(&format!("  → {}", summarize_templates_dir(&path)));
+        }
+        Err(e) => templates_log(&format!(
+            "resolve(\"{}\")=失败: {e}",
+            BUNDLE_TEMPLATES_RESOURCE
+        )),
+    }
+
+    let dev = dev_templates_dir();
+    templates_log(&format!(
+        "dev_fallback={} exists={} is_dir={}",
+        dev.display(),
+        dev.exists(),
+        dev.is_dir()
+    ));
+    if dev.exists() {
+        templates_log(&format!("  → {}", summarize_templates_dir(&dev)));
+    }
+
+    let writable = writable_templates_root();
+    templates_log(&format!(
+        "writable_root={} exists={}",
+        writable.display(),
+        writable.exists()
+    ));
+    if writable.exists() {
+        templates_log(&format!("  → {}", summarize_templates_dir(&writable)));
+    }
+}
+
+/// 启动时用 Tauri PathResolver 解析 bundle.resources（与打包器同一套规则）。
+pub fn init_bundled_templates_dir(app: &AppHandle) {
+    if BUNDLED_TEMPLATES_DIR.get().is_some() {
+        templates_log("init 跳过：模板目录已初始化");
+        return;
+    }
+
+    let log_path = init_templates_log_file(app);
+    templates_log(&format!(
+        "诊断日志文件: {}（打包版无控制台时可打开此文件排查）",
+        log_path.display()
+    ));
+
+    log_templates_startup_diagnostics(app);
+
+    match app
+        .path()
+        .resolve(BUNDLE_TEMPLATES_RESOURCE, BaseDirectory::Resource)
+    {
+        Ok(path) if dir_has_template_subdirs(&path) => {
+            let summary = summarize_templates_dir(&path);
+            let _ = BUNDLED_TEMPLATES_DIR.set(path.clone());
+            templates_log(&format!(
+                "✅ 使用打包模板: {} (resolve \"{}\")",
+                path.display(),
+                BUNDLE_TEMPLATES_RESOURCE
+            ));
+            templates_log(&format!("  → {summary}"));
+        }
+        Ok(path) => {
+            templates_log(&format!(
+                "⚠️ resolve 成功但无可用模板: {} — {}",
+                path.display(),
+                summarize_templates_dir(&path)
+            ));
+            try_dev_templates_fallback();
+        }
+        Err(e) => {
+            templates_log(&format!(
+                "⚠️ resolve 失败 (key=\"{}\"): {e}",
+                BUNDLE_TEMPLATES_RESOURCE
+            ));
+            try_dev_templates_fallback();
+        }
+    }
+
+    match BUNDLED_TEMPLATES_DIR.get() {
+        Some(path) => templates_log(&format!("init 结果: OK → {}", path.display())),
+        None => templates_log(
+            "init 结果: FAILED — 未找到模板目录；请检查 tauri.conf.json bundle.resources 与安装包内资源文件",
+        ),
+    }
+    templates_log("========== 诊断结束 ==========");
+}
+
+/// 仅 debug 构建：回退到源码树 templates/（cargo tauri dev 场景，非运行时猜路径）。
+fn try_dev_templates_fallback() {
+    if !cfg!(debug_assertions) {
+        templates_log("dev 回退跳过：release 构建不使用源码 templates");
+        return;
+    }
+    let dev = dev_templates_dir();
+    if dir_has_template_subdirs(&dev) {
+        let _ = BUNDLED_TEMPLATES_DIR.set(dev.clone());
+        templates_log(&format!(
+            "✅ dev 回退成功: {} — {}",
+            dev.display(),
+            summarize_templates_dir(&dev)
+        ));
+    } else {
+        templates_log(&format!(
+            "dev 回退失败: {} — {}",
+            dev.display(),
+            summarize_templates_dir(&dev)
+        ));
+    }
+}
+
+fn dir_has_template_subdirs(path: &Path) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    fs::read_dir(path)
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                e.file_type().map(|t| t.is_dir()).unwrap_or(false)
+                    && !e.file_name().to_string_lossy().starts_with('.')
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn dev_templates_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or(&PathBuf::from("."))
+        .join("templates")
 }
 
 /// 获取模板可写目录（用于上传、删除等写操作）
-/// 打包后资源目录只读，写操作需回退到用户可写的缓存目录
 fn writable_templates_root() -> PathBuf {
-    // 优先使用开发环境源码目录（可写）
-    let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap_or(&PathBuf::from("."))
-        .join("templates");
-    if dev_dir.exists() || dev_dir.parent().map(|p| p.exists()).unwrap_or(false) {
-        return dev_dir;
+    if cfg!(debug_assertions) {
+        let dev = dev_templates_dir();
+        if dev.is_dir() {
+            return dev;
+        }
     }
-
-    // 打包后：使用 ~/.config/jarporter/templates 作为可写目录
-    if let Some(home) = dirs::home_dir() {
-        home.join(".config").join("jarporter").join("templates")
-    } else {
-        dev_dir
-    }
+    dirs::config_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_else(dev_templates_dir)
+        .join("jarporter")
+        .join("templates")
 }
 
 #[tauri::command]
 pub async fn get_bundled_templates_dir() -> Result<String, String> {
-    if let Some(dir) = find_templates_dir() {
-        eprintln!("[JarPorter] 📁 模板目录: {}", dir.display());
+    if let Some(dir) = BUNDLED_TEMPLATES_DIR.get() {
+        templates_log(&format!("get_bundled_templates_dir → {}", dir.display()));
         return Ok(dir.to_string_lossy().to_string());
     }
-    Err("找不到模板目录".to_string())
+    templates_log("get_bundled_templates_dir → FAILED（init 未成功或未执行）");
+    if let Ok(exe) = std::env::current_exe() {
+        templates_log(&format!("  current_exe={}", exe.display()));
+    }
+    let log_hint = templates_diagnostic_log_path()
+        .map(|p| format!("\n诊断日志: {}", p.display()))
+        .unwrap_or_default();
+    Err(format!(
+        "找不到模板目录，请确认 bundle.resources 包含 \"{}\" 并已重新打包。{log_hint}",
+        BUNDLE_TEMPLATES_RESOURCE
+    ))
+}
+
+#[tauri::command]
+pub async fn get_templates_diagnostic_log_path() -> Result<String, String> {
+    templates_diagnostic_log_path()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "诊断日志尚未初始化，请重启应用后再试".to_string())
 }
 
 // ========== 模板管理功能 ==========
 
-/// 获取 templates 根目录
+/// 获取打包内置 templates 根目录（只读，由 init_bundled_templates_dir 在 setup 时解析）
 pub(crate) fn templates_root() -> PathBuf {
-    find_templates_dir().unwrap_or_else(|| {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap_or(&PathBuf::from("."))
-            .join("templates")
-    })
+    BUNDLED_TEMPLATES_DIR
+        .get()
+        .cloned()
+        .unwrap_or_else(dev_templates_dir)
+}
+
+/// 合并打包模板与用户上传模板目录名（去重）
+fn all_template_roots() -> Vec<PathBuf> {
+    let mut roots = vec![templates_root()];
+    let writable = writable_templates_root();
+    if writable != roots[0] && writable.is_dir() {
+        roots.push(writable);
+    }
+    roots
 }
 
 #[tauri::command]
 pub async fn list_template_dirs() -> Result<Vec<String>, String> {
-    let root = templates_root();
+    let mut seen = HashSet::new();
     let mut dirs: Vec<String> = Vec::new();
-    if let Ok(entries) = fs::read_dir(&root) {
-        for entry in entries.flatten() {
-            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with('.') {
-                    continue;
-                }
+    for root in all_template_roots() {
+        for name in list_template_subdirs(&root) {
+            if seen.insert(name.clone()) {
                 dirs.push(name);
             }
         }
@@ -718,24 +960,33 @@ fn read_template_category(dir: &Path) -> Option<String> {
 /// 列出所有模板目录及其中文分类（前端按 category 折叠分组展示）
 #[tauri::command]
 pub async fn list_template_infos() -> Result<Vec<TemplateInfo>, String> {
-    let root = templates_root();
     let mut infos: Vec<TemplateInfo> = Vec::new();
-    if let Ok(entries) = fs::read_dir(&root) {
-        for entry in entries.flatten() {
-            if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                continue;
+    let mut seen = HashSet::new();
+    for root in all_template_roots() {
+        templates_log(&format!(
+            "list_template_infos 扫描 {} — {}",
+            root.display(),
+            summarize_templates_dir(&root)
+        ));
+        match fs::read_dir(&root) {
+            Ok(entries) => {
+                for entry in entries.flatten() {
+                    if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        continue;
+                    }
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with('.') || !seen.insert(name.clone()) {
+                        continue;
+                    }
+                    let category = read_template_category(&entry.path())
+                        .unwrap_or_else(|| strip_numeric_suffix(&name));
+                    infos.push(TemplateInfo { dir: name, category });
+                }
             }
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with('.') {
-                continue;
-            }
-            // 优先用 index.html 预埋的中文分类，缺失则回退到英文文件夹名（去 -数字 后缀）
-            let category = read_template_category(&entry.path())
-                .unwrap_or_else(|| strip_numeric_suffix(&name));
-            infos.push(TemplateInfo { dir: name, category });
+            Err(e) => templates_log(&format!("list_template_infos 读取失败 {}: {e}", root.display())),
         }
     }
-    // 先按分类、再按目录名排序
+    templates_log(&format!("list_template_infos 合计 {} 个模板", infos.len()));
     infos.sort_by(|a, b| a.category.cmp(&b.category).then_with(|| a.dir.cmp(&b.dir)));
     Ok(infos)
 }

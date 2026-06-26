@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   History, CheckCircle, Copy, Trash2, RefreshCw, Search,
   FolderOpen, FileText, BookOpen, BookMarked, Folder,
@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import type { BuildRecord } from "../types";
 import { getProjectName } from "../types";
+import { HoverTip } from "./HoverTip";
 
 interface HistoryPanelProps {
   buildHistory: BuildRecord[];
@@ -74,10 +75,11 @@ export function HistoryPanel({
   const sortedProjects = Object.entries(filteredGroupedRecords).sort(([a], [b]) => a.localeCompare(b));
   const selectedProjectData = selectedProject ? filteredGroupedRecords[selectedProject] : null;
 
-  // 如果只有一个项目，自动选中
-  if (sortedProjects.length === 1 && !selectedProject) {
-    setSelectedProject(sortedProjects[0][0]);
-  }
+  useEffect(() => {
+    if (sortedProjects.length === 1 && !selectedProject) {
+      setSelectedProject(sortedProjects[0][0]);
+    }
+  }, [sortedProjects, selectedProject]);
 
   return (
     <div className="history-panel-new">
@@ -148,16 +150,18 @@ export function HistoryPanel({
             <p>从左侧项目列表中选择一个项目</p>
           </div>
         ) : selectedProjectData ? (
-          <>
+          <div className="history-content-body">
             <div className="history-content-header">
               <div className="history-content-header-info">
                 <h2>
                   <Folder size={20} />
                   {selectedProject}
                 </h2>
-                <span className="history-content-header-path" title={selectedProjectData.repoPath}>
-                  {selectedProjectData.repoPath}
-                </span>
+                <HoverTip tip={selectedProjectData.repoPath} className="history-content-header-path-wrap">
+                  <span className="history-content-header-path">
+                    {selectedProjectData.repoPath}
+                  </span>
+                </HoverTip>
               </div>
               <div className="history-content-header-actions">
                 {buildHistory.length > 0 && (
@@ -224,19 +228,21 @@ export function HistoryPanel({
                         )}
                       </div>
                       {record.image_tag && (
-                        <div className="history-record-image">
-                          <span className="history-record-image-text">{record.image_tag}</span>
-                          <button
-                            className="history-record-copy-btn"
-                            title="复制镜像地址"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onCopyImage(record.image_tag!);
-                            }}
-                          >
-                            <Copy size={12} />
-                          </button>
-                        </div>
+                        <HoverTip tip={record.image_tag} className="history-record-image-wrap">
+                          <div className="history-record-image">
+                            <span className="history-record-image-text">{record.image_tag}</span>
+                            <button
+                              className="history-record-copy-btn"
+                              title="复制镜像地址"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onCopyImage(record.image_tag!);
+                              }}
+                            >
+                              <Copy size={12} />
+                            </button>
+                          </div>
+                        </HoverTip>
                       )}
                     </div>
                     <div className="history-record-actions">
@@ -280,13 +286,14 @@ export function HistoryPanel({
                   <div className="history-record-paths">
                     <div className="history-record-path">
                       <span className="history-record-path-label">{record.project_type.toLowerCase() === 'maven' ? '后端' : record.package_with_backend ? '前端+后端' : '前端'}</span>
-                      <button
-                        className="history-record-path-link"
-                        onClick={() => onOpenArtifact(record.artifact_path)}
-                        title={record.artifact_path}
-                      >
-                        {record.artifact_path}
-                      </button>
+                      <HoverTip tip={record.artifact_path} className="history-record-path-link-wrap">
+                        <button
+                          className="history-record-path-link"
+                          onClick={() => onOpenArtifact(record.artifact_path)}
+                        >
+                          {record.artifact_path}
+                        </button>
+                      </HoverTip>
                       <button
                         className="history-record-path-open"
                         onClick={() => onOpenArtifact(record.artifact_path)}
@@ -298,13 +305,14 @@ export function HistoryPanel({
                     {record.backend_artifact_path && (
                       <div className="history-record-path">
                         <span className="history-record-path-label">后端</span>
-                        <button
-                          className="history-record-path-link"
-                          onClick={() => onOpenArtifact(record.backend_artifact_path!)}
-                          title={record.backend_artifact_path}
-                        >
-                          {record.backend_artifact_path}
-                        </button>
+                        <HoverTip tip={record.backend_artifact_path!} className="history-record-path-link-wrap">
+                          <button
+                            className="history-record-path-link"
+                            onClick={() => onOpenArtifact(record.backend_artifact_path!)}
+                          >
+                            {record.backend_artifact_path}
+                          </button>
+                        </HoverTip>
                         <button
                           className="history-record-path-open"
                           onClick={() => onOpenArtifact(record.backend_artifact_path!)}
@@ -324,7 +332,7 @@ export function HistoryPanel({
                 </div>
               ))}
             </div>
-          </>
+          </div>
         ) : (
           <div className="history-content-empty">
             <div className="history-content-empty-icon">

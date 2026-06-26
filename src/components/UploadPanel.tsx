@@ -111,8 +111,9 @@ export function UploadPanel({
                 type="text"
                 value={imageName}
                 onChange={(e) => setImageName(e.target.value)}
-                placeholder="例如: my-app"
+                placeholder="例如: my-app（不含 Harbor 项目名）"
               />
+              <p className="template-hint">Harbor 项目名在配置中填写，推送时自动拼接</p>
             </div>
             <div className="form-group">
               <label>镜像标签</label>

@@ -161,7 +161,17 @@ export function useLanding(deps: UseLandingDeps) {
       if (!landingTemplateBase) {
         invoke<string>("get_bundled_templates_dir").then((dir) => {
           setLandingTemplateBase(dir);
-        }).catch(() => {});
+        }).catch(async (e) => {
+          let logPath = await invoke<string>("get_templates_diagnostic_log_path").catch(() => "");
+          notifications.show({
+            title: "模板目录不可用",
+            message: logPath
+              ? `${String(e)}\n\n诊断日志：${logPath}`
+              : String(e),
+            color: "red",
+            autoClose: 8000,
+          });
+        });
       }
       if (!landingOutputDir) {
         invoke<string>("get_temp_dir").then((dir) => {

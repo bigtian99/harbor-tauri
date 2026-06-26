@@ -21,7 +21,7 @@ import type {
 } from "./types";
 import {
   DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE, DEFAULT_FRONTEND_NGINX_TEMPLATE,
-  isTauriRuntime, inferImageName, isGitUrl
+  isTauriRuntime, inferImageName, isGitUrl, resolveHarborRepository
 } from "./types";
 
 // 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
@@ -547,6 +547,11 @@ function App() {
     setUploadFullImage("");
     const uploadPort = artifactType === "jar" ? (uploadExposePort.trim() || config.expose_port.trim()) : "";
     const uploadImageName = uploadPort ? `${imageName}-${uploadPort}` : imageName;
+    const resolvedRepo = resolveHarborRepository(uploadImageName, config.project);
+    if (!resolvedRepo.ok) {
+      setLog(`⚠️ ${resolvedRepo.error}`);
+      return;
+    }
     try {
       const result = await invoke<string>("build_and_push", {
         jarPath: artifactPath,
@@ -667,6 +672,16 @@ function App() {
           if (!effectiveImageName) {
             setLog(`⚠️ 分支打包成功，但未设置镜像名称，跳过推送\n\n${result.log}`);
           } else {
+            const namesToPush = branchProjectType === "maven"
+              ? [backendImageName]
+              : hasBackend
+                ? [frontendImageName, backendImageName]
+                : [frontendImageName];
+            const invalidName = namesToPush.find((name) => !resolveHarborRepository(name, config.project).ok);
+            if (invalidName) {
+              const err = resolveHarborRepository(invalidName, config.project);
+              setLog(`⚠️ 分支打包成功，但镜像名不符合 Harbor 要求，跳过推送\n\n${err.ok ? "" : err.error}\n\n${result.log}`);
+            } else {
             const pushLogs: string[] = [];
             const imageList: string[] = [];
 
@@ -764,6 +779,7 @@ function App() {
             } catch (pushErr) {
               setLog(`⚠️ 分支打包成功，但镜像推送失败:\n${pushErr}\n\n${result.log}`);
               setActiveTab("branch");
+            }
             }
           }
         }

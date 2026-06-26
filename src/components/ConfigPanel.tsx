@@ -91,13 +91,14 @@ export function ConfigPanel({
               </div>
             </div>
             <div className="form-group">
-              <label>项目名称</label>
+              <label>Harbor 项目</label>
               <input
                 type="text"
                 value={config.project}
                 onChange={(e) => onConfigChange("project", e.target.value)}
                 placeholder="例如: my-project"
               />
+              <p className="template-hint">推送时自动拼在镜像名前，最终地址为 harbor地址/项目名/镜像名:标签</p>
             </div>
           </>
         )}
@@ -246,7 +247,7 @@ export function ConfigPanel({
             <ul>
               <li>配置保存后无需重复填写</li>
               <li>Harbor 地址不需要带 https:// 前缀</li>
-              <li>项目名称为 Harbor 中的项目名</li>
+              <li>Harbor 项目为仓库中的项目名，会与镜像名称拼接</li>
               <li>JAR 模式使用 JAR 基础镜像和 JAR 暴露端口</li>
               <li>前端 dist 模式会把所选 dist 目录的内容复制为 nginx 站点根目录，不会在镜像里嵌套 dist 目录</li>
               <li>默认 nginx.conf 的 /index.html 回退路径对应 /usr/share/nginx/html/index.html</li>

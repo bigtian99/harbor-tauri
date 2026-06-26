@@ -16,6 +16,22 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use tauri::Emitter;
 
+/// 镜像名已含 `/` 则原样使用，否则拼接 `{project}/{image_name}`
+fn resolve_harbor_repository(image_name: &str, project: &str) -> Result<String, String> {
+    let name = image_name.trim().to_lowercase();
+    if name.is_empty() {
+        return Err("镜像名称不能为空".to_string());
+    }
+    if name.contains('/') {
+        return Ok(name);
+    }
+    let project = project.trim().to_lowercase();
+    if project.is_empty() {
+        return Err("请先在 Harbor 连接中配置项目名称".to_string());
+    }
+    Ok(format!("{}/{}", project, name))
+}
+
 #[tauri::command]
 pub async fn list_npm_scripts(
     repo_path: String,
@@ -940,9 +956,10 @@ pub async fn build_and_push(
     };
 
     let image_name_lower = image_name.to_lowercase();
+    let repository = resolve_harbor_repository(&image_name_lower, &config.project)?;
     let full_image = format!(
-        "{}/{}/{}:{}",
-        config.harbor_url, config.project, image_name_lower, final_tag
+        "{}/{}:{}",
+        config.harbor_url, repository, final_tag
     );
 
     // 步骤1: 准备Docker构建上下文

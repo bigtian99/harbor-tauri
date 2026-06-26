@@ -8,6 +8,7 @@ export interface HarborConfig {
   harbor_url: string;
   username: string;
   password: string;
+  /** Harbor 项目名称，镜像名不含 / 时自动作为前缀 */
   project: string;
   base_image: string;
   expose_port: string;
@@ -229,4 +230,19 @@ export function inferImageName(path: string, type: ArtifactType) {
 
 export function isGitUrl(s: string) {
   return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("git@") || s.endsWith(".git");
+}
+
+/** Harbor 仓库路径须为 project/repo；镜像名已含 / 则原样使用 */
+export function resolveHarborRepository(imageName: string, project?: string) {
+  const name = imageName.trim().toLowerCase();
+  if (!name) return { ok: false as const, error: "镜像名称不能为空" };
+  if (name.includes("/")) return { ok: true as const, repository: name };
+  const harborProject = (project ?? "").trim().toLowerCase();
+  if (!harborProject) {
+    return {
+      ok: false as const,
+      error: "请先在 Harbor 连接中配置项目名称，或在镜像名中填写 项目名/镜像名",
+    };
+  }
+  return { ok: true as const, repository: `${harborProject}/${name}` };
 }

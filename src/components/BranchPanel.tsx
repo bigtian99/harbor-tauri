@@ -360,9 +360,9 @@ export function BranchPanel({
                     type="text"
                     value={imageName}
                     onChange={(e) => setImageName(e.target.value)}
-                    placeholder={branchProjectType === "npm" ? "例如: my-frontend（小写）" : "例如: tksy-admin（小写）"}
+                    placeholder={branchProjectType === "npm" ? "例如: my-frontend（小写）" : "例如: sdk（小写，不含项目名）"}
                   />
-                  <p className="template-hint">留空则自动从{branchProjectType === "npm" ? "目录名" : "JAR 文件名"}推断</p>
+                  <p className="template-hint">留空则自动推断；Harbor 项目名在配置中填写，推送时自动拼接</p>
                 </div>
                 <div className="form-group">
                   <label>JAR 暴露端口</label>
