@@ -1,8 +1,10 @@
 use crate::models::{GitBranchOption, LocalMergeCheck, RemoteBranchListResult};
-use crate::utils::{git_output, repo_root_for};
+use crate::utils::{create_temp_worktree_path, git_output, repo_root_for};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
 
 pub(crate) fn list_known_git_branches(repo_root: &Path) -> Result<Vec<GitBranchOption>, String> {
     let output = git_output(
@@ -382,13 +384,25 @@ fn parse_merge_tree_conflicts(stdout: &str) -> Vec<String> {
     files
 }
 
-/// 把远程 source 合并进远程 target。
+/// 向前端发送合并进度（居中遮罩展示，不携带文件明细）。
+fn emit_merge_progress(app: &tauri::AppHandle, percent: u8, message: &str) {
+    let _ = app.emit(
+        "merge-progress",
+        serde_json::json!({
+            "percent": percent,
+            "message": message,
+        }),
+    );
+}
+
+/// 把远程 source 合并进远程 target，全程基于远程引用，不切换主仓库当前工作区分支。
 ///
-/// target 形如 `origin/master`。从 target 提取本地分支名（去掉 `origin/` 前缀），
-/// checkout 该本地分支（不存在则 git 自动从 origin/target 建跟踪分支，已存在则 pull 同步），
-/// 然后 `git merge --no-ff origin/source`。冲突时 abort 回滚；成功按需 push 本地分支到远程。
+/// 在隔离 worktree 中检出 target（如 `origin/master`），执行
+/// `git merge --no-ff source`（如 `origin/feature`），再按需 push 到远程目标分支。
+/// 冲突时 abort 并清理 worktree；主仓库 HEAD 与未提交改动保持不变。
 #[tauri::command]
 pub async fn merge_remote_branches(
+    app: tauri::AppHandle,
     repo_path: String,
     source: String,
     target: String,
@@ -402,71 +416,144 @@ pub async fn merge_remote_branches(
     if source == target {
         return Err("源分支和目标分支不能相同".to_string());
     }
+    let app_for_merge = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        emit_merge_progress(&app_for_merge, 5, "同步远程分支...");
+
         let repo_root = resolve_repo_root(&repo_path)?;
 
-        // target 形如 origin/master，取本地分支名 master
-        let local_target = target
+        let (fetch_ok, _, fetch_err) = run_git_capture(&repo_root, &["fetch", "--all", "--prune"]);
+        if !fetch_ok {
+            return Err(format!("拉取远程分支失败：{}", fetch_err.trim()));
+        }
+
+        emit_merge_progress(&app_for_merge, 20, "创建隔离合并环境...");
+
+        let remote_target_branch = target
             .strip_prefix("origin/")
             .unwrap_or(&target)
             .to_string();
 
-        // checkout 本地目标分支。若本地不存在，git 会自动从 origin/<target> 创建跟踪分支。
-        let (co_ok, _, co_err) = run_git_capture(&repo_root, &["checkout", &local_target]);
-        if !co_ok {
-            // 本地无该分支时，尝试显式从远程创建跟踪分支
-            let (track_ok, _, track_err) = run_git_capture(
-                &repo_root,
-                &["checkout", "-b", &local_target, "--track", &target],
+        let worktree_path = create_temp_worktree_path()?;
+        let worktree_path_str = worktree_path
+            .to_str()
+            .ok_or_else(|| "临时 worktree 路径无效".to_string())?
+            .to_string();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("生成临时分支名失败: {e}"))?
+            .as_millis();
+        let temp_branch = format!("jarporter-merge-{}-{}", std::process::id(), now);
+
+        let (wt_ok, _, wt_err) = run_git_capture(
+            &repo_root,
+            &[
+                "worktree",
+                "add",
+                "-B",
+                &temp_branch,
+                &worktree_path_str,
+                &target,
+            ],
+        );
+        if !wt_ok {
+            fs::remove_dir_all(&worktree_path).ok();
+            return Err(format!("创建合并环境失败：{}", wt_err.trim()));
+        }
+
+        emit_merge_progress(
+            &app_for_merge,
+            40,
+            &format!("正在合并 {source} → {target}..."),
+        );
+
+        let merge_result: Result<String, String> = (|| {
+            let (m_ok, _, m_err) = run_git_capture(
+                &worktree_path,
+                &["merge", "--no-ff", "--no-edit", &source],
             );
-            if !track_ok {
-                return Err(format!(
-                    "切换到目标分支 {} 失败：{}{}",
-                    local_target,
-                    co_err.trim(),
-                    if track_err.trim().is_empty() { String::new() } else { format!("\n{}", track_err.trim()) }
-                ));
+            if !m_ok {
+                let _ = Command::new("git")
+                    .args(["merge", "--abort"])
+                    .current_dir(&worktree_path)
+                    .output();
+                if m_err.contains("CONFLICT") || m_err.contains("conflict") {
+                    let conflict_count = m_err.lines().filter(|l| l.contains("CONFLICT")).count();
+                    let count_hint = if conflict_count > 0 {
+                        format!("（约 {} 处）", conflict_count)
+                    } else {
+                        String::new()
+                    };
+                    return Err(format!(
+                        "合并 {source} → {target} 存在冲突{count_hint}，已自动中止"
+                    ));
+                }
+                let first_line = m_err
+                    .lines()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("未知错误")
+                    .trim()
+                    .to_string();
+                return Err(format!("合并失败：{first_line}"));
             }
-        } else {
-            // 已存在本地分支，pull 同步到远程最新
-            let _ = run_git_capture(&repo_root, &["pull", "--ff-only", "origin", &local_target]);
-        }
 
-        // 合并远程源分支（--no-ff 保留合并节点）
-        let (m_ok, m_out, m_err) = run_git_capture(&repo_root, &["merge", "--no-ff", "--no-edit", &source]);
-        if !m_ok {
-            // 冲突或失败：abort 回滚，保持工作区干净
-            let _ = Command::new("git")
-                .args(["merge", "--abort"])
-                .current_dir(&repo_root)
-                .output();
-            let detail = if m_err.contains("CONFLICT") || m_err.contains("conflict") {
-                format!("合并 {} → {} 存在冲突，已自动中止合并。\n{}", source, target, m_err.trim())
+            let (head_ok, head_out, _) = run_git_capture(&worktree_path, &["rev-parse", "HEAD"]);
+            let merge_sha = if head_ok {
+                head_out.trim().to_string()
             } else {
-                format!("合并失败：{}", m_err.trim())
-            };
-            let conflicts: Vec<&str> = m_err.lines().filter(|l| l.contains("CONFLICT")).collect();
-            let extra = if conflicts.is_empty() {
                 String::new()
-            } else {
-                format!("\n冲突详情：\n{}", conflicts.join("\n"))
             };
-            return Err(format!("{}{}", detail, extra));
-        }
 
-        let mut log = format!("✅ 已将 {} 合并进 {}\n{}", source, target, m_out.trim());
-
-        // 可选：推送本地目标分支到远程
-        if push {
-            let (p_ok, _, p_err) = run_git_capture(&repo_root, &["push", "origin", &local_target]);
-            if p_ok {
-                log.push_str(&format!("\n\n📤 已推送 {} 到远程 origin", local_target));
+            if push {
+                emit_merge_progress(
+                    &app_for_merge,
+                    75,
+                    &format!("推送到 origin/{remote_target_branch}..."),
+                );
+                let push_ref = format!("HEAD:refs/heads/{remote_target_branch}");
+                let (p_ok, _, p_err) =
+                    run_git_capture(&worktree_path, &["push", "origin", &push_ref]);
+                if p_ok {
+                    let _ = run_git_capture(
+                        &repo_root,
+                        &["fetch", "origin", &remote_target_branch],
+                    );
+                    Ok(format!(
+                        "已将 {source} 合并进 origin/{remote_target_branch} 并推送到远程"
+                    ))
+                } else {
+                    let first_line = p_err
+                        .lines()
+                        .find(|l| !l.trim().is_empty())
+                        .unwrap_or("推送失败")
+                        .trim()
+                        .to_string();
+                    Err(format!("合并完成，但推送失败：{first_line}"))
+                }
+            } else if !merge_sha.is_empty() {
+                emit_merge_progress(&app_for_merge, 75, "更新本地分支引用...");
+                let _ = run_git_capture(
+                    &repo_root,
+                    &["branch", "-f", &remote_target_branch, &merge_sha],
+                );
+                Ok(format!(
+                    "已将 {source} 合并进 {target}（未推送远程）"
+                ))
             } else {
-                log.push_str(&format!("\n\n⚠️ 本地合并成功，但推送到远程失败：{}", p_err.trim()));
+                Ok(format!("已将 {source} 合并进 {target}"))
             }
+        })();
+
+        emit_merge_progress(&app_for_merge, 90, "清理临时环境...");
+
+        cleanup_worktree(&repo_root, &worktree_path);
+        let _ = run_git_capture(&repo_root, &["branch", "-D", &temp_branch]);
+
+        if merge_result.is_ok() {
+            emit_merge_progress(&app_for_merge, 100, "合并完成");
         }
 
-        Ok(log)
+        merge_result
     })
     .await
     .map_err(|e| format!("合并线程异常: {e}"))?

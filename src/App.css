@@ -2761,6 +2761,12 @@ body::before {
   background: rgba(255, 107, 107, 0.06);
 }
 
+.merge-result.no-diff {
+  border-color: rgba(100, 181, 255, 0.65);
+  background: linear-gradient(135deg, rgba(100, 181, 255, 0.16) 0%, rgba(100, 181, 255, 0.06) 100%);
+  box-shadow: 0 0 0 1px rgba(100, 181, 255, 0.12), 0 4px 18px rgba(100, 181, 255, 0.14);
+}
+
 .merge-conflict-detail {
   display: flex;
   flex-direction: column;
@@ -2801,6 +2807,13 @@ body::before {
   background: rgba(255, 107, 107, 0.1);
 }
 
+.pr-state-info {
+  color: #9ed0ff;
+  background: rgba(100, 181, 255, 0.18);
+  border: 1px solid rgba(100, 181, 255, 0.35);
+  font-weight: 600;
+}
+
 /* 分支差异提交列表 */
 .merge-diff-section {
   display: flex;
@@ -2810,6 +2823,53 @@ body::before {
   border-radius: 10px;
   border: 1px solid rgba(100, 255, 218, 0.12);
   background: rgba(100, 255, 218, 0.04);
+}
+
+.merge-diff-section--empty {
+  border-color: rgba(100, 181, 255, 0.55);
+  background: linear-gradient(135deg, rgba(100, 181, 255, 0.12) 0%, rgba(100, 181, 255, 0.05) 100%);
+  box-shadow: inset 0 0 0 1px rgba(100, 181, 255, 0.18);
+}
+
+.merge-diff-section--empty .merge-diff-header {
+  color: #9ed0ff;
+}
+
+.merge-diff-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 181, 255, 0.45);
+  background: rgba(100, 181, 255, 0.16);
+  color: #64b5ff;
+  box-shadow: 0 2px 10px rgba(100, 181, 255, 0.12);
+}
+
+.merge-diff-empty > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #9ed0ff;
+}
+
+.merge-diff-empty-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+.merge-diff-empty-text strong {
+  color: #cfe8ff;
+  font-size: 1em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.merge-diff-empty-text span {
+  color: rgba(158, 208, 255, 0.9);
 }
 
 .merge-diff-header {
@@ -2828,6 +2888,70 @@ body::before {
   color: var(--muted, #8892b0);
   font-size: 0.85em;
   padding: 4px 0;
+}
+
+.merge-diff-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.merge-diff-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--muted, #8892b0);
+  pointer-events: none;
+}
+
+.merge-diff-search-input {
+  width: 100%;
+  background: rgba(15, 52, 96, 0.35);
+  border: 1px solid rgba(100, 255, 218, 0.15);
+  border-radius: 8px;
+  padding: 8px 32px 8px 32px;
+  color: var(--text, #e6f1ff);
+  font-size: 0.85em;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.merge-diff-search-input::placeholder {
+  color: var(--muted, #8892b0);
+}
+
+.merge-diff-search-input:focus {
+  border-color: rgba(100, 255, 218, 0.45);
+}
+
+.merge-diff-search-clear {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted, #8892b0);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.merge-diff-search-clear:hover {
+  color: var(--text, #e6f1ff);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.merge-diff-no-match {
+  margin: 0;
+  padding: 10px 0 4px;
+  font-size: 0.85em;
+  color: var(--muted, #8892b0);
+  text-align: center;
 }
 
 .merge-diff-list {
@@ -2878,4 +3002,121 @@ body::before {
   font-size: 0.76em;
   color: var(--muted, #8892b0);
   flex-shrink: 0;
+}
+
+/* 分支合并进度遮罩（居中） */
+.merge-progress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 20, 0.72);
+  backdrop-filter: blur(4px);
+  animation: merge-overlay-in 0.2s ease;
+}
+
+.merge-progress-modal {
+  width: min(92vw, 420px);
+  padding: 28px 24px 24px;
+  border-radius: 14px;
+  border: 1px solid rgba(100, 255, 218, 0.22);
+  background: linear-gradient(160deg, rgba(26, 31, 58, 0.98) 0%, rgba(15, 22, 41, 0.98) 100%);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  animation: merge-modal-in 0.2s ease;
+}
+
+.merge-progress-icon {
+  color: #64ffda;
+  flex-shrink: 0;
+}
+
+.merge-progress-icon--success {
+  color: #64ffda;
+}
+
+.merge-progress-icon--error {
+  color: #ff6b6b;
+}
+
+.merge-progress-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #e6f1ff;
+}
+
+.merge-progress-subtitle {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #8892b0;
+  font-family: var(--font-mono, monospace);
+}
+
+.merge-progress-message {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: #ccd6f6;
+  line-height: 1.5;
+}
+
+.merge-progress-message--center {
+  max-width: 340px;
+}
+
+.merge-progress-track {
+  width: 100%;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: rgba(10, 10, 26, 0.65);
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.28);
+}
+
+.merge-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #64ffda 0%, #48c9b0 100%);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.merge-progress-percent {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #64ffda;
+}
+
+.merge-progress-btn {
+  margin-top: 8px;
+  padding: 8px 22px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 255, 218, 0.35);
+  background: rgba(100, 255, 218, 0.12);
+  color: #64ffda;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.merge-progress-btn:hover {
+  background: rgba(100, 255, 218, 0.2);
+  border-color: rgba(100, 255, 218, 0.55);
+}
+
+@keyframes merge-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes merge-modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
