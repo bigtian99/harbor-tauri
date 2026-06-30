@@ -12,7 +12,7 @@ mod utils;
 
 use build::{
     build_and_push, cancel_build, check_dockerfile, detect_frontend_dir, detect_spring_profiles,
-    list_npm_scripts, open_directory, package_from_branch,
+    list_npm_scripts, open_directory, package_from_branch, push_local_image, list_local_images,
 };
 use commit::{get_commit_authors, get_commit_list, get_last_commit, list_branch_diff_commits};
 use config_cmd::{load_config, save_config};
@@ -69,6 +69,8 @@ pub fn run() {
             cancel_build,
             package_from_branch,
             build_and_push,
+            push_local_image,
+            list_local_images,
             open_directory,
             save_build_record,
             get_build_history,

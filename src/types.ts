@@ -2,7 +2,7 @@
 
 export type ArtifactType = "jar" | "frontend_dist";
 export type BranchProjectType = "maven" | "npm";
-export type TabType = "upload" | "branch" | "config" | "history" | "landing" | "merge";
+export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge";
 
 export interface HarborConfig {
   harbor_url: string;
@@ -230,6 +230,34 @@ export function inferImageName(path: string, type: ArtifactType) {
 
 export function isGitUrl(s: string) {
   return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("git@") || s.endsWith(".git");
+}
+
+/** 从 Docker 镜像引用中提取镜像名称和标签 */
+export function inferImageNameFromRef(imageRef: string): { name: string; tag: string } {
+  const trimmed = imageRef.trim();
+  if (!trimmed) return { name: "", tag: "" };
+
+  // 分离 name 和 tag
+  let namePart = trimmed;
+  let tagPart = "";
+  if (trimmed.includes(":") && !trimmed.startsWith("sha256:")) {
+    const lastColon = trimmed.lastIndexOf(":");
+    namePart = trimmed.substring(0, lastColon);
+    tagPart = trimmed.substring(lastColon + 1);
+  }
+
+  // 取最后一个 / 后面的部分作为镜像名
+  const parts = namePart.split("/");
+  const lastName = parts[parts.length - 1];
+
+  // 过滤掉无效名称
+  const name = (!lastName || lastName === "<none>") ? "" : lastName.toLowerCase();
+  // 过滤掉 latest 标签（用户通常想换掉它），sha256 摘要也不作为标签
+  const tag = (tagPart && tagPart !== "latest" && !tagPart.startsWith("sha256"))
+    ? tagPart
+    : "";
+
+  return { name, tag };
 }
 
 /** Harbor 仓库路径须为 project/repo；镜像名已含 / 则原样使用 */

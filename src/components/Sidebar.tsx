@@ -1,5 +1,5 @@
 import {
-  Container, Upload, Settings, GitBranch, History, Globe, GitMerge,
+  Container, Upload, Rocket, Settings, GitBranch, History, Globe, GitMerge,
   ChevronLeft, ChevronRight
 } from "lucide-react";
 import type { TabType } from "../types";
@@ -15,6 +15,7 @@ interface SidebarProps {
 export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onToggleCollapse }: SidebarProps) {
   const navItems: { tab: TabType; icon: React.ReactNode; label: string }[] = [
     { tab: "upload", icon: <Upload size={18} />, label: "上传推送" },
+    { tab: "push", icon: <Rocket size={18} />, label: "镜像推送" },
     { tab: "branch", icon: <GitBranch size={18} />, label: "分支打包" },
     { tab: "merge", icon: <GitMerge size={18} />, label: "分支合并" },
     { tab: "history", icon: <History size={18} />, label: "历史记录" },

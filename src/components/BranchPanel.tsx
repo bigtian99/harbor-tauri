@@ -337,7 +337,7 @@ export function BranchPanel({
           </div>
         )}
 
-        {(branchProjectType === "maven" || branchProjectType === "npm") && autoPushImage && (
+        {(branchProjectType === "maven" || branchProjectType === "npm") && (
           <div className="advanced-settings">
             <div
               className="advanced-settings-header"

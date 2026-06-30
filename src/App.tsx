@@ -10,6 +10,7 @@ import { BranchPanel } from "./components/BranchPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { LandingPanel } from "./components/LandingPanel";
 import { MergePanel } from "./components/MergePanel";
+import { PushImagePanel } from "./components/PushImagePanel";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { useLanding } from "./hooks/useLanding";
 import "./App.css";
@@ -21,7 +22,8 @@ import type {
 } from "./types";
 import {
   DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE, DEFAULT_FRONTEND_NGINX_TEMPLATE,
-  isTauriRuntime, inferImageName, isGitUrl, resolveHarborRepository
+  isTauriRuntime, inferImageName, isGitUrl, resolveHarborRepository,
+  inferImageNameFromRef
 } from "./types";
 
 // 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
@@ -73,6 +75,14 @@ function App() {
   const [imageTag, setImageTag] = useState<string>("latest");
   const [uploadExposePort, setUploadExposePort] = useState<string>("");
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // ==================== 镜像推送状态 ====================
+  const [pushLocalImage, setPushLocalImage] = useState<string>("");
+  const [pushImageName, setPushImageName] = useState<string>("");
+  const [pushImageTag, setPushImageTag] = useState<string>("latest");
+  const [pushFullImage, setPushFullImage] = useState<string>("");
+  const [pushLocalImageOptions, setPushLocalImageOptions] = useState<string[]>([]);
+  const [pushIsLoadingImages, setPushIsLoadingImages] = useState(false);
 
   // ==================== 分支打包状态 ====================
   const [repoPath, setRepoPath] = useState<string>("");
@@ -305,7 +315,6 @@ function App() {
   // ==================== Git 操作 ====================
   async function loadGitBranches(path: string, preserveBranch?: string) {
     const nextRepoPath = path.trim();
-    setBranchOptions([]);
     if (!preserveBranch) {
       setBranchName("");
     }
@@ -328,7 +337,7 @@ function App() {
         ? preserveBranch
         : branches[0]?.name ?? "";
       setBranchName(targetBranch);
-      if (branchProjectType === "maven" && targetBranch && !isUrl) {
+      if (branchProjectType === "maven" && targetBranch) {
         await loadSpringProfiles(nextRepoPath, targetBranch);
       }
       if (targetBranch && !isUrl) {
@@ -507,6 +516,8 @@ function App() {
         setRepoPath(selectedPath);
         // 切换仓库时清空镜像名称，打包时自动从产物推断
         setImageName("");
+        setSpringProfile("");
+        updateUi('showAdvancedSettings', true);
         await loadGitBranches(selectedPath);
         if (config.remember_branch_settings) {
           const newHistory = prependPathHistory(config.repo_path_history, selectedPath);
@@ -588,6 +599,64 @@ function App() {
       await invoke("cancel_build");
     } catch { /* 忽略取消错误 */ }
     setIsBuilding(false);
+  }
+
+  // ==================== 镜像推送 ====================
+  async function loadLocalImages() {
+    if (!isTauriRuntime()) return;
+    setPushIsLoadingImages(true);
+    try {
+      const images = await invoke<string[]>("list_local_images");
+      setPushLocalImageOptions(images);
+    } catch (e) {
+      console.error("加载本地镜像列表失败:", e);
+      setPushLocalImageOptions([]);
+    } finally {
+      setPushIsLoadingImages(false);
+    }
+  }
+
+  async function handlePushImage() {
+    if (!isTauriRuntime()) {
+      setLog("❌ 当前是浏览器预览环境，推送请在 Tauri 桌面窗口中操作");
+      return;
+    }
+    if (!pushLocalImage.trim()) {
+      setLog("⚠️ 请输入本地镜像引用");
+      return;
+    }
+    if (!pushImageName.trim()) {
+      setLog("⚠️ 请输入目标镜像名称");
+      return;
+    }
+    if (!config.harbor_url || !config.username || !config.password || !config.project) {
+      setLog("⚠️ 请先配置Harbor信息");
+      setActiveTab("config");
+      return;
+    }
+    setIsBuilding(true);
+    setCopied(false);
+    setProgress(0);
+    setProgressMessage("🏷️ 镜像打标签...");
+    setLog("");
+    setPushFullImage("");
+    try {
+      const result = await invoke<string>("push_local_image", {
+        localImage: pushLocalImage.trim(),
+        imageName: pushImageName.trim(),
+        imageTag: pushImageTag.trim() || "latest",
+      });
+      const imgMatch = result.match(/完整镜像:\s*(.+)/);
+      if (imgMatch) {
+        setPushFullImage(imgMatch[1].trim());
+      }
+      const logResult = result.replace(/完整镜像:.*(\n|$)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+      setLog((prev) => (prev ? `${prev}\n\n${logResult}` : logResult));
+    } catch (e) {
+      setLog(`❌ 推送失败:\n${e}`);
+    } finally {
+      setIsBuilding(false);
+    }
   }
 
   async function handlePackageFromBranch() {
@@ -982,6 +1051,21 @@ function App() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTab === "push" && isTauriRuntime()) {
+      loadLocalImages();
+    }
+  }, [activeTab]);
+
+  // 选择本地镜像后自动推断目标镜像名称和标签
+  useEffect(() => {
+    if (pushLocalImage.trim()) {
+      const { name, tag } = inferImageNameFromRef(pushLocalImage);
+      if (name) setPushImageName(name);
+      if (tag) setPushImageTag(tag);
+    }
+  }, [pushLocalImage]);
+
+  useEffect(() => {
     checkBranchDockerfile();
   }, [repoPath, branchName]);
 
@@ -1026,8 +1110,10 @@ function App() {
     setSpringProfile("");
     if (value.trim() && repoPath) {
       await loadSpringProfiles(repoPath, value);
-      loadLastCommit(repoPath, value);
-      loadCommitList(repoPath, value, 1);
+      if (!isGitUrl(repoPath)) {
+        loadLastCommit(repoPath, value);
+        loadCommitList(repoPath, value, 1);
+      }
     } else {
       setSpringProfiles([]);
       setLastCommit(null);
@@ -1099,6 +1185,34 @@ function App() {
             setImageName={setImageName}
             setImageTag={setImageTag}
             setExposePort={setUploadExposePort}
+            setShowImageConfig={(v: boolean) => updateUi('showImageConfig', v)}
+            setShowBuildLog={(v: boolean) => updateUi('showBuildLog', v)}
+            renderLog={renderLog}
+          />
+        )}
+
+        {activeTab === "push" && (
+          <PushImagePanel
+            localImage={pushLocalImage}
+            localImageOptions={pushLocalImageOptions}
+            isLoadingImages={pushIsLoadingImages}
+            imageName={pushImageName}
+            imageTag={pushImageTag}
+            isBuilding={isBuilding}
+            showImageConfig={ui.showImageConfig}
+            showBuildLog={ui.showBuildLog}
+            progress={progress}
+            progressMessage={progressMessage}
+            log={log}
+            fullImage={pushFullImage}
+            copied={copied}
+            onCopyImage={handleCopyImage}
+            onPushImage={handlePushImage}
+            onCancelBuild={handleCancelBuild}
+            onRefreshImages={loadLocalImages}
+            setLocalImage={setPushLocalImage}
+            setImageName={setPushImageName}
+            setImageTag={setPushImageTag}
             setShowImageConfig={(v: boolean) => updateUi('showImageConfig', v)}
             setShowBuildLog={(v: boolean) => updateUi('showBuildLog', v)}
             renderLog={renderLog}

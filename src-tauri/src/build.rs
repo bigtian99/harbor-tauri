@@ -842,16 +842,22 @@ pub async fn package_from_branch(
 
 #[tauri::command]
 pub async fn detect_spring_profiles(repo_path: String, branch: String) -> Result<Vec<String>, String> {
-    let repo_path = PathBuf::from(&repo_path);
-    if !repo_path.is_dir() {
-        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
-    }
-
-    let repo_root = repo_root_for(&repo_path)?;
+    let repo_path_str = repo_path.trim();
     let branch = branch.trim();
-    if branch.is_empty() {
+    if repo_path_str.is_empty() || branch.is_empty() {
         return Ok(Vec::new());
     }
+
+    // Git URL 需要先克隆到缓存目录
+    let repo_root = if crate::git::is_git_url(repo_path_str) {
+        crate::git::ensure_cloned_repo(repo_path_str)?
+    } else {
+        let p = PathBuf::from(repo_path_str);
+        if !p.is_dir() {
+            return Err(format!("仓库路径不是目录: {}", p.display()));
+        }
+        repo_root_for(&p)?
+    };
 
     // 用 git ls-tree 列出指定分支中所有 application-*.yml / application-*.properties 文件
     let output = Command::new("git")
@@ -1206,4 +1212,228 @@ pub async fn build_and_push(
     .ok();
 
     Ok(format!("✅ 镜像推送成功!\n\n完整镜像: {}", full_image))
+}
+
+/// 将本地已有的 Docker 镜像推送到 Harbor（跳过构建步骤）
+#[tauri::command]
+pub async fn push_local_image(
+    app: tauri::AppHandle,
+    local_image: String,
+    image_name: String,
+    image_tag: String,
+) -> Result<String, String> {
+    reset_cancel_flag();
+    let config = load_config_sync()?;
+
+    if config.harbor_url.is_empty()
+        || config.username.is_empty()
+        || config.password.is_empty()
+        || config.project.is_empty()
+    {
+        return Err("请先配置Harbor信息".to_string());
+    }
+
+    let local_image = local_image.trim().to_string();
+    if local_image.is_empty() {
+        return Err("请输入本地镜像引用".to_string());
+    }
+
+    let image_name_lower = image_name.to_lowercase();
+    if image_name_lower.is_empty() {
+        return Err("请输入目标镜像名称".to_string());
+    }
+
+    let repository = resolve_harbor_repository(&image_name_lower, &config.project)?;
+
+    let final_tag = if image_tag.is_empty() || image_tag == "latest" {
+        let now = chrono::Local::now();
+        now.format("v.%y.%m.%d.%H.%M").to_string()
+    } else {
+        image_tag
+    };
+
+    let full_image = format!(
+        "{}/{}:{}",
+        config.harbor_url, repository, final_tag
+    );
+
+    // 步骤1: docker tag <local_image> <full_image>
+    app.emit(
+        "build-progress",
+        serde_json::json!({
+            "percent": 10,
+            "message": "🏷️ 镜像打标签..."
+        }),
+    )
+    .ok();
+
+    let local_image_tag = local_image.clone();
+    let full_image_tag = full_image.clone();
+    hide_docker_desktop();
+    let _tag_result = tauri::async_runtime::spawn_blocking(move || {
+        if CANCEL_FLAG.load(Ordering::SeqCst) {
+            return Err("操作已取消".to_string());
+        }
+        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+        let child = Command::new(&docker_bin)
+            .args(["tag", &local_image_tag, &full_image_tag])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("启动docker tag失败: {}", e))?;
+
+        *CURRENT_PID.lock().unwrap() = Some(child.id());
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("docker tag失败: {}", e))?;
+        *CURRENT_PID.lock().unwrap() = None;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "docker tag失败: 镜像 \"{}\" 可能不存在\n{}",
+                local_image_tag, stderr
+            ));
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("标签线程异常: {}", e))??;
+
+    // 步骤2: docker login
+    app.emit(
+        "build-progress",
+        serde_json::json!({
+            "percent": 35,
+            "message": "🔐 登录 Harbor 镜像仓库..."
+        }),
+    )
+    .ok();
+
+    let harbor_url = config.harbor_url.clone();
+    let username = config.username.clone();
+    let password = config.password.clone();
+
+    hide_docker_desktop();
+    let login_result = tauri::async_runtime::spawn_blocking(move || {
+        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+        let mut child = Command::new(&docker_bin)
+            .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("启动docker login失败: {}", e))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(password.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+
+        child
+            .wait_with_output()
+            .map_err(|e| format!("docker login失败: {}", e))
+    })
+    .await
+    .map_err(|e| format!("登录线程异常: {}", e))?;
+
+    let login_output = login_result?;
+    if !login_output.status.success() {
+        let stderr = String::from_utf8_lossy(&login_output.stderr);
+        return Err(format!("docker login失败:\n{}", stderr));
+    }
+
+    // 步骤3: docker push
+    app.emit(
+        "build-progress",
+        serde_json::json!({
+            "percent": 60,
+            "message": "📤 推送镜像到 Harbor..."
+        }),
+    )
+    .ok();
+
+    let full_image_push = full_image.clone();
+    let push_result = tauri::async_runtime::spawn_blocking(move || {
+        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+        hide_docker_desktop();
+        Command::new(&docker_bin)
+            .args(["push", &full_image_push])
+            .output()
+    })
+    .await
+    .map_err(|e| format!("推送线程异常: {}", e))?;
+
+    let push_output = push_result.map_err(|e| format!("执行docker push失败: {}", e))?;
+    if !push_output.status.success() {
+        let stderr = String::from_utf8_lossy(&push_output.stderr);
+        return Err(format!("docker push失败:\n{}", stderr));
+    }
+
+    // 步骤4: 清理 Harbor 标签副本，不删除原始本地镜像
+    app.emit(
+        "build-progress",
+        serde_json::json!({
+            "percent": 90,
+            "message": "🧹 清理本地标签..."
+        }),
+    )
+    .ok();
+
+    let full_image_remove = full_image.clone();
+    hide_docker_desktop();
+    let remove_result = tauri::async_runtime::spawn_blocking(move || {
+        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+        Command::new(&docker_bin)
+            .args(["rmi", &full_image_remove])
+            .output()
+    })
+    .await;
+
+    match remove_result {
+        Ok(Ok(output)) if output.status.success() => {
+            eprintln!("[JarPorter] 本地标签已删除: {}", full_image);
+        }
+        _ => {
+            eprintln!(
+                "[JarPorter] 本地标签清理跳过（不影响推送结果）: {}",
+                full_image
+            );
+        }
+    }
+
+    app.emit(
+        "build-progress",
+        serde_json::json!({
+            "percent": 100,
+            "message": "✅ 推送完成!"
+        }),
+    )
+    .ok();
+
+    Ok(format!("✅ 镜像推送成功!\n\n完整镜像: {}", full_image))
+}
+
+/// 列出本地所有 Docker 镜像（格式: repository:tag）
+#[tauri::command]
+pub fn list_local_images() -> Result<Vec<String>, String> {
+    let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+    let output = Command::new(&docker_bin)
+        .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
+        .output()
+        .map_err(|e| format!("执行docker images失败: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("docker images失败:\n{}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let images: Vec<String> = stdout
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && !l.starts_with('<'))
+        .collect();
+    Ok(images)
 }
