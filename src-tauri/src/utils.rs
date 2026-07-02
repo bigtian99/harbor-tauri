@@ -460,22 +460,79 @@ pub(crate) fn find_docker_path() -> Option<String> {
     None
 }
 
+#[cfg(target_os = "macos")]
+fn is_docker_desktop_cli(docker_bin: &str) -> bool {
+    let path = PathBuf::from(docker_bin);
+    let path_text = path.to_string_lossy();
+    if path_text.contains("/Docker.app/Contents/Resources/") {
+        return true;
+    }
+
+    fs::canonicalize(&path)
+        .map(|canonical| {
+            canonical
+                .to_string_lossy()
+                .contains("/Docker.app/Contents/Resources/")
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn prepare_docker_desktop_silently(docker_bin: &str) {
+    if is_docker_desktop_cli(docker_bin) {
+        Command::new("open")
+            .args(["-g", "-j", "-a", "Docker"])
+            .output()
+            .ok();
+    }
+    hide_docker_desktop();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn prepare_docker_desktop_silently(_docker_bin: &str) {}
+
+pub(crate) fn silent_docker_command() -> Command {
+    let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
+    prepare_docker_desktop_silently(&docker_bin);
+
+    let mut command = Command::new(docker_bin);
+    command
+        .env("DOCKER_CLI_HINTS", "false")
+        .env("DOCKER_SCAN_SUGGEST", "false");
+    command
+}
+
 /// macOS 专用：隐藏 Docker Desktop 窗口，防止弹出抢焦点
 /// 在 docker 命令执行前调用，可阻止 Docker Desktop 弹出 UI
 #[cfg(target_os = "macos")]
 pub(crate) fn hide_docker_desktop() {
-    // 先尝试隐藏窗口，再切回 Finder 让 Docker Desktop 不再保持前台
     Command::new("osascript")
-        .args(["-e", r#"tell application "System Events" to set visible of process "Docker Desktop" to false"#])
+        .args([
+            "-e",
+            r#"tell application "System Events"
+    repeat with processName in {"Docker Desktop", "Docker"}
+        if exists process processName then
+            set visible of process processName to false
+        end if
+    end repeat
+end tell"#,
+        ])
         .output()
         .ok();
-    // 让出一瞬间，确保窗口管理器处理完毕
     std::thread::sleep(Duration::from_millis(200));
 }
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn hide_docker_desktop() {
     // 非 macOS 平台无操作
+}
+
+pub(crate) fn hide_docker_desktop_after_spawn() {
+    #[cfg(target_os = "macos")]
+    {
+        std::thread::sleep(Duration::from_millis(150));
+        hide_docker_desktop();
+    }
 }
 
 /// 从 dist 目录的直接父目录（即项目根目录）查找 nginx.conf

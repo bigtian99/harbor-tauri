@@ -23,7 +23,7 @@ import type {
 import {
   DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE, DEFAULT_FRONTEND_NGINX_TEMPLATE,
   isTauriRuntime, inferImageName, isGitUrl, resolveHarborRepository,
-  inferImageNameFromRef
+  inferImageNameFromRef, getProjectName
 } from "./types";
 
 // 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
@@ -700,7 +700,11 @@ function App() {
       setWorktreePath(result.worktree_path);
       setCustomDockerfile(result.dockerfile_path || "");
       // 分支打包时自动推断镜像名称（setState 异步，用局部变量保证后续逻辑可用）
-      const baseName = inferImageName(result.artifact_path, branchProjectType === "npm" ? "frontend_dist" : "jar");
+      // npm 前端：用仓库名，避免 worktree 时间戳目录名污染镜像名
+      // Maven JAR：用 JAR 文件名推断
+      const baseName = branchProjectType === "npm"
+        ? getProjectName(repoPath).toLowerCase()
+        : inferImageName(result.artifact_path, "jar");
       const effectiveImageName = imageName.trim() || baseName;
       const branchSafeName = branchName.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
       // 前端镜像名称：拼接分支和构建命令（如 myapp-frontend-develop-build_prod）

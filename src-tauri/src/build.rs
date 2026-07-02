@@ -5,9 +5,9 @@ use crate::history::save_build_record_direct;
 use crate::models::{ArtifactType, BuildRecord, DockerBuildContext, PackageFromBranchResult, PackageProjectType};
 use crate::utils::{
     cleanup_old_temp_dirs, command_output_text, copy_artifact_to_output_internal,
-    detect_npm_build_script, find_docker_path, hide_docker_desktop, lock_file_hash,
-    repo_root_for, run_command, save_node_modules_to_cache, try_restore_node_modules,
-    CANCEL_FLAG, CURRENT_PID,
+    detect_npm_build_script, hide_docker_desktop, hide_docker_desktop_after_spawn,
+    lock_file_hash, repo_root_for, run_command, save_node_modules_to_cache,
+    silent_docker_command, try_restore_node_modules, CANCEL_FLAG, CURRENT_PID,
 };
 use std::fs;
 use std::io::Write;
@@ -15,6 +15,18 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use tauri::Emitter;
+
+fn docker_output(args: &[&str]) -> std::io::Result<std::process::Output> {
+    let child = silent_docker_command()
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    hide_docker_desktop_after_spawn();
+    let output = child.wait_with_output();
+    hide_docker_desktop();
+    output
+}
 
 /// 镜像名已含 `/` 则原样使用，否则拼接 `{project}/{image_name}`
 fn resolve_harbor_repository(image_name: &str, project: &str) -> Result<String, String> {
@@ -1044,14 +1056,11 @@ pub async fn build_and_push(
     let cleanup_file = build_context.cleanup_file.clone();
     let cleanup_dir = build_context.cleanup_dir.clone();
 
-    hide_docker_desktop();
     let build_result = tauri::async_runtime::spawn_blocking(move || {
         if CANCEL_FLAG.load(Ordering::SeqCst) {
             return Err("构建已取消".to_string());
         }
-        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
-        hide_docker_desktop();
-        let child = Command::new(&docker_bin)
+        let child = silent_docker_command()
             .args([
                 "build",
                 "--platform",
@@ -1069,6 +1078,7 @@ pub async fn build_and_push(
             .map_err(|e| format!("启动docker build失败: {}", e))?;
 
         *CURRENT_PID.lock().unwrap() = Some(child.id());
+        hide_docker_desktop_after_spawn();
 
         let output = child
             .wait_with_output()
@@ -1112,16 +1122,15 @@ pub async fn build_and_push(
     let username = config.username.clone();
     let password = config.password.clone();
 
-    hide_docker_desktop();
     let login_result = tauri::async_runtime::spawn_blocking(move || {
-        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
-        let mut child = Command::new(&docker_bin)
+        let mut child = silent_docker_command()
             .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| format!("启动docker login失败: {}", e))?;
+        hide_docker_desktop_after_spawn();
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin
@@ -1129,9 +1138,11 @@ pub async fn build_and_push(
                 .map_err(|e| e.to_string())?;
         }
 
-        child
+        let output = child
             .wait_with_output()
-            .map_err(|e| format!("docker login失败: {}", e))
+            .map_err(|e| format!("docker login失败: {}", e));
+        hide_docker_desktop();
+        output
     })
     .await
     .map_err(|e| format!("登录线程异常: {}", e))?;
@@ -1154,11 +1165,7 @@ pub async fn build_and_push(
 
     let full_image_push = full_image.clone();
     let push_result = tauri::async_runtime::spawn_blocking(move || {
-        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
-        hide_docker_desktop();
-        Command::new(&docker_bin)
-            .args(["push", &full_image_push])
-            .output()
+        docker_output(&["push", &full_image_push])
     })
     .await
     .map_err(|e| format!("推送线程异常: {}", e))?;
@@ -1180,12 +1187,8 @@ pub async fn build_and_push(
     .ok();
 
     let full_image_remove = full_image.clone();
-    hide_docker_desktop();
     let remove_result = tauri::async_runtime::spawn_blocking(move || {
-        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
-        Command::new(&docker_bin)
-            .args(["rmi", &full_image_remove])
-            .output()
+        docker_output(&["rmi", &full_image_remove])
     })
     .await;
 
@@ -1269,13 +1272,11 @@ pub async fn push_local_image(
 
     let local_image_tag = local_image.clone();
     let full_image_tag = full_image.clone();
-    hide_docker_desktop();
     let _tag_result = tauri::async_runtime::spawn_blocking(move || {
         if CANCEL_FLAG.load(Ordering::SeqCst) {
             return Err("操作已取消".to_string());
         }
-        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
-        let child = Command::new(&docker_bin)
+        let child = silent_docker_command()
             .args(["tag", &local_image_tag, &full_image_tag])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1283,10 +1284,12 @@ pub async fn push_local_image(
             .map_err(|e| format!("启动docker tag失败: {}", e))?;
 
         *CURRENT_PID.lock().unwrap() = Some(child.id());
+        hide_docker_desktop_after_spawn();
         let output = child
             .wait_with_output()
             .map_err(|e| format!("docker tag失败: {}", e))?;
         *CURRENT_PID.lock().unwrap() = None;
+        hide_docker_desktop();
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1314,16 +1317,15 @@ pub async fn push_local_image(
     let username = config.username.clone();
     let password = config.password.clone();
 
-    hide_docker_desktop();
     let login_result = tauri::async_runtime::spawn_blocking(move || {
-        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
-        let mut child = Command::new(&docker_bin)
+        let mut child = silent_docker_command()
             .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| format!("启动docker login失败: {}", e))?;
+        hide_docker_desktop_after_spawn();
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin
@@ -1331,9 +1333,11 @@ pub async fn push_local_image(
                 .map_err(|e| e.to_string())?;
         }
 
-        child
+        let output = child
             .wait_with_output()
-            .map_err(|e| format!("docker login失败: {}", e))
+            .map_err(|e| format!("docker login失败: {}", e));
+        hide_docker_desktop();
+        output
     })
     .await
     .map_err(|e| format!("登录线程异常: {}", e))?;
@@ -1356,11 +1360,7 @@ pub async fn push_local_image(
 
     let full_image_push = full_image.clone();
     let push_result = tauri::async_runtime::spawn_blocking(move || {
-        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
-        hide_docker_desktop();
-        Command::new(&docker_bin)
-            .args(["push", &full_image_push])
-            .output()
+        docker_output(&["push", &full_image_push])
     })
     .await
     .map_err(|e| format!("推送线程异常: {}", e))?;
@@ -1382,12 +1382,8 @@ pub async fn push_local_image(
     .ok();
 
     let full_image_remove = full_image.clone();
-    hide_docker_desktop();
     let remove_result = tauri::async_runtime::spawn_blocking(move || {
-        let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
-        Command::new(&docker_bin)
-            .args(["rmi", &full_image_remove])
-            .output()
+        docker_output(&["rmi", &full_image_remove])
     })
     .await;
 
@@ -1418,10 +1414,7 @@ pub async fn push_local_image(
 /// 列出本地所有 Docker 镜像（格式: repository:tag）
 #[tauri::command]
 pub fn list_local_images() -> Result<Vec<String>, String> {
-    let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
-    let output = Command::new(&docker_bin)
-        .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
-        .output()
+    let output = docker_output(&["images", "--format", "{{.Repository}}:{{.Tag}}"])
         .map_err(|e| format!("执行docker images失败: {}", e))?;
 
     if !output.status.success() {

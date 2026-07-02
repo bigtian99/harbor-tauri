@@ -50,6 +50,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
   const [mergeProgressMessage, setMergeProgressMessage] = useState("");
   const [mergeResultMessage, setMergeResultMessage] = useState("");
   const mergeAutoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCheckDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const closeMergeOverlay = useCallback(() => {
     if (mergeAutoCloseTimer.current) {
@@ -78,6 +79,9 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
       unlisten?.();
       if (mergeAutoCloseTimer.current) {
         clearTimeout(mergeAutoCloseTimer.current);
+      }
+      if (autoCheckDebounce.current) {
+        clearTimeout(autoCheckDebounce.current);
       }
     };
   }, []);
@@ -196,8 +200,14 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
     setIsLoadingDiff(false);
   }, [resolvedRepoPath, sourceBranch, targetBranch]);
 
-  // 选完源和目标分支后自动检查冲突并加载差异提交
+  // 选完源和目标分支后自动检查冲突并加载差异提交（800ms 防抖，避免输入过程中频繁触发）
   useEffect(() => {
+    // 清除上一次的防抖定时器
+    if (autoCheckDebounce.current) {
+      clearTimeout(autoCheckDebounce.current);
+      autoCheckDebounce.current = null;
+    }
+
     if (sourceBranch && targetBranch && sourceBranch === targetBranch) {
       setCheckResult({
         canMerge: false,
@@ -209,7 +219,10 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
       setDiffError("");
       setDiffCommitSearch("");
     } else if (sourceBranch && targetBranch && resolvedRepoPath) {
-      handleCheck();
+      // 防抖：用户停止输入 800ms 后才自动检查
+      autoCheckDebounce.current = setTimeout(() => {
+        handleCheck();
+      }, 800);
     } else {
       setCheckResult(null);
       setDiffCommits([]);
