@@ -1,6 +1,6 @@
 [package]
 name = "jarporter"
-version = "0.1.1"
+version = "0.1.10"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -30,4 +30,3 @@ reqwest = { version = "0.12", features = ["json"] }
 tiny_http = "0.12"
 rusqlite = { version = "0.31", features = ["bundled"] }
 zip = "2"
-

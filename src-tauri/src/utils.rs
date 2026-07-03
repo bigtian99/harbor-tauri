@@ -484,6 +484,7 @@ fn prepare_docker_desktop_silently(docker_bin: &str) {
             .args(["-g", "-j", "-a", "Docker"])
             .output()
             .ok();
+        hide_docker_desktop_repeatedly();
     }
     hide_docker_desktop();
 }
@@ -532,7 +533,18 @@ pub(crate) fn hide_docker_desktop_after_spawn() {
     {
         std::thread::sleep(Duration::from_millis(150));
         hide_docker_desktop();
+        hide_docker_desktop_repeatedly();
     }
+}
+
+#[cfg(target_os = "macos")]
+fn hide_docker_desktop_repeatedly() {
+    std::thread::spawn(|| {
+        for delay_ms in [250_u64, 500, 1000, 2000] {
+            std::thread::sleep(Duration::from_millis(delay_ms));
+            hide_docker_desktop();
+        }
+    });
 }
 
 /// 从 dist 目录的直接父目录（即项目根目录）查找 nginx.conf
