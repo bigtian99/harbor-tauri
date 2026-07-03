@@ -32,7 +32,7 @@ use preview_server::get_preview_server_info;
 /// 前端据此动态隐藏非运营菜单。
 #[tauri::command]
 fn is_ops_mode() -> bool {
-    option_env!("OPS_MODE").is_some()
+    option_env!("OPS_MODE") == Some("true")
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
