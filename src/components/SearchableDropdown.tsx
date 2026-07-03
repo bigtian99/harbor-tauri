@@ -102,6 +102,9 @@ export function SearchableDropdown({
         placeholder={loading ? "加载中..." : placeholder}
         disabled={disabled || loading}
         autoComplete="off"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
       />
       {isOpen && !disabled && !loading && (
         <div ref={listRef} className="searchable-dropdown-list">

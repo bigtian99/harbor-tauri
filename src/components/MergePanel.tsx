@@ -187,8 +187,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
       source: sourceBranch,
       target: targetBranch,
     }).then((list) => setDiffCommits(list))
-      .catch((e) => {
-        const message = String(e);
+      .catch(() => {
+        const message = "无法获取差异提交，请确认源分支和目标分支存在，并刷新分支后重试";
         setDiffError(message);
         notifications.show({ title: "获取差异提交失败", message, color: "red", autoClose: 6000 });
       })
