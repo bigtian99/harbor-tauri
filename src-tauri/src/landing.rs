@@ -2,10 +2,12 @@ use crate::models::{FtpUploadItem, FtpUploadResult, LandingPageResult, SubChanne
 use crate::utils::{copy_dir_recursive, render_template};
 use std::collections::HashSet;
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
+use std::net::{Ipv4Addr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -266,7 +268,7 @@ pub async fn generate_landing_pages(
 
 // ========== FTP 上传功能 ==========
 
-/// 生成 Python FTP 上传脚本并执行（带重试）
+/// 使用原生 FTP 协议上传目录（带重试）
 pub(crate) fn run_ftp_upload(
     local_dir: &Path,
     remote_dir: &str,
@@ -291,103 +293,219 @@ pub(crate) fn run_ftp_upload(
     Err(format!("上传失败（已重试{}次）: {}", max_retries, last_error))
 }
 
+struct FtpClient {
+    reader: BufReader<TcpStream>,
+    writer: TcpStream,
+}
+
+impl FtpClient {
+    fn connect() -> Result<Self, String> {
+        let stream = TcpStream::connect((FTP_HOST, 21))
+            .map_err(|e| format!("连接 FTP 服务器失败: {}", e))?;
+        set_ftp_timeouts(&stream)?;
+        let writer = stream
+            .try_clone()
+            .map_err(|e| format!("初始化 FTP 连接失败: {}", e))?;
+        let mut client = Self {
+            reader: BufReader::new(stream),
+            writer,
+        };
+
+        let (code, message) = client.read_response()?;
+        if code != 220 {
+            return Err(format!("FTP 服务器拒绝连接: {}", message.trim()));
+        }
+
+        let (code, message) = client.command(&format!("USER {}", FTP_USER))?;
+        match code {
+            230 => {}
+            331 => {
+                client.command_expect("PASS ******", &format!("PASS {}", FTP_PASS), &[230])?;
+            }
+            _ => return Err(format!("FTP 登录失败: {}", message.trim())),
+        }
+        client.command_expect("OPTS UTF8 ON", "OPTS UTF8 ON", &[200]).ok();
+        client.command_expect("TYPE I", "TYPE I", &[200])?;
+        Ok(client)
+    }
+
+    fn read_response(&mut self) -> Result<(u32, String), String> {
+        let mut message = String::new();
+        let mut expected_code: Option<u32> = None;
+
+        loop {
+            let mut line = String::new();
+            let count = self
+                .reader
+                .read_line(&mut line)
+                .map_err(|e| format!("读取 FTP 响应失败: {}", e))?;
+            if count == 0 {
+                return Err(format!("FTP 连接已关闭: {}", message.trim()));
+            }
+            message.push_str(&line);
+
+            if line.len() < 4 || !line.as_bytes()[0..3].iter().all(u8::is_ascii_digit) {
+                continue;
+            }
+            let code = line[0..3].parse::<u32>().unwrap_or(0);
+            let separator = line.as_bytes().get(3).copied();
+            match expected_code {
+                None if separator == Some(b' ') => return Ok((code, message)),
+                None => expected_code = Some(code),
+                Some(expected) if code == expected && separator == Some(b' ') => {
+                    return Ok((code, message));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn command(&mut self, command: &str) -> Result<(u32, String), String> {
+        self.writer
+            .write_all(command.as_bytes())
+            .and_then(|_| self.writer.write_all(b"\r\n"))
+            .and_then(|_| self.writer.flush())
+            .map_err(|e| format!("发送 FTP 命令失败: {}", e))?;
+        self.read_response()
+    }
+
+    fn command_expect(
+        &mut self,
+        label: &str,
+        command: &str,
+        allowed_codes: &[u32],
+    ) -> Result<String, String> {
+        let (code, message) = self.command(command)?;
+        if allowed_codes.contains(&code) {
+            Ok(message)
+        } else {
+            Err(format!("FTP 命令失败 {}: {}", label, message.trim()))
+        }
+    }
+
+    fn cwd(&mut self, dir: &str) -> Result<(), String> {
+        self.command_expect(&format!("CWD {}", dir), &format!("CWD {}", dir), &[250])
+            .map(|_| ())
+    }
+
+    fn ensure_dir(&mut self, path: &str) -> Result<(), String> {
+        for part in path.split('/') {
+            if part.trim().is_empty() {
+                continue;
+            }
+            if self.cwd(part).is_err() {
+                let _ = self.command_expect(&format!("MKD {}", part), &format!("MKD {}", part), &[257, 250]);
+                self.cwd(part)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn open_passive_data(&mut self) -> Result<TcpStream, String> {
+        let message = self.command_expect("PASV", "PASV", &[227])?;
+        let (host, port) = parse_pasv_response(&message)?;
+        let data = TcpStream::connect((host.as_str(), port))
+            .map_err(|e| format!("连接 FTP 数据通道失败 {}:{}: {}", host, port, e))?;
+        set_ftp_timeouts(&data)?;
+        Ok(data)
+    }
+
+    fn upload_file(&mut self, name: &str, path: &Path) -> Result<(), String> {
+        let mut data = self.open_passive_data()?;
+        self.command_expect(&format!("STOR {}", name), &format!("STOR {}", name), &[125, 150])?;
+
+        let mut file = fs::File::open(path)
+            .map_err(|e| format!("读取待上传文件失败 {}: {}", path.display(), e))?;
+        std::io::copy(&mut file, &mut data)
+            .map_err(|e| format!("上传文件失败 {}: {}", name, e))?;
+        data.shutdown(std::net::Shutdown::Write).ok();
+        drop(data);
+
+        let (code, message) = self.read_response()?;
+        if code == 226 || code == 250 {
+            Ok(())
+        } else {
+            Err(format!("FTP 上传文件失败 {}: {}", name, message.trim()))
+        }
+    }
+}
+
+fn set_ftp_timeouts(stream: &TcpStream) -> Result<(), String> {
+    let timeout = Some(Duration::from_secs(30));
+    stream
+        .set_read_timeout(timeout)
+        .and_then(|_| stream.set_write_timeout(timeout))
+        .map_err(|e| format!("设置 FTP 超时失败: {}", e))
+}
+
+fn parse_pasv_response(message: &str) -> Result<(String, u16), String> {
+    let payload = message
+        .split_once('(')
+        .and_then(|(_, rest)| rest.split_once(')').map(|(inside, _)| inside))
+        .unwrap_or(message);
+    let nums: Vec<u16> = payload
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse::<u16>().ok())
+        .collect();
+    if nums.len() < 6 {
+        return Err(format!("无法解析 FTP 被动模式响应: {}", message.trim()));
+    }
+    let nums = &nums[nums.len() - 6..];
+    let mut host = format!("{}.{}.{}.{}", nums[0], nums[1], nums[2], nums[3]);
+    let use_control_host = host == "0.0.0.0"
+        || host
+            .parse::<Ipv4Addr>()
+            .map(|ip| ip.is_private() || ip.is_loopback() || ip.is_link_local())
+            .unwrap_or(false);
+    if use_control_host {
+        host = FTP_HOST.to_string();
+    }
+    let port = nums[4] * 256 + nums[5];
+    if port == 0 {
+        return Err(format!("FTP 被动模式端口无效: {}", message.trim()));
+    }
+    Ok((host, port))
+}
+
+fn upload_dir_native(client: &mut FtpClient, local_dir: &Path) -> Result<(), String> {
+    let mut entries = fs::read_dir(local_dir)
+        .map_err(|e| format!("读取上传目录失败 {}: {}", local_dir.display(), e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("读取上传目录失败 {}: {}", local_dir.display(), e))?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.is_empty() || name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        let metadata = entry
+            .metadata()
+            .map_err(|e| format!("读取文件信息失败 {}: {}", path.display(), e))?;
+        if metadata.is_dir() {
+            client.ensure_dir(&name)?;
+            upload_dir_native(client, &path)?;
+            client.cwd("..")?;
+        } else if metadata.is_file() {
+            eprintln!("[JarPorter] 📤 FTP 上传文件: {} ({} bytes)", name, metadata.len());
+            client.upload_file(&name, &path)?;
+        }
+    }
+    Ok(())
+}
+
 /// 单次上传
 fn run_ftp_upload_once(
     local_dir: &Path,
     remote_dir: &str,
 ) -> Result<(), String> {
-    let local_dir_str = local_dir.to_string_lossy().replace('\\', "\\\\");
-    let python_script = format!(
-        r#"
-import os
-import sys
-from ftplib import FTP
-
-def safe_cwd(ftp, dirname):
-    if not dirname or not isinstance(dirname, str):
-        return False
-    try:
-        ftp.cwd(dirname)
-        return True
-    except Exception:
-        return False
-
-def ensure_dir(ftp, dirname):
-    if not dirname:
-        return
-    parts = dirname.split('/')
-    for part in parts:
-        if not part:
-            continue
-        if safe_cwd(ftp, part):
-            continue
-        try:
-            ftp.mkd(part)
-            safe_cwd(ftp, part)
-        except Exception:
-            pass
-
-def upload_dir(ftp, local_path, remote_path):
-    for name in os.listdir(local_path):
-        if not name or name.startswith('.'):
-            continue
-        local_child = os.path.join(local_path, name)
-        if os.path.isdir(local_child):
-            ensure_dir(ftp, name)
-            upload_dir(ftp, local_child, os.path.join(remote_path, name))
-            safe_cwd(ftp, '..')
-        elif os.path.isfile(local_child):
-            size = os.path.getsize(local_child)
-            print('UPLOAD:' + name + ':' + str(size), flush=True)
-            with open(local_child, 'rb') as f:
-                ftp.storbinary('STOR ' + name, f)
-            print('DONE:' + name, flush=True)
-
-try:
-    ftp = FTP()
-    ftp.connect('{ftp_host}', timeout=10)
-    ftp.login('{ftp_user}', '{ftp_pass}')
-    print('CONNECTED', flush=True)
-
-    safe_cwd(ftp, '{ftp_base_dir}')
-    ensure_dir(ftp, '{remote_dir}')
-    upload_dir(ftp, '{local_dir}', '{remote_dir}')
-    ftp.quit()
-    print('SUCCESS', flush=True)
-except Exception as e:
-    print('ERROR:' + str(e), flush=True)
-    sys.exit(1)
-"#,
-        ftp_host = FTP_HOST,
-        ftp_user = FTP_USER,
-        ftp_pass = FTP_PASS,
-        ftp_base_dir = FTP_BASE_DIR,
-        remote_dir = remote_dir,
-        local_dir = local_dir_str,
-    );
-
-    let output = Command::new("python3")
-        .arg("-c")
-        .arg(&python_script)
-        .output()
-        .map_err(|e| format!("执行 Python 脚本失败: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    eprintln!("[JarPorter] 🐍 Python 输出:\n{}", stdout);
-    if !stderr.is_empty() {
-        eprintln!("[JarPorter] 🐍 Python 错误:\n{}", stderr);
-    }
-
-    if !output.status.success() {
-        return Err(format!("Python FTP 上传失败:\n{}", stdout));
-    }
-
-    if stdout.contains("ERROR:") {
-        return Err(format!("Python FTP 上传失败:\n{}", stdout));
-    }
-
+    let mut client = FtpClient::connect()?;
+    client.cwd(FTP_BASE_DIR).ok();
+    client.ensure_dir(remote_dir)?;
+    upload_dir_native(&mut client, local_dir)?;
+    client.command_expect("QUIT", "QUIT", &[221]).ok();
     Ok(())
 }
 

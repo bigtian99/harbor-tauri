@@ -313,17 +313,29 @@ export function LandingPanel({
           {landingPreviewData.length > 0 && (
             <Paper withBorder radius="md" style={{ overflow: "hidden" }}>
               <Box style={{ overflowX: "auto" }}>
-                <Table highlightOnHover verticalSpacing="sm" horizontalSpacing="sm" style={{ tableLayout: "fixed", minWidth: 1000 }}>
+                <Table highlightOnHover verticalSpacing="sm" horizontalSpacing="sm" style={{ tableLayout: "fixed", minWidth: 1180 }}>
+                  <colgroup>
+                    <col style={{ width: 46 }} />
+                    <col style={{ width: 140 }} />
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 160 }} />
+                    <col />
+                    <col style={{ width: 80 }} />
+                    <col style={{ width: 120 }} />
+                    <col style={{ width: 100 }} />
+                  </colgroup>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th style={{ width: 46, textAlign: "center" }}></Table.Th>
-                      <Table.Th style={{ width: 140 }}>名称</Table.Th>
-                      <Table.Th style={{ width: 120 }}>类型</Table.Th>
-                      <Table.Th style={{ width: 300 }}>产品</Table.Th>
-                      <Table.Th style={{ width: 200, textAlign: "center" }}>模板</Table.Th>
-                      <Table.Th style={{ width: 80 }}>ID</Table.Th>
-                      <Table.Th style={{ width: 110, textAlign: "center" }}>状态</Table.Th>
-                      <Table.Th style={{ width: 100, textAlign: "right" }}>操作</Table.Th>
+                      <Table.Th style={{ textAlign: "center" }}></Table.Th>
+                      <Table.Th>名称</Table.Th>
+                      <Table.Th>类型</Table.Th>
+                      <Table.Th>产品</Table.Th>
+                      <Table.Th style={{ textAlign: "center" }}>
+                        <span style={{ display: "inline-block", transform: "translateX(-28px)" }}>模板</span>
+                      </Table.Th>
+                      <Table.Th>ID</Table.Th>
+                      <Table.Th style={{ textAlign: "center" }}>状态</Table.Th>
+                      <Table.Th style={{ textAlign: "right" }}>操作</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -400,7 +412,7 @@ export function LandingPanel({
                           {/* 模板（带 iframe 轮播） */}
                           <Table.Td>
                             {genResult?.status === "success" ? (
-                              <Group gap={4} justify="center" style={{ height: 90, position: "relative" }}>
+                              <Group gap={4} justify="center" wrap="nowrap" style={{ height: 104, position: "relative", transform: "translateX(-28px)" }}>
                                 {hasMultipleTemplates && (
                                   <ActionIcon
                                     variant="subtle"
@@ -503,19 +515,28 @@ export function LandingPanel({
 
                           {/* 状态 */}
                           <Table.Td>
-                            <Group gap={4} justify="center" wrap="nowrap">
+                            <Stack gap={2} align="center">
                               {genResult?.status === "success" && (
-                                <Badge variant="light" color="green" size="sm" radius="xl">✓ 已生成</Badge>
+                                <Group gap={6} wrap="nowrap" style={{ color: "#8ee6b8" }}>
+                                  <Box w={6} h={6} style={{ borderRadius: 999, background: "#35d07f" }} />
+                                  <Text size="xs" fw={600}>已生成</Text>
+                                </Group>
                               )}
                               {genResult?.status === "error" && (
                                 <Tooltip label={genResult.message}>
-                                  <Badge variant="light" color="red" size="sm" radius="xl">✗ 失败</Badge>
+                                  <Group gap={6} wrap="nowrap" style={{ color: "#ff9b9b" }}>
+                                    <Box w={6} h={6} style={{ borderRadius: 999, background: "#ff5d5d" }} />
+                                    <Text size="xs" fw={600}>失败</Text>
+                                  </Group>
                                 </Tooltip>
                               )}
                               {ftpResult?.status === "success" && (
-                                <Badge variant="light" color="blue" size="sm" radius="xl">↑ 已上传</Badge>
+                                <Group gap={6} wrap="nowrap" style={{ color: "#8bbdff" }}>
+                                  <Box w={6} h={6} style={{ borderRadius: 999, background: "#4d8dff" }} />
+                                  <Text size="xs" fw={600}>已上传</Text>
+                                </Group>
                               )}
-                            </Group>
+                            </Stack>
                           </Table.Td>
 
                           {/* 操作 */}
@@ -790,9 +811,9 @@ function TemplatePreviewCard({
   isCenter: boolean;
   onClick: () => void;
 }) {
-  const cardWidth = isCenter ? 60 : 40;
-  const cardHeight = isCenter ? 80 : 56;
-  const wrapperScale = isCenter ? 0.16 : 0.107;
+  const cardWidth = isCenter ? 72 : 48;
+  const cardHeight = isCenter ? 88 : 64;
+  const wrapperScale = isCenter ? 0.192 : 0.128;
 
   return (
     <Box
