@@ -1,6 +1,6 @@
 import {
   Container, Upload, Rocket, Settings, GitBranch, History, Globe, GitMerge,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, FileText
 } from "lucide-react";
 import type { TabType } from "../types";
 
@@ -20,10 +20,11 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
     { tab: "merge", icon: <GitMerge size={18} />, label: "分支合并" },
     { tab: "history", icon: <History size={18} />, label: "历史记录" },
     { tab: "landing", icon: <Globe size={18} />, label: "生成落地页" },
+    { tab: "settlement", icon: <FileText size={18} />, label: "结算单" },
   ];
 
   const visibleItems = opsMode
-    ? navItems.filter(i => i.tab === "landing")
+    ? navItems.filter(i => i.tab === "landing" || i.tab === "settlement")
     : navItems;
 
   return (

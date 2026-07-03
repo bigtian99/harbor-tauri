@@ -12,6 +12,7 @@ import { LandingPanel } from "./components/LandingPanel";
 import { MergePanel } from "./components/MergePanel";
 import { PushImagePanel } from "./components/PushImagePanel";
 import { ConfigPanel } from "./components/ConfigPanel";
+import { SettlementPanel } from "./components/SettlementPanel";
 import { useLanding } from "./hooks/useLanding";
 import "./App.css";
 
@@ -1341,6 +1342,10 @@ function App() {
             onFtpUpload={landing.handleFtpUpload}
             onCopyAllLinks={landing.handleCopyAllLinks}
           />
+        )}
+
+        {activeTab === "settlement" && (
+          <SettlementPanel />
         )}
 
         {activeTab === "config" && (

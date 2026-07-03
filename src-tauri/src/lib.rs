@@ -8,6 +8,7 @@ mod history;
 mod landing;
 mod models;
 mod preview_server;
+mod settlement;
 mod utils;
 
 use build::{
@@ -27,6 +28,7 @@ use landing::{
     list_template_dirs, list_template_infos, upload_template_zip, delete_template_dir,
 };
 use preview_server::get_preview_server_info;
+use settlement::generate_settlement_statements;
 
 /// 编译时注入：`OPS_MODE=true tauri build` 构建的版本返回 true，
 /// 前端据此动态隐藏非运营菜单。
@@ -93,6 +95,7 @@ pub fn run() {
             list_remote_branches,
             check_remote_merge,
             merge_remote_branches,
+            generate_settlement_statements,
             db::get_jar_port,
             db::save_jar_port,
         ])

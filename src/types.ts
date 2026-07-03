@@ -2,7 +2,7 @@
 
 export type ArtifactType = "jar" | "frontend_dist";
 export type BranchProjectType = "maven" | "npm";
-export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge";
+export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement";
 
 export interface HarborConfig {
   harbor_url: string;
@@ -144,6 +144,14 @@ export interface FtpUploadItem {
 export interface TemplateInfo {
   dir: string;
   category: string;
+}
+
+export interface SettlementGenerateResult {
+  created: number;
+  accounts: number;
+  channels: number;
+  output_dir: string;
+  files: string[];
 }
 
 // ==================== 本地分支合并 ====================
