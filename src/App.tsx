@@ -27,7 +27,7 @@ import {
   isTauriRuntime, inferImageName, isGitUrl, resolveHarborRepository,
   inferImageNameFromRef, getProjectName
 } from "./types";
-import { createBranchImageResult } from "./branchImageResults";
+import { createBranchImageResult, getBranchPushSummary } from "./branchImageResults";
 
 // 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
 function prependPathHistory(history: string[] | undefined, path: string): string[] {
@@ -800,27 +800,31 @@ function App() {
               // ===== NPM 项目：先推前端 =====
               setProgress(60);
               setProgressMessage("🚀 推送前端镜像...");
-              const feResult = await invoke<string>("build_and_push", {
-                jarPath: result.artifact_path,
-                imageName: frontendImageName,
-                imageTag: branchImageTag,
-                artifactType: "frontend_dist",
-                dockerfilePath: null,
-                dockerfileContext: null,
-              });
-              pushLogs.push(`📦 前端: ${feResult}`);
-              const feMatch = feResult.match(/完整镜像:\s*(.+)/);
-              if (feMatch) {
-                const image = feMatch[1].trim();
-                imageList.push(`前端: ${image}`);
-                setBranchImageResults([createBranchImageResult("frontend", image)]);
-                try {
-                  await invoke("update_build_record_image", {
-                    imageName: effectiveImageName,
-                    imageTag: image,
-                  });
-                  await loadBuildHistory();
-                } catch { /* 忽略 */ }
+              try {
+                const feResult = await invoke<string>("build_and_push", {
+                  jarPath: result.artifact_path,
+                  imageName: frontendImageName,
+                  imageTag: branchImageTag,
+                  artifactType: "frontend_dist",
+                  dockerfilePath: null,
+                  dockerfileContext: null,
+                });
+                pushLogs.push(`📦 前端: ${feResult}`);
+                const feMatch = feResult.match(/完整镜像:\s*(.+)/);
+                if (feMatch) {
+                  const image = feMatch[1].trim();
+                  imageList.push(`前端: ${image}`);
+                  setBranchImageResults([createBranchImageResult("frontend", image)]);
+                  try {
+                    await invoke("update_build_record_image", {
+                      imageName: effectiveImageName,
+                      imageTag: image,
+                    });
+                    await loadBuildHistory();
+                  } catch { /* 忽略 */ }
+                }
+              } catch (feErr) {
+                pushLogs.push(`❌ 前端推送失败: ${feErr}`);
               }
 
               // ===== 有后端时再接续推后端 =====
@@ -853,14 +857,7 @@ function App() {
               setBranchFullImage(imageList.join("\n"));
 
               // 判断整体是否成功
-              const feFailed = pushLogs.some(l => l.startsWith("❌ 前端"));
-              if (feFailed) {
-                setLog(`❌ 前端镜像推送失败:\n${pushLogs.join("\n")}\n\n${result.log}`);
-              } else if (hasBackend && pushLogs.some(l => l.startsWith("❌ 后端"))) {
-                setLog(`⚠️ 前端推送成功，但后端推送失败:\n${pushLogs.join("\n")}\n\n${result.log}`);
-              } else {
-                setLog(`✅ 分支打包并推送镜像完成\n\n${result.log}\n\n${pushLogs.join("\n")}`);
-              }
+              setLog(`${getBranchPushSummary(pushLogs, hasBackend)}\n\n${result.log}\n\n${pushLogs.join("\n")}`);
               setActiveTab("branch");
             } catch (pushErr) {
               setLog(`⚠️ 分支打包成功，但镜像推送失败:\n${pushErr}\n\n${result.log}`);

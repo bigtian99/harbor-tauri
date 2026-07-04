@@ -1,4 +1,8 @@
-import { createBranchImageResult, getBranchImageCopyLabel } from "../src/branchImageResults";
+import {
+  createBranchImageResult,
+  getBranchImageCopyLabel,
+  getBranchPushSummary,
+} from "../src/branchImageResults";
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -33,3 +37,30 @@ assertJsonEqual(backend, {
 
 assertEqual(getBranchImageCopyLabel("frontend"), "复制前端", "frontend copy label");
 assertEqual(getBranchImageCopyLabel("backend"), "复制后端", "backend copy label");
+
+assertEqual(
+  getBranchPushSummary([
+    "❌ 前端推送失败: docker build失败",
+    "📦 后端: ✅ 镜像推送成功!",
+  ], true),
+  "⚠️ 前端推送失败，但后端推送成功",
+  "frontend failure should not hide a successful backend push",
+);
+
+assertEqual(
+  getBranchPushSummary([
+    "📦 前端: ✅ 镜像推送成功!",
+    "❌ 后端推送失败: docker build失败",
+  ], true),
+  "⚠️ 前端推送成功，但后端推送失败",
+  "backend failure should keep frontend success visible",
+);
+
+assertEqual(
+  getBranchPushSummary([
+    "❌ 前端推送失败: docker build失败",
+    "❌ 后端推送失败: docker build失败",
+  ], true),
+  "❌ 前端和后端镜像推送失败",
+  "both push failures should be called out explicitly",
+);
