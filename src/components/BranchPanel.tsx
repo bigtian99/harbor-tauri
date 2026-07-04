@@ -9,6 +9,7 @@ import type {
   BranchProjectType, HarborConfig,
   GitBranchOption, LastCommitInfo, CommitInfo, AuthorInfo
 } from "../types";
+import type { BranchImageResult } from "../branchImageResults";
 
 interface BranchPanelProps {
   // 项目类型
@@ -43,6 +44,7 @@ interface BranchPanelProps {
   isBuilding: boolean;
   autoPushImage: boolean;
   branchFullImage: string;
+  branchImageResults: BranchImageResult[];
   imageName: string;
   imageTag: string;
   exposePort: string;

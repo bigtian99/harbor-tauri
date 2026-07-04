@@ -21,11 +21,13 @@ import type {
   PackageFromBranchResult, GitBranchOption, LastCommitInfo,
   CommitInfo, CommitListResult, AuthorInfo, BuildRecord
 } from "./types";
+import type { BranchImageResult } from "./branchImageResults";
 import {
   DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE, DEFAULT_FRONTEND_NGINX_TEMPLATE,
   isTauriRuntime, inferImageName, isGitUrl, resolveHarborRepository,
   inferImageNameFromRef, getProjectName
 } from "./types";
+import { createBranchImageResult } from "./branchImageResults";
 
 // 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
 function prependPathHistory(history: string[] | undefined, path: string): string[] {
@@ -100,6 +102,7 @@ function App() {
   const [packageWithBackend, setPackageWithBackend] = useState<boolean>(false);
   const [branchExposePort, setBranchExposePort] = useState<string>("");
   const [branchFullImage, setBranchFullImage] = useState<string>("");
+  const [branchImageResults, setBranchImageResults] = useState<BranchImageResult[]>([]);
   // 上传推送菜单：推送成功后的镜像地址，独立展示，不依赖构建日志折叠框
   const [uploadFullImage, setUploadFullImage] = useState<string>("");
   const [springProfile, setSpringProfile] = useState<string>("");
@@ -684,6 +687,7 @@ function App() {
     setWorktreePath("");
     setCustomDockerfile("");
     setBranchFullImage("");
+    setBranchImageResults([]);
 
     try {
       const result = await invoke<PackageFromBranchResult>("package_from_branch", {
@@ -776,11 +780,13 @@ function App() {
                 pushLogs.push(`📦: ${resultStr}`);
                 const imgMatch = resultStr.match(/完整镜像:\s*(.+)/);
                 if (imgMatch) {
-                  imageList.push(imgMatch[1].trim());
+                  const image = imgMatch[1].trim();
+                  imageList.push(image);
+                  setBranchImageResults([createBranchImageResult("backend", image)]);
                   try {
                     await invoke("update_build_record_image", {
                       imageName: backendImageName,
-                      imageTag: imgMatch[1].trim(),
+                      imageTag: image,
                     });
                     await loadBuildHistory();
                   } catch { /* 忽略 */ }
@@ -805,11 +811,13 @@ function App() {
               pushLogs.push(`📦 前端: ${feResult}`);
               const feMatch = feResult.match(/完整镜像:\s*(.+)/);
               if (feMatch) {
-                imageList.push(`前端: ${feMatch[1].trim()}`);
+                const image = feMatch[1].trim();
+                imageList.push(`前端: ${image}`);
+                setBranchImageResults([createBranchImageResult("frontend", image)]);
                 try {
                   await invoke("update_build_record_image", {
                     imageName: effectiveImageName,
-                    imageTag: feMatch[1].trim(),
+                    imageTag: image,
                   });
                   await loadBuildHistory();
                 } catch { /* 忽略 */ }
@@ -831,7 +839,11 @@ function App() {
                   });
                   pushLogs.push(`📦 后端: ${beResult}`);
                   const beMatch = beResult.match(/完整镜像:\s*(.+)/);
-                  if (beMatch) imageList.push(`后端: ${beMatch[1].trim()}`);
+                  if (beMatch) {
+                    const image = beMatch[1].trim();
+                    imageList.push(`后端: ${image}`);
+                    setBranchImageResults((prev) => [...prev, createBranchImageResult("backend", image)]);
+                  }
                 } catch (beErr) {
                   pushLogs.push(`❌ 后端推送失败: ${beErr}`);
                 }
@@ -1252,6 +1264,7 @@ function App() {
             isBuilding={isBuilding}
             autoPushImage={autoPushImage}
             branchFullImage={branchFullImage}
+            branchImageResults={branchImageResults}
             imageName={imageName}
             imageTag={imageTag}
             exposePort={branchExposePort}
