@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -37,6 +37,12 @@ struct SettlementData {
     unit_price: f64,
     quantity: f64,
     amount: f64,
+}
+
+#[derive(Debug, Clone)]
+struct SettlementLine {
+    channel_id: String,
+    data: Option<SettlementData>,
 }
 
 #[derive(Debug, Serialize)]
@@ -99,6 +105,7 @@ fn generate_settlement_statements_inner(
     if accounts.is_empty() {
         return Err("没有可生成的数据".to_string());
     }
+    ensure_settlement_channels_have_accounts(&accounts, &settlement_data)?;
 
     let channel_count = accounts.iter().map(|item| item.channels.len()).sum();
     emit_settlement_progress(
@@ -210,13 +217,13 @@ fn parse_source_rows(rows: &[Vec<Data>]) -> Result<Vec<ChannelData>, String> {
     let mut data = Vec::new();
 
     for row in rows.iter().skip(header_row + 1) {
-        let mut account = clean_cell(row.get(idx_account));
+        let account = clean_cell(row.get(idx_account));
         let channel = clean_cell(row.get(idx_channel));
         if channel.is_empty() {
             continue;
         }
         if account.is_empty() {
-            account = "default_account".to_string();
+            return Err(format!("渠道 {} 缺少打款账号", channel));
         }
 
         data.push(ChannelData {
@@ -230,7 +237,9 @@ fn parse_source_rows(rows: &[Vec<Data>]) -> Result<Vec<ChannelData>, String> {
     Ok(data)
 }
 
-fn parse_settlement_rows(rows: &[Vec<Data>]) -> Result<HashMap<String, SettlementData>, String> {
+fn parse_settlement_rows(
+    rows: &[Vec<Data>],
+) -> Result<HashMap<String, Vec<SettlementData>>, String> {
     if rows.is_empty() {
         return Err("结算单数据为空".to_string());
     }
@@ -245,74 +254,123 @@ fn parse_settlement_rows(rows: &[Vec<Data>]) -> Result<HashMap<String, Settlemen
 
     for (row_index, row) in rows.iter().take(10).enumerate() {
         let headers: Vec<String> = row.iter().map(|v| clean_text(&cell_to_string(v))).collect();
+        let mut channel = None;
+        let mut period = None;
+        let mut product = None;
+        let mut price = None;
+        let mut quantity = None;
+        let mut amount = None;
 
         for (idx, header) in headers.iter().enumerate() {
-            if idx_channel.is_none()
+            if channel.is_none()
                 && (header == "渠道号" || header == "渠道ID" || header.contains("渠道"))
             {
-                idx_channel = Some(idx);
+                channel = Some(idx);
             }
-            if idx_period.is_none()
+            if period.is_none()
                 && (header == "结算日期" || header.contains("结算周期") || header.contains("日期"))
             {
-                idx_period = Some(idx);
+                period = Some(idx);
             }
-            if idx_product.is_none() && (header == "产品名称" || header.contains("产品")) {
-                idx_product = Some(idx);
+            if product.is_none() && (header == "产品名称" || header.contains("产品")) {
+                product = Some(idx);
             }
-            if idx_price.is_none() && (header == "结算单价" || header.contains("单价")) {
-                idx_price = Some(idx);
+            if price.is_none() && (header == "结算单价" || header.contains("单价")) {
+                price = Some(idx);
             }
-            if idx_quantity.is_none()
+            if quantity.is_none()
                 && (header == "结算数量" || header.contains("数量") || header.contains("七天总和"))
             {
-                idx_quantity = Some(idx);
+                quantity = Some(idx);
             }
-            if idx_amount.is_none()
+            if amount.is_none()
                 && (header == "结算金额"
                     || header.contains("金额")
                     || header.contains("给渠道的钱"))
             {
-                idx_amount = Some(idx);
+                amount = Some(idx);
             }
         }
 
-        if idx_channel.is_some() && idx_period.is_some() && idx_product.is_some() {
+        if channel.is_some() && period.is_some() && product.is_some() {
             header_row = Some(row_index);
+            idx_channel = channel;
+            idx_period = period;
+            idx_product = product;
+            idx_price = price;
+            idx_quantity = quantity;
+            idx_amount = amount;
             break;
         }
     }
 
     let header_row = header_row.ok_or_else(|| "未找到渠道号列".to_string())?;
     let channel_idx = idx_channel.ok_or_else(|| "未找到渠道号列".to_string())?;
+    let period_idx = idx_period.ok_or_else(|| "未找到结算日期列".to_string())?;
+    let product_idx = idx_product.ok_or_else(|| "未找到产品名称列".to_string())?;
+    let price_idx = idx_price.ok_or_else(|| "未找到结算单价列".to_string())?;
+    let quantity_idx = idx_quantity.ok_or_else(|| "未找到结算数量列".to_string())?;
+    let amount_idx = idx_amount.ok_or_else(|| "未找到结算金额列".to_string())?;
     let mut map = HashMap::new();
 
-    for row in rows.iter().skip(header_row + 1) {
+    for (row_index, row) in rows.iter().enumerate().skip(header_row + 1) {
         let channel_id = clean_cell(row.get(channel_idx));
         if channel_id.is_empty() {
             continue;
         }
 
-        map.insert(
-            channel_id,
-            SettlementData {
-                settlement_period: idx_period
-                    .map_or_else(String::new, |idx| clean_cell(row.get(idx))),
-                product_name: idx_product.map_or_else(String::new, |idx| clean_cell(row.get(idx))),
-                unit_price: idx_price
-                    .and_then(|idx| cell_to_f64(row.get(idx)))
-                    .unwrap_or(0.0),
-                quantity: idx_quantity
-                    .and_then(|idx| cell_to_f64(row.get(idx)))
-                    .unwrap_or(0.0),
-                amount: idx_amount
-                    .and_then(|idx| cell_to_f64(row.get(idx)))
-                    .unwrap_or(0.0),
-            },
-        );
+        map.entry(channel_id.clone())
+            .or_insert_with(Vec::new)
+            .push(SettlementData {
+                settlement_period: clean_cell(row.get(period_idx)),
+                product_name: clean_cell(row.get(product_idx)),
+                unit_price: required_number(
+                    row.get(price_idx),
+                    row_index + 1,
+                    "结算单价",
+                    &channel_id,
+                )?,
+                quantity: required_number(
+                    row.get(quantity_idx),
+                    row_index + 1,
+                    "结算数量",
+                    &channel_id,
+                )?,
+                amount: required_number(
+                    row.get(amount_idx),
+                    row_index + 1,
+                    "结算金额",
+                    &channel_id,
+                )?,
+            });
     }
 
     Ok(map)
+}
+
+fn ensure_settlement_channels_have_accounts(
+    accounts: &[AccountData],
+    settlement_data: &HashMap<String, Vec<SettlementData>>,
+) -> Result<(), String> {
+    let account_channels: HashSet<&str> = accounts
+        .iter()
+        .flat_map(|account| account.channels.iter().map(String::as_str))
+        .collect();
+    let mut missing: Vec<&str> = settlement_data
+        .keys()
+        .map(String::as_str)
+        .filter(|channel| !account_channels.contains(channel))
+        .collect();
+    missing.sort();
+
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "结算数据存在未配置打款账号的渠道: {}",
+            missing.join(", ")
+        ))
+    }
 }
 
 fn group_by_account(data: Vec<ChannelData>) -> Vec<AccountData> {
@@ -345,7 +403,7 @@ fn group_by_account(data: Vec<ChannelData>) -> Vec<AccountData> {
 
 fn generate_accounts_parallel(
     accounts: &[AccountData],
-    settlement_data: &HashMap<String, SettlementData>,
+    settlement_data: &HashMap<String, Vec<SettlementData>>,
     output_dir: &Path,
     app: Option<&tauri::AppHandle>,
 ) -> Result<Vec<String>, String> {
@@ -355,11 +413,10 @@ fn generate_accounts_parallel(
         return accounts
             .iter()
             .map(|account| {
-                generate_account_workbook(account, settlement_data, output_dir)
-                    .map(|path| {
-                        emit_account_progress(app, &completed, accounts.len(), account);
-                        path.to_string_lossy().to_string()
-                    })
+                generate_account_workbook(account, settlement_data, output_dir).map(|path| {
+                    emit_account_progress(app, &completed, accounts.len(), account);
+                    path.to_string_lossy().to_string()
+                })
             })
             .collect();
     }
@@ -440,47 +497,60 @@ fn settlement_worker_count(item_count: usize) -> usize {
 
 fn generate_account_workbook(
     account: &AccountData,
-    settlement_data: &HashMap<String, SettlementData>,
+    settlement_data: &HashMap<String, Vec<SettlementData>>,
     output_dir: &Path,
 ) -> Result<PathBuf, String> {
     let mut channels = account.channels.clone();
     channels.sort();
+    let mut lines = Vec::new();
+    for channel in channels {
+        if let Some(items) = settlement_data.get(&channel) {
+            for item in items {
+                lines.push(SettlementLine {
+                    channel_id: channel.clone(),
+                    data: Some(item.clone()),
+                });
+            }
+        } else {
+            lines.push(SettlementLine {
+                channel_id: channel,
+                data: None,
+            });
+        }
+    }
 
     let mut workbook = Workbook::new();
     let formats = SheetFormats::new();
 
-    for (group_index, group_channels) in channels.chunks(6).enumerate() {
+    for (group_index, group_lines) in lines.chunks(6).enumerate() {
         let worksheet = workbook.add_worksheet();
         worksheet
             .set_name(format!("对账单{}", group_index + 1))
             .map_err(format_xlsx_error)?;
-        write_sheet(
-            worksheet,
-            group_channels,
-            account,
-            settlement_data,
-            &formats,
-        )
-        .map_err(format_xlsx_error)?;
+        write_sheet(worksheet, group_lines, account, &formats).map_err(format_xlsx_error)?;
     }
 
     let settlement_period = account
         .channels
-        .first()
-        .and_then(|channel| settlement_data.get(channel))
+        .iter()
+        .find_map(|channel| settlement_data.get(channel).and_then(|items| items.first()))
         .map(|item| item.settlement_period.clone())
         .unwrap_or_default();
     let base_name = if account.name.is_empty() {
-        &account.account
+        sanitize_filename(&account.account)
     } else {
-        &account.name
+        format!(
+            "{}_{}",
+            sanitize_filename(&account.name),
+            sanitize_filename(&account.account)
+        )
     };
     let output_name = if settlement_period.is_empty() {
-        format!("{}.xlsx", sanitize_filename(base_name))
+        format!("{}.xlsx", base_name)
     } else {
         format!(
             "{}_{}.xlsx",
-            sanitize_filename(base_name),
+            base_name,
             sanitize_filename(&settlement_period)
         )
     };
@@ -491,14 +561,13 @@ fn generate_account_workbook(
 
 fn write_sheet(
     worksheet: &mut Worksheet,
-    channels: &[String],
+    lines: &[SettlementLine],
     account: &AccountData,
-    settlement_data: &HashMap<String, SettlementData>,
     formats: &SheetFormats,
 ) -> Result<(), XlsxError> {
     set_sheet_dimensions(worksheet)?;
 
-    let row_offset = channels.len().saturating_sub(2) as u32;
+    let row_offset = lines.len().saturating_sub(2) as u32;
     let total_label_row = 5 + row_offset;
     let total_row = 6 + row_offset;
     let account_start_row = 7 + row_offset;
@@ -548,14 +617,14 @@ fn write_sheet(
     }
 
     let mut total_amount = 0.0;
-    for (idx, channel) in channels.iter().enumerate() {
+    for (idx, line) in lines.iter().enumerate() {
         let row = 3 + idx as u32;
         worksheet.write_number_with_format(row, 0, (idx + 1) as f64, &formats.data_first)?;
 
-        if let Some(data) = settlement_data.get(channel) {
+        if let Some(data) = &line.data {
             worksheet.write_string_with_format(row, 1, &data.settlement_period, &formats.data)?;
             worksheet.write_string_with_format(row, 2, &data.product_name, &formats.data)?;
-            write_channel_value(worksheet, row, 3, channel, &formats.data)?;
+            write_channel_value(worksheet, row, 3, &line.channel_id, &formats.data)?;
             worksheet.write_number_with_format(row, 4, data.unit_price, &formats.data)?;
             let quantity = if data.quantity.fract() == 0.0 {
                 data.quantity.trunc()
@@ -568,12 +637,13 @@ fn write_sheet(
         } else {
             worksheet.write_string_with_format(row, 1, "暂无", &formats.data)?;
             worksheet.write_string_with_format(row, 2, "暂无", &formats.data)?;
-            write_channel_value(worksheet, row, 3, channel, &formats.data)?;
+            write_channel_value(worksheet, row, 3, &line.channel_id, &formats.data)?;
             worksheet.write_string_with_format(row, 4, "暂无", &formats.data)?;
             worksheet.write_string_with_format(row, 5, "暂无", &formats.data)?;
             worksheet.write_string_with_format(row, 6, "暂无", &formats.data)?;
         }
     }
+    let total_amount = round_money(total_amount);
 
     worksheet.write_string_with_format(
         total_label_row,
@@ -762,11 +832,7 @@ fn write_channel_value(
     value: &str,
     format: &Format,
 ) -> Result<(), XlsxError> {
-    if let Some(number) = parse_number(value) {
-        worksheet.write_number_with_format(row, col, number, format)?;
-    } else {
-        worksheet.write_string_with_format(row, col, value, format)?;
-    }
+    worksheet.write_string_with_format(row, col, value, format)?;
     Ok(())
 }
 
@@ -818,6 +884,20 @@ fn cell_to_f64(cell: Option<&Data>) -> Option<f64> {
     }
 }
 
+fn required_number(
+    cell: Option<&Data>,
+    row: usize,
+    label: &str,
+    channel: &str,
+) -> Result<f64, String> {
+    cell_to_f64(cell)
+        .ok_or_else(|| format!("第 {} 行渠道 {} 的{}不是有效数字", row, channel, label))
+}
+
+fn round_money(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
+}
+
 fn format_number(value: f64) -> String {
     if value.fract() == 0.0 {
         format!("{:.0}", value)
@@ -830,7 +910,14 @@ fn parse_number(value: &str) -> Option<f64> {
     if value.is_empty() {
         return None;
     }
-    value.parse::<f64>().ok()
+    value
+        .trim()
+        .trim_start_matches('￥')
+        .trim_start_matches('¥')
+        .trim_end_matches('元')
+        .replace(',', "")
+        .parse::<f64>()
+        .ok()
 }
 
 fn is_account_header(text: &str) -> bool {
@@ -933,9 +1020,13 @@ mod tests {
         write_source_fixture(&source_path);
         write_settlement_fixture(&settlement_path);
 
-        let result =
-            generate_settlement_statements_inner(source_path, settlement_path, output_dir.clone(), None)
-                .unwrap();
+        let result = generate_settlement_statements_inner(
+            source_path,
+            settlement_path,
+            output_dir.clone(),
+            None,
+        )
+        .unwrap();
 
         assert_eq!(result.created, 1);
         assert_eq!(result.channels, 2);
@@ -946,6 +1037,232 @@ mod tests {
         let rows = read_first_sheet(&output_file).unwrap();
         assert_eq!(clean_cell(rows[0].first()), "对账单");
         assert_eq!(clean_cell(rows[8].get(4)), "开户名称：张三");
+
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn rejects_source_rows_without_payment_account() {
+        let rows = vec![
+            vec![
+                Data::String("打款账号".to_string()),
+                Data::String("打款名字".to_string()),
+                Data::String("开户行".to_string()),
+                Data::String("渠道ID".to_string()),
+            ],
+            vec![
+                Data::String(String::new()),
+                Data::String("张三".to_string()),
+                Data::String("招商银行".to_string()),
+                Data::String("1001".to_string()),
+            ],
+        ];
+
+        assert!(parse_source_rows(&rows).is_err());
+    }
+
+    #[test]
+    fn rejects_settlement_channels_missing_payment_info() {
+        let stamp = test_stamp("missing-channel");
+        let root = std::env::temp_dir().join(stamp);
+        let output_dir = root.join("out");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let source_path = root.join("source.xlsx");
+        let settlement_path = root.join("settlement.xlsx");
+        write_text_rows(
+            &source_path,
+            &[
+                &["打款账号", "打款名字", "开户行", "渠道ID"],
+                &["621700001", "张三", "招商银行", "1001"],
+            ],
+        );
+        write_text_rows(
+            &settlement_path,
+            &[
+                &[
+                    "结算日期",
+                    "渠道ID",
+                    "产品名称",
+                    "结算单价",
+                    "七天总和",
+                    "给渠道的钱",
+                ],
+                &["2026.6.22-2026.6.28", "9999", "漫画", "0.65", "1", "0.65"],
+            ],
+        );
+
+        let err =
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+                .unwrap_err();
+        assert!(err.contains("未配置打款账号"));
+
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn keeps_duplicate_channel_settlement_rows() {
+        let stamp = test_stamp("duplicate-channel");
+        let root = std::env::temp_dir().join(stamp);
+        let output_dir = root.join("out");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let source_path = root.join("source.xlsx");
+        let settlement_path = root.join("settlement.xlsx");
+        write_text_rows(
+            &source_path,
+            &[
+                &["打款账号", "打款名字", "开户行", "渠道ID"],
+                &["621700001", "张三", "招商银行", "1001"],
+            ],
+        );
+        write_text_rows(
+            &settlement_path,
+            &[
+                &[
+                    "结算日期",
+                    "渠道ID",
+                    "产品名称",
+                    "结算单价",
+                    "七天总和",
+                    "给渠道的钱",
+                ],
+                &["2026.6.22-2026.6.28", "1001", "漫画", "0.65", "1", "0.65"],
+                &["2026.6.22-2026.6.28", "1001", "影视", "0.65", "2", "1.30"],
+            ],
+        );
+
+        let result =
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+                .unwrap();
+        let rows = read_first_sheet(Path::new(&result.files[0])).unwrap();
+
+        assert_eq!(clean_cell(rows[3].get(2)), "漫画");
+        assert_eq!(clean_cell(rows[4].get(2)), "影视");
+        assert_eq!(clean_cell(rows[5].get(6)), "1.95");
+
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn names_files_with_account_to_avoid_same_name_overwrite() {
+        let stamp = test_stamp("same-name");
+        let root = std::env::temp_dir().join(stamp);
+        let output_dir = root.join("out");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let source_path = root.join("source.xlsx");
+        let settlement_path = root.join("settlement.xlsx");
+        write_text_rows(
+            &source_path,
+            &[
+                &["打款账号", "打款名字", "开户行", "渠道ID"],
+                &["621700001", "张三", "招商银行", "1001"],
+                &["621700002", "张三", "招商银行", "1002"],
+            ],
+        );
+        write_text_rows(
+            &settlement_path,
+            &[
+                &[
+                    "结算日期",
+                    "渠道ID",
+                    "产品名称",
+                    "结算单价",
+                    "七天总和",
+                    "给渠道的钱",
+                ],
+                &["2026.6.22-2026.6.28", "1001", "漫画", "0.65", "1", "0.65"],
+                &["2026.6.22-2026.6.28", "1002", "影视", "0.65", "2", "1.30"],
+            ],
+        );
+
+        let result =
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+                .unwrap();
+        let unique_files: std::collections::HashSet<_> = result.files.iter().collect();
+
+        assert_eq!(unique_files.len(), 2);
+
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn preserves_channel_ids_with_leading_zeroes() {
+        let stamp = test_stamp("leading-zero");
+        let root = std::env::temp_dir().join(stamp);
+        let output_dir = root.join("out");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let source_path = root.join("source.xlsx");
+        let settlement_path = root.join("settlement.xlsx");
+        write_text_rows(
+            &source_path,
+            &[
+                &["打款账号", "打款名字", "开户行", "渠道ID"],
+                &["621700001", "张三", "招商银行", "00123"],
+            ],
+        );
+        write_text_rows(
+            &settlement_path,
+            &[
+                &[
+                    "结算日期",
+                    "渠道ID",
+                    "产品名称",
+                    "结算单价",
+                    "七天总和",
+                    "给渠道的钱",
+                ],
+                &["2026.6.22-2026.6.28", "00123", "漫画", "0.65", "1", "0.65"],
+            ],
+        );
+
+        let result =
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+                .unwrap();
+        let rows = read_first_sheet(Path::new(&result.files[0])).unwrap();
+
+        assert_eq!(clean_cell(rows[3].get(3)), "00123");
+
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn rejects_invalid_amount_cells() {
+        let stamp = test_stamp("bad-amount");
+        let root = std::env::temp_dir().join(stamp);
+        let output_dir = root.join("out");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let source_path = root.join("source.xlsx");
+        let settlement_path = root.join("settlement.xlsx");
+        write_text_rows(
+            &source_path,
+            &[
+                &["打款账号", "打款名字", "开户行", "渠道ID"],
+                &["621700001", "张三", "招商银行", "1001"],
+            ],
+        );
+        write_text_rows(
+            &settlement_path,
+            &[
+                &[
+                    "结算日期",
+                    "渠道ID",
+                    "产品名称",
+                    "结算单价",
+                    "七天总和",
+                    "给渠道的钱",
+                ],
+                &["2026.6.22-2026.6.28", "1001", "漫画", "0.65", "1", "￥abc"],
+            ],
+        );
+
+        let err =
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+                .unwrap_err();
+        assert!(err.contains("结算金额"));
 
         fs::remove_dir_all(root).ok();
     }
@@ -965,6 +1282,27 @@ mod tests {
         worksheet.write_string(2, 1, "张三").unwrap();
         worksheet.write_string(2, 2, "招商银行").unwrap();
         worksheet.write_string(2, 3, "1002").unwrap();
+        workbook.save(path).unwrap();
+    }
+
+    fn test_stamp(name: &str) -> String {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        format!("jarporter-settlement-test-{name}-{stamp}")
+    }
+
+    fn write_text_rows(path: &Path, rows: &[&[&str]]) {
+        let mut workbook = Workbook::new();
+        let worksheet = workbook.add_worksheet();
+        for (row, cells) in rows.iter().enumerate() {
+            for (col, value) in cells.iter().enumerate() {
+                worksheet
+                    .write_string(row as u32, col as u16, *value)
+                    .unwrap();
+            }
+        }
         workbook.save(path).unwrap();
     }
 
