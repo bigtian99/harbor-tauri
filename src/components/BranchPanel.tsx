@@ -10,6 +10,7 @@ import type {
   GitBranchOption, LastCommitInfo, CommitInfo, AuthorInfo
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
+import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
 
 interface BranchPanelProps {
   // 项目类型
@@ -112,6 +113,9 @@ export function BranchPanel({
   setImageName, setImageTag, setExposePort, setShowAdvancedSettings, setShowBuildLog,
   renderLog,
 }: BranchPanelProps) {
+  const showProgress = shouldShowBranchProgress(isBuilding, log, progress);
+  const showResults = shouldShowBranchResults(isBuilding, artifactPath);
+
   // 分支名映射：显示时去掉 origin/ 前缀，值保持完整 ref
   const branchDisplayMap = Object.fromEntries(
     branchOptions.map((b) => {
@@ -420,7 +424,7 @@ export function BranchPanel({
         )}
       </button>
 
-      {isBuilding && (
+      {showProgress && (
         <div className="progress-section">
           <div className="progress-info">
             <span className="progress-message">{progressMessage}</span>
@@ -435,7 +439,7 @@ export function BranchPanel({
         </div>
       )}
 
-      {artifactPath && (
+      {showResults && (
         <div className="path-links">
           {branchImageResults.length > 0 ? (
             branchImageResults.map((item) => (

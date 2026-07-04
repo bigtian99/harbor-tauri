@@ -42,3 +42,12 @@ export function getBranchPushSummary(pushLogs: string[], hasBackend: boolean) {
   }
   return "✅ 分支打包并推送镜像完成";
 }
+
+export function shouldShowBranchResults(isBuilding: boolean, artifactPath: string) {
+  return !isBuilding && artifactPath.trim().length > 0;
+}
+
+export function shouldShowBranchProgress(isBuilding: boolean, log: string, progress: number) {
+  if (isBuilding) return true;
+  return log.includes("❌") && progress > 0 && progress < 100;
+}

@@ -2,6 +2,8 @@ import {
   createBranchImageResult,
   getBranchImageCopyLabel,
   getBranchPushSummary,
+  shouldShowBranchProgress,
+  shouldShowBranchResults,
 } from "../src/branchImageResults";
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
@@ -63,4 +65,34 @@ assertEqual(
   ], true),
   "❌ 前端和后端镜像推送失败",
   "both push failures should be called out explicitly",
+);
+
+assertEqual(
+  shouldShowBranchResults(true, "/tmp/dist"),
+  false,
+  "branch result links should stay hidden while package or push is still running",
+);
+
+assertEqual(
+  shouldShowBranchResults(false, "/tmp/dist"),
+  true,
+  "branch result links should show after package and push are no longer running",
+);
+
+assertEqual(
+  shouldShowBranchProgress(true, "", 10),
+  true,
+  "progress should show while branch build is running",
+);
+
+assertEqual(
+  shouldShowBranchProgress(false, "❌ docker build失败", 25),
+  true,
+  "progress should remain visible after a failed push stops before 100 percent",
+);
+
+assertEqual(
+  shouldShowBranchProgress(false, "✅ 分支打包并推送镜像完成", 100),
+  false,
+  "progress should hide after a completed 100 percent success",
 );
