@@ -99,7 +99,7 @@ export function BranchPanel({
   springProfile, springProfiles, isLoadingProfiles,
   lastCommit, isLoadingCommit, commitList, commitListTotal, showCommitListModal,
   artifactPath, backendArtifactPath, worktreePath, customDockerfile, branchHasDockerfile,
-  isBuilding, autoPushImage, branchFullImage, imageName, imageTag, exposePort,
+  isBuilding, autoPushImage, branchFullImage, branchImageResults, imageName, imageTag, exposePort,
   showAdvancedSettings, config,
   progress, progressMessage, log, showBuildLog, copied,
   onBranchProjectTypeChange, onRepoPathChange, onSelectRepo, onRefreshBranches,
@@ -437,7 +437,31 @@ export function BranchPanel({
 
       {artifactPath && (
         <div className="path-links">
-          {branchFullImage && (
+          {branchImageResults.length > 0 ? (
+            branchImageResults.map((item) => (
+              <div key={`${item.role}-${item.image}`} className="path-link-item image-url-row">
+                <span className="path-link-label">🐳 {item.label}:</span>
+                <span className="image-url-value">
+                  <span style={{ display: 'block' }} title={item.image}>{item.image}</span>
+                </span>
+                <button
+                  className={`copy-btn ${copied ? "copied" : ""}`}
+                  onClick={() => onCopyImage(item.image)}
+                  title={item.copyLabel}
+                >
+                  {copied ? (
+                    <>
+                      <CheckCircle size={14} /> 已复制
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={14} /> {item.copyLabel}
+                    </>
+                  )}
+                </button>
+              </div>
+            ))
+          ) : branchFullImage && (
             <div className="path-link-item image-url-row">
               <span className="path-link-label">🐳 完整镜像:</span>
               <span className="image-url-value">
