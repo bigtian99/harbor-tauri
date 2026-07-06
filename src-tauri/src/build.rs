@@ -5,9 +5,9 @@ use crate::history::save_build_record_direct;
 use crate::models::{ArtifactType, BuildRecord, DockerBuildContext, PackageFromBranchResult, PackageProjectType};
 use crate::utils::{
     cleanup_old_temp_dirs, command_output_text, copy_artifact_to_output_internal,
-    detect_npm_build_script, hide_docker_desktop, hide_docker_desktop_after_spawn,
-    lock_file_hash, repo_root_for, run_command, save_node_modules_to_cache,
-    silent_docker_command, try_restore_node_modules, CANCEL_FLAG, CURRENT_PID,
+    detect_npm_build_script, lock_file_hash, repo_root_for, run_command,
+    save_node_modules_to_cache, silent_docker_command, try_restore_node_modules,
+    CANCEL_FLAG, CURRENT_PID,
 };
 use std::fs;
 use std::io::Write;
@@ -22,10 +22,7 @@ fn docker_output(args: &[&str]) -> std::io::Result<std::process::Output> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-    hide_docker_desktop_after_spawn();
-    let output = child.wait_with_output();
-    hide_docker_desktop();
-    output
+    child.wait_with_output()
 }
 
 /// 镜像名已含 `/` 则原样使用，否则拼接 `{project}/{image_name}`
@@ -1078,7 +1075,6 @@ pub async fn build_and_push(
             .map_err(|e| format!("启动docker build失败: {}", e))?;
 
         *CURRENT_PID.lock().unwrap() = Some(child.id());
-        hide_docker_desktop_after_spawn();
 
         let output = child
             .wait_with_output()
@@ -1092,7 +1088,6 @@ pub async fn build_and_push(
         if let Some(path) = cleanup_dir {
             fs::remove_dir_all(path).ok();
         }
-        hide_docker_desktop();
         Ok(output)
     })
     .await
@@ -1130,7 +1125,6 @@ pub async fn build_and_push(
             .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| format!("启动docker login失败: {}", e))?;
-        hide_docker_desktop_after_spawn();
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin
@@ -1141,7 +1135,6 @@ pub async fn build_and_push(
         let output = child
             .wait_with_output()
             .map_err(|e| format!("docker login失败: {}", e));
-        hide_docker_desktop();
         output
     })
     .await
@@ -1284,12 +1277,10 @@ pub async fn push_local_image(
             .map_err(|e| format!("启动docker tag失败: {}", e))?;
 
         *CURRENT_PID.lock().unwrap() = Some(child.id());
-        hide_docker_desktop_after_spawn();
         let output = child
             .wait_with_output()
             .map_err(|e| format!("docker tag失败: {}", e))?;
         *CURRENT_PID.lock().unwrap() = None;
-        hide_docker_desktop();
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1325,7 +1316,6 @@ pub async fn push_local_image(
             .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| format!("启动docker login失败: {}", e))?;
-        hide_docker_desktop_after_spawn();
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin
@@ -1336,7 +1326,6 @@ pub async fn push_local_image(
         let output = child
             .wait_with_output()
             .map_err(|e| format!("docker login失败: {}", e));
-        hide_docker_desktop();
         output
     })
     .await

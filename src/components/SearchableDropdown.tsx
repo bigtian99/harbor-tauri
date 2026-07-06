@@ -8,6 +8,8 @@ interface SearchableDropdownProps {
   placeholder?: string;
   disabled?: boolean;
   loading?: boolean;
+  commitOnInput?: boolean;
+  allowCustomValue?: boolean;
 }
 
 export function SearchableDropdown({
@@ -18,6 +20,8 @@ export function SearchableDropdown({
   placeholder = "请选择...",
   disabled = false,
   loading = false,
+  commitOnInput = true,
+  allowCustomValue = true,
 }: SearchableDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -54,14 +58,16 @@ export function SearchableDropdown({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setSearchTerm(newValue);
-    onChange(newValue);
+    if (commitOnInput) {
+      onChange(newValue);
+    }
     if (!isOpen) {
       setIsOpen(true);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && searchTerm && !options.includes(searchTerm)) {
+    if (e.key === "Enter" && allowCustomValue && searchTerm && !options.includes(searchTerm)) {
       onChange(searchTerm);
       setIsOpen(false);
       setSearchTerm("");
@@ -118,7 +124,7 @@ export function SearchableDropdown({
                 {option}
               </div>
             ))
-          ) : searchTerm ? (
+          ) : allowCustomValue && searchTerm ? (
             <div
               className="searchable-dropdown-item searchable-dropdown-custom"
               onClick={() => handleSelect(searchTerm)}

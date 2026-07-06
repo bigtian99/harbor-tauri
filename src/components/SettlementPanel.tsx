@@ -11,6 +11,7 @@ import {
   Paper,
   Progress,
   Stack,
+  Switch,
   Text,
   TextInput,
   Title,
@@ -41,6 +42,22 @@ type SettlementProgress = {
   current: number;
   total: number;
 };
+
+const SETTLEMENT_OUTPUT_BASE_STORAGE_KEY = "jarporter:settlement-output-base-dir";
+
+function formatSettlementDateDir(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+function joinOutputPreview(baseDir: string, dateDir: string) {
+  const trimmed = baseDir.trim();
+  if (!trimmed) return "";
+  const separator = trimmed.includes("\\") && !trimmed.includes("/") ? "\\" : "/";
+  return `${trimmed.replace(/[\\/]+$/, "")}${separator}${dateDir}`;
+}
 
 function PathPicker({ label, value, placeholder, directory, onChange }: PathPickerProps) {
   async function handleSelect() {
@@ -79,9 +96,10 @@ function PathPicker({ label, value, placeholder, directory, onChange }: PathPick
 }
 
 export function SettlementPanel() {
+  const [useDefaultSource, setUseDefaultSource] = useState(true);
   const [sourcePath, setSourcePath] = useState("");
   const [settlementPath, setSettlementPath] = useState("");
-  const [outputDir, setOutputDir] = useState("");
+  const [outputBaseDir, setOutputBaseDir] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<SettlementGenerateResult | null>(null);
   const [progress, setProgress] = useState<SettlementProgress>({
@@ -91,7 +109,13 @@ export function SettlementPanel() {
     total: 0,
   });
 
-  const canGenerate = sourcePath && settlementPath && outputDir && !isGenerating;
+  const datedOutputPreview = joinOutputPreview(outputBaseDir, formatSettlementDateDir());
+  const canGenerate = (useDefaultSource || sourcePath) && settlementPath && outputBaseDir && !isGenerating;
+
+  useEffect(() => {
+    const remembered = localStorage.getItem(SETTLEMENT_OUTPUT_BASE_STORAGE_KEY);
+    if (remembered) setOutputBaseDir(remembered);
+  }, []);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -117,6 +141,15 @@ export function SettlementPanel() {
     };
   }, []);
 
+  function handleOutputBaseDirChange(nextValue: string) {
+    setOutputBaseDir(nextValue);
+    if (nextValue.trim()) {
+      localStorage.setItem(SETTLEMENT_OUTPUT_BASE_STORAGE_KEY, nextValue);
+    } else {
+      localStorage.removeItem(SETTLEMENT_OUTPUT_BASE_STORAGE_KEY);
+    }
+  }
+
   async function handleGenerate() {
     if (!canGenerate) return;
     setIsGenerating(true);
@@ -124,9 +157,9 @@ export function SettlementPanel() {
     setProgress({ percent: 1, message: "准备生成结算单...", current: 0, total: 0 });
     try {
       const generated = await invoke<SettlementGenerateResult>("generate_settlement_statements", {
-        sourcePath,
+        sourcePath: useDefaultSource ? "" : sourcePath,
         settlementPath,
-        outputDir,
+        outputDir: outputBaseDir,
       });
       setResult(generated);
       setProgress({
@@ -154,7 +187,7 @@ export function SettlementPanel() {
   }
 
   async function handleOpenOutput() {
-    const path = result?.output_dir || outputDir;
+    const path = result?.output_dir || datedOutputPreview || outputBaseDir;
     if (!path) return;
     try {
       await invoke("open_directory", { path });
@@ -177,12 +210,20 @@ export function SettlementPanel() {
               <Text size="sm" c="dimmed">模板</Text>
               <Badge color="gray" variant="light">默认模板</Badge>
             </Group>
-            <PathPicker
-              label="渠道打款信息表"
-              value={sourcePath}
-              placeholder="选择 渠道打款信息表.xlsx"
-              onChange={setSourcePath}
+            <Switch
+              checked={useDefaultSource}
+              onChange={(event) => setUseDefaultSource(event.currentTarget.checked)}
+              label="使用默认渠道打款信息表"
+              color="teal"
             />
+            {!useDefaultSource && (
+              <PathPicker
+                label="渠道打款信息表"
+                value={sourcePath}
+                placeholder="选择 渠道打款信息表.xlsx"
+                onChange={setSourcePath}
+              />
+            )}
             <PathPicker
               label="结算数据"
               value={settlementPath}
@@ -190,12 +231,17 @@ export function SettlementPanel() {
               onChange={setSettlementPath}
             />
             <PathPicker
-              label="输出目录"
-              value={outputDir}
-              placeholder="选择结算单输出目录"
+              label="输出基础目录"
+              value={outputBaseDir}
+              placeholder="选择一次基础目录，生成时自动进入日期目录"
               directory
-              onChange={setOutputDir}
+              onChange={handleOutputBaseDirChange}
             />
+            {datedOutputPreview && (
+              <Text size="xs" c="dimmed">
+                本次输出目录: {datedOutputPreview}
+              </Text>
+            )}
 
             <Group gap="sm">
               <Button
@@ -209,7 +255,7 @@ export function SettlementPanel() {
               </Button>
               <Button
                 leftSection={<ExternalLink size={14} />}
-                disabled={!result && !outputDir}
+                disabled={!result && !outputBaseDir}
                 onClick={handleOpenOutput}
                 variant="light"
                 color="gray"
@@ -246,13 +292,13 @@ export function SettlementPanel() {
                 <Badge color="teal" variant="light">{result.created} 个文件</Badge>
                 <Badge color="blue" variant="light">{result.channels} 个渠道</Badge>
               </Group>
-              <Stack gap={6}>
+              <Box className="settlement-result-list">
                 {result.files.map((file) => (
                   <Text key={file} size="sm" c="dimmed" style={{ wordBreak: "break-all" }}>
                     {file}
                   </Text>
                 ))}
-              </Stack>
+              </Box>
             </Stack>
           </Paper>
         )}

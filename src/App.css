@@ -3181,6 +3181,15 @@ body::before {
   to { opacity: 1; }
 }
 
+.settlement-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
 /* 悬浮提示（fixed 定位，避免被 overflow 裁切） */
 .hover-tip-popup {
   position: fixed;

@@ -406,6 +406,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
               placeholder={isLoadingBranches ? "加载中..." : branchNames.length === 0 ? "请先选择仓库并刷新分支" : "选择源分支（如 origin/feature）..."}
               disabled={branchNames.length === 0}
               loading={isLoadingBranches}
+              commitOnInput={false}
+              allowCustomValue={false}
             />
           </div>
           <div className="merge-arrow">
@@ -427,6 +429,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
               placeholder={isLoadingBranches ? "加载中..." : branchNames.length === 0 ? "请先选择仓库并刷新分支" : "选择目标分支（如 origin/master）..."}
               disabled={branchNames.length === 0}
               loading={isLoadingBranches}
+              commitOnInput={false}
+              allowCustomValue={false}
             />
           </div>
         </div>
