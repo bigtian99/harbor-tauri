@@ -28,6 +28,7 @@ import {
   inferImageNameFromRef, getProjectName
 } from "./types";
 import { createBranchImageResult, getBranchPushSummary } from "./branchImageResults";
+import { getRememberedBranchAdvancedSettings } from "./branchSettings";
 
 // 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
 function prependPathHistory(history: string[] | undefined, path: string): string[] {
@@ -166,6 +167,12 @@ function App() {
       setToast({ show: false, message: "" });
       toastTimerRef.current = null;
     }, duration);
+  }
+
+  function restoreRememberedBranchAdvancedSettings() {
+    const remembered = getRememberedBranchAdvancedSettings(config);
+    setSpringProfile(remembered.springProfile);
+    setBranchExposePort(remembered.exposePort);
   }
 
   // ==================== 落地页（状态与逻辑封装在 hook） ====================
@@ -520,7 +527,7 @@ function App() {
         setRepoPath(selectedPath);
         // 切换仓库时清空镜像名称，打包时自动从产物推断
         setImageName("");
-        setSpringProfile("");
+        restoreRememberedBranchAdvancedSettings();
         updateUi('showAdvancedSettings', true);
         await loadGitBranches(selectedPath);
         if (config.remember_branch_settings) {
@@ -1111,11 +1118,14 @@ function App() {
     if (value.trim()) {
       // 切换仓库时清空镜像名称，打包时自动从产物推断
       setImageName("");
+      restoreRememberedBranchAdvancedSettings();
       loadGitBranches(value);
     } else {
       setBranchOptions([]);
       setBranchName("");
       setImageName("");
+      setBranchExposePort("");
+      setSpringProfile("");
     }
   }
 
