@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -105,8 +105,6 @@ fn generate_settlement_statements_inner(
     if accounts.is_empty() {
         return Err("没有可生成的数据".to_string());
     }
-    ensure_settlement_channels_have_accounts(&accounts, &settlement_data)?;
-
     let channel_count = accounts.iter().map(|item| item.channels.len()).sum();
     emit_settlement_progress(
         &app,
@@ -346,31 +344,6 @@ fn parse_settlement_rows(
     }
 
     Ok(map)
-}
-
-fn ensure_settlement_channels_have_accounts(
-    accounts: &[AccountData],
-    settlement_data: &HashMap<String, Vec<SettlementData>>,
-) -> Result<(), String> {
-    let account_channels: HashSet<&str> = accounts
-        .iter()
-        .flat_map(|account| account.channels.iter().map(String::as_str))
-        .collect();
-    let mut missing: Vec<&str> = settlement_data
-        .keys()
-        .map(String::as_str)
-        .filter(|channel| !account_channels.contains(channel))
-        .collect();
-    missing.sort();
-
-    if missing.is_empty() {
-        Ok(())
-    } else {
-        Err(format!(
-            "结算数据存在未配置打款账号的渠道: {}",
-            missing.join(", ")
-        ))
-    }
 }
 
 fn group_by_account(data: Vec<ChannelData>) -> Vec<AccountData> {
@@ -1062,7 +1035,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_settlement_channels_missing_payment_info() {
+    fn ignores_settlement_channels_missing_payment_info_like_python_script() {
         let stamp = test_stamp("missing-channel");
         let root = std::env::temp_dir().join(stamp);
         let output_dir = root.join("out");
@@ -1092,10 +1065,15 @@ mod tests {
             ],
         );
 
-        let err =
+        let result =
             generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
-                .unwrap_err();
-        assert!(err.contains("未配置打款账号"));
+                .unwrap();
+        assert_eq!(result.created, 1);
+        assert_eq!(result.channels, 1);
+
+        let rows = read_first_sheet(Path::new(&result.files[0])).unwrap();
+        assert_eq!(clean_cell(rows[3].get(3)), "1001");
+        assert_eq!(clean_cell(rows[3].get(4)), "暂无");
 
         fs::remove_dir_all(root).ok();
     }
