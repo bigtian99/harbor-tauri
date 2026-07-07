@@ -112,12 +112,6 @@ export function PackSpeedPanel({
 
   return (
     <div className="branch-panel pack-speed-panel">
-      <div className="artifact-type-selector">
-        <button type="button" className="artifact-type active">
-          <Rocket size={16} /> 打包加速
-        </button>
-      </div>
-
       <div className="branch-card">
         <div className="form-group">
           <label><KeyRound size={14} /> Authorization</label>
