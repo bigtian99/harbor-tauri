@@ -1097,12 +1097,12 @@ mod tests {
 
     #[test]
     fn output_base_dir_resolves_to_yyyymmdd_dir() {
-        let base_dir = PathBuf::from("/tmp/settlement-output");
+        let base_dir = PathBuf::from("settlement-output");
         let date = chrono::NaiveDate::from_ymd_opt(2026, 7, 6).unwrap();
 
         let resolved = dated_settlement_output_dir(&base_dir, date);
 
-        assert_eq!(resolved, PathBuf::from("/tmp/settlement-output").join("20260706"));
+        assert_eq!(resolved, PathBuf::from("settlement-output").join("20260706"));
     }
 
     #[test]

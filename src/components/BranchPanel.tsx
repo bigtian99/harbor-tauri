@@ -155,6 +155,8 @@ export function BranchPanel({
                 onChange={(value) => {
                   onRepoPathChange(value);
                 }}
+                onBlur={onRepoPathChange}
+                commitOnInput={false}
                 placeholder="输入 Git 地址或选择本地目录"
               />
             </div>

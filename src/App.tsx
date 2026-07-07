@@ -28,7 +28,7 @@ import {
   inferImageNameFromRef, getProjectName
 } from "./types";
 import { createBranchImageResult, getBranchPushSummary } from "./branchImageResults";
-import { getRememberedBranchAdvancedSettings } from "./branchSettings";
+import { getRememberedBranchAdvancedSettings, rememberBranchRepoSettings } from "./branchSettings";
 
 // 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
 function prependPathHistory(history: string[] | undefined, path: string): string[] {
@@ -64,6 +64,7 @@ function App() {
     last_spring_profile: "",
     last_expose_port: "",
     repo_path_history: [],
+    branch_repo_settings: {},
     npm_package_manager: "npm",
     npm_registry: "",
     artifact_output_dir: "",
@@ -156,6 +157,7 @@ function App() {
   // ==================== Toast ====================
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
   const toastTimerRef = useRef<number | null>(null);
+  const branchLoadRequestRef = useRef(0);
 
   // ==================== 工具函数 ====================
   function showToast(message: string, duration = 2000) {
@@ -169,10 +171,14 @@ function App() {
     }, duration);
   }
 
-  function restoreRememberedBranchAdvancedSettings() {
-    const remembered = getRememberedBranchAdvancedSettings(config);
+  function restoreRememberedBranchAdvancedSettings(sourceConfig = config, sourceRepoPath = repoPath) {
+    const remembered = getRememberedBranchAdvancedSettings(sourceConfig, sourceRepoPath);
     setSpringProfile(remembered.springProfile);
     setBranchExposePort(remembered.exposePort);
+  }
+
+  function isStaleBranchLoad(requestId?: number) {
+    return requestId !== undefined && requestId !== branchLoadRequestRef.current;
   }
 
   // ==================== 落地页（状态与逻辑封装在 hook） ====================
@@ -231,6 +237,7 @@ function App() {
       const savedConfig = await invoke<HarborConfig>("load_config");
       setConfig(savedConfig);
       setBuildHistory(savedConfig.build_history || []);
+      restoreRememberedBranchAdvancedSettings(savedConfig, savedConfig.last_repo_path);
       if (savedConfig.remember_branch_settings) {
         if (savedConfig.last_repo_path) setRepoPath(savedConfig.last_repo_path);
         if (savedConfig.last_branch) setBranchName(savedConfig.last_branch);
@@ -238,8 +245,6 @@ function App() {
         if (savedConfig.last_build_script) setSelectedBuildScript(savedConfig.last_build_script);
         if (savedConfig.last_auto_push_image !== undefined) setAutoPushImage(savedConfig.last_auto_push_image);
         if (savedConfig.last_package_with_backend !== undefined) setPackageWithBackend(savedConfig.last_package_with_backend);
-        if (savedConfig.last_spring_profile) setSpringProfile(savedConfig.last_spring_profile);
-        if (savedConfig.last_expose_port !== undefined) setBranchExposePort(savedConfig.last_expose_port);
         if (savedConfig.last_repo_path) {
           await loadGitBranches(savedConfig.last_repo_path, savedConfig.last_branch || undefined);
           if (savedConfig.last_branch) {
@@ -325,9 +330,19 @@ function App() {
 
   // ==================== Git 操作 ====================
   async function loadGitBranches(path: string, preserveBranch?: string) {
+    const requestId = ++branchLoadRequestRef.current;
     const nextRepoPath = path.trim();
     if (!preserveBranch) {
       setBranchName("");
+      setBranchOptions([]);
+      setSpringProfiles([]);
+      setLastCommit(null);
+      setCommitList([]);
+      setCommitListTotal(0);
+      if (branchProjectType === "npm") {
+        setNpmScripts([]);
+        setSelectedBuildScript("");
+      }
     }
     if (!nextRepoPath) return;
     if (!isTauriRuntime()) {
@@ -342,6 +357,7 @@ function App() {
       const branches = isUrl
         ? await invoke<GitBranchOption[]>("list_git_branches_from_url", { url: nextRepoPath })
         : await invoke<GitBranchOption[]>("list_git_branches", { repoPath: nextRepoPath });
+      if (isStaleBranchLoad(requestId)) return;
       setBranchOptions(branches);
       // 刷新时优先保持之前选中的分支，不存在则选第一个
       const targetBranch = preserveBranch && branches.some((b) => b.name === preserveBranch)
@@ -349,11 +365,11 @@ function App() {
         : branches[0]?.name ?? "";
       setBranchName(targetBranch);
       if (branchProjectType === "maven" && targetBranch) {
-        await loadSpringProfiles(nextRepoPath, targetBranch);
+        await loadSpringProfiles(nextRepoPath, targetBranch, requestId);
       }
       if (targetBranch && !isUrl) {
-        loadLastCommit(nextRepoPath, targetBranch);
-        loadCommitList(nextRepoPath, targetBranch, 1);
+        loadLastCommit(nextRepoPath, targetBranch, requestId);
+        loadCommitList(nextRepoPath, targetBranch, 1, undefined, undefined, requestId);
       }
       if (branches.length === 0) {
         setLog("⚠️ 没有读取到可用分支");
@@ -361,27 +377,36 @@ function App() {
       if (branchProjectType === "npm" && !isUrl) {
         try {
           const detectedDir = await invoke<string | null>("detect_frontend_dir", { repoPath: nextRepoPath });
+          if (isStaleBranchLoad(requestId)) return;
           if (detectedDir) {
             setFrontendDir(detectedDir);
-            loadNpmScripts(nextRepoPath, detectedDir);
+            loadNpmScripts(nextRepoPath, detectedDir, requestId);
           } else {
             setFrontendDir("");
-            loadNpmScripts(nextRepoPath, "");
+            loadNpmScripts(nextRepoPath, "", requestId);
           }
         } catch {
-          loadNpmScripts(nextRepoPath, frontendDir);
+          if (!isStaleBranchLoad(requestId)) {
+            loadNpmScripts(nextRepoPath, frontendDir, requestId);
+          }
         }
       }
     } catch (e) {
-      setLog(`❌ 读取分支失败:\n${e}`);
+      if (!isStaleBranchLoad(requestId)) {
+        setLog(`❌ 读取分支失败:\n${e}`);
+      }
     } finally {
-      updateLoading('branches', false);
+      if (!isStaleBranchLoad(requestId)) {
+        updateLoading('branches', false);
+      }
     }
   }
 
-  async function loadSpringProfiles(repoPath: string, branch: string) {
+  async function loadSpringProfiles(repoPath: string, branch: string, branchLoadRequestId?: number) {
     if (!repoPath.trim() || !branch.trim() || !isTauriRuntime()) {
-      setSpringProfiles([]);
+      if (!isStaleBranchLoad(branchLoadRequestId)) {
+        setSpringProfiles([]);
+      }
       return;
     }
     updateLoading('profiles', true);
@@ -390,22 +415,28 @@ function App() {
         repoPath: repoPath.trim(),
         branch: branch.trim(),
       });
+      if (isStaleBranchLoad(branchLoadRequestId)) return;
       setSpringProfiles(profiles);
       // ponytail: 检测到 test profile 时自动选中，仅在用户尚未手动选过时生效
       if (profiles.includes("test")) {
         setSpringProfile(prev => prev || "test");
       }
     } catch (e) {
+      if (isStaleBranchLoad(branchLoadRequestId)) return;
       console.error("[Spring Profiles] 检测失败:", e);
       setSpringProfiles([]);
     } finally {
-      updateLoading('profiles', false);
+      if (!isStaleBranchLoad(branchLoadRequestId)) {
+        updateLoading('profiles', false);
+      }
     }
   }
 
-  async function loadLastCommit(repoPath: string, branch: string) {
+  async function loadLastCommit(repoPath: string, branch: string, branchLoadRequestId?: number) {
     if (!repoPath.trim() || !isTauriRuntime()) {
-      setLastCommit(null);
+      if (!isStaleBranchLoad(branchLoadRequestId)) {
+        setLastCommit(null);
+      }
       return;
     }
     updateLoading('commit', true);
@@ -414,19 +445,32 @@ function App() {
         repoPath: repoPath.trim(),
         branch: branch.trim() || null,
       });
+      if (isStaleBranchLoad(branchLoadRequestId)) return;
       setLastCommit(commit);
     } catch (e) {
+      if (isStaleBranchLoad(branchLoadRequestId)) return;
       console.error("[Last Commit] 获取失败:", e);
       setLastCommit(null);
     } finally {
-      updateLoading('commit', false);
+      if (!isStaleBranchLoad(branchLoadRequestId)) {
+        updateLoading('commit', false);
+      }
     }
   }
 
-  async function loadCommitList(repoPath: string, branch: string, page: number = 1, authorFilter?: string, messageFilter?: string) {
+  async function loadCommitList(
+    repoPath: string,
+    branch: string,
+    page: number = 1,
+    authorFilter?: string,
+    messageFilter?: string,
+    branchLoadRequestId?: number,
+  ) {
     if (!repoPath.trim() || !isTauriRuntime()) {
-      setCommitList([]);
-      setCommitListTotal(0);
+      if (!isStaleBranchLoad(branchLoadRequestId)) {
+        setCommitList([]);
+        setCommitListTotal(0);
+      }
       return;
     }
     updateLoading('commitList', true);
@@ -439,16 +483,20 @@ function App() {
         authorFilter: authorFilter || null,
         messageFilter: messageFilter || null,
       });
+      if (isStaleBranchLoad(branchLoadRequestId)) return;
       setCommitList(result.commits);
       setCommitListTotal(result.total);
       setCommitListPage(result.page);
       setCommitListPageSize(result.page_size);
     } catch (e) {
+      if (isStaleBranchLoad(branchLoadRequestId)) return;
       console.error("[Commit List] 获取失败:", e);
       setCommitList([]);
       setCommitListTotal(0);
     } finally {
-      updateLoading('commitList', false);
+      if (!isStaleBranchLoad(branchLoadRequestId)) {
+        updateLoading('commitList', false);
+      }
     }
   }
 
@@ -486,10 +534,12 @@ function App() {
   }
 
   // ==================== npm 操作 ====================
-  async function loadNpmScripts(repoPath: string, frontendDir: string) {
+  async function loadNpmScripts(repoPath: string, frontendDir: string, branchLoadRequestId?: number) {
     if (!repoPath.trim() || !isTauriRuntime()) {
-      setNpmScripts([]);
-      setSelectedBuildScript("");
+      if (!isStaleBranchLoad(branchLoadRequestId)) {
+        setNpmScripts([]);
+        setSelectedBuildScript("");
+      }
       return;
     }
     updateLoading('scripts', true);
@@ -498,15 +548,19 @@ function App() {
         repoPath: repoPath.trim(),
         frontendDir: frontendDir.trim() || null,
       });
+      if (isStaleBranchLoad(branchLoadRequestId)) return;
       setNpmScripts(scripts);
       const preferred = ["build", "build:prod", "build:production", "compile", "dist"];
       const autoSelected = preferred.find(s => scripts.includes(s)) || scripts[0] || "";
       setSelectedBuildScript(autoSelected);
     } catch (e) {
+      if (isStaleBranchLoad(branchLoadRequestId)) return;
       setNpmScripts([]);
       setSelectedBuildScript("");
     } finally {
-      updateLoading('scripts', false);
+      if (!isStaleBranchLoad(branchLoadRequestId)) {
+        updateLoading('scripts', false);
+      }
     }
   }
 
@@ -527,7 +581,7 @@ function App() {
         setRepoPath(selectedPath);
         // 切换仓库时清空镜像名称，打包时自动从产物推断
         setImageName("");
-        restoreRememberedBranchAdvancedSettings();
+        restoreRememberedBranchAdvancedSettings(config, selectedPath);
         updateUi('showAdvancedSettings', true);
         await loadGitBranches(selectedPath);
         if (config.remember_branch_settings) {
@@ -885,7 +939,7 @@ function App() {
     if (!isTauriRuntime() || !config.remember_branch_settings) return;
     try {
       const newHistory = prependPathHistory(config.repo_path_history, repoPath);
-      const updatedConfig = {
+      const updatedConfig = rememberBranchRepoSettings({
         ...config,
         last_repo_path: repoPath,
         last_branch: branchName.trim(),
@@ -897,7 +951,10 @@ function App() {
         last_spring_profile: springProfile,
         last_expose_port: branchExposePort,
         repo_path_history: newHistory,
-      };
+      }, repoPath, {
+        springProfile,
+        exposePort: branchExposePort,
+      });
       await invoke("save_config", { config: updatedConfig });
       setConfig(updatedConfig);
     } catch (e) {
@@ -1118,7 +1175,7 @@ function App() {
     if (value.trim()) {
       // 切换仓库时清空镜像名称，打包时自动从产物推断
       setImageName("");
-      restoreRememberedBranchAdvancedSettings();
+      restoreRememberedBranchAdvancedSettings(config, value);
       loadGitBranches(value);
     } else {
       setBranchOptions([]);
@@ -1150,7 +1207,7 @@ function App() {
     setConfig((prev) => ({ ...prev, remember_branch_settings: checked }));
     if (checked) {
       const newHistory = prependPathHistory(config.repo_path_history, repoPath);
-      const updatedConfig = {
+      const updatedConfig = rememberBranchRepoSettings({
         ...config,
         remember_branch_settings: true,
         last_repo_path: repoPath,
@@ -1163,7 +1220,10 @@ function App() {
         last_spring_profile: springProfile,
         last_expose_port: branchExposePort,
         repo_path_history: newHistory,
-      };
+      }, repoPath, {
+        springProfile,
+        exposePort: branchExposePort,
+      });
       invoke("save_config", { config: updatedConfig }).then(() => {
         setConfig(updatedConfig);
       });

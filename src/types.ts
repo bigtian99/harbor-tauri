@@ -4,6 +4,11 @@ export type ArtifactType = "jar" | "frontend_dist";
 export type BranchProjectType = "maven" | "npm";
 export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement";
 
+export interface BranchRepoSettings {
+  springProfile: string;
+  exposePort: string;
+}
+
 export interface HarborConfig {
   harbor_url: string;
   username: string;
@@ -28,6 +33,7 @@ export interface HarborConfig {
   last_spring_profile: string;
   last_expose_port: string;
   repo_path_history: string[];
+  branch_repo_settings: Record<string, BranchRepoSettings | undefined>;
   npm_package_manager: string;
   npm_registry: string;
   // 打包产物输出目录

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub(crate) const APP_CONFIG_DIR: &str = "jarporter";
@@ -150,6 +151,13 @@ pub struct BuildRecord {
     pub(crate) full_log: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchRepoSettings {
+    pub spring_profile: String,
+    pub expose_port: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct HarborConfig {
@@ -175,6 +183,7 @@ pub struct HarborConfig {
     pub last_spring_profile: String,
     pub last_expose_port: String,
     pub repo_path_history: Vec<String>,
+    pub branch_repo_settings: HashMap<String, BranchRepoSettings>,
     pub npm_package_manager: String,
     pub npm_registry: String,
     // 打包产物输出目录
@@ -215,6 +224,7 @@ impl Default for HarborConfig {
             last_spring_profile: String::new(),
             last_expose_port: String::new(),
             repo_path_history: Vec::new(),
+            branch_repo_settings: HashMap::new(),
             npm_package_manager: "npm".to_string(),
             npm_registry: String::new(),
             // 打包产物输出目录默认为桌面
