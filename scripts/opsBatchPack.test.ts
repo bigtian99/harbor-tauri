@@ -55,7 +55,7 @@ const modelsSource = readFileSync("src-tauri/src/models.rs", "utf8");
 assertContains(typesSource, '"packSpeed"', "TabType should include the pack speed page");
 assertContains(typesSource, "ops_authorization", "Config should persist the ops Authorization token");
 assertContains(sidebarSource, 'tab: "packSpeed"', "Sidebar should show the pack speed menu in normal builds");
-assertContains(sidebarSource, 'i.tab === "packSpeed"', "Ops mode should keep the pack speed menu visible");
+assertContains(sidebarSource, "isOpsTab(item.tab)", "Ops mode should keep the pack speed menu visible");
 assertNotContains(panelSource, "artifact-type-selector", "Pack speed panel should not render a duplicate top tab button");
 assertNotContains(panelSource, "保存 Authorization", "Pack speed panel should not show a separate save button");
 assertNotContains(panelSource, "handleSaveAuthorization", "Pack speed panel should save only when submitting acceleration");

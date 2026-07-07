@@ -3,6 +3,7 @@ import {
   ChevronLeft, ChevronRight, FileText, Zap
 } from "lucide-react";
 import type { TabType } from "../types";
+import { isOpsTab } from "../opsNavigation";
 
 interface SidebarProps {
   activeTab: TabType;
@@ -24,9 +25,7 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
     { tab: "packSpeed", icon: <Zap size={18} />, label: "打包加速" },
   ];
 
-  const visibleItems = opsMode
-    ? navItems.filter(i => i.tab === "landing" || i.tab === "settlement" || i.tab === "packSpeed")
-    : navItems;
+  const visibleItems = opsMode ? navItems.filter((item) => isOpsTab(item.tab)) : navItems;
 
   return (
     <>

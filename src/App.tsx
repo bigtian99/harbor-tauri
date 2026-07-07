@@ -30,6 +30,7 @@ import {
 } from "./types";
 import { createBranchImageResult, getBranchPushSummary } from "./branchImageResults";
 import { getRememberedBranchAdvancedSettings, rememberBranchRepoSettings } from "./branchSettings";
+import { resolveOpsInitialTab, resolveTabForOpsMode } from "./opsNavigation";
 
 // 把路径加入历史记录最前（去重，上限 20）；路径为空时仅去重返回
 function prependPathHistory(history: string[] | undefined, path: string): string[] {
@@ -160,6 +161,7 @@ function App() {
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
   const toastTimerRef = useRef<number | null>(null);
   const branchLoadRequestRef = useRef(0);
+  const opsModeInitializedRef = useRef(false);
 
   // ==================== 工具函数 ====================
   function showToast(message: string, duration = 2000) {
@@ -172,6 +174,10 @@ function App() {
       toastTimerRef.current = null;
     }, duration);
   }
+
+  const handleTabChange = useCallback((tab: TabType) => {
+    setActiveTab(resolveTabForOpsMode(tab, opsMode));
+  }, [opsMode]);
 
   function restoreRememberedBranchAdvancedSettings(sourceConfig = config, sourceRepoPath = repoPath) {
     const remembered = getRememberedBranchAdvancedSettings(sourceConfig, sourceRepoPath);
@@ -1076,10 +1082,16 @@ function App() {
     invoke<boolean>("is_ops_mode").then((ops) => {
       if (ops) {
         setOpsMode(true);
-        setActiveTab("landing");
+        if (!opsModeInitializedRef.current) {
+          opsModeInitializedRef.current = true;
+          setActiveTab((currentTab) => resolveOpsInitialTab(currentTab));
+        }
       }
     }).catch(() => {/* 非 Tauri 环境忽略 */});
+  }, []);
 
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
     const appWindow = getCurrentWindow();
     const unlistenProgress = appWindow.listen<{ percent: number; message: string }>(
       "build-progress",
@@ -1245,7 +1257,7 @@ function App() {
         activeTab={activeTab}
         sidebarCollapsed={sidebarCollapsed}
         opsMode={opsMode}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 

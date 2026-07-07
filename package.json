@@ -1,7 +1,7 @@
 {
   "name": "jarporter",
   "private": true,
-  "version": "0.1.10",
+  "version": "0.1.14",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,8 +12,8 @@
     "tauri:build:arm64": "tauri build --target aarch64-apple-darwin",
     "tauri:build:x64": "tauri build --target x86_64-apple-darwin",
     "tauri:build:universal": "tauri build --target universal-apple-darwin",
-    "tauri:build:ops": "OPS_MODE=true tauri build --target aarch64-apple-darwin",
-    "tauri:build:ops:win64": "OPS_MODE=true tauri build --target x86_64-pc-windows-msvc",
+    "tauri:build:ops": "node scripts/tauri-build-ops.mjs aarch64-apple-darwin",
+    "tauri:build:ops:win64": "node scripts/tauri-build-ops.mjs x86_64-pc-windows-msvc",
     "tauri:build:all": "pnpm tauri:build:arm64 && pnpm tauri:build:x64",
     "release": "node -e \"const v=require('./package.json').version;const e=require('child_process').execSync;e('git tag -a v'+v+' -m v'+v,{stdio:'inherit'});e('git push origin v'+v,{stdio:'inherit'})\""
   },
