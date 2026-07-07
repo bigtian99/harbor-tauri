@@ -8,6 +8,27 @@ use tauri::Emitter;
 const APP_CONFIG_DIR: &str = "jarporter";
 const LEGACY_CONFIG_DIR: &str = "jar-to-harbor";
 
+/// Windows 进程创建标志：让子进程不分配/不显示控制台窗口。
+/// 不加这个标志时，每次调用 `docker` 都会闪出一个黑色命令行窗口，
+/// 而且 push/login 期间 Docker 会反复调用凭证助手(docker-credential-*.exe)，
+/// 导致命令行窗口“一直闪烁”。
+/// 参考: https://learn.microsoft.com/windows/win32/procthread/process-creation-flags
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// 构造一个 `docker` 命令。在 Windows 上附加 `CREATE_NO_WINDOW` 标志以隐藏控制台窗口；
+/// 其它平台等同于 `Command::new("docker")`。
+fn docker_command() -> Command {
+    #[allow(unused_mut)]
+    let mut cmd = Command::new("docker");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HarborConfig {
     pub harbor_url: String,
@@ -122,7 +143,7 @@ async fn build_and_push(app: tauri::AppHandle, jar_path: String, image_name: Str
     let full_image_clone = full_image.clone();
 
     let build_result = tauri::async_runtime::spawn_blocking(move || {
-        let output = Command::new("docker")
+        let output = docker_command()
             .args(["build", "--platform", "linux/amd64", "-f", &df_path_str, "-t", &full_image_clone, "."])
             .current_dir(&jar_dir_clone)
             .output();
@@ -149,7 +170,7 @@ async fn build_and_push(app: tauri::AppHandle, jar_path: String, image_name: Str
     let password = config.password.clone();
 
     let login_result = tauri::async_runtime::spawn_blocking(move || {
-        let mut child = Command::new("docker")
+        let mut child = docker_command()
             .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -178,7 +199,7 @@ async fn build_and_push(app: tauri::AppHandle, jar_path: String, image_name: Str
 
     let full_image_push = full_image.clone();
     let push_result = tauri::async_runtime::spawn_blocking(move || {
-        Command::new("docker")
+        docker_command()
             .args(["push", &full_image_push])
             .output()
     }).await.map_err(|e| format!("推送线程异常: {}", e))?;
