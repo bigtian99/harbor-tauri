@@ -13,6 +13,7 @@ import { MergePanel } from "./components/MergePanel";
 import { PushImagePanel } from "./components/PushImagePanel";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { SettlementPanel } from "./components/SettlementPanel";
+import { PackSpeedPanel } from "./components/PackSpeedPanel";
 import { useLanding } from "./hooks/useLanding";
 import "./App.css";
 
@@ -68,6 +69,7 @@ function App() {
     npm_package_manager: "npm",
     npm_registry: "",
     artifact_output_dir: "",
+    ops_authorization: "",
     custom_docker_extras_dir: "",
     build_history: [],
   });
@@ -276,6 +278,12 @@ function App() {
 
   function handleConfigChange(field: keyof HarborConfig, value: string) {
     setConfig((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handleOpsAuthorizationSave(authorization: string) {
+    const updatedConfig = { ...config, ops_authorization: authorization.trim() };
+    await invoke("save_config", { config: updatedConfig });
+    setConfig(updatedConfig);
   }
 
   // ==================== 文件和拖拽处理 ====================
@@ -1426,6 +1434,14 @@ function App() {
 
         {activeTab === "settlement" && (
           <SettlementPanel />
+        )}
+
+        {activeTab === "packSpeed" && (
+          <PackSpeedPanel
+            authorization={config.ops_authorization}
+            onAuthorizationChange={(value) => setConfig((prev) => ({ ...prev, ops_authorization: value }))}
+            onSaveAuthorization={handleOpsAuthorizationSave}
+          />
         )}
 
         {activeTab === "config" && (

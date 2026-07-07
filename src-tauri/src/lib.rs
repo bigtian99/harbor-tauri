@@ -7,6 +7,7 @@ mod git;
 mod history;
 mod landing;
 mod models;
+mod ops;
 mod preview_server;
 mod settlement;
 mod utils;
@@ -28,6 +29,7 @@ use landing::{
     list_template_dirs, list_template_infos, upload_template_zip, delete_template_dir,
 };
 use preview_server::get_preview_server_info;
+use ops::batch_pack_sub_channels;
 use settlement::generate_settlement_statements;
 
 /// 编译时注入：`OPS_MODE=true tauri build` 构建的版本返回 true，
@@ -95,6 +97,7 @@ pub fn run() {
             list_remote_branches,
             check_remote_merge,
             merge_remote_branches,
+            batch_pack_sub_channels,
             generate_settlement_statements,
             db::get_jar_port,
             db::save_jar_port,

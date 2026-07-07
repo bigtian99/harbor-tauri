@@ -188,6 +188,8 @@ pub struct HarborConfig {
     pub npm_registry: String,
     // 打包产物输出目录
     pub artifact_output_dir: String,
+    // 运营接口 Authorization
+    pub ops_authorization: String,
     // 自定义 Dockerfile 构建时，额外通过 --build-context tools= 注入的目录
     pub custom_docker_extras_dir: String,
     // 历史打包记录
@@ -229,6 +231,8 @@ impl Default for HarborConfig {
             npm_registry: String::new(),
             // 打包产物输出目录默认为桌面
             artifact_output_dir: default_output_dir,
+            // 运营接口 Authorization 默认为空
+            ops_authorization: String::new(),
             // 自定义 Dockerfile 附加目录默认为空
             custom_docker_extras_dir: String::new(),
             // 历史打包记录默认为空

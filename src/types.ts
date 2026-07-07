@@ -2,7 +2,7 @@
 
 export type ArtifactType = "jar" | "frontend_dist";
 export type BranchProjectType = "maven" | "npm";
-export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement";
+export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement" | "packSpeed";
 
 export interface BranchRepoSettings {
   springProfile: string;
@@ -38,6 +38,8 @@ export interface HarborConfig {
   npm_registry: string;
   // 打包产物输出目录
   artifact_output_dir: string;
+  // 运营接口 Authorization
+  ops_authorization: string;
   // 自定义 Dockerfile 附加目录（--build-context tools=）
   custom_docker_extras_dir: string;
   // 历史打包记录
@@ -158,6 +160,14 @@ export interface SettlementGenerateResult {
   channels: number;
   output_dir: string;
   files: string[];
+}
+
+export interface BatchPackResult {
+  code: number;
+  message: string;
+  data: unknown;
+  timestamp: string | null;
+  unauthorized: boolean;
 }
 
 // ==================== 本地分支合并 ====================

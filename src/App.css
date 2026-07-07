@@ -567,6 +567,81 @@ body::before {
   background: rgba(15, 52, 96, 0.5);
 }
 
+.pack-speed-actions {
+  display: flex;
+  margin-top: 12px;
+}
+
+.pack-speed-actions .build-btn {
+  margin-top: 0;
+}
+
+.secondary-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(100, 255, 218, 0.18);
+  background: rgba(15, 52, 96, 0.42);
+  color: #ccd6f6;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.secondary-action-btn:hover:not(:disabled) {
+  border-color: rgba(100, 255, 218, 0.34);
+  background: rgba(15, 52, 96, 0.62);
+  color: #64ffda;
+}
+
+.secondary-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pack-speed-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.16);
+  background: rgba(15, 52, 96, 0.34);
+  color: #ccd6f6;
+}
+
+.pack-speed-result.success {
+  border-color: rgba(53, 208, 127, 0.38);
+}
+
+.pack-speed-result.warning {
+  border-color: rgba(255, 196, 87, 0.38);
+}
+
+.pack-speed-result div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pack-speed-result strong {
+  font-size: 13px;
+  color: #e6f1ff;
+}
+
+.pack-speed-result span {
+  color: #a8b2d1;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 .cancel-btn {
   width: 100%;
   margin-top: 8px;
