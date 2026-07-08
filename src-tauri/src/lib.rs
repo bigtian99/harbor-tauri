@@ -29,7 +29,7 @@ use landing::{
     list_template_dirs, list_template_infos, upload_template_zip, delete_template_dir,
 };
 use preview_server::get_preview_server_info;
-use ops::batch_pack_sub_channels;
+use ops::{batch_pack_sub_channels, close_ops_login_window, open_ops_login_window};
 use settlement::generate_settlement_statements;
 
 /// 编译时注入：`OPS_MODE=true tauri build` 构建的版本返回 true，
@@ -98,6 +98,8 @@ pub fn run() {
             check_remote_merge,
             merge_remote_branches,
             batch_pack_sub_channels,
+            open_ops_login_window,
+            close_ops_login_window,
             generate_settlement_statements,
             db::get_jar_port,
             db::save_jar_port,

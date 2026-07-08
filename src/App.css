@@ -576,6 +576,23 @@ body::before {
   margin-top: 0;
 }
 
+.auth-input-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.auth-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.auth-login-btn {
+  flex: 0 0 auto;
+  min-height: 40px;
+  white-space: nowrap;
+}
+
 .secondary-action-btn {
   display: inline-flex;
   align-items: center;
@@ -602,6 +619,12 @@ body::before {
 .secondary-action-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .auth-input-row {
+    flex-direction: column;
+  }
 }
 
 .pack-speed-result {

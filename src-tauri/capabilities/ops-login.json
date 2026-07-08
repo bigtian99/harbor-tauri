@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ops-login",
+  "description": "Allow the embedded ops login page to send the captured token back to the main window.",
+  "local": false,
+  "windows": ["ops-login"],
+  "remote": {
+    "urls": ["https://admintksy.tiankongshuyu.cn/*"]
+  },
+  "permissions": [
+    "core:event:allow-emit-to"
+  ]
+}
