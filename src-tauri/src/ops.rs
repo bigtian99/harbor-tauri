@@ -236,7 +236,7 @@ pub async fn batch_pack_sub_channels(
 }
 
 #[tauri::command]
-pub fn open_ops_login_window(app: AppHandle) -> Result<(), String> {
+pub async fn open_ops_login_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(OPS_LOGIN_WINDOW_LABEL) {
         window.set_focus().map_err(|e| format!("聚焦登录窗口失败: {}", e))?;
         return Ok(());

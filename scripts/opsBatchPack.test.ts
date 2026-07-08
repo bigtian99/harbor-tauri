@@ -74,6 +74,7 @@ assertContains(libSource, "open_ops_login_window", "Tauri should register the em
 assertContains(libSource, "close_ops_login_window", "Tauri should register the embedded ops login close command");
 assertContains(modelsSource, "ops_authorization", "Rust config should persist ops Authorization");
 assertContains(opsSource, "WebviewWindowBuilder", "Ops login should use an embedded Tauri webview window");
+assertContains(opsSource, "pub async fn open_ops_login_window", "Ops login window creation should use an async Tauri command to avoid Windows WebView2 deadlocks");
 assertContains(opsSource, "initialization_script", "Ops login should inject the auth capture script");
 assertContains(opsSource, 'const OPS_LOGIN_URL: &str = "https://admintksy.tiankongshuyu.cn";', "Ops login should open the admin login site");
 assertContains(opsSource, 'const HOST = "admintksy.tiankongshuyu.cn";', "Ops login capture script should be restricted to the admin login host");
