@@ -11,7 +11,6 @@ import {
   Paper,
   Progress,
   Stack,
-  Switch,
   Text,
   TextInput,
   Title,
@@ -96,7 +95,6 @@ function PathPicker({ label, value, placeholder, directory, onChange }: PathPick
 }
 
 export function SettlementPanel() {
-  const [useDefaultSource, setUseDefaultSource] = useState(true);
   const [sourcePath, setSourcePath] = useState("");
   const [settlementPath, setSettlementPath] = useState("");
   const [outputBaseDir, setOutputBaseDir] = useState("");
@@ -110,7 +108,7 @@ export function SettlementPanel() {
   });
 
   const datedOutputPreview = joinOutputPreview(outputBaseDir, formatSettlementDateDir());
-  const canGenerate = (useDefaultSource || sourcePath) && settlementPath && outputBaseDir && !isGenerating;
+  const canGenerate = sourcePath && settlementPath && outputBaseDir && !isGenerating;
 
   useEffect(() => {
     const remembered = localStorage.getItem(SETTLEMENT_OUTPUT_BASE_STORAGE_KEY);
@@ -157,7 +155,7 @@ export function SettlementPanel() {
     setProgress({ percent: 1, message: "准备生成结算单...", current: 0, total: 0 });
     try {
       const generated = await invoke<SettlementGenerateResult>("generate_settlement_statements", {
-        sourcePath: useDefaultSource ? "" : sourcePath,
+        sourcePath,
         settlementPath,
         outputDir: outputBaseDir,
       });
@@ -210,20 +208,12 @@ export function SettlementPanel() {
               <Text size="sm" c="dimmed">模板</Text>
               <Badge color="gray" variant="light">默认模板</Badge>
             </Group>
-            <Switch
-              checked={useDefaultSource}
-              onChange={(event) => setUseDefaultSource(event.currentTarget.checked)}
-              label="使用默认渠道打款信息表"
-              color="teal"
+            <PathPicker
+              label="渠道打款信息表"
+              value={sourcePath}
+              placeholder="选择 渠道打款信息表.xlsx"
+              onChange={setSourcePath}
             />
-            {!useDefaultSource && (
-              <PathPicker
-                label="渠道打款信息表"
-                value={sourcePath}
-                placeholder="选择 渠道打款信息表.xlsx"
-                onChange={setSourcePath}
-              />
-            )}
             <PathPicker
               label="结算数据"
               value={settlementPath}

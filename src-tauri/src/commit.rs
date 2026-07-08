@@ -1,7 +1,6 @@
 use crate::models::{AuthorInfo, CommitInfo, CommitListResult, LastCommitInfo};
-use crate::utils::{git_output, repo_root_for};
+use crate::utils::{git_output, repo_root_for, silent_command};
 use std::path::PathBuf;
-use std::process::Command;
 
 /// 将 git remote URL 转换为 commit 页面 URL
 pub(crate) fn remote_url_to_commit_url(remote_url: &str, commit_hash: &str) -> Option<String> {
@@ -270,7 +269,7 @@ pub async fn list_branch_diff_commits(
         } else {
             vec!["fetch", "--all", "--prune"]
         };
-        let _ = Command::new("git")
+        let _ = silent_command("git")
             .args(fetch_args)
             .current_dir(&repo_root)
             .output();

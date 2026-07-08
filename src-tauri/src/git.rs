@@ -1,8 +1,7 @@
 use crate::models::{GitBranchOption, LocalMergeCheck, RemoteBranchListResult};
-use crate::utils::{create_temp_worktree_path, git_output, repo_root_for};
+use crate::utils::{create_temp_worktree_path, git_output, repo_root_for, silent_command};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
@@ -37,7 +36,7 @@ pub(crate) fn list_known_git_branches(repo_root: &Path) -> Result<Vec<GitBranchO
 }
 
 pub(crate) fn cleanup_worktree(repo_path: &Path, worktree_path: &Path) {
-    Command::new("git")
+    silent_command("git")
         .args(["worktree", "remove", "--force"])
         .arg(worktree_path)
         .current_dir(repo_path)
@@ -119,7 +118,7 @@ pub async fn list_git_branches(repo_path: String) -> Result<Vec<GitBranchOption>
     tauri::async_runtime::spawn_blocking(move || {
         let repo_root = repo_root_for(&repo_path)?;
         // 先执行 git fetch 获取远程最新分支信息
-        Command::new("git")
+        silent_command("git")
             .args(["fetch", "--all", "--prune"])
             .current_dir(&repo_root)
             .output()
@@ -148,7 +147,7 @@ pub(crate) fn repo_name_from_url(url: &str) -> String {
 #[tauri::command]
 pub async fn list_git_branches_from_url(url: String) -> Result<Vec<GitBranchOption>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let output = Command::new("git")
+        let output = silent_command("git")
             .args(["ls-remote", "--heads", url.trim()])
             .output()
             .map_err(|e| format!("执行 git ls-remote 失败: {}", e))?;
@@ -200,13 +199,13 @@ pub(crate) fn ensure_cloned_repo(url: &str) -> Result<PathBuf, String> {
         .join(&name);
 
     if cache_dir.exists() {
-        Command::new("git")
+        silent_command("git")
             .args(["fetch", "--all", "--prune"])
             .current_dir(&cache_dir)
             .output()
             .map_err(|e| format!("git fetch 失败: {}", e))?;
     } else {
-        let output = Command::new("git")
+        let output = silent_command("git")
             .args(["clone", "--depth", "1", "--no-single-branch", url])
             .arg(&cache_dir)
             .output()
@@ -255,7 +254,7 @@ pub async fn list_remote_branches(repo_path: String) -> Result<RemoteBranchListR
 
     tauri::async_runtime::spawn_blocking(move || {
         // fetch 同步远程引用
-        let _ = Command::new("git")
+        let _ = silent_command("git")
             .args(["fetch", "--all", "--prune"])
             .current_dir(&repo_root)
             .output();
@@ -271,7 +270,7 @@ pub async fn list_remote_branches(repo_path: String) -> Result<RemoteBranchListR
 
 /// 在仓库目录执行 git 命令，捕获 stdout/stderr 与退出码。
 fn run_git_capture(repo_root: &PathBuf, args: &[&str]) -> (bool, String, String) {
-    let out = Command::new("git")
+    let out = silent_command("git")
         .args(args)
         .current_dir(repo_root)
         .output();
@@ -473,7 +472,7 @@ pub async fn merge_remote_branches(
                 &["merge", "--no-ff", "--no-edit", &source],
             );
             if !m_ok {
-                let _ = Command::new("git")
+                let _ = silent_command("git")
                     .args(["merge", "--abort"])
                     .current_dir(&worktree_path)
                     .output();

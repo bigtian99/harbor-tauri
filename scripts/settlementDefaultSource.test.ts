@@ -16,40 +16,40 @@ const settlementPanel = readFileSync("src/components/SettlementPanel.tsx", "utf8
 const appCss = readFileSync("src/App.css", "utf8");
 const tauriConfig = readFileSync("src-tauri/tauri.conf.json", "utf8");
 
-assertContains(
+assertNotContains(
   settlementPanel,
   "useDefaultSource",
-  "Settlement page should expose a default payment info toggle",
+  "Settlement page should not expose a default payment info toggle",
 );
-assertContains(
+assertNotContains(
   settlementPanel,
   "使用默认渠道打款信息表",
-  "Settlement page should label the default payment info toggle clearly",
+  "Settlement page should not show the default payment info label",
 );
-assertContains(
+assertNotContains(
   settlementPanel,
   "sourcePath: useDefaultSource ? \"\" : sourcePath",
-  "Settlement generation should use the bundled default only when the toggle is enabled",
+  "Settlement generation should always pass the selected payment info file",
 );
-assertContains(
+assertNotContains(
   settlementPanel,
   "!useDefaultSource &&",
-  "Settlement page should show the payment info picker only when the default source is disabled",
+  "Settlement page should always show the payment info picker",
 );
 assertContains(
   settlementPanel,
   'label="渠道打款信息表"',
-  "Settlement page should still support manually selecting the payment info file",
-);
-assertNotContains(
-  settlementPanel,
-  "const canGenerate = settlementPath && outputDir && !isGenerating;",
-  "Manual payment info mode should require a selected payment info file before generating",
+  "Settlement page should require manually selecting the payment info file",
 );
 assertContains(
   settlementPanel,
+  "const canGenerate = sourcePath && settlementPath && outputBaseDir && !isGenerating;",
+  "Settlement generation should require both source and settlement files",
+);
+assertNotContains(
+  settlementPanel,
   "useDefaultSource || sourcePath",
-  "Generate button should allow default mode or require sourcePath in manual mode",
+  "Generate button should not allow default payment info mode",
 );
 assertContains(
   settlementPanel,
@@ -96,8 +96,8 @@ assertContains(
   "overflow-y: auto",
   "Generated settlement files scroll container should scroll vertically",
 );
-assertContains(
+assertNotContains(
   tauriConfig,
   "../resources/**/*",
-  "Tauri bundle should include project resources such as the default payment info file",
+  "Tauri bundle should not include the old default payment info resource",
 );

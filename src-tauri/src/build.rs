@@ -6,13 +6,13 @@ use crate::models::{ArtifactType, BuildRecord, DockerBuildContext, PackageFromBr
 use crate::utils::{
     cleanup_old_temp_dirs, command_output_text, copy_artifact_to_output_internal,
     detect_npm_build_script, lock_file_hash, repo_root_for, run_command,
-    save_node_modules_to_cache, silent_docker_command, try_restore_node_modules,
+    save_node_modules_to_cache, silent_command, silent_docker_command, try_restore_node_modules,
     CANCEL_FLAG, CURRENT_PID,
 };
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::Ordering;
 use tauri::Emitter;
 
@@ -59,7 +59,7 @@ pub async fn list_npm_scripts(
     // 创建临时 worktree 来读取 package.json
     let branch = "HEAD";
     tauri::async_runtime::spawn_blocking(move || -> Result<Vec<String>, String> {
-        let output = Command::new("git")
+        let output = silent_command("git")
             .args(["worktree", "add", "--detach"])
             .arg(&worktree_path)
             .arg(branch)
@@ -101,7 +101,7 @@ pub async fn list_npm_scripts(
         };
 
         // 清理临时 worktree
-        let _ = Command::new("git")
+        let _ = silent_command("git")
             .args(["worktree", "remove", "--force"])
             .arg(&worktree_path)
             .current_dir(&repo_root)
@@ -177,7 +177,7 @@ pub async fn open_directory(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
+        silent_command("open")
             .arg(target)
             .output()
             .map_err(|e| format!("打开目录失败: {}", e))?;
@@ -187,7 +187,7 @@ pub async fn open_directory(path: String) -> Result<(), String> {
     {
         // 使用 cmd /c start 避免 explorer 路径解析异常（如跳到文档文件夹）
         let path_str = target.to_string_lossy().to_string();
-        Command::new("cmd")
+        silent_command("cmd")
             .args(["/C", "start", "", &path_str])
             .output()
             .map_err(|e| format!("打开目录失败: {}", e))?;
@@ -195,7 +195,7 @@ pub async fn open_directory(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open")
+        silent_command("xdg-open")
             .arg(target)
             .output()
             .map_err(|e| format!("打开目录失败: {}", e))?;
@@ -222,7 +222,7 @@ pub async fn check_dockerfile(repo_path: String, branch: String) -> Result<bool,
         // 用 git show 检查分支上是否有 Dockerfile（大小写都试）
         for name in &["Dockerfile", "dockerfile"] {
             let ref_name = format!("{}:{}", branch_clone, name);
-            let output = Command::new("git")
+            let output = silent_command("git")
                 .args(["show", &ref_name])
                 .current_dir(&repo_root)
                 .output()
@@ -369,7 +369,7 @@ pub async fn package_from_branch(
     let worktree_for_add = worktree_path.clone();
     let branch_for_add = branch.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let output = Command::new("git")
+        let output = silent_command("git")
             .args(["worktree", "add", "--detach"])
             .arg(&worktree_for_add)
             .arg(&branch_for_add)
@@ -869,7 +869,7 @@ pub async fn detect_spring_profiles(repo_path: String, branch: String) -> Result
     };
 
     // 用 git ls-tree 列出指定分支中所有 application-*.yml / application-*.properties 文件
-    let output = Command::new("git")
+    let output = silent_command("git")
         .args(["ls-tree", "-r", "--name-only", branch])
         .current_dir(&repo_root)
         .output()
@@ -919,7 +919,7 @@ pub fn cancel_build() -> Result<(), String> {
     // 杀掉当前运行的子进程
     if let Some(pid) = *CURRENT_PID.lock().unwrap() {
         eprintln!("[JarPorter] 🛑 取消构建，终止进程 PID={}", pid);
-        let _ = Command::new("kill").arg(pid.to_string()).output();
+        let _ = silent_command("kill").arg(pid.to_string()).output();
     }
     Ok(())
 }

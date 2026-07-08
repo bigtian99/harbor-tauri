@@ -1,11 +1,10 @@
 use crate::models::{FtpUploadItem, FtpUploadResult, LandingPageResult, SubChannelApiResponse, SubChannelData};
-use crate::utils::{copy_dir_recursive, render_template};
+use crate::utils::{copy_dir_recursive, render_template, silent_command};
 use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::path::BaseDirectory;
@@ -655,7 +654,7 @@ pub async fn preview_landing_page(path: String, template_index: Option<usize>) -
 
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
+        silent_command("open")
             .arg(&html_path)
             .output()
             .map_err(|e| format!("打开预览失败: {}", e))?;
@@ -663,7 +662,7 @@ pub async fn preview_landing_page(path: String, template_index: Option<usize>) -
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
+        silent_command("cmd")
             .args(["/c", "start", "", &html_path.to_string_lossy()])
             .output()
             .map_err(|e| format!("打开预览失败: {}", e))?;
@@ -671,7 +670,7 @@ pub async fn preview_landing_page(path: String, template_index: Option<usize>) -
 
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open")
+        silent_command("xdg-open")
             .arg(&html_path)
             .output()
             .map_err(|e| format!("打开预览失败: {}", e))?;

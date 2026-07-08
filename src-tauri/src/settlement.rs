@@ -13,11 +13,7 @@ use calamine::{open_workbook_auto, Data, Reader};
 use chrono::{Local, NaiveDate};
 use rust_xlsxwriter::{Color, Format, FormatAlign, FormatBorder, Workbook, Worksheet, XlsxError};
 use serde::Serialize;
-use tauri::path::BaseDirectory;
-use tauri::{Emitter, Manager};
-
-const DEFAULT_SETTLEMENT_SOURCE_RESOURCE: &str = "../resources/settlement/渠道打款信息表.xlsx";
-const DEFAULT_SETTLEMENT_SOURCE_DEV_PATH: &str = "resources/settlement/渠道打款信息表.xlsx";
+use tauri::Emitter;
 
 #[derive(Debug, Clone)]
 struct ChannelData {
@@ -74,8 +70,7 @@ pub async fn generate_settlement_statements(
     settlement_path: String,
     output_dir: String,
 ) -> Result<SettlementGenerateResult, String> {
-    let default_source_path = default_settlement_source_path(&app);
-    let source_path = resolve_settlement_source_path(&source_path, default_source_path)?;
+    let source_path = resolve_settlement_source_path(&source_path)?;
     tauri::async_runtime::spawn_blocking(move || {
         generate_settlement_statements_inner(
             source_path,
@@ -88,38 +83,12 @@ pub async fn generate_settlement_statements(
     .map_err(|e| format!("生成结算单任务失败: {}", e))?
 }
 
-fn default_settlement_source_path(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Ok(path) = app
-        .path()
-        .resolve(DEFAULT_SETTLEMENT_SOURCE_RESOURCE, BaseDirectory::Resource)
-    {
-        candidates.push(path);
-    }
-    if let Ok(current_dir) = std::env::current_dir() {
-        candidates.push(current_dir.join(DEFAULT_SETTLEMENT_SOURCE_DEV_PATH));
-        candidates.push(current_dir.join(DEFAULT_SETTLEMENT_SOURCE_RESOURCE));
-        if let Some(parent) = current_dir.parent() {
-            candidates.push(parent.join(DEFAULT_SETTLEMENT_SOURCE_DEV_PATH));
-            candidates.push(parent.join(DEFAULT_SETTLEMENT_SOURCE_RESOURCE));
-        }
-    }
-
-    candidates.into_iter().find(|path| path.is_file())
-}
-
-fn resolve_settlement_source_path(
-    source_path: &str,
-    default_source_path: Option<PathBuf>,
-) -> Result<PathBuf, String> {
+fn resolve_settlement_source_path(source_path: &str) -> Result<PathBuf, String> {
     let source_path = source_path.trim();
     if !source_path.is_empty() {
         return Ok(PathBuf::from(source_path));
     }
-    default_source_path.ok_or_else(|| {
-        "内置渠道打款信息表不存在，请确认 resources/settlement/渠道打款信息表.xlsx 已随应用打包"
-            .to_string()
-    })
+    Err("请选择渠道打款信息表".to_string())
 }
 
 fn dated_settlement_output_dir(base_dir: &Path, date: NaiveDate) -> PathBuf {
@@ -1081,18 +1050,9 @@ mod tests {
     }
 
     #[test]
-    fn empty_source_path_uses_default_payment_info_file() {
-        let stamp = test_stamp("default-source");
-        let root = std::env::temp_dir().join(stamp);
-        fs::create_dir_all(&root).unwrap();
-        let default_source = root.join("渠道打款信息表.xlsx");
-        write_source_fixture(&default_source);
-
-        let resolved =
-            resolve_settlement_source_path("", Some(default_source.clone())).unwrap();
-        assert_eq!(resolved, default_source);
-
-        fs::remove_dir_all(root).ok();
+    fn empty_source_path_requires_payment_info_file() {
+        let err = resolve_settlement_source_path("").unwrap_err();
+        assert!(err.contains("请选择渠道打款信息表"));
     }
 
     #[test]

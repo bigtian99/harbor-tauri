@@ -251,7 +251,7 @@ pub(crate) fn try_restore_node_modules(build_dir: &Path, cache_key: &str) -> Res
 
     // 优先尝试硬链接 (cp -al)，同文件系统下 100K+ 文件几乎瞬时完成
     // npm install 对已安装的包会跳过，不修改硬链接文件；需要更新时会先删除再写入，不会污染缓存
-    let link_output = Command::new("cp")
+    let link_output = silent_command("cp")
         .args([
             "-al",
             cache_path.to_str().unwrap(),
@@ -266,7 +266,7 @@ pub(crate) fn try_restore_node_modules(build_dir: &Path, cache_key: &str) -> Res
             "[JarPorter] 硬链接恢复失败，回退到复制: {}",
             String::from_utf8_lossy(&link_output.stderr).trim()
         );
-        let copy_output = Command::new("cp")
+        let copy_output = silent_command("cp")
             .args(["-a", cache_path.to_str().unwrap(), target.to_str().unwrap()])
             .output()
             .map_err(|e| format!("cp 命令执行失败: {}", e))?;
@@ -305,7 +305,7 @@ pub(crate) fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
     // 如果缓存已存在（相同 key），更新其修改时间即可
     if cache_path.is_dir() {
         // touch 更新 mtime，标记为最近使用
-        Command::new("touch").arg(&cache_base).output().ok();
+        silent_command("touch").arg(&cache_base).output().ok();
         return;
     }
 
@@ -340,7 +340,7 @@ pub(crate) fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
     fs::create_dir_all(&cache_base).ok();
 
     // 优先硬链接，跨文件系统时回退到复制
-    let link_result = Command::new("cp")
+    let link_result = silent_command("cp")
         .args([
             "-al",
             source.to_str().unwrap(),
@@ -358,7 +358,7 @@ pub(crate) fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
                 "[JarPorter] 硬链接保存失败，回退到复制 (hash={})",
                 cache_key
             );
-            Command::new("cp")
+            silent_command("cp")
                 .args(["-a", source.to_str().unwrap(), cache_path.to_str().unwrap()])
                 .output()
                 .ok();
@@ -366,42 +366,94 @@ pub(crate) fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
     }
 }
 
+fn command_candidates(command: &str) -> Vec<String> {
+    #[cfg(windows)]
+    {
+        let lower = command.to_ascii_lowercase();
+        if lower.ends_with(".exe") || lower.ends_with(".cmd") || lower.ends_with(".bat") {
+            return vec![command.to_string()];
+        }
+        return vec![
+            format!("{}.exe", command),
+            format!("{}.cmd", command),
+            format!("{}.bat", command),
+            command.to_string(),
+        ];
+    }
+
+    #[cfg(not(windows))]
+    {
+        vec![command.to_string()]
+    }
+}
+
+fn find_command_in_dir(dir: &Path, command: &str) -> Option<String> {
+    command_candidates(command)
+        .into_iter()
+        .map(|name| dir.join(name))
+        .find(|path| path.is_file())
+        .map(|path| path.to_string_lossy().to_string())
+}
+
+pub(crate) fn find_command_path(command: &str) -> Option<String> {
+    let command = command.trim();
+    if command.is_empty() {
+        return None;
+    }
+
+    let direct = PathBuf::from(command);
+    if direct.is_file() {
+        return Some(direct.to_string_lossy().to_string());
+    }
+    if command.contains('/') || command.contains('\\') || direct.is_absolute() {
+        if let (Some(parent), Some(name)) = (direct.parent(), direct.file_name()) {
+            return find_command_in_dir(parent, &name.to_string_lossy());
+        }
+        return None;
+    }
+
+    std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .find_map(|dir| find_command_in_dir(&dir, command))
+}
+
 /// 查找 Maven 可执行文件路径
 pub(crate) fn find_maven_path() -> Option<String> {
     // 1. 检查环境变量
-    if let Ok(m2_home) = std::env::var("M2_HOME") {
-        let path = PathBuf::from(m2_home).join("bin/mvn");
-        if path.exists() {
-            return Some(path.to_string_lossy().to_string());
+    if let Some(m2_home) = std::env::var_os("M2_HOME") {
+        if let Some(path) = find_command_in_dir(&PathBuf::from(m2_home).join("bin"), "mvn") {
+            return Some(path);
         }
     }
-    if let Ok(maven_home) = std::env::var("MAVEN_HOME") {
-        let path = PathBuf::from(maven_home).join("bin/mvn");
-        if path.exists() {
-            return Some(path.to_string_lossy().to_string());
+    if let Some(maven_home) = std::env::var_os("MAVEN_HOME") {
+        if let Some(path) = find_command_in_dir(&PathBuf::from(maven_home).join("bin"), "mvn") {
+            return Some(path);
         }
     }
 
-    // 2. 检查用户 home 目录下的常见安装位置
+    // 2. PATH 查找，Windows 下会覆盖 mvn.cmd / mvn.bat
+    if let Some(path) = find_command_path("mvn") {
+        return Some(path);
+    }
+
+    // 3. 检查用户 home 目录下的常见安装位置
     if let Some(home) = dirs::home_dir() {
         // SDKMAN
-        let sdkman_mvn = home.join(".sdkman/candidates/maven/current/bin/mvn");
-        if sdkman_mvn.exists() {
-            return Some(sdkman_mvn.to_string_lossy().to_string());
+        if let Some(path) = find_command_in_dir(&home.join(".sdkman/candidates/maven/current/bin"), "mvn") {
+            return Some(path);
         }
         // Homebrew (Apple Silicon)
-        let brew_arm = PathBuf::from("/opt/homebrew/bin/mvn");
-        if brew_arm.exists() {
-            return Some(brew_arm.to_string_lossy().to_string());
+        if let Some(path) = find_command_in_dir(Path::new("/opt/homebrew/bin"), "mvn") {
+            return Some(path);
         }
         // Homebrew (Intel)
-        let brew_intel = PathBuf::from("/usr/local/bin/mvn");
-        if brew_intel.exists() {
-            return Some(brew_intel.to_string_lossy().to_string());
+        if let Some(path) = find_command_in_dir(Path::new("/usr/local/bin"), "mvn") {
+            return Some(path);
         }
     }
 
-    // 3. 检查 IntelliJ IDEA 内置 Maven
+    // 4. 检查 IntelliJ IDEA 内置 Maven
     if let Some(home) = dirs::home_dir() {
         let idea_dir = home.join("Library/Application Support/JetBrains");
         if idea_dir.exists() {
@@ -415,11 +467,11 @@ pub(crate) fn find_maven_path() -> Option<String> {
                 versions.sort_by(|a, b| b.cmp(a)); // 倒序
 
                 for version in versions {
-                    let mvn_path = idea_dir
+                    let mvn_dir = idea_dir
                         .join(&version)
-                        .join("plugins/maven/lib/maven3/bin/mvn");
-                    if mvn_path.exists() {
-                        return Some(mvn_path.to_string_lossy().to_string());
+                        .join("plugins/maven/lib/maven3/bin");
+                    if let Some(path) = find_command_in_dir(&mvn_dir, "mvn") {
+                        return Some(path);
                     }
                 }
             }
@@ -432,13 +484,8 @@ pub(crate) fn find_maven_path() -> Option<String> {
 /// 查找 Docker 可执行文件路径
 pub(crate) fn find_docker_path() -> Option<String> {
     // 1. 直接从 PATH 查找（终端启动时有效）
-    if let Ok(path) = std::env::var("PATH") {
-        for dir in path.split(':') {
-            let candidate = PathBuf::from(dir).join("docker");
-            if candidate.is_file() {
-                return Some(candidate.to_string_lossy().to_string());
-            }
-        }
+    if let Some(path) = find_command_path("docker") {
+        return Some(path);
     }
 
     // 2. Homebrew (Apple Silicon)
@@ -460,10 +507,26 @@ pub(crate) fn find_docker_path() -> Option<String> {
     None
 }
 
+pub(crate) fn silent_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+
+    #[cfg(not(windows))]
+    {
+        Command::new(program)
+    }
+}
+
 pub(crate) fn silent_docker_command() -> Command {
     let docker_bin = find_docker_path().unwrap_or_else(|| "docker".to_string());
 
-    let mut command = Command::new(docker_bin);
+    let mut command = silent_command(docker_bin);
     command
         .env("DOCKER_CLI_HINTS", "false")
         .env("DOCKER_SCAN_SUGGEST", "false");
@@ -492,11 +555,11 @@ pub(crate) fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> R
     let actual_command = if command == "mvn" {
         find_maven_path().unwrap_or_else(|| "mvn".to_string())
     } else {
-        command.to_string()
+        find_command_path(command).unwrap_or_else(|| command.to_string())
     };
 
     // 使用 spawn 替代 output，以便追踪 PID 支持取消
-    let child = match Command::new(&actual_command)
+    let child = match silent_command(&actual_command)
         .args(args)
         .current_dir(current_dir)
         .stdout(Stdio::piped())
@@ -508,14 +571,25 @@ pub(crate) fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> R
             c
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // 通过 login shell 执行，确保加载 nvm/pyenv 等环境
             let full_cmd = format!("{} {}", actual_command, args.join(" "));
-            match Command::new("sh")
+
+            #[cfg(windows)]
+            let fallback = silent_command("cmd")
+                .args(["/C", &full_cmd])
+                .current_dir(current_dir)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn();
+
+            #[cfg(not(windows))]
+            let fallback = silent_command("sh")
                 .args(["-l", "-c", &full_cmd])
                 .current_dir(current_dir)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                .spawn()
+                .spawn();
+
+            match fallback
             {
                 Ok(c) => {
                     *CURRENT_PID.lock().unwrap() = Some(c.id());
@@ -609,6 +683,8 @@ pub(crate) fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> 
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     #[test]
     fn docker_command_helpers_do_not_touch_desktop_gui() {
         let source = std::fs::read_to_string(file!()).expect("read utils.rs");
@@ -627,6 +703,54 @@ mod tests {
         assert!(
             !source.contains(&hide_helper),
             "Docker helpers must not hide or refocus Docker Desktop"
+        );
+    }
+
+    #[test]
+    fn windows_child_processes_use_no_window_helper() {
+        let source = std::fs::read_to_string(file!()).expect("read utils.rs");
+        let helper_name = ["pub(crate) fn ", "silent", "_command", "("].concat();
+        let flag_name = ["CREATE", "_NO", "_WINDOW"].concat();
+        let flag_call = ["creation_flags(", &flag_name, ")"].concat();
+        assert!(
+            source.contains(&helper_name),
+            "utils.rs should expose one helper for hidden child processes"
+        );
+        assert!(
+            source.contains(&flag_name) && source.contains(&flag_call),
+            "silent_command should set CREATE_NO_WINDOW on Windows"
+        );
+
+        let src_dir = Path::new(file!()).parent().expect("src dir");
+        for file_name in ["build.rs", "commit.rs", "git.rs", "landing.rs"] {
+            let module_source =
+                std::fs::read_to_string(src_dir.join(file_name)).expect("read module source");
+            assert!(
+                module_source.contains("silent_command("),
+                "{file_name} should route Windows-visible child processes through silent_command"
+            );
+        }
+    }
+
+    #[test]
+    fn maven_resolution_supports_windows_command_shims() {
+        let source = std::fs::read_to_string(file!()).expect("read utils.rs");
+        let windows_cmd_candidate = ["format!(\"{}", ".cmd\", command)"].concat();
+        let maven_path_lookup = ["find_command_path(\"", "mvn", "\")"].concat();
+        let split_paths = ["std::env::", "split_paths"].concat();
+        let windows_shell = ["silent", "_command(\"", "cmd", "\")"].concat();
+
+        assert!(
+            source.contains(&windows_cmd_candidate) && source.contains(&maven_path_lookup),
+            "Maven lookup should include the Windows command shim"
+        );
+        assert!(
+            source.contains(&split_paths),
+            "PATH lookup should use the standard cross-platform path splitter"
+        );
+        assert!(
+            source.contains(&windows_shell),
+            "Missing-command fallback should use hidden cmd /C on Windows"
         );
     }
 }
