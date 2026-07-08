@@ -49,13 +49,15 @@ const OPS_AUTH_CAPTURE_SCRIPT: &str = r#"
     try {
       const payload = typeof body === "string" ? JSON.parse(body) : body;
       const token = payload && payload.code === 200 && payload.data && payload.data.token;
-      emitToken(token);
+      if (token && typeof token === "string") {
+        window.__JARPORTER_OPS_AUTH_LOGIN_TOKEN__ = token;
+      }
     } catch (_) {}
   }
 
   function syncTokenFromLocalStorage() {
     try {
-      return emitToken(localStorage.getItem("token"), true, collectSelectedSubChannelIds());
+      return emitToken(localStorage.getItem("token") || window.__JARPORTER_OPS_AUTH_LOGIN_TOKEN__, true, collectSelectedSubChannelIds());
     } catch (_) {
       return false;
     }

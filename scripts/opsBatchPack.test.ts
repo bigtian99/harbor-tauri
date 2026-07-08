@@ -81,6 +81,9 @@ assertContains(opsSource, 'const HOST = "admintksy.tiankongshuyu.cn";', "Ops log
 assertContains(opsSource, 'const LOGIN_API_HOST = "tksyadmin.tiankongshuyu.cn";', "Ops login capture script should allow the login API host");
 assertContains(opsSource, "/auth/login", "Ops login should capture only the login response");
 assertContains(opsSource, "data.token", "Ops login should extract data.token from the login response");
+assertContains(opsSource, "window.__JARPORTER_OPS_AUTH_LOGIN_TOKEN__ = token", "Login response should cache token without syncing immediately");
+assertNotContains(opsSource, "emitToken(token);", "Login response should not auto sync token and close the login window");
+assertContains(opsSource, 'localStorage.getItem("token") || window.__JARPORTER_OPS_AUTH_LOGIN_TOKEN__', "Manual sync should use localStorage token or the captured login token");
 assertContains(opsSource, 'localStorage.getItem("token")', "Ops login should allow manually syncing token from localStorage");
 assertContains(opsSource, 'const SUB_CHANNEL_PATH = "/alarm/channel/sub";', "Ops login should only collect selected IDs on the sub channel page");
 assertContains(opsSource, "collectSelectedSubChannelIds", "Ops login should collect selected sub channel IDs");
