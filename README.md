@@ -1,109 +1,184 @@
-# JarPorter
+# ShipForge (JarPorter)
 
-JarPorter is a Tauri desktop app for turning a local JAR package or frontend `dist` directory into a Docker image and pushing it to a Harbor registry.
+Tauri 2.0 桌面应用，将 JAR 包或前端 `dist` 目录打包为 Docker 镜像并推送到 Harbor registry。同时集成分支打包、落地页生成、结算单等运营工具。
 
-## Supported Artifacts
+## 功能导览
 
-- `JAR 应用`: builds the selected `.jar` with the configured Java base image and entrypoint.
-- `前端 dist`: builds the selected static `dist` directory with the configured frontend Dockerfile and `nginx.conf` templates. JarPorter copies the contents of the selected directory into the Nginx site root, so the image contains `/usr/share/nginx/html/index.html`, not `/usr/share/nginx/html/dist/index.html`.
-- After a successful Harbor push, JarPorter removes the pushed local Docker image tag to keep the machine clean.
+![](screenshots/01-upload.png)
 
-## Static Web Docker Image
+---
 
-The repository also includes a production static web image setup based on `Dockerfile` and `nginx.conf`.
+### 1. 上传推送
+
+选择 **JAR 应用** 或 **前端 dist**，拖拽文件/目录即可构建镜像并推送 Harbor。
+
+| JAR 应用 | 前端 dist |
+|---|---|
+| ![](screenshots/01-upload.png) | ![](screenshots/01b-upload-frontend.png) |
+
+- **JAR 应用**：Eclipse Temurin 基础镜像 + 自动生成 Dockerfile，自动解压读取 `application.yml` 推断端口
+- **前端 dist**：Nginx 静态站点，目录内容直接拷贝到 `/usr/share/nginx/html/`
+- 推送到 Harbor 后自动清理本地镜像
+- 展开"镜像配置"可自定义镜像名、标签、暴露端口
+
+---
+
+### 2. 镜像推送
+
+![](screenshots/02-push.png)
+
+- 列出本地 Docker 镜像，选中后推送到 Harbor
+- 支持手动输入远程镜像名覆盖
+
+---
+
+### 3. 分支打包
+
+![](screenshots/03-branch.png)
+
+- 支持**本地仓库路径**和 **Git URL** 两种输入方式
+- 基于 `git worktree` 隔离构建，自动清理临时目录
+- **Maven 项目**：`mvn clean package -DskipTests`
+- **npm 项目**：`npm install && npm run <script>`
+- `node_modules` 按 lockfile hash 缓存到 `~/.cache/jarporter/npm-cache/`
+- 自动检测 Spring profiles、前端子目录、npm scripts
+- 支持前后端分离双构建 + 聚合打包
+- 分支名自动转为镜像 tag
+
+---
+
+### 4. 分支合并
+
+![](screenshots/04-merge.png)
+
+- 当前分支 → 目标分支合并
+- 支持 merge / rebase 策略
+
+---
+
+### 5. 历史记录
+
+![](screenshots/05-history.png)
+
+- 所有构建记录（产物类型、镜像名、标签、时间、状态）
+- 支持清空历史
+
+---
+
+### 6. 生成落地页
+
+![](screenshots/06-landing.png)
+
+- 按渠道 `typeCode` 匹配模板目录，渲染 `{{NAME}}` / `{{LOGO}}` / `{{DOWNLOAD_URL}}` 占位符
+- 内建 HTTP 预览服务器（`127.0.0.1`），iframe 内嵌预览
+- 一键 FTP 上传
+
+### 模板变量
+
+| 占位符 | 说明 |
+|---|---|
+| `{{NAME}}` | 产品名称 |
+| `{{LOGO}}` | 产品 Logo URL |
+| `{{DOWNLOAD_URL}}` | 下载链接 |
+
+### 模板目录
+
+```
+templates/
+├── comic/
+├── novel/
+├── aiChat/
+├── videoShortPlay/
+├── gameLibraryAds/
+└── softwareLibrary/
+```
+
+---
+
+### 7. 结算单
+
+![](screenshots/07-settlement.png)
+
+- 输入**渠道打款信息表** + **结算数据**两个 Excel
+- 按打款账号自动分组，生成 `{姓名}_{账号}_{结算周期}.xlsx`
+- 模板包含：对账单标题、渠道明细、金额中文大写、开户行/账号信息
+- **可切换每 Sheet 6 行 / 全部合并到一个 Sheet**
+- 多线程并行生成，实时进度条
+
+---
+
+### 8. 打包加速
+
+![](screenshots/08-packspeed.png)
+
+- 批量打包多个分支/仓库，并行执行
+- 实时进度追踪
+
+---
+
+### 9. 设置
+
+![](screenshots/09-settings.png)
+
+- Harbor 连接配置（Registry 地址、用户名、密码）
+- 配置持久化到 `~/.config/jarporter/config.json`
+- 支持 Ops 模式切换
+
+---
+
+## 模板变量（前端 Dockerfile）
+
+前端 Dockerfile 和 nginx.conf 模板支持以下占位符：
+
+| 变量 | 说明 |
+|---|---|
+| `{{BASE_IMAGE}}` | 前端基础镜像，如 `nginx:alpine` |
+| `{{EXPOSE_PORT}}` | 暴露/监听端口 |
+| `{{NGINX_CONF_PATH}}` | nginx 配置路径 |
+| `{{DIST_DIR}}` | 临时构建上下文中的 dist 目录 |
+| `{{IMAGE_NAME}}` | 规范化镜像名 |
+| `{{IMAGE_TAG}}` | 最终镜像标签 |
+| `{{FULL_IMAGE}}` | 完整 registry 镜像引用 |
+
+## 开发
+
+```bash
+# 前端开发 (Vite, port 1420)
+pnpm dev
+
+# 完整 Tauri 开发 (前端 + Rust 热重载)
+pnpm tauri
+
+# 生产构建
+pnpm tauri:build
+
+# 架构构建
+pnpm tauri:build:arm64
+pnpm tauri:build:x64
+pnpm tauri:build:universal
+
+# 发布 (tag + push)
+pnpm release
+```
+
+## 静态 Web Docker 镜像
 
 ```bash
 docker build -t jarporter-web:latest .
 docker run --rm -p 8080:80 jarporter-web:latest
 ```
 
-The Docker build uses `npm ci`, then serves the generated `dist` directory with Nginx gzip, SPA history fallback, immutable cache headers for hashed assets, and no-cache headers for `index.html`.
+## 技术栈
 
-## Frontend Template Variables
+| 层 | 技术 |
+|---|---|
+| 桌面框架 | Tauri 2.0 |
+| 前端 | React 19 + TypeScript + Vite |
+| UI 组件 | Mantine |
+| 后端 | Rust |
+| Excel | rust_xlsxwriter |
+| Docker | bollard (Docker API) |
 
-The frontend Dockerfile and nginx templates can use these placeholders:
-
-- `{{BASE_IMAGE}}`: frontend base image, for example `nginx:alpine`.
-- `{{EXPOSE_PORT}}`: exposed/listen port, for example `80`.
-- `{{NGINX_CONF_PATH}}`: nginx config path inside the image.
-- `{{DIST_DIR}}`: copied dist directory inside the temporary build context.
-- `{{IMAGE_NAME}}`: normalized image name.
-- `{{IMAGE_TAG}}`: final image tag.
-- `{{FULL_IMAGE}}`: complete registry image reference.
-
-The default frontend template copies `{{DIST_DIR}}/` into `/usr/share/nginx/html/`, so the default SPA fallback is:
-
-```nginx
-location / {
-    try_files $uri $uri/ /index.html;
-}
-```
-
-Only change the fallback target if you intentionally copy the selected directory itself under a subdirectory such as `/usr/share/nginx/html/dist`.
-
-## Landing Page Generator
-
-JarPorter can generate and upload landing pages from built-in templates.
-
-### Workflow
-
-1. **Fetch channels** — enter channel IDs to pull sub-channel data (name, logo, download URL) from a remote API.
-2. **Generate** — each channel's `typeCode` is matched against template directories under `templates/`. The matching templates are rendered using `{{NAME}}`, `{{LOGO}}`, and `{{DOWNLOAD_URL}}` placeholders, and output to a temporary directory.
-3. **Preview** — generated pages are served via a local HTTP preview server (bound to `127.0.0.1` only), allowing relative image/font paths to load correctly.
-4. **Upload** — rendered pages are uploaded to an FTP server via a Python script.
-
-### Template Directories
-
-Each subdirectory under `templates/` is an independent template:
-
-```
-templates/
-├── comic/             # Comic category template group
-├── comic-1/
-├── comic-2/
-├── comic-3/
-├── novel/             # Novel template
-├── aiChat/            # AI chat app template
-├── videoShortPlay/    # Short video template
-├── gameLibraryAds/    # Game library ad template
-└── softwareLibrary/   # Software library template
-```
-
-### Template Variables
-
-Within each template's `index.html`, the following placeholders are rendered at generation time:
-
-- `{{NAME}}` — product name (from the channel's `productName`)
-- `{{LOGO}}` — product logo URL (from the channel's `subChannelLogo`)
-- `{{DOWNLOAD_URL}}` — download link (from the channel's `subChannelLink`)
-
-### Template Category Convention
-
-Each template's `index.html` can embed a Chinese category label via a `<meta>` tag:
-
-```html
-<meta name="template-category" content="漫画" />
-```
-
-In the **Manage Templates** panel, templates are grouped by this label using Chinese-aware collation. Templates sharing the same `content` value appear in the same foldable group. If a template lacks this `<meta>` tag, its folder name (minus trailing `-123` numeric suffixes) is used as a fallback.
-
-### Template Management
-
-The app provides a template management panel where you can:
-
-- Browse all available templates grouped by category
-- Preview each template's `index.html` via an inline iframe
-- Upload new templates as ZIP archives
-- Delete template directories
-
-### Branch Packaging
-
-JarPorter also supports building artifacts directly from git branches using `git worktree` isolation:
-
-- **Maven projects**: `mvn clean package -DskipTests`
-- **npm projects**: `npm install && npm run <script>`
-- `node_modules` are cached by lock file hash under `~/.cache/jarporter/npm-cache/` for faster repeated builds.
-
-## Recommended IDE Setup
+## 推荐 IDE
 
 - [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
