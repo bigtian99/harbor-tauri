@@ -11,6 +11,7 @@ import {
   Paper,
   Progress,
   Stack,
+  Switch,
   Text,
   TextInput,
   Title,
@@ -98,6 +99,7 @@ export function SettlementPanel() {
   const [sourcePath, setSourcePath] = useState("");
   const [settlementPath, setSettlementPath] = useState("");
   const [outputBaseDir, setOutputBaseDir] = useState("");
+  const [singleSheet, setSingleSheet] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<SettlementGenerateResult | null>(null);
   const [progress, setProgress] = useState<SettlementProgress>({
@@ -158,6 +160,7 @@ export function SettlementPanel() {
         sourcePath,
         settlementPath,
         outputDir: outputBaseDir,
+        rowsPerSheet: singleSheet ? 0 : 6,
       });
       setResult(generated);
       setProgress({
@@ -232,6 +235,13 @@ export function SettlementPanel() {
                 本次输出目录: {datedOutputPreview}
               </Text>
             )}
+
+            <Switch
+              label="所有数据合并到一个Sheet"
+              description={singleSheet ? "不拆分，全部行放在对账单1" : "每 6 行拆分为一个 Sheet"}
+              checked={singleSheet}
+              onChange={(event) => setSingleSheet(event.currentTarget.checked)}
+            />
 
             <Group gap="sm">
               <Button

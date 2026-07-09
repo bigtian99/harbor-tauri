@@ -69,14 +69,17 @@ pub async fn generate_settlement_statements(
     source_path: String,
     settlement_path: String,
     output_dir: String,
+    rows_per_sheet: Option<usize>,
 ) -> Result<SettlementGenerateResult, String> {
     let source_path = resolve_settlement_source_path(&source_path)?;
+    let rows_per_sheet = normalize_rows_per_sheet(rows_per_sheet);
     tauri::async_runtime::spawn_blocking(move || {
         generate_settlement_statements_inner(
             source_path,
             PathBuf::from(settlement_path),
             PathBuf::from(output_dir),
             Some(app),
+            rows_per_sheet,
         )
     })
     .await
@@ -91,6 +94,13 @@ fn resolve_settlement_source_path(source_path: &str) -> Result<PathBuf, String> 
     Err("请选择渠道打款信息表".to_string())
 }
 
+fn normalize_rows_per_sheet(rows_per_sheet: Option<usize>) -> usize {
+    match rows_per_sheet {
+        Some(0) | None => 0,
+        Some(n) => n.max(1),
+    }
+}
+
 fn dated_settlement_output_dir(base_dir: &Path, date: NaiveDate) -> PathBuf {
     base_dir.join(date.format("%Y%m%d").to_string())
 }
@@ -100,6 +110,7 @@ fn generate_settlement_statements_inner(
     settlement_path: PathBuf,
     output_dir: PathBuf,
     app: Option<tauri::AppHandle>,
+    rows_per_sheet: usize,
 ) -> Result<SettlementGenerateResult, String> {
     emit_settlement_progress(&app, 1, "检查输入文件...", 0, 0);
     ensure_file(&source_path, "渠道打款信息表")?;
@@ -128,7 +139,7 @@ fn generate_settlement_statements_inner(
         0,
         accounts.len(),
     );
-    let files = generate_accounts_parallel(&accounts, &settlement_data, &output_dir, app.as_ref())?;
+    let files = generate_accounts_parallel(&accounts, &settlement_data, &output_dir, app.as_ref(), rows_per_sheet)?;
     emit_settlement_progress(&app, 100, "结算单生成完成", accounts.len(), accounts.len());
 
     Ok(SettlementGenerateResult {
@@ -394,6 +405,7 @@ fn generate_accounts_parallel(
     settlement_data: &HashMap<String, Vec<SettlementData>>,
     output_dir: &Path,
     app: Option<&tauri::AppHandle>,
+    rows_per_sheet: usize,
 ) -> Result<Vec<String>, String> {
     let workers = settlement_worker_count(accounts.len());
     let completed = Arc::new(AtomicUsize::new(0));
@@ -401,7 +413,7 @@ fn generate_accounts_parallel(
         return accounts
             .iter()
             .map(|account| {
-                generate_account_workbook(account, settlement_data, output_dir).map(|path| {
+                generate_account_workbook(account, settlement_data, output_dir, rows_per_sheet).map(|path| {
                     emit_account_progress(app, &completed, accounts.len(), account);
                     path.to_string_lossy().to_string()
                 })
@@ -422,7 +434,7 @@ fn generate_accounts_parallel(
                 scope.spawn(move || -> Result<Vec<(usize, String)>, String> {
                     let mut files = Vec::new();
                     for (offset, account) in chunk.iter().enumerate() {
-                        let file = generate_account_workbook(account, settlement_data, output_dir)?;
+                        let file = generate_account_workbook(account, settlement_data, output_dir, rows_per_sheet)?;
                         emit_account_progress(app.as_ref(), &completed, total, account);
                         files.push((start_index + offset, file.to_string_lossy().to_string()));
                     }
@@ -487,6 +499,7 @@ fn generate_account_workbook(
     account: &AccountData,
     settlement_data: &HashMap<String, Vec<SettlementData>>,
     output_dir: &Path,
+    rows_per_sheet: usize,
 ) -> Result<PathBuf, String> {
     let mut channels = account.channels.clone();
     channels.sort();
@@ -510,7 +523,8 @@ fn generate_account_workbook(
     let mut workbook = Workbook::new();
     let formats = SheetFormats::new();
 
-    for (group_index, group_lines) in lines.chunks(6).enumerate() {
+    let chunk_size = if rows_per_sheet == 0 { lines.len().max(1) } else { rows_per_sheet };
+    for (group_index, group_lines) in lines.chunks(chunk_size).enumerate() {
         let worksheet = workbook.add_worksheet();
         worksheet
             .set_name(format!("对账单{}", group_index + 1))
@@ -1013,6 +1027,7 @@ mod tests {
             settlement_path,
             output_dir.clone(),
             None,
+            6,
         )
         .unwrap();
 
@@ -1097,7 +1112,7 @@ mod tests {
         );
 
         let result =
-            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None, 6)
                 .unwrap();
         assert_eq!(result.created, 1);
         assert_eq!(result.channels, 1);
@@ -1142,7 +1157,7 @@ mod tests {
         );
 
         let result =
-            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None, 6)
                 .unwrap();
         let rows = read_first_sheet(Path::new(&result.files[0])).unwrap();
 
@@ -1187,7 +1202,7 @@ mod tests {
         );
 
         let result =
-            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None, 6)
                 .unwrap();
         let unique_files: std::collections::HashSet<_> = result.files.iter().collect();
 
@@ -1228,7 +1243,7 @@ mod tests {
         );
 
         let result =
-            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None, 6)
                 .unwrap();
         let rows = read_first_sheet(Path::new(&result.files[0])).unwrap();
 
@@ -1269,7 +1284,7 @@ mod tests {
         );
 
         let err =
-            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None)
+            generate_settlement_statements_inner(source_path, settlement_path, output_dir, None, 6)
                 .unwrap_err();
         assert!(err.contains("结算金额"));
 
