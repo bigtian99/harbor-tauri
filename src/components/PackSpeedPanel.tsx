@@ -4,9 +4,15 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { notifications } from "@mantine/notifications";
 import { AlertTriangle, CheckCircle, KeyRound, Loader2, LogIn, Rocket } from "lucide-react";
 
-import { isBatchPackUnauthorized, parseSubChannelIds } from "../opsBatchPack";
+import {
+  getBatchPackIdLabel,
+  getBatchPackSubmitText,
+  isBatchPackUnauthorized,
+  parseSubChannelIds,
+} from "../opsBatchPack";
 import { isTauriRuntime } from "../types";
 import type { BatchPackResult } from "../types";
+import type { BatchPackType } from "../opsBatchPack";
 
 interface PackSpeedPanelProps {
   authorization: string;
@@ -16,7 +22,8 @@ interface PackSpeedPanelProps {
 
 interface OpsAuthTokenCapturedPayload {
   token?: string;
-  subChannelIds?: string[];
+  ids?: string[];
+  packType?: BatchPackType;
 }
 
 export function PackSpeedPanel({
@@ -27,6 +34,7 @@ export function PackSpeedPanel({
   const onAuthorizationChangeRef = useRef(onAuthorizationChange);
   const onSaveAuthorizationRef = useRef(onSaveAuthorization);
   const [localAuthorization, setLocalAuthorization] = useState(authorization);
+  const [batchPackType, setBatchPackType] = useState<BatchPackType>("subChannel");
   const [idsText, setIdsText] = useState("");
   const [priority, setPriority] = useState("0");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,11 +64,14 @@ export function PackSpeedPanel({
           return;
         }
 
-        const syncedSubChannelIds = Array.isArray(event.payload.subChannelIds)
-          ? parseSubChannelIds(event.payload.subChannelIds.join("\n"))
+        const syncedIds = Array.isArray(event.payload.ids)
+          ? parseSubChannelIds(event.payload.ids.join("\n"))
           : [];
-        if (syncedSubChannelIds.length > 0) {
-          setIdsText(syncedSubChannelIds.join("\n"));
+        if (syncedIds.length > 0) {
+          setIdsText(syncedIds.join("\n"));
+        }
+        if (event.payload.packType === "subChannel" || event.payload.packType === "vest") {
+          setBatchPackType(event.payload.packType);
         }
 
         setLocalAuthorization(token);
@@ -70,15 +81,15 @@ export function PackSpeedPanel({
           await invoke("close_ops_login_window").catch(() => {});
           notifications.show({
             title: "Authorization 已获取",
-            message: syncedSubChannelIds.length > 0
-              ? `登录 token 已保存，并同步 ${syncedSubChannelIds.length} 个子渠道 ID`
-              : "登录 token 已自动保存",
+            message: syncedIds.length > 0
+              ? `登录 token 已获取，并同步 ${syncedIds.length} 个${getBatchPackIdLabel(event.payload.packType || batchPackType)}`
+              : "登录 token 已在本次运行中可用",
             color: "teal",
             autoClose: 3000,
           });
         } catch (e) {
           notifications.show({
-            title: "保存 token 失败",
+            title: "处理 token 失败",
             message: String(e),
             color: "red",
             autoClose: 6000,
@@ -133,11 +144,12 @@ export function PackSpeedPanel({
     }
   }
 
-  const subChannelIds = parseSubChannelIds(idsText);
+  const ids = parseSubChannelIds(idsText);
   const numericPriority = Number.parseInt(priority || "0", 10);
+  const idLabel = getBatchPackIdLabel(batchPackType);
   const canSubmit =
     localAuthorization.trim() &&
-    subChannelIds.length > 0 &&
+    ids.length > 0 &&
     Number.isFinite(numericPriority) &&
     !isSubmitting;
 
@@ -160,10 +172,10 @@ export function PackSpeedPanel({
       });
       return;
     }
-    if (subChannelIds.length === 0) {
+    if (ids.length === 0) {
       notifications.show({
-        title: "缺少子渠道 ID",
-        message: "请输入至少一个子渠道 ID",
+        title: `缺少${idLabel}`,
+        message: `请输入至少一个${idLabel}`,
         color: "yellow",
         autoClose: 3500,
       });
@@ -176,7 +188,8 @@ export function PackSpeedPanel({
       await onSaveAuthorization(localAuthorization);
       const response = await invoke<BatchPackResult>("batch_pack_sub_channels", {
         authorization: localAuthorization.trim(),
-        subChannelIds,
+        ids,
+        packType: batchPackType,
         priority: numericPriority,
       });
       setResult(response);
@@ -241,17 +254,43 @@ export function PackSpeedPanel({
               自动获取
             </button>
           </div>
-          <p className="template-hint">自动获取会打开内嵌运营后台登录页；点击提交时会自动保存到本地配置。</p>
+          <p className="template-hint">自动获取会打开内嵌运营后台登录页；Authorization 仅本次运行内保留，不会写入本地配置。</p>
         </div>
 
         <div className="form-group">
-          <label>子渠道 ID</label>
+          <label>类型</label>
+          <div className="pack-type-options" role="radiogroup" aria-label="打包加速类型">
+            <label className={`pack-type-option ${batchPackType === "subChannel" ? "active" : ""}`}>
+              <input
+                type="radio"
+                name="batch-pack-type"
+                value="subChannel"
+                checked={batchPackType === "subChannel"}
+                onChange={() => setBatchPackType("subChannel")}
+              />
+              <span>子渠道</span>
+            </label>
+            <label className={`pack-type-option ${batchPackType === "vest" ? "active" : ""}`}>
+              <input
+                type="radio"
+                name="batch-pack-type"
+                value="vest"
+                checked={batchPackType === "vest"}
+                onChange={() => setBatchPackType("vest")}
+              />
+              <span>马甲包</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label>{idLabel}</label>
           <textarea
             value={idsText}
             onChange={(event) => setIdsText(event.currentTarget.value)}
             placeholder={"10593,10594\n或一行一个 ID"}
           />
-          <p className="template-hint">已解析 {subChannelIds.length} 个 ID，支持英文逗号、空格、换行分隔。</p>
+          <p className="template-hint">已解析 {ids.length} 个 ID，支持英文逗号、空格、换行分隔。</p>
         </div>
 
         <div className="form-group">
@@ -274,7 +313,7 @@ export function PackSpeedPanel({
             disabled={!canSubmit}
           >
             {isSubmitting ? <Loader2 size={18} className="spin" /> : <Rocket size={18} />}
-            {isSubmitting ? "提交中..." : "提交打包加速"}
+            {isSubmitting ? "提交中..." : getBatchPackSubmitText(batchPackType)}
           </button>
         </div>
 

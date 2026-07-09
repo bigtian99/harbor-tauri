@@ -38,8 +38,8 @@ export interface HarborConfig {
   npm_registry: string;
   // 打包产物输出目录
   artifact_output_dir: string;
-  // 运营接口 Authorization
-  ops_authorization: string;
+  // 运营接口 Authorization，仅当前运行内保留
+  ops_authorization?: string;
   // 自定义 Dockerfile 附加目录（--build-context tools=）
   custom_docker_extras_dir: string;
   // 历史打包记录

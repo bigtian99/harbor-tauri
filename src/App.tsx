@@ -39,6 +39,10 @@ function prependPathHistory(history: string[] | undefined, path: string): string
   return trimmed ? [trimmed, ...rest].slice(0, 20) : rest;
 }
 
+function withSessionConfigDefaults(config: HarborConfig): HarborConfig {
+  return { ...config, ops_authorization: config.ops_authorization ?? "" };
+}
+
 function App() {
   // ==================== 核心状态 ====================
   const [activeTab, setActiveTab] = useState<TabType>("upload");
@@ -70,7 +74,6 @@ function App() {
     npm_package_manager: "npm",
     npm_registry: "",
     artifact_output_dir: "",
-    ops_authorization: "",
     custom_docker_extras_dir: "",
     build_history: [],
   });
@@ -242,7 +245,7 @@ function App() {
   async function loadConfig() {
     if (!isTauriRuntime()) return;
     try {
-      const savedConfig = await invoke<HarborConfig>("load_config");
+      const savedConfig = withSessionConfigDefaults(await invoke<HarborConfig>("load_config"));
       setConfig(savedConfig);
       setBuildHistory(savedConfig.build_history || []);
       restoreRememberedBranchAdvancedSettings(savedConfig, savedConfig.last_repo_path);
@@ -287,9 +290,8 @@ function App() {
   }
 
   async function handleOpsAuthorizationSave(authorization: string) {
-    const updatedConfig = { ...config, ops_authorization: authorization.trim() };
-    await invoke("save_config", { config: updatedConfig });
-    setConfig(updatedConfig);
+    const token = authorization.trim();
+    setConfig((prev) => ({ ...prev, ops_authorization: token }));
   }
 
   // ==================== 文件和拖拽处理 ====================
@@ -1450,7 +1452,7 @@ function App() {
 
         {activeTab === "packSpeed" && (
           <PackSpeedPanel
-            authorization={config.ops_authorization}
+            authorization={config.ops_authorization ?? ""}
             onAuthorizationChange={(value) => setConfig((prev) => ({ ...prev, ops_authorization: value }))}
             onSaveAuthorization={handleOpsAuthorizationSave}
           />

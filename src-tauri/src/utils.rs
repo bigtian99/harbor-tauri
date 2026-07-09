@@ -39,6 +39,7 @@ pub(crate) fn normalize_config(mut config: HarborConfig) -> HarborConfig {
     ) {
         config.frontend_nginx_template = DEFAULT_FRONTEND_NGINX_TEMPLATE.to_string();
     }
+    config.ops_authorization = None;
     config
 }
 
@@ -683,7 +684,26 @@ pub(crate) fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> 
 
 #[cfg(test)]
 mod tests {
+    use crate::models::HarborConfig;
     use std::path::Path;
+
+    #[test]
+    fn normalize_config_does_not_persist_ops_authorization() {
+        let mut config = HarborConfig::default();
+        config.ops_authorization = Some("secret-token".to_string());
+
+        let normalized = super::normalize_config(config);
+        let serialized = serde_json::to_string(&normalized).expect("serialize config");
+
+        assert!(
+            normalized.ops_authorization.is_none(),
+            "loaded config should not expose a saved ops Authorization token"
+        );
+        assert!(
+            !serialized.contains("ops_authorization"),
+            "saved config should not include an empty ops Authorization field"
+        );
+    }
 
     #[test]
     fn docker_command_helpers_do_not_touch_desktop_gui() {
