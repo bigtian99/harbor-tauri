@@ -2591,6 +2591,15 @@ body::before {
   font-weight: bold;
 }
 
+.history-record-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-left: -2px;
+}
+
 .history-record-info {
   flex: 1;
   min-width: 0;

@@ -112,6 +112,8 @@ export interface BuildRecord {
   status: string;
   log_summary: string;
   full_log: string;
+  author: string;
+  email: string;
 }
 
 export interface SubChannelData {

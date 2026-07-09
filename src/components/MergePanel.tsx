@@ -62,7 +62,6 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
   const [diffLoaded, setDiffLoaded] = useState(false);
   const [diffError, setDiffError] = useState("");
   const [diffCommitSearch, setDiffCommitSearch] = useState("");
-  const [diffAuthors, setDiffAuthors] = useState<AuthorInfo[]>([]);
   const [selectedAuthor, setSelectedAuthor] = useState("");
   const [mergeOverlayPhase, setMergeOverlayPhase] = useState<MergeOverlayPhase>("idle");
   const [mergeProgress, setMergeProgress] = useState(0);
@@ -142,7 +141,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
     setDiffLoaded(false);
     setDiffError("");
     setDiffCommitSearch("");
-    setDiffAuthors([]);
+
     setSelectedAuthor("");
   }, []);
 
@@ -216,12 +215,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
       .finally(() => {
         setDiffLoaded(true);
       });
-    const authorsP = invoke<AuthorInfo[]>("get_commit_authors", {
-      repoPath: resolvedRepoPath,
-      branch: sourceBranch,
-    }).then((list) => setDiffAuthors(list))
-      .catch(() => { /* 非关键路径，忽略失败 */ });
-    await Promise.all([checkP, diffP, authorsP]);
+    await Promise.all([checkP, diffP]);
     setIsChecking(false);
     setIsLoadingDiff(false);
   }, [resolvedRepoPath, sourceBranch, targetBranch]);
@@ -303,6 +297,19 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
   const hasNoDiff = Boolean(
     diffLoaded && !diffError && diffCommits.length === 0 && sourceBranch && targetBranch
   );
+  const diffAuthors = useMemo(() => {
+    const map = new Map<string, AuthorInfo>();
+    for (const c of diffCommits) {
+      const existing = map.get(c.author);
+      if (existing) {
+        existing.count++;
+      } else {
+        map.set(c.author, { name: c.author, email: c.email, count: 1 });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [diffCommits]);
+
   const filteredDiffCommits = useMemo(() => {
     let list = diffCommits;
     if (selectedAuthor) {
@@ -434,7 +441,6 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                 setDiffLoaded(false);
                 setDiffError("");
                 setDiffCommitSearch("");
-                setDiffAuthors([]);
                 setSelectedAuthor("");
               }}
               placeholder={isLoadingBranches ? "加载中..." : branchNames.length === 0 ? "请先选择仓库并刷新分支" : "选择源分支（如 origin/feature）..."}
@@ -459,7 +465,6 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                 setDiffLoaded(false);
                 setDiffError("");
                 setDiffCommitSearch("");
-                setDiffAuthors([]);
                 setSelectedAuthor("");
               }}
               placeholder={isLoadingBranches ? "加载中..." : branchNames.length === 0 ? "请先选择仓库并刷新分支" : "选择目标分支（如 origin/master）..."}

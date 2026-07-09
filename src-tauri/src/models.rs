@@ -151,6 +151,8 @@ pub struct BuildRecord {
     pub(crate) status: String,
     pub(crate) log_summary: String,
     pub(crate) full_log: String,
+    pub(crate) author: String,
+    pub(crate) email: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

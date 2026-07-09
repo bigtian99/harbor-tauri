@@ -5,7 +5,7 @@ use crate::history::save_build_record_direct;
 use crate::models::{ArtifactType, BuildRecord, DockerBuildContext, PackageFromBranchResult, PackageProjectType};
 use crate::utils::{
     cleanup_old_temp_dirs, command_output_text, copy_artifact_to_output_internal,
-    detect_npm_build_script, lock_file_hash, repo_root_for, run_command,
+    detect_npm_build_script, git_output, lock_file_hash, repo_root_for, run_command,
     save_node_modules_to_cache, silent_command, silent_docker_command, try_restore_node_modules,
     CANCEL_FLAG, CURRENT_PID,
 };
@@ -809,6 +809,22 @@ pub async fn package_from_branch(
     let log_summary = log.lines().take(3).collect::<Vec<_>>().join(" ");
     let duration_ms = start_time.elapsed().as_millis() as u64;
 
+    // 获取最后提交人信息（用于历史记录显示头像）
+    let (author, email) = repo_root_for(&repo_path)
+        .ok()
+        .and_then(|root| {
+            git_output(&root, &["log", "-1", "--format=%an%n%ae", &branch]).ok()
+        })
+        .and_then(|output| {
+            let lines: Vec<&str> = output.lines().collect();
+            if lines.len() >= 2 {
+                Some((lines[0].to_string(), lines[1].to_string()))
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+
     let record = BuildRecord {
         id: record_id,
         timestamp,
@@ -829,6 +845,8 @@ pub async fn package_from_branch(
         status: "success".to_string(),
         log_summary,
         full_log: log.clone(),
+        author,
+        email,
     };
 
     if let Err(e) = save_build_record_direct(record) {
