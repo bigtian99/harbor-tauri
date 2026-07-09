@@ -8,7 +8,7 @@ import {
   ArrowRight, GitBranch, GitCommit, ExternalLink, Info, Search
 } from "lucide-react";
 import { SearchableDropdown } from "./SearchableDropdown";
-import type { HarborConfig, GitBranchOption, LocalMergeCheck, RemoteBranchListResult, CommitInfo } from "../types";
+import type { HarborConfig, GitBranchOption, LocalMergeCheck, RemoteBranchListResult, CommitInfo, AuthorInfo } from "../types";
 import { isTauriRuntime } from "../types";
 
 interface MergePanelProps {
@@ -17,6 +17,23 @@ interface MergePanelProps {
 }
 
 type MergeOverlayPhase = "idle" | "running" | "success" | "error";
+
+function gravatarUrl(email: string, size = 40): string {
+  // ponytail: simple md5 hash — inline to avoid pulling a crypto dep
+  const normalized = email.trim().toLowerCase();
+  let hash = "";
+  for (let i = 0; i < normalized.length; i++) {
+    hash += ("0" + normalized.charCodeAt(i).toString(16)).slice(-2);
+  }
+  // Simple string hash (not md5, but good enough for unique colors)
+  let h = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    h = ((h << 5) - h) + normalized.charCodeAt(i);
+    h |= 0;
+  }
+  const color = Math.abs(h).toString(16).slice(0, 6);
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(normalized)}&size=${size}&background=${color}&color=fff`;
+}
 
 function summarizeMergeError(error: unknown): string {
   const msg = String(error).trim();
@@ -45,6 +62,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
   const [diffLoaded, setDiffLoaded] = useState(false);
   const [diffError, setDiffError] = useState("");
   const [diffCommitSearch, setDiffCommitSearch] = useState("");
+  const [diffAuthors, setDiffAuthors] = useState<AuthorInfo[]>([]);
+  const [selectedAuthor, setSelectedAuthor] = useState("");
   const [mergeOverlayPhase, setMergeOverlayPhase] = useState<MergeOverlayPhase>("idle");
   const [mergeProgress, setMergeProgress] = useState(0);
   const [mergeProgressMessage, setMergeProgressMessage] = useState("");
@@ -123,6 +142,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
     setDiffLoaded(false);
     setDiffError("");
     setDiffCommitSearch("");
+    setDiffAuthors([]);
+    setSelectedAuthor("");
   }, []);
 
   const onSelectRepo = useCallback(async () => {
@@ -195,7 +216,12 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
       .finally(() => {
         setDiffLoaded(true);
       });
-    await Promise.all([checkP, diffP]);
+    const authorsP = invoke<AuthorInfo[]>("get_commit_authors", {
+      repoPath: resolvedRepoPath,
+      branch: sourceBranch,
+    }).then((list) => setDiffAuthors(list))
+      .catch(() => { /* 非关键路径，忽略失败 */ });
+    await Promise.all([checkP, diffP, authorsP]);
     setIsChecking(false);
     setIsLoadingDiff(false);
   }, [resolvedRepoPath, sourceBranch, targetBranch]);
@@ -278,16 +304,22 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
     diffLoaded && !diffError && diffCommits.length === 0 && sourceBranch && targetBranch
   );
   const filteredDiffCommits = useMemo(() => {
+    let list = diffCommits;
+    if (selectedAuthor) {
+      list = list.filter((c) => c.author === selectedAuthor);
+    }
     const q = diffCommitSearch.trim().toLowerCase();
-    if (!q) return diffCommits;
-    return diffCommits.filter((c) =>
-      c.hash.toLowerCase().includes(q) ||
-      c.short_hash.toLowerCase().includes(q) ||
-      c.message.toLowerCase().includes(q) ||
-      c.author.toLowerCase().includes(q) ||
-      c.date.toLowerCase().includes(q)
-    );
-  }, [diffCommits, diffCommitSearch]);
+    if (q) {
+      list = list.filter((c) =>
+        c.hash.toLowerCase().includes(q) ||
+        c.short_hash.toLowerCase().includes(q) ||
+        c.message.toLowerCase().includes(q) ||
+        c.author.toLowerCase().includes(q) ||
+        c.date.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [diffCommits, diffCommitSearch, selectedAuthor]);
   const diffCountLabel = isLoadingDiff
     ? "加载中..."
     : diffCommitSearch.trim()
@@ -402,6 +434,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                 setDiffLoaded(false);
                 setDiffError("");
                 setDiffCommitSearch("");
+                setDiffAuthors([]);
+                setSelectedAuthor("");
               }}
               placeholder={isLoadingBranches ? "加载中..." : branchNames.length === 0 ? "请先选择仓库并刷新分支" : "选择源分支（如 origin/feature）..."}
               disabled={branchNames.length === 0}
@@ -425,6 +459,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                 setDiffLoaded(false);
                 setDiffError("");
                 setDiffCommitSearch("");
+                setDiffAuthors([]);
+                setSelectedAuthor("");
               }}
               placeholder={isLoadingBranches ? "加载中..." : branchNames.length === 0 ? "请先选择仓库并刷新分支" : "选择目标分支（如 origin/master）..."}
               disabled={branchNames.length === 0}
@@ -496,6 +532,40 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                 {sourceBranch} → {targetBranch}
               </span>
             </div>
+
+            {diffAuthors.length > 0 && (
+              <div className="merge-authors-row">
+                <span className="merge-authors-label">共 {diffAuthors.length} 人提交：</span>
+                {diffAuthors.map((a) => (
+                  <button
+                    key={a.name}
+                    type="button"
+                    className={`merge-author-pill${selectedAuthor === a.name ? " merge-author-pill--active" : ""}`}
+                    title={`${a.name} · ${a.count} 次提交`}
+                    onClick={() => setSelectedAuthor(selectedAuthor === a.name ? "" : a.name)}
+                  >
+                    <img
+                      src={gravatarUrl(a.email || a.name, 24)}
+                      alt={a.name}
+                      className="merge-author-avatar"
+                    />
+                    <span className="merge-author-name">{a.name}</span>
+                    <span className="merge-author-count">{a.count}</span>
+                  </button>
+                ))}
+                {selectedAuthor && (
+                  <button
+                    type="button"
+                    className="merge-author-clear"
+                    onClick={() => setSelectedAuthor("")}
+                    title="清除筛选"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+
             {isLoadingDiff ? (
               <div className="merge-diff-loading"><Loader2 size={16} className="spin" /> 加载提交中...</div>
             ) : diffError ? (

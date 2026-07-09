@@ -52,14 +52,14 @@ pub async fn get_last_commit(
         };
         let output = git_output(
             &repo_root,
-            &["log", "-1", "--format=%H%n%s%n%an%n%ai", &rev],
+            &["log", "-1", "--format=%H%n%s%n%an%n%ae%n%ai", &rev],
         )?;
         let lines: Vec<&str> = output.lines().collect();
-        if lines.len() < 4 {
+        if lines.len() < 5 {
             return Err("无法解析提交信息".to_string());
         }
         // 将 ISO 8601 日期转换为本地时间格式
-        let date_str = lines[3].to_string();
+        let date_str = lines[4].to_string();
         let formatted_date = chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
             .map(|dt| {
                 let local: chrono::DateTime<chrono::Local> = dt.with_timezone(&chrono::Local);
@@ -102,23 +102,28 @@ pub async fn get_commit_authors(
             branch.trim().to_string()
         };
 
-        // 获取所有提交的作者信息
-        let output = git_output(&repo_root, &["log", "--format=%an", &rev])?;
+        // 获取所有提交的作者信息（名字和邮箱）
+        let output = git_output(&repo_root, &["log", "--format=%an%n%ae", &rev])?;
 
-        // 统计每个作者的提交次数
-        let mut author_counts: std::collections::HashMap<String, usize> =
+        // 统计每个 (名字, 邮箱) 的提交次数，取最新的名字
+        let mut author_counts: std::collections::HashMap<(String, String), usize> =
             std::collections::HashMap::new();
-        for line in output.lines() {
-            let author = line.trim().to_string();
-            if !author.is_empty() {
-                *author_counts.entry(author).or_insert(0) += 1;
+        let lines: Vec<&str> = output.lines().collect();
+        for chunk in lines.chunks(2) {
+            if chunk.len() < 2 {
+                continue;
+            }
+            let name = chunk[0].trim().to_string();
+            let email = chunk[1].trim().to_string();
+            if !name.is_empty() {
+                *author_counts.entry((name, email)).or_insert(0) += 1;
             }
         }
 
         // 转换为 AuthorInfo 列表并按提交次数排序
         let mut authors: Vec<AuthorInfo> = author_counts
             .into_iter()
-            .map(|(name, count)| AuthorInfo { name, count })
+            .map(|((name, email), count)| AuthorInfo { name, email, count })
             .collect();
         authors.sort_by(|a, b| b.count.cmp(&a.count));
 
@@ -159,7 +164,7 @@ pub async fn get_commit_list(
         // 构建 git log 命令，支持搜索
         let mut git_args = vec![
             "log".to_string(),
-            "--format=%H%n%s%n%an%n%ai".to_string(),
+            "--format=%H%n%s%n%an%n%ae%n%ai".to_string(),
             rev.clone(),
         ];
 
@@ -199,15 +204,16 @@ pub async fn get_commit_list(
 
         let mut commits = Vec::new();
         let lines: Vec<&str> = output.lines().collect();
-        for chunk in lines.chunks(4) {
-            if chunk.len() < 4 {
+        for chunk in lines.chunks(5) {
+            if chunk.len() < 5 {
                 continue;
             }
             let hash = chunk[0].to_string();
             let short_hash = hash[..8.min(hash.len())].to_string();
             let message = chunk[1].to_string();
             let author = chunk[2].to_string();
-            let date_str = chunk[3].to_string();
+            let email = chunk[3].to_string();
+            let date_str = chunk[4].to_string();
 
             let formatted_date =
                 chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
@@ -227,6 +233,7 @@ pub async fn get_commit_list(
                 short_hash,
                 message,
                 author,
+                email,
                 date: formatted_date,
                 url,
             });
@@ -277,7 +284,7 @@ pub async fn list_branch_diff_commits(
         let rev_range = format!("{target}..{source}");
         let output = git_output(
             &repo_root,
-            &["log", "-50", "--format=%H%n%s%n%an%n%ai", &rev_range],
+            &["log", "-50", "--format=%H%n%s%n%an%n%ae%n%ai", &rev_range],
         )?;
         let remote_url = git_output(&repo_root, &["remote", "get-url", "origin"])
             .ok()
@@ -285,15 +292,16 @@ pub async fn list_branch_diff_commits(
 
         let mut commits = Vec::new();
         let lines: Vec<&str> = output.lines().collect();
-        for chunk in lines.chunks(4) {
-            if chunk.len() < 4 {
+        for chunk in lines.chunks(5) {
+            if chunk.len() < 5 {
                 continue;
             }
             let hash = chunk[0].to_string();
             let short_hash = hash[..8.min(hash.len())].to_string();
             let message = chunk[1].to_string();
             let author = chunk[2].to_string();
-            let date_str = chunk[3].to_string();
+            let email = chunk[3].to_string();
+            let date_str = chunk[4].to_string();
             let formatted_date =
                 chrono::DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z")
                     .map(|dt| {
@@ -309,6 +317,7 @@ pub async fn list_branch_diff_commits(
                 short_hash,
                 message,
                 author,
+                email,
                 date: formatted_date,
                 url,
             });

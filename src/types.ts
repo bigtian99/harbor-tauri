@@ -74,6 +74,7 @@ export interface CommitInfo {
   short_hash: string;
   message: string;
   author: string;
+  email: string;
   date: string;
   url: string | null;
 }
@@ -87,6 +88,7 @@ export interface CommitListResult {
 
 export interface AuthorInfo {
   name: string;
+  email: string;
   count: number;
 }
 

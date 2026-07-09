@@ -110,6 +110,7 @@ pub(crate) struct CommitInfo {
     pub(crate) short_hash: String,
     pub(crate) message: String,
     pub(crate) author: String,
+    pub(crate) email: String,
     pub(crate) date: String,
     pub(crate) url: Option<String>,
 }
@@ -125,6 +126,7 @@ pub(crate) struct CommitListResult {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuthorInfo {
     pub(crate) name: String,
+    pub(crate) email: String,
     pub(crate) count: usize,
 }
 

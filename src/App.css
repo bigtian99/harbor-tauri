@@ -3204,6 +3204,89 @@ body::before {
   flex-shrink: 0;
 }
 
+/* 合并面板作者头像行 */
+.merge-authors-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.merge-authors-label {
+  font-size: 0.8em;
+  color: var(--muted, #8892b0);
+  margin-right: 4px;
+}
+
+.merge-author-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 4px;
+  border-radius: 20px;
+  border: 1px solid rgba(100, 255, 218, 0.15);
+  background: rgba(15, 52, 96, 0.25);
+  color: var(--text, #e6f1ff);
+  cursor: pointer;
+  font-size: 0.8em;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.merge-author-pill:hover {
+  border-color: rgba(100, 255, 218, 0.4);
+  background: rgba(100, 255, 218, 0.08);
+}
+
+.merge-author-pill--active {
+  border-color: rgba(100, 255, 218, 0.65);
+  background: rgba(100, 255, 218, 0.12);
+  box-shadow: 0 0 8px rgba(100, 255, 218, 0.15);
+}
+
+.merge-author-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.merge-author-name {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merge-author-count {
+  color: var(--muted, #8892b0);
+  font-size: 0.85em;
+  background: rgba(100, 255, 218, 0.08);
+  border-radius: 10px;
+  padding: 0 5px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.merge-author-clear {
+  border: none;
+  background: rgba(255, 107, 107, 0.15);
+  color: #ff6b6b;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75em;
+  transition: background 0.15s;
+}
+
+.merge-author-clear:hover {
+  background: rgba(255, 107, 107, 0.3);
+}
+
 /* 分支合并进度遮罩（居中） */
 .merge-progress-overlay {
   position: fixed;
