@@ -112,7 +112,9 @@ pub async fn generate_landing_pages(
         if let Ok(entries) = fs::read_dir(template_base_path) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name == channel.type_code || name.starts_with(&format!("{}-", channel.type_code)) {
+                let name_lower = name.to_lowercase();
+                let tc_lower = channel.type_code.to_lowercase();
+                if name_lower == tc_lower || name_lower.starts_with(&format!("{}-", tc_lower)) {
                     if entry.path().is_dir() {
                         template_dirs.push(entry.path());
                     }
