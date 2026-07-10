@@ -14,6 +14,7 @@ import { PushImagePanel } from "./components/PushImagePanel";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { SettlementPanel } from "./components/SettlementPanel";
 import { PackSpeedPanel } from "./components/PackSpeedPanel";
+import { UpdateModal, type UpdateInfo } from "./components/UpdateModal";
 import { useLanding } from "./hooks/useLanding";
 import "./App.css";
 
@@ -77,6 +78,10 @@ function App() {
     custom_docker_extras_dir: "",
     build_history: [],
   });
+
+  // ==================== 更新检查状态 ====================
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
   // ==================== 上传推送状态 ====================
   const [artifactType, setArtifactType] = useState<ArtifactType>("jar");
@@ -1180,6 +1185,23 @@ function App() {
     checkBranchDockerfile();
   }, [repoPath, branchName]);
 
+  // 启动 2 秒后检查更新（不阻塞首屏渲染）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      invoke<UpdateInfo>("check_update")
+        .then((info) => {
+          if (info.needs_update && info.download_url) {
+            setUpdateInfo(info);
+            setUpdateModalOpen(true);
+          }
+        })
+        .catch(() => {
+          // 网络不通或 API 异常 → 静默跳过，不影响正常使用
+        });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // ==================== 分支打包回调 ====================
   function handleBranchProjectTypeChange(type: BranchProjectType) {
     setBranchProjectType(type);
@@ -1556,6 +1578,12 @@ function App() {
           {toast.message}
         </div>
       )}
+
+      <UpdateModal
+        opened={updateModalOpen}
+        onClose={() => setUpdateModalOpen(false)}
+        updateInfo={updateInfo}
+      />
     </div>
   );
 }
