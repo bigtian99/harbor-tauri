@@ -253,19 +253,32 @@ export function LandingPanel({
           </Group>
 
           {/* 模式切换 */}
-          <Group gap="xs" mb="xs">
+          <Group gap={0} mb="xs">
             <Button
               size="xs"
-              variant={landingMode === "sub_channel" ? "filled" : "outline"}
-              color={landingMode === "sub_channel" ? "teal" : "gray"}
+              variant="filled"
+              style={{
+                borderRadius: "6px 0 0 6px",
+                background: landingMode === "sub_channel" ? "#5eead4" : "#1a2332",
+                color: landingMode === "sub_channel" ? "#0a0f1a" : "#8892b0",
+                border: "1px solid #2a3a5c",
+                fontWeight: landingMode === "sub_channel" ? 700 : 400,
+              }}
               onClick={() => setLandingMode("sub_channel")}
             >
               子渠道
             </Button>
             <Button
               size="xs"
-              variant={landingMode === "vest" ? "filled" : "outline"}
-              color={landingMode === "vest" ? "teal" : "gray"}
+              variant="filled"
+              style={{
+                borderRadius: "0 6px 6px 0",
+                background: landingMode === "vest" ? "#5eead4" : "#1a2332",
+                color: landingMode === "vest" ? "#0a0f1a" : "#8892b0",
+                border: "1px solid #2a3a5c",
+                borderLeft: "none",
+                fontWeight: landingMode === "vest" ? 700 : 400,
+              }}
               onClick={() => setLandingMode("vest")}
             >
               马甲包
