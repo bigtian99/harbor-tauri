@@ -516,6 +516,80 @@ body::before {
   line-height: 1.5;
 }
 
+.location-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+
+.location-row input {
+  flex: 1;
+  min-width: 0;
+  background: #0a0f1a;
+  border: 1px solid #1e2a3d;
+  border-radius: 8px;
+  color: #ccd6f6;
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.location-row input:focus {
+  border-color: #64ffda;
+}
+
+.location-row input::placeholder {
+  color: #5a6577;
+  font-size: 12px;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: #64ffda;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background: rgba(100, 255, 218, 0.1);
+}
+
+.icon-btn.danger {
+  color: #ff6b6b;
+}
+
+.icon-btn.danger:hover {
+  background: rgba(255, 107, 107, 0.15);
+}
+
+.add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px dashed #2a3a5c;
+  color: #64ffda;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 4px;
+}
+
+.add-btn:hover {
+  border-color: #64ffda;
+  background: rgba(100, 255, 218, 0.05);
+}
+
 .build-btn {
   width: 100%;
   margin-top: 12px;
@@ -2996,6 +3070,134 @@ body::before {
   word-break: break-all;
 }
 
+.conflict-file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: #ff6b6b;
+  cursor: pointer;
+  font-size: inherit;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-align: left;
+  word-break: break-all;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.conflict-file-btn:hover {
+  background: rgba(255, 107, 107, 0.1);
+  color: #ff4444;
+}
+
+/* 冲突文件左右对比 */
+.merge-conflict-compare-modal {
+  max-width: 78vw;
+  width: 78vw;
+  max-height: 82vh;
+}
+
+.merge-conflict-compare {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.merge-conflict-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.merge-conflict-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: #e0e0e0;
+  background: rgba(100, 255, 218, 0.06);
+  border-bottom: 1px solid rgba(100, 255, 218, 0.12);
+  flex-shrink: 0;
+}
+
+.merge-conflict-role-tag {
+  font-size: 0.72em;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: rgba(100, 255, 218, 0.15);
+  color: #64ffda;
+  margin-left: 4px;
+}
+
+.merge-conflict-role-tag--source {
+  background: rgba(255, 165, 0, 0.15);
+  color: #ffa500;
+}
+
+.merge-conflict-content {
+  flex: 1;
+  overflow: auto;
+  font-size: 0.78em;
+  line-height: 1.55;
+  font-family: "Fira Code", "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  tab-size: 4;
+  color: #c9d1d9;
+  background: #0d1117;
+}
+
+.merge-conflict-line {
+  display: flex;
+  min-height: 1.55em;
+  white-space: pre;
+}
+
+.merge-conflict-line--removed {
+  background: rgba(255, 107, 107, 0.15);
+  border-left: 3px solid #ff6b6b;
+}
+
+.merge-conflict-line--added {
+  background: rgba(100, 255, 150, 0.1);
+  border-left: 3px solid #64ff96;
+}
+
+.merge-conflict-line--active {
+  background: rgba(100, 200, 255, 0.2) !important;
+  border-left: 3px solid #64c8ff !important;
+  box-shadow: inset 0 0 0 1px rgba(100, 200, 255, 0.3);
+}
+
+.merge-conflict-ln {
+  display: inline-block;
+  min-width: 3.2em;
+  padding: 0 10px 0 6px;
+  text-align: right;
+  color: rgba(140, 150, 165, 0.5);
+  user-select: none;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(100, 255, 218, 0.08);
+  margin-right: 8px;
+}
+
+.merge-conflict-text {
+  flex: 1;
+  overflow: hidden;
+}
+
+.merge-conflict-divider {
+  width: 1px;
+  flex-shrink: 0;
+  background: rgba(100, 255, 218, 0.15);
+}
+
 .pr-state {
   display: inline-flex;
   align-items: center;
@@ -3180,6 +3382,15 @@ body::before {
   border-radius: 8px;
   background: rgba(15, 52, 96, 0.24);
   border: 1px solid rgba(100, 255, 218, 0.08);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.merge-diff-item:hover,
+.merge-diff-item:focus-visible {
+  border-color: rgba(100, 255, 218, 0.35);
+  background: rgba(15, 52, 96, 0.38);
+  outline: none;
 }
 
 .merge-diff-item-main {
@@ -3211,6 +3422,11 @@ body::before {
   font-size: 0.76em;
   color: var(--muted, #8892b0);
   flex-shrink: 0;
+}
+
+.merge-diff-item-action {
+  color: var(--primary, #64ffda);
+  font-weight: 600;
 }
 
 /* 合并面板作者头像行 */

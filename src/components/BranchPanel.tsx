@@ -1,13 +1,13 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   FileText, Package, CheckCircle, Copy, Loader2, Eye, EyeOff,
-  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User
+  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User, Plus, Trash2
 } from "lucide-react";
 import { SearchableDropdown } from "./SearchableDropdown";
 import "./Modal.css";
 import type {
   BranchProjectType, HarborConfig,
-  GitBranchOption, LastCommitInfo, CommitInfo, AuthorInfo
+  GitBranchOption, LastCommitInfo, CommitInfo, AuthorInfo, NginxLocationBlock
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
@@ -49,6 +49,7 @@ interface BranchPanelProps {
   imageName: string;
   imageTag: string;
   exposePort: string;
+  nginxLocations: NginxLocationBlock[];
   // 高级设置
   showAdvancedSettings: boolean;
   // 配置
@@ -89,6 +90,7 @@ interface BranchPanelProps {
   setImageName: (name: string) => void;
   setImageTag: (tag: string) => void;
   setExposePort: (port: string) => void;
+  onNginxLocationsChange: (locations: NginxLocationBlock[]) => void;
   setShowAdvancedSettings: (show: boolean) => void;
   setShowBuildLog: (show: boolean) => void;
   renderLog: (text: string) => React.ReactNode;
@@ -101,7 +103,7 @@ export function BranchPanel({
   lastCommit, isLoadingCommit, commitList, commitListTotal, showCommitListModal,
   artifactPath, backendArtifactPath, worktreePath, customDockerfile, branchHasDockerfile,
   isBuilding, autoPushImage, branchFullImage, branchImageResults, imageName, imageTag, exposePort,
-  showAdvancedSettings, config,
+  nginxLocations, showAdvancedSettings, config,
   progress, progressMessage, log, showBuildLog, copied,
   onBranchProjectTypeChange, onRepoPathChange, onSelectRepo, onRefreshBranches,
   onBranchChange, onFrontendDirChange, onSelectedBuildScriptChange,
@@ -110,7 +112,7 @@ export function BranchPanel({
   commitAuthors, isLoadingCommitList, commitListPage, commitListPageSize,
   commitAuthorFilter, commitMessageFilter, setCommitAuthorFilter, setCommitMessageFilter,
   onPackageFromBranch, onCancelBuild, onOpenDirectory, onCopyImage,
-  setImageName, setImageTag, setExposePort, setShowAdvancedSettings, setShowBuildLog,
+  setImageName, setImageTag, setExposePort, onNginxLocationsChange, setShowAdvancedSettings, setShowBuildLog,
   renderLog,
 }: BranchPanelProps) {
   const showProgress = shouldShowBranchProgress(isBuilding, log, progress);
@@ -392,6 +394,68 @@ export function BranchPanel({
                   />
                   <p className="template-hint">留空则自动生成 分支名-v.YY.MM.DD.HH.MM</p>
                 </div>
+                {branchProjectType === "npm" && (
+                  <div className="form-group">
+                    <label>nginx Location 代理</label>
+                    {(nginxLocations ?? []).map((loc, i) => (
+                      <div key={i} className="location-row">
+                        <input
+                          type="text"
+                          placeholder="路径, 如 /test-api/"
+                          value={loc.path}
+                          onChange={(e) => {
+                            const next = [...(nginxLocations ?? [])];
+                            next[i] = { ...next[i], path: e.target.value };
+                            onNginxLocationsChange(next);
+                          }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="proxy_pass"
+                          value={loc.proxy_pass}
+                          onChange={(e) => {
+                            const next = [...(nginxLocations ?? [])];
+                            next[i] = { ...next[i], proxy_pass: e.target.value };
+                            onNginxLocationsChange(next);
+                          }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Host (可选)"
+                          value={loc.host}
+                          onChange={(e) => {
+                            const next = [...(nginxLocations ?? [])];
+                            next[i] = { ...next[i], host: e.target.value };
+                            onNginxLocationsChange(next);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="icon-btn danger"
+                          title="删除"
+                          onClick={() => {
+                            const next = [...(nginxLocations ?? [])];
+                            next.splice(i, 1);
+                            onNginxLocationsChange(next);
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="add-btn"
+                      onClick={() => {
+                        const next = [...(nginxLocations ?? []), { path: "", proxy_pass: "", host: "" }];
+                        onNginxLocationsChange(next);
+                      }}
+                    >
+                      <Plus size={14} /> 添加 Location
+                    </button>
+                    <p className="template-hint">配置的代理会注入到 nginx.conf 的 {"{{CUSTOM_LOCATIONS}}"} 位置</p>
+                  </div>
+                )}
               </>
             )}
           </div>

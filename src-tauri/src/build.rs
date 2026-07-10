@@ -2,7 +2,7 @@ use crate::config_cmd::load_config_sync;
 use crate::docker::{prepare_custom_docker_context, prepare_frontend_dist_context, prepare_jar_context};
 use crate::git::{cleanup_worktree, find_maven_artifact, find_npm_artifact};
 use crate::history::save_build_record_direct;
-use crate::models::{ArtifactType, BuildRecord, DockerBuildContext, PackageFromBranchResult, PackageProjectType};
+use crate::models::{ArtifactType, BuildRecord, DockerBuildContext, NginxLocationBlock, PackageFromBranchResult, PackageProjectType};
 use crate::utils::{
     cleanup_old_temp_dirs, command_output_text, copy_artifact_to_output_internal,
     detect_npm_build_script, git_output, lock_file_hash, repo_root_for, run_command,
@@ -957,6 +957,7 @@ pub async fn build_and_push(
     dockerfile_path: Option<String>,
     dockerfile_context: Option<String>,
     expose_port: Option<String>,
+    nginx_locations: Vec<NginxLocationBlock>,
 ) -> Result<String, String> {
     reset_cancel_flag();
     let mut config = load_config_sync()?;
@@ -1038,6 +1039,7 @@ pub async fn build_and_push(
                 &image_name_lower,
                 &final_tag,
                 &full_image,
+                &nginx_locations,
             )?
         } else {
             return Err(format!("自定义Dockerfile不存在: {}", df_path));
@@ -1051,6 +1053,7 @@ pub async fn build_and_push(
                 &image_name_lower,
                 &final_tag,
                 &full_image,
+                &nginx_locations,
             )?,
         }
     };

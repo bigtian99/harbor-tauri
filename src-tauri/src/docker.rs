@@ -1,7 +1,27 @@
-use crate::models::{ArtifactType, DockerBuildContext, HarborConfig};
+use crate::models::{ArtifactType, DockerBuildContext, HarborConfig, NginxLocationBlock};
 use crate::utils::{copy_dir_contents, create_temp_build_dir, docker_json_string, find_project_nginx, render_template};
 use std::fs;
 use std::path::Path;
+
+fn render_nginx_locations(locations: &[NginxLocationBlock]) -> String {
+    if locations.is_empty() {
+        return String::new();
+    }
+    locations.iter().fold(String::new(), |mut acc, loc| {
+        use std::fmt::Write;
+        let _ = writeln!(acc);
+        let _ = writeln!(acc, "    location {} {{", loc.path);
+        let _ = writeln!(acc, "        proxy_pass {};", loc.proxy_pass);
+        if !loc.host.is_empty() {
+            let _ = writeln!(acc, "        proxy_set_header Host {};", loc.host);
+        }
+        let _ = writeln!(acc, "        proxy_set_header X-Real-IP $remote_addr;");
+        let _ = writeln!(acc, "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;");
+        let _ = writeln!(acc, "        proxy_set_header X-Forwarded-Proto $scheme;");
+        let _ = writeln!(acc, "    }}");
+        acc
+    })
+}
 
 /// 拼接 tools 的 --build-context 片段（如 `--build-context tools=/path/tools`），未配置则返回空
 #[allow(dead_code)]
@@ -22,6 +42,7 @@ pub(crate) fn prepare_custom_docker_context(
     image_name: &str,
     image_tag: &str,
     full_image: &str,
+    nginx_locations: &[NginxLocationBlock],
 ) -> Result<DockerBuildContext, String> {
     let context_dir = create_temp_build_dir()?;
 
@@ -72,6 +93,7 @@ pub(crate) fn prepare_custom_docker_context(
             // nginx.conf 优先级：项目自带 > 兜底模板
             let nginx_content = find_project_nginx(artifact_path)
                 .unwrap_or_else(|| render_template(&config.frontend_nginx_template, &replacements));
+            let nginx_content = nginx_content.replace("{{CUSTOM_LOCATIONS}}", &render_nginx_locations(nginx_locations));
             fs::write(&nginx_path, nginx_content)
                 .map_err(|e| format!("写入nginx配置失败: {}", e))?;
 
@@ -136,6 +158,7 @@ pub(crate) fn prepare_frontend_dist_context(
     image_name: &str,
     image_tag: &str,
     full_image: &str,
+    nginx_locations: &[NginxLocationBlock],
 ) -> Result<DockerBuildContext, String> {
     if !artifact_path.is_dir() {
         return Err(format!(
@@ -180,6 +203,7 @@ pub(crate) fn prepare_frontend_dist_context(
         .unwrap_or_else(|| {
             render_template(&config.frontend_nginx_template, &replacements)
         });
+    let nginx_content = nginx_content.replace("{{CUSTOM_LOCATIONS}}", &render_nginx_locations(nginx_locations));
 
     if let Err(error) = fs::write(&dockerfile_path, dockerfile_content) {
         fs::remove_dir_all(&context_dir).ok();

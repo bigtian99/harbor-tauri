@@ -7,6 +7,13 @@ export type TabType = "upload" | "push" | "branch" | "config" | "history" | "lan
 export interface BranchRepoSettings {
   springProfile: string;
   exposePort: string;
+  nginxLocations: NginxLocationBlock[];
+}
+
+export interface NginxLocationBlock {
+  path: string;
+  proxy_pass: string;
+  host: string;
 }
 
 export interface HarborConfig {
@@ -84,6 +91,11 @@ export interface CommitListResult {
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface CommitDiffResult {
+  hash: string;
+  diff: string;
 }
 
 export interface AuthorInfo {
@@ -182,6 +194,16 @@ export interface LocalMergeCheck {
   message: string;
 }
 
+export interface MergeConflictDetail {
+  filePath: string;
+  /** target 分支中的文件内容 */
+  targetContent: string;
+  /** source 分支中的文件内容 */
+  sourceContent: string;
+  /** git diff target..source -- <file> 的输出，用于前端提取变更行 */
+  diff: string;
+}
+
 export interface RemoteBranchListResult {
   /** 实际使用的本地仓库路径（Git URL 输入时为缓存克隆目录） */
   repoPath: string;
@@ -223,6 +245,8 @@ export const DEFAULT_FRONTEND_NGINX_TEMPLATE = `server {
     location = /index.html {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
+
+{{CUSTOM_LOCATIONS}}
 }
 `;
 

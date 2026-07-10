@@ -36,6 +36,8 @@ pub(crate) const DEFAULT_FRONTEND_NGINX_TEMPLATE: &str = r#"server {
     location = /index.html {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
+
+{{CUSTOM_LOCATIONS}}
 }
 "#;
 pub(crate) const LEGACY_FRONTEND_DOCKERFILE_TEMPLATE: &str = r#"FROM {{BASE_IMAGE}}
@@ -124,6 +126,12 @@ pub(crate) struct CommitListResult {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct CommitDiffResult {
+    pub(crate) hash: String,
+    pub(crate) diff: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuthorInfo {
     pub(crate) name: String,
     pub(crate) email: String,
@@ -160,6 +168,16 @@ pub struct BuildRecord {
 pub struct BranchRepoSettings {
     pub spring_profile: String,
     pub expose_port: String,
+    #[serde(default)]
+    pub nginx_locations: Vec<NginxLocationBlock>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct NginxLocationBlock {
+    pub path: String,
+    pub proxy_pass: String,
+    #[serde(default)]
+    pub host: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -335,6 +353,20 @@ pub(crate) struct LocalMergeCheck {
     pub(crate) conflict_files: Vec<String>,
     /// 中文提示
     pub(crate) message: String,
+}
+
+/// 冲突文件的双分支对比内容。
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MergeConflictDetail {
+    /// 文件路径
+    pub(crate) file_path: String,
+    /// target 分支中的文件内容
+    pub(crate) target_content: String,
+    /// source 分支中的文件内容
+    pub(crate) source_content: String,
+    /// git diff target..source -- <file> 的输出
+    pub(crate) diff: String,
 }
 
 /// 列分支的返回：解析后的本地仓库路径（Git URL 会克隆到缓存目录）+ 远程分支列表。

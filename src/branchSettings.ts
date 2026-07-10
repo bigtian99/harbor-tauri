@@ -1,3 +1,5 @@
+import type { NginxLocationBlock } from "./types";
+
 interface RememberedBranchSettingsConfig {
   remember_branch_settings: boolean;
   last_repo_path?: string;
@@ -10,6 +12,7 @@ interface RememberedBranchSettingsConfig {
 export interface RememberedBranchRepoSettings {
   springProfile: string;
   exposePort: string;
+  nginxLocations: NginxLocationBlock[];
 }
 
 function normalizeRepoPath(repoPath?: string) {
@@ -19,13 +22,14 @@ function normalizeRepoPath(repoPath?: string) {
 export function getRememberedBranchAdvancedSettings(
   config: RememberedBranchSettingsConfig,
   repoPath?: string,
-) {
+): RememberedBranchRepoSettings {
   const defaultExposePort = config.expose_port.trim();
 
   if (!config.remember_branch_settings) {
     return {
       springProfile: "",
       exposePort: defaultExposePort,
+      nginxLocations: [],
     };
   }
 
@@ -35,6 +39,7 @@ export function getRememberedBranchAdvancedSettings(
     return {
       springProfile: repoSettings.springProfile.trim(),
       exposePort: repoSettings.exposePort.trim() || defaultExposePort,
+      nginxLocations: repoSettings.nginxLocations ?? [],
     };
   }
 
@@ -44,12 +49,14 @@ export function getRememberedBranchAdvancedSettings(
     return {
       springProfile: "",
       exposePort: defaultExposePort,
+      nginxLocations: [],
     };
   }
 
   return {
     springProfile: config.last_spring_profile.trim(),
     exposePort: config.last_expose_port.trim() || defaultExposePort,
+    nginxLocations: [],
   };
 }
 
@@ -64,6 +71,7 @@ export function rememberBranchRepoSettings<T extends { branch_repo_settings?: Re
     branchRepoSettings[repoKey] = {
       springProfile: settings.springProfile.trim(),
       exposePort: settings.exposePort.trim(),
+      nginxLocations: settings.nginxLocations ?? [],
     };
   }
 

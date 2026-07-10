@@ -20,7 +20,7 @@ import "./App.css";
 import type {
   ArtifactType, BranchProjectType, TabType, HarborConfig,
   PackageFromBranchResult, GitBranchOption, LastCommitInfo,
-  CommitInfo, CommitListResult, AuthorInfo, BuildRecord
+  CommitInfo, CommitListResult, AuthorInfo, BuildRecord, NginxLocationBlock
 } from "./types";
 import type { BranchImageResult } from "./branchImageResults";
 import {
@@ -109,6 +109,7 @@ function App() {
   const [autoPushImage, setAutoPushImage] = useState<boolean>(false);
   const [packageWithBackend, setPackageWithBackend] = useState<boolean>(false);
   const [branchExposePort, setBranchExposePort] = useState<string>("");
+  const [nginxLocations, setNginxLocations] = useState<NginxLocationBlock[]>([]);
   const [branchFullImage, setBranchFullImage] = useState<string>("");
   const [branchImageResults, setBranchImageResults] = useState<BranchImageResult[]>([]);
   // 上传推送菜单：推送成功后的镜像地址，独立展示，不依赖构建日志折叠框
@@ -186,6 +187,7 @@ function App() {
     const remembered = getRememberedBranchAdvancedSettings(sourceConfig, sourceRepoPath);
     setSpringProfile(remembered.springProfile);
     setBranchExposePort(remembered.exposePort);
+    setNginxLocations(remembered.nginxLocations ?? []);
   }
 
   function isStaleBranchLoad(requestId?: number) {
@@ -651,6 +653,7 @@ function App() {
         imageTag,
         artifactType,
         exposePort: uploadExposePort || null,
+        nginxLocations: [],
       });
       // 提取推送成功的镜像地址，独立展示在日志折叠框之外
       const imgMatch = result.match(/完整镜像:\s*(.+)/);
@@ -853,6 +856,7 @@ function App() {
                   dockerfilePath: null,
                   dockerfileContext: null,
                   exposePort: branchExposePort || null,
+                  nginxLocations: [],
                 });
                 pushLogs.push(`📦: ${resultStr}`);
                 const imgMatch = resultStr.match(/完整镜像:\s*(.+)/);
@@ -885,6 +889,7 @@ function App() {
                   artifactType: "frontend_dist",
                   dockerfilePath: null,
                   dockerfileContext: null,
+                  nginxLocations: nginxLocations,
                 });
                 pushLogs.push(`📦 前端: ${feResult}`);
                 const feMatch = feResult.match(/完整镜像:\s*(.+)/);
@@ -917,6 +922,7 @@ function App() {
                     dockerfilePath: null,
                     dockerfileContext: null,
                     exposePort: branchExposePort || null,
+                    nginxLocations: [],
                   });
                   pushLogs.push(`📦 后端: ${beResult}`);
                   const beMatch = beResult.match(/完整镜像:\s*(.+)/);
@@ -970,6 +976,7 @@ function App() {
       }, repoPath, {
         springProfile,
         exposePort: branchExposePort,
+        nginxLocations,
       });
       await invoke("save_config", { config: updatedConfig });
       setConfig(updatedConfig);
@@ -1245,6 +1252,7 @@ function App() {
       }, repoPath, {
         springProfile,
         exposePort: branchExposePort,
+        nginxLocations,
       });
       invoke("save_config", { config: updatedConfig }).then(() => {
         setConfig(updatedConfig);
@@ -1357,6 +1365,7 @@ function App() {
             imageName={imageName}
             imageTag={imageTag}
             exposePort={branchExposePort}
+            nginxLocations={nginxLocations}
             showAdvancedSettings={ui.showAdvancedSettings}
             config={config}
             progress={progress}
@@ -1396,6 +1405,7 @@ function App() {
             setImageName={setImageName}
             setImageTag={setImageTag}
             setExposePort={setBranchExposePort}
+            onNginxLocationsChange={setNginxLocations}
             setShowAdvancedSettings={(v: boolean) => updateUi('showAdvancedSettings', v)}
             setShowBuildLog={(v: boolean) => updateUi('showBuildLog', v)}
             renderLog={renderLog}
