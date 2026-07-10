@@ -1181,7 +1181,7 @@ pub async fn get_templates_diagnostic_log_path() -> Result<String, String> {
         .ok_or_else(|| "诊断日志尚未初始化，请重启应用后再试".to_string())
 }
 
-/// 读取诊断日志内容（最多返回最后 200 行）
+/// 读取诊断日志内容（最多返回最近 N 行，**新日志在前**）
 #[tauri::command]
 pub async fn read_diagnostic_log(lines: Option<usize>) -> Result<String, String> {
     let path = templates_diagnostic_log_path()
@@ -1189,9 +1189,13 @@ pub async fn read_diagnostic_log(lines: Option<usize>) -> Result<String, String>
     let content = fs::read_to_string(&path)
         .map_err(|e| format!("读取日志失败: {}", e))?;
     let max_lines = lines.unwrap_or(200);
-    let result: Vec<&str> = content.lines().collect();
-    let start = if result.len() > max_lines { result.len() - max_lines } else { 0 };
-    Ok(result[start..].join("\n"))
+    // 文件按时间 append（旧→新）；展示时 reverse，新在前
+    Ok(content
+        .lines()
+        .rev()
+        .take(max_lines)
+        .collect::<Vec<_>>()
+        .join("\n"))
 }
 
 // ========== 模板管理功能 ==========

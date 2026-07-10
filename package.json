@@ -15,7 +15,14 @@
     "tauri:build:ops": "node scripts/tauri-build-ops.mjs aarch64-apple-darwin",
     "tauri:build:ops:win64": "node scripts/tauri-build-ops.mjs x86_64-pc-windows-msvc",
     "tauri:build:all": "pnpm tauri:build:arm64 && pnpm tauri:build:x64",
-    "release": "node -e \"const v=require('./package.json').version;const e=require('child_process').execSync;e('git tag -a v'+v+' -m v'+v,{stdio:'inherit'});e('git push origin v'+v,{stdio:'inherit'})\""
+    "version:set": "node scripts/set-version.mjs",
+    "version:patch": "node scripts/set-version.mjs patch",
+    "version:minor": "node scripts/set-version.mjs minor",
+    "version:major": "node scripts/set-version.mjs major",
+    "release": "node scripts/release.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major"
   },
   "dependencies": {
     "@mantine/core": "^9.4.0",
