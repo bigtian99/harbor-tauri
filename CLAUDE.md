@@ -71,6 +71,38 @@ pnpm release
 - `@tauri-apps/plugin-shell` — shell command execution
 - `@tauri-apps/plugin-opener` — open URLs/files in system default app
 
+## 日志规范（强制性）
+
+**每个功能开发都必须输出诊断日志**，方便通过"系统日志"查看器排查问题，不依赖控制台或外部工具。
+
+### Rust 后端日志
+
+```rust
+// 关键路径——模板加载、API 调用、文件操作、错误
+templates_log(&format!("generate_landing_pages base={} — {}", gen_base.display(), summarize_templates_dir(&gen_base)));
+
+// 一般信息
+eprintln!("[JarPorter] 检测到项目 nginx.conf: {}", candidate.display());
+
+// 错误信息——必须包含足够的上下文（路径、参数、返回值）
+return Err(format!("获取渠道数据失败: {}", e));
+```
+
+- `templates_log` 写入诊断日志文件（侧边栏"系统日志"可查看），同时输出到 stderr
+- `eprintln!` 仅输出到 stderr，不会出现在诊断日志中——仅在临时调试时用
+- **所有 Tauri 命令的新参数/新逻辑必须至少有一条 `templates_log`**，含输入参数和关键决策点
+- **模板匹配失败、API 返回异常、文件操作错误**必须记录实际路径和值
+
+### 前端日志
+
+- 关键 API 调用结果用 `notifications.show` 通知用户
+- 调试信息用 `console.error`（Tauri dev 模式可在终端看到）
+- 模板相关错误归入诊断日志的展示范围
+
+### 日志查看
+
+侧边栏底部"系统日志"按钮，全局可访问，支持关键词搜索和高亮。开发完成后验证日志可读性：打开系统日志，搜索功能名，确认关键步骤有记录。
+
 ## CI/CD
 
 GitHub Actions workflow (`build.yml`) builds for macOS (ARM64 + x64), Linux x64, and Windows x64 on tag push (`v*`). Uses pnpm 9, Node 20, and Rust stable.
