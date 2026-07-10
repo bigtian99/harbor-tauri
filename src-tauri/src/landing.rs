@@ -1181,6 +1181,19 @@ pub async fn get_templates_diagnostic_log_path() -> Result<String, String> {
         .ok_or_else(|| "诊断日志尚未初始化，请重启应用后再试".to_string())
 }
 
+/// 读取诊断日志内容（最多返回最后 200 行）
+#[tauri::command]
+pub async fn read_diagnostic_log(lines: Option<usize>) -> Result<String, String> {
+    let path = templates_diagnostic_log_path()
+        .ok_or_else(|| "诊断日志尚未初始化".to_string())?;
+    let content = fs::read_to_string(&path)
+        .map_err(|e| format!("读取日志失败: {}", e))?;
+    let max_lines = lines.unwrap_or(200);
+    let result: Vec<&str> = content.lines().collect();
+    let start = if result.len() > max_lines { result.len() - max_lines } else { 0 };
+    Ok(result[start..].join("\n"))
+}
+
 // ========== 模板管理功能 ==========
 
 /// 获取打包内置 templates 根目录（只读，由 init_bundled_templates_dir 在 setup 时解析）
