@@ -508,7 +508,7 @@ export function LandingPanel({
                                   <Text
                                     size="xs"
                                     c="dimmed"
-                                    style={{ position: "absolute", bottom: -18, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap" }}
+                                    style={{ position: "absolute", bottom: -10, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap" }}
                                   >
                                     {currentTemplateIndex + 1}/{genResult.template_dirs.length}
                                   </Text>
@@ -714,7 +714,7 @@ export function LandingPanel({
                                   </ActionIcon>
                                 )}
                                 {hasMultipleTemplates && (
-                                  <Text size="xs" c="dimmed" style={{ position: "absolute", bottom: -18, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap" }}>
+                                  <Text size="xs" c="dimmed" style={{ position: "absolute", bottom: -10, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap" }}>
                                     {currentTemplateIndex + 1}/{genResult.template_dirs.length}
                                   </Text>
                                 )}
