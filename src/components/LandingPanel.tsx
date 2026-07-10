@@ -398,7 +398,7 @@ export function LandingPanel({
                                 w={36} h={36}
                                 style={{
                                   borderRadius: 6,
-                                  background: "rgba(100,255,218,0.15)",
+                                  background: "rgba(94,234,212,0.15)",
                                   color: "#64ffda",
                                   fontSize: 14,
                                   fontWeight: 700,
@@ -518,7 +518,7 @@ export function LandingPanel({
                                 w={56} h={72}
                                 style={{
                                   borderRadius: 6,
-                                  border: "1px solid rgba(100,255,218,0.08)",
+                                  border: "1px solid rgba(94,234,212,0.08)",
                                   background: "rgba(15,52,96,0.3)",
                                   display: "flex",
                                   alignItems: "center",
@@ -627,16 +627,25 @@ export function LandingPanel({
             </Paper>
           )}
 
-          {/* 马甲包生成结果 */}
+          {/* 马甲包生成结果 — 带 iframe 模板预览 */}
           {landingMode === "vest" && Object.keys(landingGenerated).length > 0 && (
             <Paper withBorder radius="md" style={{ overflow: "hidden" }}>
               <Box style={{ overflowX: "auto" }}>
-                <Table highlightOnHover verticalSpacing="sm" horizontalSpacing="sm">
+                <Table highlightOnHover verticalSpacing="sm" horizontalSpacing="sm" style={{ tableLayout: "fixed", minWidth: 900 }}>
+                  <colgroup>
+                    <col style={{ width: 140 }} />
+                    <col style={{ width: 80 }} />
+                    <col />
+                    <col style={{ width: 80 }} />
+                    <col style={{ width: 120 }} />
+                  </colgroup>
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th>名称</Table.Th>
                       <Table.Th>ID</Table.Th>
-                      <Table.Th style={{ textAlign: "center" }}>模板</Table.Th>
+                      <Table.Th style={{ textAlign: "center" }}>
+                        <span style={{ display: "inline-block", transform: "translateX(-28px)" }}>模板</span>
+                      </Table.Th>
                       <Table.Th style={{ textAlign: "center" }}>状态</Table.Th>
                       <Table.Th style={{ textAlign: "right" }}>操作</Table.Th>
                     </Table.Tr>
@@ -652,31 +661,73 @@ export function LandingPanel({
                             <Text fw={600} size="sm">{genResult?.name || id}</Text>
                           </Table.Td>
                           <Table.Td>
-                            <Text size="sm" c="dimmed">{id}</Text>
+                            <Text size="xs" c="dimmed" style={{ fontFamily: 'var(--mantine-font-family-monospace)' }}>{id}</Text>
                           </Table.Td>
-                          <Table.Td style={{ textAlign: "center" }}>
-                            {hasMultipleTemplates ? (
-                              <Group gap={4} justify="center" wrap="nowrap">
-                                <ActionIcon
-                                  size="sm" variant="subtle" color="gray"
-                                  onClick={() => switchTemplate(id, "prev")}
-                                >
-                                  <ChevronLeft size={14} />
-                                </ActionIcon>
-                                <Text size="xs" style={{ whiteSpace: "nowrap" }}>
-                                  {currentTemplateIndex + 1}/{genResult.template_dirs.length}
-                                </Text>
-                                <ActionIcon
-                                  size="sm" variant="subtle" color="gray"
-                                  onClick={() => switchTemplate(id, "next")}
-                                >
-                                  <ChevronRight size={14} />
-                                </ActionIcon>
+
+                          {/* 模板（带 iframe 轮播） */}
+                          <Table.Td>
+                            {genResult?.status === "success" ? (
+                              <Group gap={4} justify="center" wrap="nowrap" style={{ height: 104, position: "relative", transform: "translateX(-28px)" }}>
+                                {hasMultipleTemplates && (
+                                  <ActionIcon
+                                    variant="subtle" color="teal" size="sm"
+                                    onClick={(e) => { e.stopPropagation(); switchTemplate(id, "prev"); }}
+                                  >
+                                    <ChevronLeft size={14} />
+                                  </ActionIcon>
+                                )}
+                                {(() => {
+                                  const total = genResult.template_dirs.length;
+                                  const indices = getCarouselIndices(id, total);
+                                  if (total === 1) {
+                                    const s = getTemplateIframeSrc(genResult, 0);
+                                    return (
+                                      <TemplatePreviewCard
+                                        iframeSrc={s}
+                                        animationClass=""
+                                        isCenter={true}
+                                        onClick={() => openInAppPreview(s, `${genResult.name} - 模板`)}
+                                      />
+                                    );
+                                  }
+                                  return indices.map((tempIdx, pos) => {
+                                    const isCenter = pos === 1 || total < 3;
+                                    const s = getTemplateIframeSrc(genResult, tempIdx);
+                                    return (
+                                      <TemplatePreviewCard
+                                        key={tempIdx}
+                                        iframeSrc={s}
+                                        animationClass={isCenter ? animatingCards[id] || "" : ""}
+                                        isCenter={isCenter}
+                                        onClick={() => openInAppPreview(s, `${genResult.name} - 模板${tempIdx + 1}`)}
+                                      />
+                                    );
+                                  });
+                                })()}
+                                {hasMultipleTemplates && (
+                                  <ActionIcon
+                                    variant="subtle" color="teal" size="sm"
+                                    onClick={(e) => { e.stopPropagation(); switchTemplate(id, "next"); }}
+                                  >
+                                    <ChevronRight size={14} />
+                                  </ActionIcon>
+                                )}
+                                {hasMultipleTemplates && (
+                                  <Text size="xs" c="dimmed" style={{ position: "absolute", bottom: -2, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap" }}>
+                                    {currentTemplateIndex + 1}/{genResult.template_dirs.length}
+                                  </Text>
+                                )}
                               </Group>
                             ) : (
-                              <Text size="xs" c="dimmed">1/1</Text>
+                              <Box w={56} h={72} style={{
+                                borderRadius: 6, border: "1px solid rgba(94,234,212,0.08)",
+                                background: "rgba(15,52,96,0.3)", display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>
+                                <Text size="sm" c="dimmed">{(genResult?.name || "?").charAt(0)}</Text>
+                              </Box>
                             )}
                           </Table.Td>
+
                           <Table.Td style={{ textAlign: "center" }}>
                             {genResult?.status === "success" ? (
                               <Badge color="teal" variant="light">成功</Badge>
@@ -686,25 +737,37 @@ export function LandingPanel({
                               <Badge color="yellow" variant="light">处理中</Badge>
                             )}
                           </Table.Td>
+
                           <Table.Td style={{ textAlign: "right" }}>
-                            <Group gap="xs" justify="flex-end">
+                            <Group gap={4} justify="flex-end">
                               {genResult?.status === "success" && (
-                                <Tooltip label="预览">
-                                  <ActionIcon
-                                    variant="light" color="teal" size="sm"
-                                    onClick={() => {
-                                    const src = getTemplateIframeSrc(genResult, currentTemplateIndex);
-                                    openInAppPreview(src, genResult.name);
-                                  }}
-                                  >
-                                    <Eye size={14} />
-                                  </ActionIcon>
-                                </Tooltip>
+                                <>
+                                  <Tooltip label="打开模板目录">
+                                    <ActionIcon variant="light" color="gray" size="sm"
+                                      onClick={async () => {
+                                        try {
+                                          await invoke("open_directory", { path: `${genResult.output_dir}/template_${currentTemplateIndex}` });
+                                        } catch (e) { notifications.show({ title: "打开失败", message: String(e), color: "red", autoClose: 3000 }); }
+                                      }}
+                                    >
+                                      <FolderOpen size={14} />
+                                    </ActionIcon>
+                                  </Tooltip>
+                                  <Tooltip label="预览">
+                                    <ActionIcon variant="light" color="teal" size="sm"
+                                      onClick={() => openInAppPreview(
+                                        getTemplateIframeSrc(genResult, currentTemplateIndex),
+                                        genResult.name,
+                                      )}
+                                    >
+                                      <Maximize2 size={14} />
+                                    </ActionIcon>
+                                  </Tooltip>
+                                </>
                               )}
                               {ftpResult && ftpResult.status === "success" && (
                                 <Tooltip label="复制链接">
-                                  <ActionIcon
-                                    variant="light" color="teal" size="sm"
+                                  <ActionIcon variant="light" color="teal" size="sm"
                                     onClick={() => {
                                       navigator.clipboard.writeText(ftpResult.url);
                                       notifications.show({ message: "已复制", color: "teal", autoClose: 1500 });
@@ -797,7 +860,7 @@ export function LandingPanel({
                             height: 320,
                             overflow: "hidden",
                             borderRadius: 6,
-                            border: "1px solid rgba(100,255,218,0.12)",
+                            border: "1px solid rgba(94,234,212,0.12)",
                             cursor: "pointer",
                             background: "#0a192f",
                           }}
@@ -956,7 +1019,7 @@ function TemplatePreviewCard({
       style={{
         position: "relative",
         borderRadius: 8,
-        border: `1px solid ${isCenter ? "rgba(100,255,218,0.6)" : "rgba(100,255,218,0.15)"}`,
+        border: `1px solid ${isCenter ? "rgba(94,234,212,0.6)" : "rgba(94,234,212,0.15)"}`,
         overflow: "hidden",
         cursor: "pointer",
         background: "#fff",
@@ -965,7 +1028,7 @@ function TemplatePreviewCard({
         height: cardHeight,
         opacity: isCenter ? 1 : 0.5,
         transform: isCenter ? "scale(1)" : "scale(0.92)",
-        boxShadow: isCenter ? "0 4px 20px rgba(100,255,218,0.35)" : "none",
+        boxShadow: isCenter ? "0 4px 20px rgba(94,234,212,0.35)" : "none",
         zIndex: isCenter ? 2 : 1,
         transition: "all 0.4s cubic-bezier(0.25,0.46,0.45,0.94)",
         animation: animationClass === "animating-left"
@@ -976,8 +1039,8 @@ function TemplatePreviewCard({
       }}
       onMouseEnter={(e) => {
         if (isCenter) {
-          e.currentTarget.style.borderColor = "rgba(100,255,218,0.8)";
-          e.currentTarget.style.boxShadow = "0 6px 24px rgba(100,255,218,0.45)";
+          e.currentTarget.style.borderColor = "rgba(94,234,212,0.8)";
+          e.currentTarget.style.boxShadow = "0 6px 24px rgba(94,234,212,0.45)";
           e.currentTarget.style.transform = "scale(1.08)";
         } else {
           e.currentTarget.style.opacity = "0.75";
@@ -986,8 +1049,8 @@ function TemplatePreviewCard({
       }}
       onMouseLeave={(e) => {
         if (isCenter) {
-          e.currentTarget.style.borderColor = "rgba(100,255,218,0.6)";
-          e.currentTarget.style.boxShadow = "0 4px 20px rgba(100,255,218,0.35)";
+          e.currentTarget.style.borderColor = "rgba(94,234,212,0.6)";
+          e.currentTarget.style.boxShadow = "0 4px 20px rgba(94,234,212,0.35)";
           e.currentTarget.style.transform = "scale(1)";
         } else {
           e.currentTarget.style.opacity = "0.5";
