@@ -10,6 +10,7 @@ mod models;
 mod ops;
 mod preview_server;
 mod settlement;
+mod updater;
 mod utils;
 
 use build::{
@@ -33,6 +34,7 @@ use landing::{
 use preview_server::get_preview_server_info;
 use ops::{batch_pack_sub_channels, close_ops_login_window, open_ops_login_window};
 use settlement::generate_settlement_statements;
+use updater::{check_update, download_and_install};
 
 /// 编译时注入：`OPS_MODE=true tauri build` 构建的版本返回 true，
 /// 前端据此动态隐藏非运营菜单。
@@ -110,6 +112,8 @@ pub fn run() {
             generate_settlement_statements,
             db::get_jar_port,
             db::save_jar_port,
+            check_update,
+            download_and_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
