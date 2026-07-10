@@ -27,8 +27,9 @@ serde_json = "1"
 dirs = "6"
 chrono = "0.4"
 calamine = "0.26"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
 tiny_http = "0.12"
 rusqlite = { version = "0.31", features = ["bundled"] }
 rust_xlsxwriter = "0.79"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+semver = "1"
