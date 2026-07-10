@@ -35,8 +35,12 @@ pub fn check_update() -> Result<UpdateInfo, String> {
 
     let response = match client.get(GITHUB_API_URL).send() {
         Ok(r) => r,
-        Err(_) => {
+        Err(e) => {
             // 网络不通 → 静默跳过
+            crate::landing::templates_log(&format!(
+                "check_update: network error fetching {}, error={}",
+                GITHUB_API_URL, e
+            ));
             return Ok(UpdateInfo {
                 needs_update: false,
                 current_version,
@@ -48,6 +52,12 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     };
 
     if !response.status().is_success() {
+        let status = response.status();
+        crate::landing::templates_log(&format!(
+            "check_update: non-200 status {} from {}",
+            status.as_u16(),
+            GITHUB_API_URL
+        ));
         return Ok(UpdateInfo {
             needs_update: false,
             current_version,
@@ -59,13 +69,23 @@ pub fn check_update() -> Result<UpdateInfo, String> {
 
     let json: serde_json::Value = response
         .json()
-        .map_err(|e| format!("解析 GitHub API 响应失败: {}", e))?;
+        .map_err(|e| {
+            crate::landing::templates_log(&format!(
+                "check_update: failed to parse JSON response from {}, error={}",
+                GITHUB_API_URL, e
+            ));
+            format!("解析 GitHub API 响应失败: {}", e)
+        })?;
 
     // 2. 版本比较
     let tag_name = json["tag_name"].as_str().unwrap_or("");
     let latest_version = tag_name.strip_prefix('v').unwrap_or(tag_name).to_string();
 
     let Ok(current) = semver::Version::parse(&current_version) else {
+        crate::landing::templates_log(&format!(
+            "check_update: failed to parse current version '{}' as semver",
+            current_version
+        ));
         return Ok(UpdateInfo {
             needs_update: false,
             current_version,
@@ -76,6 +96,10 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     };
 
     let Ok(latest) = semver::Version::parse(&latest_version) else {
+        crate::landing::templates_log(&format!(
+            "check_update: failed to parse latest version '{}' as semver",
+            latest_version
+        ));
         return Ok(UpdateInfo {
             needs_update: false,
             current_version,
@@ -153,6 +177,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     })
 }
 
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub fn download_and_install(
     app: AppHandle,
@@ -342,4 +367,13 @@ pub fn download_and_install(
         .spawn();
 
     std::process::exit(0);
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn download_and_install(
+    _app: AppHandle,
+    _download_url: String,
+) -> Result<(), String> {
+    Err("当前平台不支持自动更新，请手动下载最新版本".into())
 }
