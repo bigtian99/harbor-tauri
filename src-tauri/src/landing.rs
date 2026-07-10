@@ -318,7 +318,9 @@ pub async fn fetch_vest_data(
                 id: item.id,
                 name: item.app_name.unwrap_or_else(|| format!("vest_{}", id)),
                 logo: item.icon_path.unwrap_or_default(),
-                download_url: item.short_url.unwrap_or_default(),
+                download_url: item.short_url
+                    .or_else(|| item.current_build_url.clone())
+                    .unwrap_or_default(),
             })
         }));
     }

@@ -303,6 +303,8 @@ pub(crate) struct VestApiItem {
     pub(crate) icon_path: Option<String>,
     #[serde(rename = "shortUrl")]
     pub(crate) short_url: Option<String>,
+    #[serde(rename = "currentBuildUrl")]
+    pub(crate) current_build_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
