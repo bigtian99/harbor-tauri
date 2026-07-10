@@ -311,8 +311,8 @@ pub async fn fetch_vest_data(
                 .map_err(|e| format!("解析 vest/{} 响应失败: {}", id, e))?;
             if body.code != Some(200) {
                 return Err(format!(
-                    "vest/{} API 错误: code={:?}",
-                    id, body.code
+                    "vest/{} API 错误: code={:?}, message={:?}",
+                    id, body.code, body.message
                 ));
             }
             let item = body.data.ok_or_else(|| format!("vest/{} 无数据", id))?;

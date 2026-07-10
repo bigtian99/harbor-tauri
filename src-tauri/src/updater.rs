@@ -23,6 +23,8 @@ pub struct UpdateInfo {
     /// GitHub release asset id；优先走 API 下载（比 browser 直链更稳）
     pub asset_id: u64,
     pub file_size: u64,
+    /// Release 更新说明（GitHub body，markdown 原文）
+    pub release_notes: String,
 }
 
 fn empty_update(current_version: String, latest_version: String) -> UpdateInfo {
@@ -33,6 +35,7 @@ fn empty_update(current_version: String, latest_version: String) -> UpdateInfo {
         download_url: String::new(),
         asset_id: 0,
         file_size: 0,
+        release_notes: String::new(),
     }
 }
 
@@ -94,6 +97,11 @@ fn validate_dmg_file(path: &std::path::Path, expected_size: u64) -> Result<(), S
 }
 
 #[tauri::command]
+pub fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
 pub fn check_update() -> Result<UpdateInfo, String> {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
 
@@ -136,6 +144,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
 
     let tag_name = json["tag_name"].as_str().unwrap_or("");
     let latest_version = tag_name.strip_prefix('v').unwrap_or(tag_name).to_string();
+    let release_notes = json["body"].as_str().unwrap_or("").trim().to_string();
 
     let Ok(current) = semver::Version::parse(&current_version) else {
         crate::landing::templates_log(&format!(
@@ -197,8 +206,8 @@ pub fn check_update() -> Result<UpdateInfo, String> {
         ));
     } else {
         crate::landing::templates_log(&format!(
-            "check_update: current={}, latest={}, needs_update=true, url={}, asset_id={}, size={}",
-            current_version, latest_version, download_url, asset_id, file_size
+            "check_update: current={}, latest={}, needs_update=true, url={}, asset_id={}, size={}, notes_len={}",
+            current_version, latest_version, download_url, asset_id, file_size, release_notes.len()
         ));
     }
 
@@ -209,6 +218,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
         download_url,
         asset_id,
         file_size,
+        release_notes,
     })
 }
 
@@ -289,10 +299,36 @@ fn try_download(
         return Err(format!("HTTP {}", status.as_u16()));
     }
 
-    let total_size = response.content_length().unwrap_or(expected_size);
+    let total_size = response
+        .content_length()
+        .or(if expected_size > 0 {
+            Some(expected_size)
+        } else {
+            None
+        })
+        .unwrap_or(0);
     let mut downloaded: u64 = 0;
     let mut file =
         fs::File::create(dmg_path).map_err(|e| format!("创建临时文件失败: {}", e))?;
+    let mut last_emit_pct: i16 = -1;
+    let mut last_emit_at = std::time::Instant::now();
+
+    // 立刻给前端一条进度，避免一直停在 0
+    app.emit(
+        "update-progress",
+        serde_json::json!({
+            "phase": "downloading",
+            "percent": 0,
+            "downloaded": 0u64,
+            "total": total_size,
+            "message": if total_size > 0 {
+                format!("正在下载更新... 0% (0 / {:.1} MB)", total_size as f64 / 1024.0 / 1024.0)
+            } else {
+                "正在下载更新...".to_string()
+            },
+        }),
+    )
+    .ok();
 
     let mut buf = [0u8; 64 * 1024];
     loop {
@@ -307,7 +343,9 @@ fn try_download(
             if buf[0] == b'{' {
                 return Err("返回了 JSON 而非安装包".into());
             }
-            if buf.starts_with(b"<!DOCTYPE") || buf.starts_with(b"<html") || buf.starts_with(b"<HTML")
+            if buf.starts_with(b"<!DOCTYPE")
+                || buf.starts_with(b"<html")
+                || buf.starts_with(b"<HTML")
             {
                 return Err("返回了 HTML 页面而非安装包（多半被墙/需代理）".into());
             }
@@ -315,14 +353,40 @@ fn try_download(
         file.write_all(&buf[..n])
             .map_err(|e| format!("写入失败: {}", e))?;
         downloaded += n as u64;
-        if total_size > 0 {
-            let pct = ((downloaded as f64 / total_size as f64) * 100.0).min(100.0) as u8;
+
+        // 节流：至少 1% 变化或 200ms 再发，避免刷爆事件
+        let pct = if total_size > 0 {
+            ((downloaded as f64 / total_size as f64) * 100.0).min(100.0) as u8
+        } else {
+            // 无总大小：用已下载 MB 做伪进度上限 95
+            let fake = ((downloaded as f64 / (20.0 * 1024.0 * 1024.0)) * 95.0).min(95.0) as u8;
+            fake
+        };
+        let due = last_emit_at.elapsed().as_millis() >= 200 || pct as i16 != last_emit_pct;
+        if due {
+            last_emit_pct = pct as i16;
+            last_emit_at = std::time::Instant::now();
+            let msg = if total_size > 0 {
+                format!(
+                    "正在下载… {}% ({:.1} / {:.1} MB)",
+                    pct,
+                    downloaded as f64 / 1024.0 / 1024.0,
+                    total_size as f64 / 1024.0 / 1024.0
+                )
+            } else {
+                format!(
+                    "正在下载… {:.1} MB",
+                    downloaded as f64 / 1024.0 / 1024.0
+                )
+            };
             app.emit(
                 "update-progress",
                 serde_json::json!({
                     "phase": "downloading",
                     "percent": pct,
-                    "message": format!("正在下载更新... {}%", pct),
+                    "downloaded": downloaded,
+                    "total": total_size,
+                    "message": msg,
                 }),
             )
             .ok();
@@ -331,19 +395,29 @@ fn try_download(
     drop(file);
 
     validate_dmg_file(dmg_path, expected_size.max(total_size))?;
+    app.emit(
+        "update-progress",
+        serde_json::json!({
+            "phase": "downloading",
+            "percent": 100,
+            "downloaded": downloaded,
+            "total": total_size.max(downloaded),
+            "message": "下载完成，准备安装…",
+        }),
+    )
+    .ok();
     Ok(downloaded)
 }
 
+/// 真正干活的同步实现。必须丢到 blocking 线程，否则会卡死前端事件循环，
+/// 导致 `update-progress` 事件和 React 重绘都发不出去。
 #[cfg(target_os = "macos")]
-#[tauri::command]
-pub fn download_and_install(
+fn download_and_install_blocking(
     app: AppHandle,
     download_url: String,
-    asset_id: Option<u64>,
-    file_size: Option<u64>,
+    asset_id: u64,
+    expected_size: u64,
 ) -> Result<(), String> {
-    let asset_id = asset_id.unwrap_or(0);
-    let expected_size = file_size.unwrap_or(0);
     crate::landing::templates_log(&format!(
         "download_and_install: starting url={}, asset_id={}, expected_size={}",
         download_url, asset_id, expected_size
@@ -542,9 +616,38 @@ pub fn download_and_install(
     std::process::exit(0);
 }
 
+/// async 命令 + spawn_blocking：下载/安装不堵 UI 线程，进度条才能动。
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn download_and_install(
+    app: AppHandle,
+    download_url: String,
+    asset_id: Option<u64>,
+    file_size: Option<u64>,
+) -> Result<(), String> {
+    let asset_id = asset_id.unwrap_or(0);
+    let expected_size = file_size.unwrap_or(0);
+    // 先让前端有机会 paint 下载态
+    app.emit(
+        "update-progress",
+        serde_json::json!({
+            "phase": "downloading",
+            "percent": 0,
+            "message": "正在准备下载…"
+        }),
+    )
+    .ok();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        download_and_install_blocking(app, download_url, asset_id, expected_size)
+    })
+    .await
+    .map_err(|e| format!("下载任务异常: {}", e))?
+}
+
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
-pub fn download_and_install(
+pub async fn download_and_install(
     _app: AppHandle,
     _download_url: String,
     _asset_id: Option<u64>,

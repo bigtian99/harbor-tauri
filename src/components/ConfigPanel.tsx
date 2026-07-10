@@ -2,10 +2,15 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Settings, CheckCircle, AlertCircle, Eye, EyeOff, FolderOpen, Archive,
-  Server, Package, Globe, FolderOutput, Info
+  Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink
 } from "lucide-react";
 import type { HarborConfig } from "../types";
 import { isTauriRuntime } from "../types";
+
+export type CheckUpdateResult = {
+  status: "update" | "latest" | "error";
+  message: string;
+};
 
 interface ConfigPanelProps {
   config: HarborConfig;
@@ -14,6 +19,10 @@ interface ConfigPanelProps {
   onConfigChange: (field: keyof HarborConfig, value: string) => void;
   onSaveConfig: () => void;
   onTogglePassword: () => void;
+  /** 当前应用版本（Cargo） */
+  appVersion?: string;
+  /** 手动检查更新 */
+  onCheckUpdate?: () => Promise<CheckUpdateResult>;
 }
 
 type ConfigTab = "connection" | "jar" | "frontend" | "output" | "about";
@@ -29,9 +38,27 @@ const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
 export function ConfigPanel({
   config, configSaved, showPassword,
   onConfigChange, onSaveConfig, onTogglePassword,
+  appVersion, onCheckUpdate,
 }: ConfigPanelProps) {
   const [activeTab, setActiveTab] = useState<ConfigTab>("connection");
+  const [checking, setChecking] = useState(false);
+  const [checkMsg, setCheckMsg] = useState<{ type: "ok" | "update" | "err"; text: string } | null>(null);
 
+  const handleCheckUpdate = async () => {
+    if (!onCheckUpdate || checking) return;
+    setChecking(true);
+    setCheckMsg(null);
+    try {
+      const r = await onCheckUpdate();
+      if (r.status === "update") setCheckMsg({ type: "update", text: r.message });
+      else if (r.status === "latest") setCheckMsg({ type: "ok", text: r.message });
+      else setCheckMsg({ type: "err", text: r.message });
+    } catch (e) {
+      setCheckMsg({ type: "err", text: String(e) });
+    } finally {
+      setChecking(false);
+    }
+  };
   return (
     <div className="config-panel">
       <div className="config-subtabs" role="tablist">
@@ -242,31 +269,73 @@ export function ConfigPanel({
         )}
 
         {activeTab === "about" && (
-          <div className="config-tip">
-            <p><AlertCircle size={16} className="inline-icon" /> 配置说明：</p>
-            <ul>
-              <li>配置保存后无需重复填写</li>
-              <li>Harbor 地址不需要带 https:// 前缀</li>
-              <li>Harbor 项目为仓库中的项目名，会与镜像名称拼接</li>
-              <li>JAR 模式使用 JAR 基础镜像和 JAR 暴露端口</li>
-              <li>前端 dist 模式会把所选 dist 目录的内容复制为 nginx 站点根目录，不会在镜像里嵌套 dist 目录</li>
-              <li>默认 nginx.conf 的 /index.html 回退路径对应 /usr/share/nginx/html/index.html</li>
-            </ul>
+          <div className="about-panel">
+            <div className="about-card">
+              <div className="about-app-name">JarPorter</div>
+              <div className="about-version">
+                当前版本 <strong>v{appVersion || "—"}</strong>
+              </div>
+              <p className="about-desc">JAR / 前端 dist 一键打包推送 Harbor</p>
+
+              <div className="about-actions">
+                <button
+                  type="button"
+                  className="about-check-btn"
+                  onClick={handleCheckUpdate}
+                  disabled={checking || !onCheckUpdate}
+                >
+                  {checking ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
+                  {checking ? "检查中…" : "检查更新"}
+                </button>
+                <a
+                  className="about-link"
+                  href="https://github.com/bigtian99/harbor-tauri/releases"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  发布页
+                  <ExternalLink size={12} />
+                </a>
+              </div>
+
+              {checkMsg && (
+                <div className={`about-check-msg about-check-msg--${checkMsg.type}`}>
+                  {checkMsg.type === "ok" && <CheckCircle size={14} />}
+                  {checkMsg.type === "update" && <RefreshCw size={14} />}
+                  {checkMsg.type === "err" && <AlertCircle size={14} />}
+                  <span>{checkMsg.text}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="config-tip">
+              <p><AlertCircle size={16} className="inline-icon" /> 配置说明：</p>
+              <ul>
+                <li>配置保存后无需重复填写</li>
+                <li>Harbor 地址不需要带 https:// 前缀</li>
+                <li>Harbor 项目为仓库中的项目名，会与镜像名称拼接</li>
+                <li>JAR 模式使用 JAR 基础镜像和 JAR 暴露端口</li>
+                <li>前端 dist 模式会把所选 dist 目录的内容复制为 nginx 站点根目录，不会在镜像里嵌套 dist 目录</li>
+                <li>默认 nginx.conf 的 /index.html 回退路径对应 /usr/share/nginx/html/index.html</li>
+              </ul>
+            </div>
           </div>
         )}
       </div>
 
-      <button className="save-btn" onClick={onSaveConfig}>
-        {configSaved ? (
-          <>
-            <CheckCircle size={18} /> 已保存
-          </>
-        ) : (
-          <>
-            <Settings size={18} /> 保存配置
-          </>
-        )}
-      </button>
+      {activeTab !== "about" && (
+        <button className="save-btn" onClick={onSaveConfig}>
+          {configSaved ? (
+            <>
+              <CheckCircle size={18} /> 已保存
+            </>
+          ) : (
+            <>
+              <Settings size={18} /> 保存配置
+            </>
+          )}
+        </button>
+      )}
     </div>
   );
 }

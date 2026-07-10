@@ -82,6 +82,7 @@ function App() {
   // ==================== 更新检查状态 ====================
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
 
   // ==================== 上传推送状态 ====================
   const [artifactType, setArtifactType] = useState<ArtifactType>("jar");
@@ -1185,11 +1186,19 @@ function App() {
     checkBranchDockerfile();
   }, [repoPath, branchName]);
 
+  // 读取本地版本（关于页展示，不依赖检查更新）
+  useEffect(() => {
+    invoke<string>("get_app_version")
+      .then(setAppVersion)
+      .catch(() => setAppVersion(""));
+  }, []);
+
   // 启动 2 秒后检查更新（不阻塞首屏渲染）
   useEffect(() => {
     const timer = setTimeout(() => {
       invoke<UpdateInfo>("check_update")
         .then((info) => {
+          if (info.current_version) setAppVersion(info.current_version);
           if (info.needs_update && info.download_url) {
             setUpdateInfo(info);
             setUpdateModalOpen(true);
@@ -1202,6 +1211,32 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  /** 关于页手动检查更新 */
+  async function handleManualCheckUpdate(): Promise<{
+    status: "update" | "latest" | "error";
+    message: string;
+  }> {
+    try {
+      const info = await invoke<UpdateInfo>("check_update");
+      if (info.needs_update && (info.download_url || info.asset_id)) {
+        setUpdateInfo(info);
+        setUpdateModalOpen(true);
+        return {
+          status: "update",
+          message: `发现新版本 v${info.latest_version}，已打开更新弹窗`,
+        };
+      }
+      const ver = info.latest_version || info.current_version;
+      return {
+        status: "latest",
+        message: ver
+          ? `已是最新版本（当前 v${info.current_version}${info.latest_version ? `，远端 v${info.latest_version}` : ""}）`
+          : `已是最新版本（当前 v${info.current_version}）`,
+      };
+    } catch (e) {
+      return { status: "error", message: `检查失败：${String(e)}` };
+    }
+  }
   // ==================== 分支打包回调 ====================
   function handleBranchProjectTypeChange(type: BranchProjectType) {
     setBranchProjectType(type);
@@ -1515,6 +1550,8 @@ function App() {
             onConfigChange={handleConfigChange}
             onSaveConfig={handleSaveConfig}
             onTogglePassword={() => updateUi('showPassword', !ui.showPassword)}
+            appVersion={appVersion || updateInfo?.current_version}
+            onCheckUpdate={handleManualCheckUpdate}
           />
         )}
       </main>
