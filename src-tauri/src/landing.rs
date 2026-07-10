@@ -923,7 +923,7 @@ pub(crate) fn templates_diagnostic_log_path() -> Option<PathBuf> {
     TEMPLATES_LOG_FILE.get().cloned()
 }
 
-fn templates_log(message: impl AsRef<str>) {
+pub(crate) fn templates_log(message: impl AsRef<str>) {
     let line = format!("[JarPorter][templates] {}", message.as_ref());
     eprintln!("{line}");
     if let Some(path) = TEMPLATES_LOG_FILE.get() {

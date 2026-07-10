@@ -86,6 +86,10 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     };
 
     if latest <= current {
+        crate::landing::templates_log(&format!(
+            "check_update: current={}, latest={}, needs_update=false (up to date)",
+            current_version, latest_version
+        ));
         return Ok(UpdateInfo {
             needs_update: false,
             current_version,
@@ -128,6 +132,18 @@ pub fn check_update() -> Result<UpdateInfo, String> {
         }
     }
 
+    if download_url.is_empty() {
+        crate::landing::templates_log(&format!(
+            "check_update: current={}, latest={}, needs_update=false (no matching {} dmg asset found)",
+            current_version, latest_version, arch_key
+        ));
+    } else {
+        crate::landing::templates_log(&format!(
+            "check_update: current={}, latest={}, needs_update=true, url={}, size={}",
+            current_version, latest_version, download_url, file_size
+        ));
+    }
+
     Ok(UpdateInfo {
         needs_update: !download_url.is_empty(),
         current_version,
@@ -142,6 +158,10 @@ pub fn download_and_install(
     app: AppHandle,
     download_url: String,
 ) -> Result<(), String> {
+    crate::landing::templates_log(&format!(
+        "download_and_install: starting download from {}",
+        download_url
+    ));
     let cache_dir = dirs::cache_dir()
         .ok_or("无法获取缓存目录")?
         .join("jarporter")
@@ -176,7 +196,13 @@ pub fn download_and_install(
     let mut response = client
         .get(&download_url)
         .send()
-        .map_err(|e| format!("下载请求失败: {}", e))?;
+        .map_err(|e| {
+            crate::landing::templates_log(&format!(
+                "download_and_install: download request failed, url={}, error={}",
+                download_url, e
+            ));
+            format!("下载请求失败: {}", e)
+        })?;
 
     let total_size = response.content_length().unwrap_or(0);
     let mut downloaded: u64 = 0;
@@ -223,6 +249,12 @@ pub fn download_and_install(
         }
     }
 
+    crate::landing::templates_log(&format!(
+        "download_and_install: download complete, file={}, size={}",
+        dmg_path.display(),
+        fs::metadata(&dmg_path).map(|m| m.len()).unwrap_or(0)
+    ));
+
     // Phase 2: 挂载 dmg
     app.emit(
         "update-progress",
@@ -246,10 +278,15 @@ pub fn download_and_install(
 
     if !mount_output.status.success() {
         let _ = fs::remove_file(&dmg_path);
-        return Err(format!(
+        let err_msg = format!(
             "挂载 dmg 失败: {}",
             String::from_utf8_lossy(&mount_output.stderr)
+        );
+        crate::landing::templates_log(&format!(
+            "download_and_install: mount failed, dmg={}, error={}",
+            dmg_path.display(), err_msg
         ));
+        return Err(err_msg);
     }
 
     // hdiutil 输出的最后一行格式: /dev/disk4s1\t/Volumes/JarPorter
@@ -281,6 +318,10 @@ pub fn download_and_install(
             .args(["detach", &mount_point, "-quiet"])
             .output();
         let _ = fs::remove_file(&dmg_path);
+        crate::landing::templates_log(&format!(
+            "download_and_install: copy failed, from={}, to={}",
+            mounted_app.display(), target_app.display()
+        ));
         return Err("复制应用到 /Applications 失败".into());
     }
 
@@ -289,6 +330,11 @@ pub fn download_and_install(
         .args(["detach", &mount_point, "-quiet"])
         .output();
     let _ = fs::remove_file(&dmg_path);
+
+    crate::landing::templates_log(&format!(
+        "download_and_install: install complete, app copied to {}",
+        target_app.display()
+    ));
 
     // Phase 5: 拉起新版本 + 退出
     let _ = Command::new("open")
