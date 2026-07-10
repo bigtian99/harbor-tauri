@@ -8,7 +8,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 const GITHUB_API_URL: &str =
-    "https://api.github.com/repos/daijunxiong/jarporter/releases/latest";
+    "https://api.github.com/repos/bigtian99/harbor-tauri/releases/latest";
 const USER_AGENT: &str = "JarPorter-Updater/1.0";
 const REQUEST_TIMEOUT: u64 = 10;
 const DOWNLOAD_TIMEOUT: u64 = 600; // 10 分钟，dmg 可能较大

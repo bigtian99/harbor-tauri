@@ -125,7 +125,7 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
             更新失败: {error}
           </Text>
           <Anchor
-            href="https://github.com/daijunxiong/jarporter/releases/latest"
+            href="https://github.com/bigtian99/harbor-tauri/releases/latest"
             target="_blank"
             size="sm"
           >
