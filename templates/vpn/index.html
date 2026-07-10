@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="template-category" content="VPN" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>{{NAME}} - 官方下载</title>
+  <meta name="description" content="{{NAME}} - 全球加速，安全加密，畅享无界网络。" />
+  <style>
+    :root {
+      --bg: #060b14;
+      --cyan: #06b6d4;
+      --cyan-bright: #22d3ee;
+      --blue: #0ea5e9;
+      --text: #e2e8f0;
+      --text-mute: rgba(226, 232, 240, 0.65);
+      --card-bg: rgba(12, 20, 40, 0.7);
+      --card-border: rgba(6, 182, 212, 0.2);
+      --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ========== 网络节点背景 ========== */
+    .net-bg {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 50% at 30% 20%, rgba(6,182,212,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 70% 70%, rgba(14,165,233,0.06) 0%, transparent 60%);
+    }
+    .net-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(6,182,212,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(6,182,212,0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+    .net-dots {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    }
+    .scrim {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
+      background:
+        radial-gradient(ellipse 50% 40% at 50% 30%, transparent 0%, rgba(6,11,20,0.85) 85%),
+        linear-gradient(180deg, rgba(6,11,20,0.5) 0%, transparent 15%, transparent 85%, rgba(6,11,20,0.85) 100%);
+    }
+
+    /* ========== 主体 ========== */
+    .wrap {
+      position: relative; z-index: 2;
+      width: 100%; min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 7vh 18px 0;
+    }
+
+    /* ========== Hero ========== */
+    .hero {
+      width: min(94vw, 620px);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 18px;
+      align-items: center;
+      margin-bottom: 28px;
+      animation: rise 0.7s var(--ease) both;
+    }
+    .shield-icon {
+      grid-column: 1; grid-row: 1 / 3; align-self: center;
+      width: clamp(62px, 15vw, 100px); height: clamp(62px, 15vw, 100px);
+      display: flex; align-items: center; justify-content: center;
+      font-size: clamp(40px, 10vw, 68px);
+      filter: drop-shadow(0 0 20px rgba(6,182,212,0.5));
+    }
+    .name-box {
+      grid-column: 2; grid-row: 1 / 3;
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 20px; border-radius: 16px;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border: 2px solid rgba(6,182,212,0.35);
+      box-shadow: 0 0 30px rgba(6,182,212,0.08), 0 12px 36px rgba(0,0,0,0.5);
+    }
+    .logo {
+      width: 60px; height: 60px; flex-shrink: 0;
+      border-radius: 14px; object-fit: cover;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      border: 2px solid rgba(255,255,255,0.15);
+    }
+    .name-text { min-width: 0; }
+    .name {
+      font-size: clamp(22px, 5.5vw, 30px); font-weight: 900;
+      letter-spacing: -0.02em; line-height: 1.1;
+      background: linear-gradient(135deg, #fff, var(--cyan-bright));
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .slogan {
+      font-size: 13px; font-weight: 600; letter-spacing: 0.06em;
+      color: var(--text-mute); margin-top: 3px;
+    }
+
+    /* ========== 数据条 ========== */
+    .stats {
+      display: flex; gap: 0; width: min(94vw, 620px);
+      margin-bottom: 26px; border-radius: 14px; overflow: hidden;
+      border: 1px solid rgba(6,182,212,0.2);
+      background: var(--card-bg);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      animation: rise 0.7s var(--ease) 0.1s both;
+    }
+    .stat {
+      flex: 1; padding: 14px 8px; text-align: center;
+      border-right: 1px dashed rgba(6,182,212,0.15);
+    }
+    .stat:last-child { border-right: none; }
+    .stat-num {
+      font-size: clamp(20px, 5vw, 26px); font-weight: 900;
+      color: var(--cyan-bright); line-height: 1;
+    }
+    .stat-num small { font-size: 0.55em; font-weight: 700; opacity: 0.8; }
+    .stat-label {
+      font-size: 11px; letter-spacing: 0.05em;
+      color: var(--text-mute); margin-top: 6px;
+    }
+
+    /* ========== 特性亮点 ========== */
+    .features {
+      width: min(94vw, 620px);
+      display: grid; grid-template-columns: repeat(2, 1fr);
+      gap: 10px; margin-bottom: 26px;
+      animation: rise 0.7s var(--ease) 0.15s both;
+    }
+    .feature {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 14px; border-radius: 12px;
+      background: var(--card-bg);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+    }
+    .feature-icon {
+      width: 36px; height: 36px; flex-shrink: 0;
+      border-radius: 10px; display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      background: rgba(6,182,212,0.12);
+    }
+    .feature-text { min-width: 0; }
+    .feature-title { font-size: 14px; font-weight: 700; color: var(--text); }
+    .feature-desc { font-size: 11px; color: var(--text-mute); margin-top: 2px; }
+
+    /* ========== 下载按钮 ========== */
+    .downloads {
+      display: flex; gap: 14px; width: min(94vw, 620px);
+      margin-bottom: 20px;
+      animation: rise 0.7s var(--ease) 0.2s both;
+    }
+    .dl-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      gap: 9px; padding: 15px 14px; border-radius: 15px;
+      cursor: pointer; font-weight: 800; font-size: 15px;
+      text-decoration: none; border: 2px solid transparent;
+      transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
+    }
+    .dl-btn img { width: 24px; height: 24px; flex-shrink: 0; }
+    .dl-android {
+      color: #fff;
+      background: linear-gradient(135deg, #06b6d4, #0ea5e9);
+      box-shadow: 0 8px 24px rgba(6,182,212,0.4);
+    }
+    .dl-android:hover, .dl-android:focus-visible {
+      transform: translateY(-3px);
+      box-shadow: 0 14px 32px rgba(6,182,212,0.55);
+      outline: none;
+    }
+    .dl-ios {
+      color: #fff;
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.15);
+    }
+    .dl-ios:hover, .dl-ios:focus-visible {
+      transform: translateY(-3px);
+      background: rgba(255,255,255,0.12);
+      outline: none;
+    }
+
+    /* ========== 服务器节点条 ========== */
+    .servers {
+      width: min(94vw, 620px);
+      display: flex; gap: 8px; overflow: hidden;
+      padding: 8px 0 12px; margin-bottom: 12px;
+      mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+    }
+    .server-item {
+      flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 20px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      font-size: 12px; white-space: nowrap;
+      color: var(--text-mute);
+    }
+    .server-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34,197,94,0.6);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.5); }
+    }
+
+    /* ========== 二维码 ========== */
+    .qr-section {
+      display: flex; align-items: center; gap: 14px;
+      margin: 8px 0 28px; padding: 14px 18px;
+      border-radius: 16px;
+      background: var(--card-bg);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(6,182,212,0.2);
+      animation: rise 0.7s var(--ease) 0.25s both;
+    }
+    .qr-code {
+      width: 86px; height: 86px; flex-shrink: 0;
+      border-radius: 9px; overflow: hidden;
+      background: #fff; padding: 4px;
+    }
+    .qr-code canvas { width: 100% !important; height: 100% !important; border-radius: 5px; }
+    .qr-info { min-width: 0; }
+    .qr-title { font-size: 14px; font-weight: 700; color: var(--text); }
+    .qr-tip {
+      font-size: 11px; color: var(--text-mute);
+      margin-top: 3px; max-width: 240px; word-break: break-all;
+    }
+
+    /* ========== 动画 ========== */
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(22px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ========== 响应式 ========== */
+    @media (max-width: 480px) {
+      .wrap { padding-top: 5vh; }
+      .hero { grid-template-columns: 1fr; gap: 12px; }
+      .shield-icon { grid-column: 1; grid-row: 1; justify-self: start; }
+      .name-box { grid-column: 1; grid-row: 2; }
+      .features { grid-template-columns: 1fr; }
+      .stat { padding: 11px 6px; }
+      .servers { gap: 6px; }
+      .server-item { padding: 6px 10px; font-size: 11px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero, .stats, .features, .downloads, .qr-section { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 网络背景 -->
+  <div class="net-bg" aria-hidden="true"></div>
+  <div class="net-grid" aria-hidden="true"></div>
+  <canvas class="net-dots" id="net-canvas" aria-hidden="true"></canvas>
+  <div class="scrim" aria-hidden="true"></div>
+
+  <main class="wrap">
+    <!-- Hero -->
+    <header class="hero">
+      <div class="shield-icon" aria-hidden="true">🛡️</div>
+      <div class="name-box">
+        <img class="logo" src="{{LOGO}}" alt="{{NAME}}图标" onerror="this.onerror=null;this.src='./image/logo.png'">
+        <div class="name-text">
+          <h1 class="name">{{NAME}}</h1>
+          <p class="slogan">全球加速 · 安全加密 · 畅享无界</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- 数据条 -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-num">50<small>+</small></div>
+        <div class="stat-label">全球节点</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">G<small>bps</small></div>
+        <div class="stat-label">极速带宽</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">AES</div>
+        <div class="stat-label">256位加密</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">0</div>
+        <div class="stat-label">日志记录</div>
+      </div>
+    </div>
+
+    <!-- 特性亮点 -->
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-text">
+          <div class="feature-title">军事级加密</div>
+          <div class="feature-desc">AES-256 加密协议，保护隐私安全</div>
+        </div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-text">
+          <div class="feature-title">极速连接</div>
+          <div class="feature-desc">全球 BGP 智能路由，低延迟</div>
+        </div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🌍</div>
+        <div class="feature-text">
+          <div class="feature-title">多国节点</div>
+          <div class="feature-desc">覆盖 50+ 国家和地区</div>
+        </div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🛡️</div>
+        <div class="feature-text">
+          <div class="feature-title">无日志政策</div>
+          <div class="feature-desc">严格零日志，绝不追踪</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下载按钮 -->
+    <div class="downloads">
+      <a id="android-download-btn" class="dl-btn dl-android" href="javascript:void(0);" aria-label="安卓下载">
+        <img src="./image/Group6.png" alt="安卓">
+        <span>安卓下载</span>
+      </a>
+      <a id="ios-download-btn" class="dl-btn dl-ios" href="javascript:void(0);" aria-label="iOS下载">
+        <img src="./image/Group7.png" alt="iOS">
+        <span>iOS 下载</span>
+      </a>
+    </div>
+
+    <!-- 服务器节点 -->
+    <div class="servers" aria-label="全球节点">
+      <div class="server-item"><span class="server-dot"></span> 美国·洛杉矶</div>
+      <div class="server-item"><span class="server-dot"></span> 日本·东京</div>
+      <div class="server-item"><span class="server-dot"></span> 新加坡</div>
+      <div class="server-item"><span class="server-dot"></span> 香港</div>
+      <div class="server-item"><span class="server-dot"></span> 德国·法兰克福</div>
+      <div class="server-item"><span class="server-dot"></span> 韩国·首尔</div>
+      <div class="server-item"><span class="server-dot"></span> 英国·伦敦</div>
+    </div>
+
+    <!-- 二维码 -->
+    <div class="qr-section">
+      <div class="qr-code" id="qrcode-container"></div>
+      <div class="qr-info">
+        <div class="qr-title">扫码下载</div>
+        <div class="qr-tip">
+          扫码即下 Android 版
+          <span class="qr-link-preview" id="qr-link-preview"></span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+  (function() {
+    // 粒子网络背景
+    var canvas = document.getElementById("net-canvas");
+    if (canvas) {
+      var ctx = canvas.getContext("2d");
+      var dots = [], maxDots = 35;
+      var w, h;
+      function resize() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+      }
+      resize();
+      window.addEventListener("resize", resize);
+
+      for (var i = 0; i < maxDots; i++) {
+        dots.push({
+          x: Math.random() * w, y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4,
+          r: Math.random() * 1.5 + 0.8
+        });
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, w, h);
+        for (var i = 0; i < dots.length; i++) {
+          var d = dots[i];
+          d.x += d.vx; d.y += d.vy;
+          if (d.x < 0) d.x = w; if (d.x > w) d.x = 0;
+          if (d.y < 0) d.y = h; if (d.y > h) d.y = 0;
+          ctx.beginPath();
+          ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(6,182,212,0.25)";
+          ctx.fill();
+
+          for (var j = i + 1; j < dots.length; j++) {
+            var e = dots[j];
+            var dx = d.x - e.x, dy = d.y - e.y;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 110) {
+              ctx.beginPath();
+              ctx.moveTo(d.x, d.y);
+              ctx.lineTo(e.x, e.y);
+              ctx.strokeStyle = "rgba(6,182,212," + (0.08 * (1 - dist / 110)).toFixed(2) + ")";
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+            }
+          }
+        }
+        requestAnimationFrame(draw);
+      }
+      draw();
+    }
+
+    // 下载链接
+    var androidDownloadUrl = "{{DOWNLOAD_URL}}";
+    var iosBtn = document.getElementById("ios-download-btn");
+    var androidBtn = document.getElementById("android-download-btn");
+
+    if (iosBtn) {
+      iosBtn.addEventListener("click", function(event) {
+        event.preventDefault();
+        alert("iOS 版本开发中，敬请期待。");
+      });
+    }
+    if (androidBtn) {
+      androidBtn.setAttribute("href", androidDownloadUrl);
+      androidBtn.setAttribute("target", "_blank");
+      androidBtn.setAttribute("rel", "noopener noreferrer");
+    }
+
+    var previewSpan = document.getElementById("qr-link-preview");
+    if (previewSpan) {
+      var shortDisplay = androidDownloadUrl.length > 50 ? androidDownloadUrl.substring(0, 47) + "..." : androidDownloadUrl;
+      previewSpan.innerHTML = "🔗 " + shortDisplay;
+      previewSpan.style.fontSize = "10px";
+      previewSpan.style.display = "inline-block";
+      previewSpan.style.maxWidth = "240px";
+      previewSpan.style.wordBreak = "break-all";
+    }
+
+    // 二维码
+    var qrContainer = document.getElementById("qrcode-container");
+    if (qrContainer) {
+      var qrCanvas = document.createElement("canvas");
+      qrCanvas.width = 120; qrCanvas.height = 120;
+      qrContainer.appendChild(qrCanvas);
+
+      var script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
+      script.onload = function() {
+        QRCode.toCanvas(qrCanvas, androidDownloadUrl, {
+          width: 120, margin: 1,
+          color: { dark: "#000", light: "#fff" }
+        }, function(err) { if (err) console.error("QR生成失败", err); });
+      };
+      document.head.appendChild(script);
+    }
+  })();
+  </script>
+</body>
+</html>
