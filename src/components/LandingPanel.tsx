@@ -33,7 +33,6 @@ import {
   Trash2,
   Package,
   Maximize2,
-  FileText,
 } from "lucide-react";
 import type { SubChannelData, LandingPageResult, FtpUploadResult, TemplateInfo } from "../types";
 import type { LandingMode } from "../hooks/useLanding";
@@ -81,8 +80,6 @@ export function LandingPanel({
   const [templatesBaseDir, setTemplatesBaseDir] = useState("");
   const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
-  const [showDiagnosticLog, setShowDiagnosticLog] = useState(false);
-  const [diagnosticLog, setDiagnosticLog] = useState("");
 
   // 预览浮层状态
   const [previewOverlay, setPreviewOverlay] = useState<{
@@ -340,22 +337,6 @@ export function LandingPanel({
                 复制所有链接
               </Button>
             )}
-            <Button
-              leftSection={<FileText size={14} />}
-              onClick={async () => {
-                try {
-                  const log = await invoke<string>("read_diagnostic_log", { lines: 300 });
-                  setDiagnosticLog(log);
-                } catch (e) {
-                  setDiagnosticLog(String(e));
-                }
-                setShowDiagnosticLog(true);
-              }}
-              variant="light"
-              color="gray"
-            >
-              系统日志
-            </Button>
             <Button
               leftSection={<Package size={14} />}
               onClick={handleOpenTemplateManager}
@@ -985,39 +966,6 @@ export function LandingPanel({
           </Accordion>
           </>
         )}
-      </Modal>
-
-      {/* ========== 诊断日志弹窗 ========== */}
-      <Modal
-        opened={showDiagnosticLog}
-        onClose={() => setShowDiagnosticLog(false)}
-        title={
-          <Group gap="xs">
-            <FileText size={16} />
-            <Text fw={600}>系统诊断日志（最新 300 行）</Text>
-          </Group>
-        }
-        size="xl"
-      >
-        <Box
-          component="pre"
-          style={{
-            background: "#0a0f1a",
-            color: "#a8b2d1",
-            padding: 16,
-            borderRadius: 8,
-            fontSize: 11,
-            lineHeight: 1.5,
-            maxHeight: "calc(100vh - 200px)",
-            overflow: "auto",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-all",
-            margin: 0,
-            fontFamily: "'SF Mono', 'Fira Code', monospace",
-          }}
-        >
-          {diagnosticLog || "（无日志内容）"}
-        </Box>
       </Modal>
 
       {/* ========== 全屏预览浮层 ========== */}

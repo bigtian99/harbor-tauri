@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { CheckCircle, Copy } from "lucide-react";
+import { CheckCircle, Copy, ScrollText, Search, X } from "lucide-react";
 
 import { Sidebar } from "./components/Sidebar";
 import { UploadPanel } from "./components/UploadPanel";
@@ -1501,17 +1501,28 @@ function App() {
         <div className="log-viewer-overlay" onClick={() => { setShowLogViewer(false); setLogSearch(""); }}>
           <div className="log-viewer" onClick={(e) => e.stopPropagation()}>
             <div className="log-viewer-header">
+              <ScrollText size={18} className="log-viewer-title-icon" />
               <h3>系统诊断日志</h3>
-              <input
-                className="log-viewer-search"
-                type="text"
-                placeholder="搜索日志..."
-                value={logSearch}
-                onChange={(e) => setLogSearch(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
-              />
-              <button className="log-viewer-close" onClick={() => { setShowLogViewer(false); setLogSearch(""); }}>✕</button>
+              <div className="log-viewer-search-wrap">
+                <Search size={14} className="log-viewer-search-icon" />
+                <input
+                  className="log-viewer-search"
+                  type="text"
+                  placeholder="搜索日志..."
+                  value={logSearch}
+                  onChange={(e) => setLogSearch(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                />
+                {logSearch && (
+                  <button className="log-viewer-search-clear" onClick={() => setLogSearch("")}>
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              <button className="log-viewer-close" onClick={() => { setShowLogViewer(false); setLogSearch(""); }}>
+                <X size={18} />
+              </button>
             </div>
             <pre
               className="log-viewer-content"
