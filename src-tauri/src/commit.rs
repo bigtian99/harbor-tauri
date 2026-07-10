@@ -1,4 +1,4 @@
-use crate::models::{AuthorInfo, CommitInfo, CommitListResult, LastCommitInfo};
+use crate::models::{AuthorInfo, CommitDiffResult, CommitInfo, CommitListResult, LastCommitInfo};
 use crate::utils::{git_output, repo_root_for, silent_command};
 use std::path::PathBuf;
 
@@ -326,4 +326,40 @@ pub async fn list_branch_diff_commits(
     })
     .await
     .map_err(|e| format!("读取分支差异提交线程异常: {e}"))?
+}
+
+#[tauri::command]
+pub async fn get_commit_diff(
+    repo_path: String,
+    commit_hash: String,
+) -> Result<CommitDiffResult, String> {
+    let repo_path = PathBuf::from(repo_path);
+    let commit_hash = commit_hash.trim().to_string();
+    if commit_hash.is_empty() {
+        return Err("提交 hash 不能为空".to_string());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = repo_root_for(&repo_path)?;
+        let verified = git_output(
+            &repo_root,
+            &["rev-parse", "--verify", &format!("{commit_hash}^{{commit}}")],
+        )?;
+        let hash = verified.trim().to_string();
+        let diff = git_output(
+            &repo_root,
+            &[
+                "show",
+                "--format=",
+                "--find-renames",
+                "--patch",
+                "--no-ext-diff",
+                "--no-color",
+                &hash,
+            ],
+        )?;
+        Ok(CommitDiffResult { hash, diff })
+    })
+    .await
+    .map_err(|e| format!("读取提交 diff 线程异常: {e}"))?
 }

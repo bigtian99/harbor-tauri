@@ -514,3 +514,251 @@
 .commit-modal .modal-pagination {
   margin-top: 0;
 }
+
+.commit-diff-modal {
+  max-width: 1120px;
+  width: 94%;
+}
+
+.commit-diff-modal .commit-modal-header h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.commit-diff-jump-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-left: 72px;
+}
+
+.commit-diff-jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(100, 255, 218, 0.24);
+  background: rgba(15, 52, 96, 0.42);
+  color: #64ffda;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.commit-diff-jump-btn:hover:not(:disabled) {
+  border-color: rgba(100, 255, 218, 0.52);
+  background: rgba(15, 52, 96, 0.72);
+}
+
+.commit-diff-jump-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.commit-diff-jump-count {
+  color: #8892b0;
+  font-size: 12px;
+  min-width: 42px;
+  text-align: center;
+}
+
+.commit-diff-summary {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 52, 96, 0.22);
+}
+
+.commit-diff-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.commit-diff-summary-main strong {
+  color: #e6f1ff;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-diff-summary-meta {
+  display: flex;
+  gap: 14px;
+  padding-left: 72px;
+  margin-top: 6px;
+  color: #8892b0;
+  font-size: 12px;
+}
+
+.commit-diff-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: rgba(3, 7, 18, 0.35);
+  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.commit-diff-file-menu {
+  width: 260px;
+  flex-shrink: 0;
+  overflow: auto;
+  padding: 12px 10px;
+  border-right: 1px solid rgba(100, 255, 218, 0.12);
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.commit-diff-file-tree {
+  min-width: 0;
+}
+
+.commit-diff-file-tree-dir,
+.commit-diff-file-tree-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  margin: 2px 0;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.commit-diff-file-tree-dir span,
+.commit-diff-file-tree-file span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.commit-diff-file-tree-dir {
+  padding: 5px 8px;
+  appearance: none;
+  background: transparent;
+  color: #7dd3fc;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.commit-diff-file-tree-dir svg,
+.commit-diff-file-tree-file svg {
+  flex-shrink: 0;
+}
+
+.commit-diff-file-tree-dir:hover {
+  background: rgba(14, 165, 233, 0.1);
+  color: #e0f2fe;
+}
+
+.commit-diff-file-tree-dir--collapsed {
+  color: #bae6fd;
+}
+
+.commit-diff-file-tree-file {
+  padding: 5px 8px;
+  background: transparent;
+  color: #cbd5e1;
+  text-align: left;
+  cursor: pointer;
+}
+
+.commit-diff-file-tree-file:hover,
+.commit-diff-file-tree-file--active {
+  border-color: rgba(100, 255, 218, 0.28);
+  background: rgba(100, 255, 218, 0.1);
+  color: #e6f1ff;
+}
+
+.commit-diff-files {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 12px 0;
+}
+
+.commit-diff-file {
+  margin: 0 14px 12px;
+  border: 1px solid rgba(100, 255, 218, 0.12);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.46);
+}
+
+.commit-diff-file--active {
+  border-color: rgba(100, 255, 218, 0.36);
+}
+
+.commit-diff-file:last-child {
+  margin-bottom: 0;
+}
+
+.commit-diff-file-title {
+  padding: 8px 12px;
+  color: #7dd3fc;
+  background: rgba(14, 165, 233, 0.12);
+  border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.commit-diff-lines {
+  min-width: max-content;
+}
+
+.commit-diff-line {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  color: #cbd5e1;
+}
+
+.commit-diff-line-marker {
+  padding: 0 10px;
+  color: #64748b;
+  text-align: center;
+  user-select: none;
+  border-right: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.commit-diff-line code {
+  padding: 0 14px;
+  white-space: pre;
+  font-family: inherit;
+}
+
+.commit-diff-line--addition {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.commit-diff-line--deletion {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.commit-diff-line--active {
+  box-shadow: inset 3px 0 0 #64ffda;
+  background: rgba(100, 255, 218, 0.18);
+}
+
+.commit-diff-error {
+  margin: 20px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.1);
+  color: #ffb4b4;
+  font-size: 13px;
+}

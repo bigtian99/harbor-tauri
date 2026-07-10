@@ -16,9 +16,9 @@ use build::{
     build_and_push, cancel_build, check_dockerfile, detect_frontend_dir, detect_spring_profiles,
     list_npm_scripts, open_directory, package_from_branch, push_local_image, list_local_images,
 };
-use commit::{get_commit_authors, get_commit_list, get_last_commit, list_branch_diff_commits};
+use commit::{get_commit_authors, get_commit_diff, get_commit_list, get_last_commit, list_branch_diff_commits};
 use config_cmd::{load_config, save_config};
-use git::{list_git_branches, list_git_branches_from_url, clone_repo, list_remote_branches, check_remote_merge, merge_remote_branches};
+use git::{list_git_branches, list_git_branches_from_url, clone_repo, list_remote_branches, check_remote_merge, merge_remote_branches, get_merge_conflict_diff};
 use history::{
     clear_build_history, delete_artifact_path, delete_build_record,
     get_build_history, save_build_record, update_build_record_image,
@@ -64,6 +64,7 @@ pub fn run() {
             clone_repo,
             get_last_commit,
             get_commit_list,
+            get_commit_diff,
             get_commit_authors,
             list_branch_diff_commits,
             list_npm_scripts,
@@ -97,6 +98,7 @@ pub fn run() {
             list_remote_branches,
             check_remote_merge,
             merge_remote_branches,
+            get_merge_conflict_diff,
             batch_pack_sub_channels,
             open_ops_login_window,
             close_ops_login_window,

@@ -5,10 +5,14 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { notifications } from "@mantine/notifications";
 import {
   GitMerge, FolderOpen, Loader2, RefreshCw, CheckCircle, AlertTriangle,
-  ArrowRight, GitBranch, GitCommit, ExternalLink, Info, Search
+  ArrowRight, GitBranch, GitCommit, ExternalLink, Info, Search, FileText, X,
+  ArrowUp, ArrowDown, ChevronDown, ChevronRight
 } from "lucide-react";
 import { SearchableDropdown } from "./SearchableDropdown";
-import type { HarborConfig, GitBranchOption, LocalMergeCheck, RemoteBranchListResult, CommitInfo, AuthorInfo } from "../types";
+import { getCommitDiffChangeRefs, getCommitDiffFileTree, parseCommitDiffFiles } from "../commitDiff";
+import "./Modal.css";
+import type { CommitDiffFileTreeNode } from "../commitDiff";
+import type { HarborConfig, GitBranchOption, LocalMergeCheck, RemoteBranchListResult, CommitInfo, AuthorInfo, CommitDiffResult, MergeConflictDetail } from "../types";
 import { isTauriRuntime } from "../types";
 
 interface MergePanelProps {
@@ -35,6 +39,99 @@ function gravatarUrl(email: string, size = 40): string {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(normalized)}&size=${size}&background=${color}&color=fff`;
 }
 
+interface ConflictBlock {
+  /** 该块在 target 面板中的起始行（1-based） */
+  targetLine: number;
+  /** 该块在 source 面板中的起始行（1-based） */
+  sourceLine: number;
+  /** 该块在 target 中涉及的行号 */
+  targetLines: Set<number>;
+  /** 该块在 source 中涉及的行号 */
+  sourceLines: Set<number>;
+}
+
+/** 解析 unified diff，提取 target（旧文件）中被删除/修改的行号，和 source（新文件）中被新增/修改的行号 */
+function parseChangedLines(diff: string): { targetLines: Set<number>; sourceLines: Set<number> } {
+  const targetLines = new Set<number>();
+  const sourceLines = new Set<number>();
+  let oldLine = 0;
+  let newLine = 0;
+
+  for (const line of diff.split("\n")) {
+    const hunkMatch = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+    if (hunkMatch) {
+      oldLine = parseInt(hunkMatch[1], 10);
+      newLine = parseInt(hunkMatch[3], 10);
+      continue;
+    }
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      targetLines.add(oldLine);
+      oldLine++;
+    } else if (line.startsWith("+") && !line.startsWith("+++")) {
+      sourceLines.add(newLine);
+      newLine++;
+    } else if (line.startsWith(" ")) {
+      oldLine++;
+      newLine++;
+    }
+  }
+  return { targetLines, sourceLines };
+}
+
+/** 从 unified diff 提取冲突块（连续变更合并为一个块，块间 gap ≤ 3 行视为连续） */
+function parseConflictBlocks(diff: string): ConflictBlock[] {
+  // 先收集每个 hunk 的原始信息
+  interface RawHunk { targetStart: number; sourceStart: number; tLines: Set<number>; sLines: Set<number>; tEnd: number; sEnd: number }
+  const hunks: RawHunk[] = [];
+  let oldLine = 0;
+  let newLine = 0;
+  let current: RawHunk | null = null;
+
+  for (const line of diff.split("\n")) {
+    const m = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (m) {
+      if (current) hunks.push(current);
+      oldLine = parseInt(m[1], 10);
+      newLine = parseInt(m[3], 10);
+      current = { targetStart: oldLine, sourceStart: newLine, tLines: new Set(), sLines: new Set(), tEnd: oldLine, sEnd: newLine };
+      continue;
+    }
+    if (!current) continue;
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      current.tLines.add(oldLine);
+      current.tEnd = oldLine;
+      oldLine++;
+    } else if (line.startsWith("+") && !line.startsWith("+++")) {
+      current.sLines.add(newLine);
+      current.sEnd = newLine;
+      newLine++;
+    } else if (line.startsWith(" ")) {
+      oldLine++;
+      newLine++;
+    }
+  }
+  if (current) hunks.push(current);
+
+  // 合并 gap ≤ 3 的相邻 hunk 为一个 block
+  const blocks: ConflictBlock[] = [];
+  for (const h of hunks) {
+    const last = blocks[blocks.length - 1];
+    if (last && h.targetStart <= Math.max(...last.targetLines, last.targetLine) + 4) {
+      // 合并：把 h 的行号并入 last
+      for (const l of h.tLines) last.targetLines.add(l);
+      for (const l of h.sLines) last.sourceLines.add(l);
+    } else {
+      blocks.push({
+        targetLine: h.targetStart,
+        sourceLine: h.sourceStart,
+        targetLines: h.tLines,
+        sourceLines: h.sLines,
+      });
+    }
+  }
+  return blocks;
+}
+
 function summarizeMergeError(error: unknown): string {
   const msg = String(error).trim();
   if (!msg) return "合并失败，请稍后重试";
@@ -42,6 +139,60 @@ function summarizeMergeError(error: unknown): string {
     return msg.split("\n")[0].trim();
   }
   return msg.split("\n")[0].trim();
+}
+
+function renderCommitDiffFileTree(
+  nodes: CommitDiffFileTreeNode[],
+  activeFile: number,
+  onSelectFile: (fileIndex: number) => void,
+  collapsedDirs: Set<string>,
+  onToggleDir: (path: string) => void,
+  depth = 0,
+) {
+  return nodes.map((node) => {
+    if (node.children) {
+      const isCollapsed = collapsedDirs.has(node.path);
+      return (
+        <div key={node.path} className="commit-diff-file-tree-node">
+          <button
+            type="button"
+            className={`commit-diff-file-tree-dir${isCollapsed ? " commit-diff-file-tree-dir--collapsed" : ""}`}
+            style={{ paddingLeft: `${depth * 14}px` }}
+            title={node.path}
+            aria-expanded={!isCollapsed}
+            onClick={() => onToggleDir(node.path)}
+          >
+            {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+            <FolderOpen size={13} />
+            <span>{node.name}</span>
+          </button>
+          {!isCollapsed && (
+            <div className="commit-diff-file-tree-children">
+              {renderCommitDiffFileTree(node.children, activeFile, onSelectFile, collapsedDirs, onToggleDir, depth + 1)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <button
+        key={`${node.path}-${node.fileIndex}`}
+        type="button"
+        className={`commit-diff-file-tree-file${activeFile === node.fileIndex ? " commit-diff-file-tree-file--active" : ""}`}
+        style={{ paddingLeft: `${depth * 14 + 8}px` }}
+        title={node.path}
+        onClick={() => {
+          if (node.fileIndex !== undefined) {
+            onSelectFile(node.fileIndex);
+          }
+        }}
+      >
+        <FileText size={13} />
+        <span>{node.name}</span>
+      </button>
+    );
+  });
 }
 
 export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
@@ -63,12 +214,25 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
   const [diffError, setDiffError] = useState("");
   const [diffCommitSearch, setDiffCommitSearch] = useState("");
   const [selectedAuthor, setSelectedAuthor] = useState("");
+  const [selectedDiffCommit, setSelectedDiffCommit] = useState<CommitInfo | null>(null);
+  const [commitDiff, setCommitDiff] = useState("");
+  const [commitDiffError, setCommitDiffError] = useState("");
+  const [isLoadingCommitDiff, setIsLoadingCommitDiff] = useState(false);
+  const [activeCommitDiffChange, setActiveCommitDiffChange] = useState(-1);
+  const [activeCommitDiffFile, setActiveCommitDiffFile] = useState(-1);
+  const [collapsedCommitDiffDirs, setCollapsedCommitDiffDirs] = useState<Set<string>>(new Set());
   const [mergeOverlayPhase, setMergeOverlayPhase] = useState<MergeOverlayPhase>("idle");
   const [mergeProgress, setMergeProgress] = useState(0);
   const [mergeProgressMessage, setMergeProgressMessage] = useState("");
   const [mergeResultMessage, setMergeResultMessage] = useState("");
   const mergeAutoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCheckDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitDiffRequest = useRef(0);
+  const commitDiffLineRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const commitDiffFileRefs = useRef<Record<number, HTMLElement | null>>({});
+  // 冲突文件 diff 查看
+  const [conflictDetail, setConflictDetail] = useState<MergeConflictDetail | null>(null);
+  const [isLoadingConflictDiff, setIsLoadingConflictDiff] = useState(false);
 
   const closeMergeOverlay = useCallback(() => {
     if (mergeAutoCloseTimer.current) {
@@ -141,8 +305,21 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
     setDiffLoaded(false);
     setDiffError("");
     setDiffCommitSearch("");
-
     setSelectedAuthor("");
+    setSelectedDiffCommit(null);
+    setCommitDiff("");
+    setCommitDiffError("");
+    setIsLoadingCommitDiff(false);
+    setActiveCommitDiffChange(-1);
+    setActiveCommitDiffFile(-1);
+    setCollapsedCommitDiffDirs(new Set());
+    setConflictDetail(null);
+    setActiveConflictBlock(-1);
+    targetLineRefs.current = {};
+    sourceLineRefs.current = {};
+    commitDiffLineRefs.current = {};
+    commitDiffFileRefs.current = {};
+    commitDiffRequest.current++;
   }, []);
 
   const onSelectRepo = useCallback(async () => {
@@ -184,6 +361,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
       setDiffLoaded(true);
       setDiffError("");
       setDiffCommitSearch("");
+      setSelectedDiffCommit(null);
+      setCollapsedCommitDiffDirs(new Set());
       return;
     }
     setIsChecking(true);
@@ -193,6 +372,20 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
     setDiffLoaded(false);
     setDiffError("");
     setDiffCommitSearch("");
+    setSelectedDiffCommit(null);
+    setCommitDiff("");
+    setCommitDiffError("");
+    setIsLoadingCommitDiff(false);
+    setActiveCommitDiffChange(-1);
+    setActiveCommitDiffFile(-1);
+    setCollapsedCommitDiffDirs(new Set());
+    setConflictDetail(null);
+    setActiveConflictBlock(-1);
+    targetLineRefs.current = {};
+    sourceLineRefs.current = {};
+    commitDiffLineRefs.current = {};
+    commitDiffFileRefs.current = {};
+    commitDiffRequest.current++;
     // 并行：冲突检查 + 差异提交列表
     const checkP = invoke<LocalMergeCheck>("check_remote_merge", {
       repoPath: resolvedRepoPath,
@@ -238,6 +431,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
       setDiffLoaded(true);
       setDiffError("");
       setDiffCommitSearch("");
+      setSelectedDiffCommit(null);
+      setCollapsedCommitDiffDirs(new Set());
     } else if (sourceBranch && targetBranch && resolvedRepoPath) {
       // 防抖：用户停止输入 800ms 后才自动检查
       autoCheckDebounce.current = setTimeout(() => {
@@ -249,6 +444,8 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
       setDiffLoaded(false);
       setDiffError("");
       setDiffCommitSearch("");
+      setSelectedDiffCommit(null);
+      setCollapsedCommitDiffDirs(new Set());
     }
   }, [sourceBranch, targetBranch, resolvedRepoPath, handleCheck]);
 
@@ -327,6 +524,141 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
     }
     return list;
   }, [diffCommits, diffCommitSearch, selectedAuthor]);
+  const commitDiffFiles = useMemo(() => parseCommitDiffFiles(commitDiff), [commitDiff]);
+  const commitDiffChangeRefs = useMemo(() => getCommitDiffChangeRefs(commitDiffFiles), [commitDiffFiles]);
+  const commitDiffFileTree = useMemo(() => getCommitDiffFileTree(commitDiffFiles), [commitDiffFiles]);
+  const conflictChangedLines = useMemo(
+    () => conflictDetail ? parseChangedLines(conflictDetail.diff) : { targetLines: new Set<number>(), sourceLines: new Set<number>() },
+    [conflictDetail],
+  );
+  const conflictBlocks = useMemo(
+    () => conflictDetail ? parseConflictBlocks(conflictDetail.diff) : [],
+    [conflictDetail],
+  );
+  const [activeConflictBlock, setActiveConflictBlock] = useState(-1);
+  const targetLineRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const sourceLineRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const closeCommitDiffModal = useCallback(() => {
+    commitDiffRequest.current++;
+    setSelectedDiffCommit(null);
+    setCommitDiff("");
+    setCommitDiffError("");
+    setIsLoadingCommitDiff(false);
+    setActiveCommitDiffChange(-1);
+    setActiveCommitDiffFile(-1);
+    setCollapsedCommitDiffDirs(new Set());
+    commitDiffLineRefs.current = {};
+    commitDiffFileRefs.current = {};
+  }, []);
+  const toggleCommitDiffTreeDir = useCallback((path: string) => {
+    setCollapsedCommitDiffDirs((current) => {
+      const next = new Set(current);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+  const scrollCommitDiffFile = useCallback((fileIndex: number) => {
+    setActiveCommitDiffFile(fileIndex);
+    requestAnimationFrame(() => {
+      commitDiffFileRefs.current[fileIndex]?.scrollIntoView({
+        block: "start",
+        behavior: "smooth",
+      });
+    });
+  }, []);
+  const jumpCommitDiffChange = useCallback((step: -1 | 1) => {
+    if (commitDiffChangeRefs.length === 0) return;
+    const nextIndex = activeCommitDiffChange < 0
+      ? (step > 0 ? 0 : commitDiffChangeRefs.length - 1)
+      : (activeCommitDiffChange + step + commitDiffChangeRefs.length) % commitDiffChangeRefs.length;
+    const next = commitDiffChangeRefs[nextIndex];
+    setActiveCommitDiffChange(nextIndex);
+    setActiveCommitDiffFile(next.fileIndex);
+    requestAnimationFrame(() => {
+      commitDiffLineRefs.current[`${next.fileIndex}-${next.lineIndex}`]?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+    });
+  }, [activeCommitDiffChange, commitDiffChangeRefs]);
+  const loadConflictDiff = useCallback(async (filePath: string) => {
+    if (!isTauriRuntime() || !resolvedRepoPath) return;
+    setConflictDetail(null);
+    setActiveConflictBlock(-1);
+    targetLineRefs.current = {};
+    sourceLineRefs.current = {};
+    setIsLoadingConflictDiff(true);
+    try {
+      const detail = await invoke<MergeConflictDetail>("get_merge_conflict_diff", {
+        repoPath: resolvedRepoPath,
+        source: sourceBranch,
+        target: targetBranch,
+        filePath: filePath,
+      });
+      setConflictDetail(detail);
+    } catch (e) {
+      setConflictDetail({
+        filePath,
+        targetContent: `获取失败：${String(e)}`,
+        sourceContent: `获取失败：${String(e)}`,
+        diff: "",
+      });
+    } finally {
+      setIsLoadingConflictDiff(false);
+    }
+  }, [resolvedRepoPath, sourceBranch, targetBranch]);
+  const closeConflictDiff = useCallback(() => {
+    setConflictDetail(null);
+    setActiveConflictBlock(-1);
+    targetLineRefs.current = {};
+    sourceLineRefs.current = {};
+  }, []);
+  const jumpConflictBlock = useCallback((step: -1 | 1) => {
+    if (conflictBlocks.length === 0) return;
+    const next = activeConflictBlock < 0
+      ? (step > 0 ? 0 : conflictBlocks.length - 1)
+      : Math.max(0, Math.min(conflictBlocks.length - 1, activeConflictBlock + step));
+    setActiveConflictBlock(next);
+    const block = conflictBlocks[next];
+    requestAnimationFrame(() => {
+      targetLineRefs.current[block.targetLine]?.scrollIntoView({ block: "center", behavior: "smooth" });
+      sourceLineRefs.current[block.sourceLine]?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  }, [activeConflictBlock, conflictBlocks]);
+  const openCommitDiffModal = useCallback(async (commit: CommitInfo) => {
+    if (!isTauriRuntime() || !resolvedRepoPath) return;
+    const requestId = ++commitDiffRequest.current;
+    setSelectedDiffCommit(commit);
+    setCommitDiff("");
+    setCommitDiffError("");
+    setIsLoadingCommitDiff(true);
+    setActiveCommitDiffChange(-1);
+    setActiveCommitDiffFile(-1);
+    setCollapsedCommitDiffDirs(new Set());
+    commitDiffLineRefs.current = {};
+    commitDiffFileRefs.current = {};
+    try {
+      const result = await invoke<CommitDiffResult>("get_commit_diff", {
+        repoPath: resolvedRepoPath,
+        commitHash: commit.hash,
+      });
+      if (requestId === commitDiffRequest.current) {
+        setCommitDiff(result.diff);
+      }
+    } catch (e) {
+      if (requestId === commitDiffRequest.current) {
+        setCommitDiffError(String(e));
+      }
+    } finally {
+      if (requestId === commitDiffRequest.current) {
+        setIsLoadingCommitDiff(false);
+      }
+    }
+  }, [resolvedRepoPath]);
   const diffCountLabel = isLoadingDiff
     ? "加载中..."
     : diffCommitSearch.trim()
@@ -383,6 +715,208 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                   关闭
                 </button>
               </>
+            )}
+          </div>
+        </div>
+      )}
+      {selectedDiffCommit && (
+        <div
+          className="commit-modal-overlay commit-diff-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="commit-diff-title"
+          onClick={closeCommitDiffModal}
+        >
+          <div className="commit-modal commit-diff-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="commit-modal-header">
+              <h3 id="commit-diff-title"><FileText size={16} /> 提交 Diff</h3>
+              <button className="commit-modal-close" onClick={closeCommitDiffModal} title="关闭">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="commit-diff-summary">
+              <div className="commit-diff-summary-main">
+                <span className="commit-hash" title={selectedDiffCommit.hash}>{selectedDiffCommit.short_hash}</span>
+                <strong>{selectedDiffCommit.message}</strong>
+              </div>
+              <div className="commit-diff-summary-meta">
+                <span>{selectedDiffCommit.author}</span>
+                <span>{selectedDiffCommit.date}</span>
+              </div>
+              <div className="commit-diff-jump-actions">
+                <button
+                  type="button"
+                  className="commit-diff-jump-btn"
+                  onClick={() => jumpCommitDiffChange(-1)}
+                  disabled={commitDiffChangeRefs.length === 0}
+                  title="上一个修改点"
+                >
+                  <ArrowUp size={14} /> 上一个
+                </button>
+                <span className="commit-diff-jump-count">
+                  {commitDiffChangeRefs.length > 0 ? `${activeCommitDiffChange + 1 || 0}/${commitDiffChangeRefs.length}` : "0/0"}
+                </span>
+                <button
+                  type="button"
+                  className="commit-diff-jump-btn"
+                  onClick={() => jumpCommitDiffChange(1)}
+                  disabled={commitDiffChangeRefs.length === 0}
+                  title="下一个修改点"
+                >
+                  <ArrowDown size={14} /> 下一个
+                </button>
+              </div>
+            </div>
+            {isLoadingCommitDiff ? (
+              <div className="modal-loading"><Loader2 size={16} className="spin" /> 加载 diff 中...</div>
+            ) : commitDiffError ? (
+              <div className="commit-diff-error">获取 diff 失败：{commitDiffError}</div>
+            ) : commitDiffFiles.length > 0 ? (
+              <div className="commit-diff-layout">
+                <aside className="commit-diff-file-menu" aria-label="变更文件">
+                  <div className="commit-diff-file-tree">
+                    {renderCommitDiffFileTree(
+                      commitDiffFileTree,
+                      activeCommitDiffFile,
+                      scrollCommitDiffFile,
+                      collapsedCommitDiffDirs,
+                      toggleCommitDiffTreeDir,
+                    )}
+                  </div>
+                </aside>
+                <div className="commit-diff-files">
+                  {commitDiffFiles.map((file, fileIndex) => {
+                    return (
+                      <section
+                        key={`${fileIndex}-${file.path}`}
+                        ref={(el) => {
+                          commitDiffFileRefs.current[fileIndex] = el;
+                        }}
+                        className={`commit-diff-file${activeCommitDiffFile === fileIndex ? " commit-diff-file--active" : ""}`}
+                      >
+                        <div className="commit-diff-file-title">{file.path}</div>
+                        <div className="commit-diff-lines">
+                          {file.lines.map((line, index) => (
+                            <div
+                              key={`${file.path}-${index}-${line.text}`}
+                              ref={(el) => {
+                                commitDiffLineRefs.current[`${fileIndex}-${index}`] = el;
+                              }}
+                              className={`commit-diff-line commit-diff-line--${line.kind}${commitDiffChangeRefs[activeCommitDiffChange]?.fileIndex === fileIndex && commitDiffChangeRefs[activeCommitDiffChange]?.lineIndex === index ? " commit-diff-line--active" : ""}`}
+                            >
+                              <span className="commit-diff-line-marker">
+                                {line.kind === "addition" ? "+" : line.kind === "deletion" ? "-" : " "}
+                              </span>
+                              <code>{line.text || " "}</code>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="modal-empty">这个提交没有可展示的文件变更</div>
+            )}
+          </div>
+        </div>
+      )}
+      {conflictDetail && (
+        <div
+          className="commit-modal-overlay commit-diff-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="conflict-diff-title"
+          onClick={closeConflictDiff}
+        >
+          <div className="commit-modal merge-conflict-compare-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="commit-modal-header">
+              <h3 id="conflict-diff-title"><FileText size={16} /> 冲突文件对比</h3>
+              <span className="template-hint" style={{ marginLeft: 12 }}>
+                {conflictDetail.filePath}
+              </span>
+              <div className="commit-diff-jump-actions" style={{ marginLeft: "auto", marginRight: 8 }}>
+                <button
+                  type="button"
+                  className="commit-diff-jump-btn"
+                  onClick={() => jumpConflictBlock(-1)}
+                  disabled={conflictBlocks.length === 0}
+                  title="上一个冲突块"
+                >
+                  <ArrowUp size={14} /> 上一个
+                </button>
+                <span className="commit-diff-jump-count">
+                  {conflictBlocks.length > 0 ? `${activeConflictBlock + 1 || 0}/${conflictBlocks.length}` : "0/0"}
+                </span>
+                <button
+                  type="button"
+                  className="commit-diff-jump-btn"
+                  onClick={() => jumpConflictBlock(1)}
+                  disabled={conflictBlocks.length === 0}
+                  title="下一个冲突块"
+                >
+                  <ArrowDown size={14} /> 下一个
+                </button>
+              </div>
+              <button className="commit-modal-close" onClick={closeConflictDiff} title="关闭">
+                <X size={16} />
+              </button>
+            </div>
+            {isLoadingConflictDiff ? (
+              <div className="modal-loading"><Loader2 size={16} className="spin" /> 加载中...</div>
+            ) : (
+              <div className="merge-conflict-compare">
+                <div className="merge-conflict-panel">
+                  <div className="merge-conflict-panel-header">
+                    <GitBranch size={14} /> {targetBranch.replace(/^origin\//, "")}
+                    <span className="merge-conflict-role-tag">目标</span>
+                  </div>
+                  <div className="merge-conflict-content">
+                    {conflictDetail.targetContent.split("\n").map((line, i) => {
+                      const ln = i + 1;
+                      const changed = conflictChangedLines.targetLines.has(ln);
+                      const activeBlock = conflictBlocks[activeConflictBlock];
+                      const inActiveBlock = activeBlock && activeBlock.targetLines.has(ln);
+                      return (
+                        <div
+                          key={i}
+                          ref={(el) => { targetLineRefs.current[ln] = el; }}
+                          className={`merge-conflict-line${changed ? " merge-conflict-line--removed" : ""}${inActiveBlock ? " merge-conflict-line--active" : ""}`}
+                        >
+                          <span className="merge-conflict-ln">{ln}</span>
+                          <span className="merge-conflict-text">{line || " "}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="merge-conflict-divider" />
+                <div className="merge-conflict-panel">
+                  <div className="merge-conflict-panel-header">
+                    <GitBranch size={14} /> {sourceBranch.replace(/^origin\//, "")}
+                    <span className="merge-conflict-role-tag merge-conflict-role-tag--source">源</span>
+                  </div>
+                  <div className="merge-conflict-content">
+                    {conflictDetail.sourceContent.split("\n").map((line, i) => {
+                      const ln = i + 1;
+                      const changed = conflictChangedLines.sourceLines.has(ln);
+                      const activeBlock = conflictBlocks[activeConflictBlock];
+                      const inActiveBlock = activeBlock && activeBlock.sourceLines.has(ln);
+                      return (
+                        <div
+                          key={i}
+                          ref={(el) => { sourceLineRefs.current[ln] = el; }}
+                          className={`merge-conflict-line${changed ? " merge-conflict-line--added" : ""}${inActiveBlock ? " merge-conflict-line--active" : ""}`}
+                        >
+                          <span className="merge-conflict-ln">{ln}</span>
+                          <span className="merge-conflict-text">{line || " "}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -519,7 +1053,16 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                 {checkResult.conflictFiles.length > 0 && (
                   <ul className="conflict-file-list">
                     {checkResult.conflictFiles.map((f) => (
-                      <li key={f}>{f}</li>
+                      <li key={f}>
+                        <button
+                          type="button"
+                          className="conflict-file-btn"
+                          title={`查看 ${f} 在两个分支间的差异`}
+                          onClick={() => loadConflictDiff(f)}
+                        >
+                          <FileText size={14} /> {f}
+                        </button>
+                      </li>
                     ))}
                   </ul>
                 )}
@@ -620,14 +1163,30 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                 ) : (
                   <div className="merge-diff-list">
                     {filteredDiffCommits.map((c) => (
-                      <div key={c.hash} className="merge-diff-item">
+                      <div
+                        key={c.hash}
+                        className="merge-diff-item"
+                        role="button"
+                        tabIndex={0}
+                        title="查看提交 Diff"
+                        onClick={() => openCommitDiffModal(c)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            openCommitDiffModal(c);
+                          }
+                        }}
+                      >
                         <div className="merge-diff-item-main">
                           {c.url ? (
                             <button
                               className="commit-link"
                               style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", padding: 0, flexShrink: 0 }}
                               title={`在浏览器中打开: ${c.hash}`}
-                              onClick={() => openUrl(c.url!)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openUrl(c.url!);
+                              }}
                             >
                               {c.short_hash}
                               <ExternalLink size={10} style={{ marginLeft: 2, verticalAlign: "middle" }} />
@@ -640,6 +1199,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                         <div className="merge-diff-item-meta">
                           <span className="commit-author">{c.author}</span>
                           <span className="commit-date">{c.date}</span>
+                          <span className="merge-diff-item-action">查看 Diff</span>
                         </div>
                       </div>
                     ))}

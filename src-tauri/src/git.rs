@@ -363,6 +363,51 @@ pub async fn check_remote_merge(
     .map_err(|e| format!("合并预检线程异常: {e}"))?
 }
 
+/// 获取冲突文件在两个分支中的内容，用于左右对比展示。
+#[tauri::command]
+pub async fn get_merge_conflict_diff(
+    repo_path: String,
+    source: String,
+    target: String,
+    file_path: String,
+) -> Result<crate::models::MergeConflictDetail, String> {
+    use crate::models::MergeConflictDetail;
+    let source = source.trim().to_string();
+    let target = target.trim().to_string();
+    let file_path = file_path.trim().to_string();
+    if source.is_empty() || target.is_empty() || file_path.is_empty() {
+        return Err("参数不能为空".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = resolve_repo_root(&repo_path)?;
+
+        let get_content = |git_ref: &str| -> String {
+            let (ok, stdout, _) = run_git_capture(
+                &repo_root,
+                &["show", &format!("{}:{}", git_ref, file_path)],
+            );
+            if ok { stdout } else { String::from("(文件不存在)") }
+        };
+
+        let target_content = get_content(&target);
+        let source_content = get_content(&source);
+
+        let (_, diff, _) = run_git_capture(
+            &repo_root,
+            &["diff", &target, &source, "--", &file_path],
+        );
+
+        Ok(MergeConflictDetail {
+            file_path,
+            target_content,
+            source_content,
+            diff,
+        })
+    })
+    .await
+    .map_err(|e| format!("获取冲突文件内容线程异常: {e}"))?
+}
+
 /// 解析 `git merge-tree --write-tree` 有冲突时的 stdout，提取冲突文件路径。
 fn parse_merge_tree_conflicts(stdout: &str) -> Vec<String> {
     let mut files: Vec<String> = Vec::new();

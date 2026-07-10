@@ -31,4 +31,4 @@ reqwest = { version = "0.12", features = ["json"] }
 tiny_http = "0.12"
 rusqlite = { version = "0.31", features = ["bundled"] }
 rust_xlsxwriter = "0.79"
-zip = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
