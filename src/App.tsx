@@ -165,6 +165,7 @@ function App() {
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
   const [showLogViewer, setShowLogViewer] = useState(false);
   const [logContent, setLogContent] = useState("");
+  const [logSearch, setLogSearch] = useState("");
   const toastTimerRef = useRef<number | null>(null);
   const branchLoadRequestRef = useRef(0);
   const opsModeInitializedRef = useRef(false);
@@ -1497,13 +1498,43 @@ function App() {
       </main>
 
       {showLogViewer && (
-        <div className="log-viewer-overlay" onClick={() => setShowLogViewer(false)}>
+        <div className="log-viewer-overlay" onClick={() => { setShowLogViewer(false); setLogSearch(""); }}>
           <div className="log-viewer" onClick={(e) => e.stopPropagation()}>
             <div className="log-viewer-header">
-              <h3>系统诊断日志（最新 300 行）</h3>
-              <button className="log-viewer-close" onClick={() => setShowLogViewer(false)}>✕</button>
+              <h3>系统诊断日志</h3>
+              <input
+                className="log-viewer-search"
+                type="text"
+                placeholder="搜索日志..."
+                value={logSearch}
+                onChange={(e) => setLogSearch(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+              <button className="log-viewer-close" onClick={() => { setShowLogViewer(false); setLogSearch(""); }}>✕</button>
             </div>
-            <pre className="log-viewer-content">{logContent || "（无日志内容）"}</pre>
+            <pre
+              className="log-viewer-content"
+              dangerouslySetInnerHTML={{ __html: (() => {
+                const raw = logContent || "（无日志内容）";
+                if (!logSearch.trim()) return raw;
+                const lines = raw.split("\n");
+                const q = logSearch.toLowerCase();
+                return lines
+                  .map((line) => {
+                    const lower = line.toLowerCase();
+                    if (!lower.includes(q)) return null;
+                    const parts = line.split(new RegExp(`(${logSearch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
+                    return parts.map((p) =>
+                      p.toLowerCase() === q
+                        ? `<mark class="log-highlight">${p}</mark>`
+                        : p
+                    ).join("");
+                  })
+                  .filter(Boolean)
+                  .join("\n");
+              })() }}
+            />
           </div>
         </div>
       )}

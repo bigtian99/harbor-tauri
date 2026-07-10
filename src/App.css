@@ -3704,6 +3704,20 @@ body::before {
 }
 .log-viewer-header h3 {
   margin: 0; font-size: 15px; color: #c9d1d9; font-weight: 600;
+  flex-shrink: 0;
+}
+.log-viewer-search {
+  flex: 1; max-width: 240px;
+  background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+  color: #c9d1d9; padding: 6px 10px; font-size: 12px; outline: none;
+}
+.log-viewer-search:focus { border-color: #5eead4; }
+.log-viewer-search::placeholder { color: #484f58; }
+.log-highlight {
+  background: rgba(94,234,212,0.35);
+  color: #5eead4;
+  border-radius: 2px;
+  padding: 0 1px;
 }
 .log-viewer-close {
   background: none; border: none; color: #8b949e; font-size: 18px;
