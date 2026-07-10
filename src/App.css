@@ -133,7 +133,7 @@ body::before {
 .sidebar-header h1 {
   font-size: 20px;
   font-weight: 700;
-  background: linear-gradient(135deg, #fff 0%, #64ffda 100%);
+  background: linear-gradient(135deg, #fff 0%, #5eead4 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -142,7 +142,7 @@ body::before {
 
 
 .header-icon {
-  color: #64ffda;
+  color: #5eead4;
   filter: drop-shadow(0 0 12px rgba(100, 255, 218, 0.5));
   -webkit-text-fill-color: initial;
 }
@@ -181,7 +181,7 @@ body::before {
 
 .sidebar-item.active {
   background: linear-gradient(135deg, rgba(15, 52, 96, 0.8), rgba(22, 33, 62, 0.9));
-  color: #64ffda;
+  color: #5eead4;
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.4),
     0 0 20px rgba(100, 255, 218, 0.15),
@@ -227,11 +227,11 @@ body::before {
 }
 
 .settings-item {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .settings-item:hover {
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.15);
 }
 
@@ -290,7 +290,7 @@ body::before {
 }
 
 .drop-zone.drag-over {
-  border-color: #64ffda;
+  border-color: #5eead4;
   background: rgba(100, 255, 218, 0.15);
   transform: scale(1.02);
   box-shadow:
@@ -315,7 +315,7 @@ body::before {
 }
 
 .drop-icon {
-  color: #64ffda;
+  color: #5eead4;
   filter: drop-shadow(0 0 20px rgba(100, 255, 218, 0.3));
   animation: float-icon 3s ease-in-out infinite;
 }
@@ -346,14 +346,14 @@ body::before {
 }
 
 .file-icon {
-  color: #64ffda;
+  color: #5eead4;
   filter: drop-shadow(0 0 20px rgba(100, 255, 218, 0.5));
 }
 
 .file-name {
   font-size: 15px;
   font-weight: 700;
-  color: #64ffda;
+  color: #5eead4;
   text-shadow: 0 0 20px rgba(100, 255, 218, 0.3);
 }
 
@@ -395,7 +395,7 @@ body::before {
 }
 
 .artifact-type.active {
-  color: #64ffda;
+  color: #5eead4;
   border-color: rgba(100, 255, 218, 0.45);
   background: linear-gradient(135deg, rgba(15, 52, 96, 0.85), rgba(22, 33, 62, 0.95));
   box-shadow:
@@ -428,7 +428,7 @@ body::before {
 }
 
 .pm-btn.active {
-  color: #64ffda;
+  color: #5eead4;
   border-color: rgba(100, 255, 218, 0.45);
   background: linear-gradient(135deg, rgba(15, 52, 96, 0.85), rgba(22, 33, 62, 0.95));
   box-shadow:
@@ -496,7 +496,7 @@ body::before {
 .form-row input:focus,
 .form-group input:focus,
 .form-group textarea:focus {
-  border-color: #64ffda;
+  border-color: #5eead4;
   background: rgba(15, 52, 96, 0.7);
   box-shadow:
     0 0 0 3px rgba(100, 255, 218, 0.12),
@@ -537,7 +537,7 @@ body::before {
 }
 
 .location-row input:focus {
-  border-color: #64ffda;
+  border-color: #5eead4;
 }
 
 .location-row input::placeholder {
@@ -548,7 +548,7 @@ body::before {
 .icon-btn {
   background: none;
   border: none;
-  color: #64ffda;
+  color: #5eead4;
   cursor: pointer;
   padding: 4px;
   border-radius: 6px;
@@ -576,7 +576,7 @@ body::before {
   gap: 6px;
   background: none;
   border: 1px dashed #2a3a5c;
-  color: #64ffda;
+  color: #5eead4;
   padding: 8px 14px;
   border-radius: 8px;
   font-size: 13px;
@@ -586,7 +586,7 @@ body::before {
 }
 
 .add-btn:hover {
-  border-color: #64ffda;
+  border-color: #5eead4;
   background: rgba(100, 255, 218, 0.05);
 }
 
@@ -612,7 +612,7 @@ body::before {
   border-radius: 12px;
   border: none;
   background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
-  color: #64ffda;
+  color: #5eead4;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -715,7 +715,7 @@ body::before {
 
 .pack-type-option:hover,
 .pack-type-option.active {
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.1);
 }
 
@@ -739,7 +739,7 @@ body::before {
 .secondary-action-btn:hover:not(:disabled) {
   border-color: rgba(100, 255, 218, 0.34);
   background: rgba(15, 52, 96, 0.62);
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .secondary-action-btn:disabled {
@@ -860,7 +860,7 @@ body::before {
 .progress-percent {
   font-size: 12px;
   font-weight: 700;
-  color: #64ffda;
+  color: #5eead4;
   text-shadow: 0 0 10px rgba(100, 255, 218, 0.5);
 }
 
@@ -875,7 +875,7 @@ body::before {
 .progress-fill,
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #64ffda 0%, #48c9b0 100%);
+  background: linear-gradient(90deg, #5eead4 0%, #48c9b0 100%);
   border-radius: 4px;
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 0 10px rgba(100, 255, 218, 0.5);
@@ -942,7 +942,7 @@ body::before {
   border: 1px solid rgba(100, 255, 218, 0.2);
   border-radius: 8px;
   padding: 6px 12px;
-  color: #64ffda;
+  color: #5eead4;
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -960,7 +960,7 @@ body::before {
 }
 
 .success-icon {
-  color: #64ffda;
+  color: #5eead4;
   flex-shrink: 0;
   margin-top: 1px;
   filter: drop-shadow(0 0 8px rgba(100, 255, 218, 0.5));
@@ -989,7 +989,7 @@ body::before {
 .image-url-value {
   font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
   font-size: 11px;
-  color: #64ffda;
+  color: #5eead4;
   word-break: break-all;
   flex: 1;
   user-select: all;
@@ -998,10 +998,10 @@ body::before {
 
 .copy-btn {
   padding: 5px 10px;
-  border: 1px solid #64ffda;
+  border: 1px solid #5eead4;
   border-radius: 6px;
   background: transparent;
-  color: #64ffda;
+  color: #5eead4;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -1060,7 +1060,7 @@ body::before {
 }
 
 .config-subtab.active {
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.15);
   border-color: rgba(100, 255, 218, 0.35);
 }
@@ -1135,13 +1135,13 @@ body::before {
 }
 
 .dockerfile-indicator .path-link-label {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .path-link-btn {
   background: none;
   border: none;
-  color: #64ffda;
+  color: #5eead4;
   font-size: 13px;
   font-family: monospace;
   cursor: pointer;
@@ -1172,7 +1172,7 @@ body::before {
   border-radius: 10px;
   border: 1px solid rgba(100, 255, 218, 0.25);
   background: rgba(15, 52, 96, 0.55);
-  color: #64ffda;
+  color: #5eead4;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -1210,7 +1210,7 @@ body::before {
 }
 
 .branch-command-preview code {
-  color: #64ffda;
+  color: #5eead4;
   font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
   font-size: 12px;
   word-break: break-all;
@@ -1266,7 +1266,7 @@ body::before {
 
 .checkbox-label input[type="checkbox"]:checked + .checkbox-toggle::after {
   left: 21px;
-  background: #64ffda;
+  background: #5eead4;
   box-shadow: 0 0 8px rgba(100, 255, 218, 0.5);
 }
 
@@ -1304,7 +1304,7 @@ body::before {
 }
 
 .form-group select:focus {
-  border-color: #64ffda;
+  border-color: #5eead4;
   background: rgba(15, 52, 96, 0.7);
   box-shadow:
     0 0 0 3px rgba(100, 255, 218, 0.12),
@@ -1345,7 +1345,7 @@ body::before {
 }
 
 .searchable-dropdown-input:focus {
-  border-color: #64ffda;
+  border-color: #5eead4;
   background: rgba(15, 52, 96, 0.7);
   box-shadow:
     0 0 0 3px rgba(100, 255, 218, 0.12),
@@ -1405,12 +1405,12 @@ body::before {
 
 .searchable-dropdown-item:hover {
   background: rgba(100, 255, 218, 0.15);
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .searchable-dropdown-item.selected {
   background: rgba(100, 255, 218, 0.2);
-  color: #64ffda;
+  color: #5eead4;
   font-weight: 500;
 }
 
@@ -1449,7 +1449,7 @@ body::before {
 }
 
 .password-toggle:hover {
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.1);
 }
 
@@ -1458,7 +1458,7 @@ body::before {
   border-radius: 12px;
   border: none;
   background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
-  color: #64ffda;
+  color: #5eead4;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -1514,7 +1514,7 @@ body::before {
 }
 
 .config-tip p {
-  color: #64ffda;
+  color: #5eead4;
   font-weight: 700;
   margin-bottom: 12px;
   font-size: 14px;
@@ -1548,7 +1548,7 @@ body::before {
   content: "•";
   position: absolute;
   left: 0;
-  color: #64ffda;
+  color: #5eead4;
   font-size: 16px;
   font-weight: bold;
 }
@@ -1559,7 +1559,7 @@ body::before {
   left: 50%;
   transform: translateX(-50%);
   background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
-  color: #64ffda;
+  color: #5eead4;
   padding: 12px 24px;
   border-radius: 12px;
   border: 1px solid rgba(100, 255, 218, 0.4);
@@ -1616,7 +1616,7 @@ body::before {
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  color: #64ffda;
+  color: #5eead4;
   font-size: 13px;
   line-height: 1;
 }
@@ -1636,7 +1636,7 @@ body::before {
 .commit-hash {
   font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
   font-size: 12px;
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.1);
   padding: 2px 6px;
   border-radius: 4px;
@@ -1700,7 +1700,7 @@ body::before {
   border: 1px solid rgba(100, 255, 218, 0.3);
   border-radius: 8px;
   padding: 10px 16px;
-  color: #64ffda;
+  color: #5eead4;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1757,7 +1757,7 @@ body::before {
 
 .commit-list-label {
   font-weight: 600;
-  color: #64ffda;
+  color: #5eead4;
   font-size: 13px;
 }
 
@@ -1778,7 +1778,7 @@ body::before {
   gap: 4px;
   background: rgba(100, 255, 218, 0.1);
   border: 1px solid rgba(100, 255, 218, 0.3);
-  color: #64ffda;
+  color: #5eead4;
   padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
@@ -1840,7 +1840,7 @@ body::before {
   border: 1px solid rgba(100, 255, 218, 0.2);
   border-radius: 8px;
   padding: 12px 16px;
-  color: #64ffda;
+  color: #5eead4;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -1885,7 +1885,7 @@ body::before {
 }
 
 .history-item.success {
-  border-left: 3px solid #64ffda;
+  border-left: 3px solid #5eead4;
 }
 
 .history-item.failed {
@@ -1914,7 +1914,7 @@ body::before {
 
 .history-status.success,
 .history-status.pushed {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .modal-history-item-info {
@@ -1935,7 +1935,7 @@ body::before {
 
 .history-branch {
   font-size: 11px;
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.1);
   padding: 3px 8px;
   border-radius: 4px;
@@ -1994,7 +1994,7 @@ body::before {
 }
 
 .history-copy-btn:hover {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .modal-history-item-path {
@@ -2030,7 +2030,7 @@ body::before {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 10px;
-  color: #64ffda;
+  color: #5eead4;
   font-family: monospace;
   background: none;
   border: none;
@@ -2058,7 +2058,7 @@ body::before {
 }
 
 .modal-history-item-path .path-open-btn:hover {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .history-item-meta {
@@ -2090,7 +2090,7 @@ body::before {
 .history-action-btn:hover {
   background: rgba(100, 255, 218, 0.15);
   border-color: rgba(100, 255, 218, 0.4);
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .history-action-btn.delete {
@@ -2234,7 +2234,7 @@ body::before {
   margin-left: auto;
   font-size: 11px;
   font-weight: 500;
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.1);
   border: 1px solid rgba(100, 255, 218, 0.25);
   padding: 2px 8px;
@@ -2314,13 +2314,13 @@ body::before {
 }
 
 .history-sidebar-header h3 svg {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .history-sidebar-count {
   font-size: 12px;
   font-weight: 600;
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.1);
   padding: 2px 8px;
   border-radius: 10px;
@@ -2434,7 +2434,7 @@ body::before {
   justify-content: center;
   background: rgba(100, 255, 218, 0.1);
   border-radius: 8px;
-  color: #64ffda;
+  color: #5eead4;
   flex-shrink: 0;
 }
 
@@ -2457,7 +2457,7 @@ body::before {
 }
 
 .history-sidebar-item.active .history-sidebar-item-name {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .history-sidebar-item-meta {
@@ -2553,7 +2553,7 @@ body::before {
 }
 
 .history-content-header-info h2 svg {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .history-content-header-path {
@@ -2636,7 +2636,7 @@ body::before {
 }
 
 .history-record-card.success {
-  border-left: 3px solid #64ffda;
+  border-left: 3px solid #5eead4;
 }
 
 .history-record-card.failed {
@@ -2666,7 +2666,7 @@ body::before {
 
 .history-record-card.success .history-record-status,
 .history-record-card.pushed .history-record-status {
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.1);
 }
 
@@ -2713,7 +2713,7 @@ body::before {
 
 .history-record-branch {
   font-size: 11px;
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.1);
   padding: 2px 8px;
   border-radius: 4px;
@@ -2796,7 +2796,7 @@ body::before {
 }
 
 .history-record-copy-btn:hover {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .history-record-actions {
@@ -2821,7 +2821,7 @@ body::before {
 .history-record-action:hover {
   background: rgba(100, 255, 218, 0.15);
   border-color: rgba(100, 255, 218, 0.3);
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .history-record-action.danger {
@@ -2866,7 +2866,7 @@ body::before {
   width: 100%;
   font-family: "SF Mono", "Fira Code", monospace;
   font-size: 11px;
-  color: #64ffda;
+  color: #5eead4;
   background: none;
   border: none;
   padding: 0;
@@ -2902,7 +2902,7 @@ body::before {
 }
 
 .history-record-path-open:hover {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .history-record-log {
@@ -3027,7 +3027,7 @@ body::before {
   display: flex;
   align-items: center;
   height: 42px;
-  color: var(--primary, #64ffda);
+  color: var(--primary, #5eead4);
   flex-shrink: 0;
 }
 
@@ -3148,7 +3148,7 @@ body::before {
   padding: 1px 7px;
   border-radius: 3px;
   background: rgba(100, 255, 218, 0.15);
-  color: #64ffda;
+  color: #5eead4;
   margin-left: 4px;
 }
 
@@ -3224,7 +3224,7 @@ body::before {
 }
 
 .pr-state-ok {
-  color: #64ffda;
+  color: #5eead4;
   background: rgba(100, 255, 218, 0.1);
 }
 
@@ -3417,7 +3417,7 @@ body::before {
 }
 
 .merge-diff-item-main .commit-hash {
-  color: var(--primary, #64ffda);
+  color: var(--primary, #5eead4);
   font-family: var(--font-mono, monospace);
   font-size: 0.82em;
 }
@@ -3440,7 +3440,7 @@ body::before {
 }
 
 .merge-diff-item-action {
-  color: var(--primary, #64ffda);
+  color: var(--primary, #5eead4);
   font-weight: 600;
 }
 
@@ -3556,12 +3556,12 @@ body::before {
 }
 
 .merge-progress-icon {
-  color: #64ffda;
+  color: #5eead4;
   flex-shrink: 0;
 }
 
 .merge-progress-icon--success {
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .merge-progress-icon--error {
@@ -3606,14 +3606,14 @@ body::before {
 .merge-progress-bar {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #64ffda 0%, #48c9b0 100%);
+  background: linear-gradient(90deg, #5eead4 0%, #48c9b0 100%);
   transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .merge-progress-percent {
   font-size: 0.82rem;
   font-weight: 700;
-  color: #64ffda;
+  color: #5eead4;
 }
 
 .merge-progress-btn {
@@ -3622,7 +3622,7 @@ body::before {
   border-radius: 8px;
   border: 1px solid rgba(100, 255, 218, 0.35);
   background: rgba(100, 255, 218, 0.12);
-  color: #64ffda;
+  color: #5eead4;
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
