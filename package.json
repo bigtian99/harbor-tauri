@@ -20,7 +20,6 @@
     "version:minor": "node scripts/set-version.mjs minor",
     "version:major": "node scripts/set-version.mjs major",
     "release": "node scripts/release.mjs",
-    "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major"
   },

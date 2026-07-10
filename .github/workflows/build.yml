@@ -105,17 +105,49 @@ jobs:
           tauriScript: pnpm exec tauri
           args: --target ${{ matrix.target }} ${{ matrix.platform == 'windows-latest' && '--bundles nsis' || '' }}
 
+      # OPS / 非 OPS 会产出同名 dmg/exe，不改名会在 release 上传时撞名 →
+      # softprops 调 update-a-release-asset 404（Not Found）
+      - name: Collect unique-named assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          suffix="${{ matrix.ops && 'ops' || 'std' }}"
+          # 只收安装包，不收 .app 目录（体积大且无法当 release asset 下载用）
+          while IFS= read -r -d '' f; do
+            base="$(basename "$f")"
+            ext="${base##*.}"
+            name="${base%.*}"
+            # 已含 ops 标记则不再重复加
+            if [[ "$suffix" == "ops" && "$base" != *ops* && "$base" != *OPS* ]]; then
+              out="${name}-ops.${ext}"
+            else
+              out="$base"
+            fi
+            # 仍冲突则加 target 后缀
+            if [[ -e "release-assets/$out" ]]; then
+              out="${name}-${{ matrix.target }}.${ext}"
+            fi
+            echo "pack: $f -> release-assets/$out"
+            cp "$f" "release-assets/$out"
+          done < <(find "src-tauri/target/${{ matrix.target }}/release/bundle" \
+            \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.nsis.zip' \) \
+            -type f -print0 2>/dev/null || true)
+
+          echo "---- release-assets ----"
+          ls -la release-assets || true
+          if ! find release-assets -type f -print -quit | grep -q .; then
+            echo "::error::No installers found under bundle for ${{ matrix.label }}"
+            find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f 2>/dev/null | head -50 || true
+            exit 1
+          fi
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.label }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+          path: release-assets/*
+          if-no-files-found: error
           retention-days: 7
 
   release:
@@ -160,25 +192,65 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: List release assets
+      - name: Prepare asset list
+        id: assets
         shell: bash
         run: |
-          if ! find artifacts -type f -print -quit | grep -q .; then
+          set -euo pipefail
+          mkdir -p upload
+          # 扁平化 + 去重文件名（后写覆盖前写并告警）
+          find artifacts -type f | sort | while read -r f; do
+            base="$(basename "$f")"
+            if [[ -e "upload/$base" ]]; then
+              echo "::warning::duplicate asset name $base — renaming with parent dir"
+              parent="$(basename "$(dirname "$f")")"
+              base="${parent}-${base}"
+            fi
+            cp "$f" "upload/$base"
+          done
+
+          echo "---- files to upload ----"
+          ls -la upload
+          count="$(find upload -type f | wc -l | tr -d ' ')"
+          if [[ "$count" -eq 0 ]]; then
             echo "::error::No build artifacts were downloaded for the release"
             exit 1
           fi
+          echo "count=$count" >> "$GITHUB_OUTPUT"
 
-          find artifacts -type f -print | sort
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.release_tag.outputs.tag }}
-          name: ${{ steps.release_tag.outputs.tag }}
-          draft: false
-          prerelease: false
-          make_latest: true
-          generate_release_notes: true
-          files: artifacts/**/*
+      # 不用 softprops：同名 asset 会打 update-a-release-asset 且 404
+      # 改用 gh：先确保 Release 存在，再 --clobber 上传
+      - name: Create or update GitHub Release
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release_tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — will upload/clobber assets"
+            # 若是 draft，发布成正式
+            gh release edit "$TAG" --draft=false --prerelease=false --latest 2>/dev/null || \
+              gh release edit "$TAG" --draft=false --prerelease=false || true
+          else
+            echo "Creating release $TAG"
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --generate-notes \
+              --latest \
+              --verify-tag
+          fi
+
+          # 上传全部安装包；--clobber 覆盖同名，避免 update asset 404
+          shopt -s nullglob
+          files=(upload/*)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::upload/ is empty"
+            exit 1
+          fi
+          gh release upload "$TAG" "${files[@]}" --clobber
+
+          echo "---- release assets ----"
+          gh release view "$TAG" --json tagName,isDraft,isLatest,assets \
+            --jq '{tag:.tagName, draft:.isDraft, latest:.isLatest, assets:[.assets[].name]}'

@@ -3,17 +3,15 @@
  * 版本单一真相源：package.json
  *
  * 同步到：
- *   - package.json          ← 你只改这个（或用本脚本）
+ *   - package.json          ← 唯一需要你改的 / release 自动 bump 的
  *   - src-tauri/Cargo.toml  ← check_update 读 CARGO_PKG_VERSION
  *   - src-tauri/tauri.conf.json ← 安装包显示版本
  *
  * 用法：
- *   node scripts/set-version.mjs              # 查看当前三处版本
- *   node scripts/set-version.mjs 0.2.32       # 指定版本
+ *   node scripts/set-version.mjs              # 查看
+ *   node scripts/set-version.mjs 0.2.40       # 指定版本（只改文件）
  *   node scripts/set-version.mjs patch|minor|major
- *   pnpm version:set 0.2.32
- *   pnpm version:patch
- *   pnpm release:patch   # 改版本 + tag + push → CI Release
+ *   pnpm release                              # 默认 patch + 发版
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -97,9 +95,11 @@ if (isMain) {
   一致: ${cur.pkg === cur.cargo && cur.pkg === cur.tauri ? "是" : "否 ⚠️"}
 
 用法:
-  pnpm version:set 0.2.32   # 指定版本，只改三处文件不发版
-  pnpm version:patch        # +0.0.1
-  pnpm release:patch        # 改版本 + 打 tag + 推送 → CI 出 Release
+  pnpm version:set 0.2.40   # 指定版本，只改三处文件不发版
+  pnpm version:patch        # +0.0.1（不发版）
+  pnpm release              # 默认 patch + tag + push → CI Release
+  pnpm release minor|major  # 大版本 bump 后发版
+  pnpm release 0.2.40       # 指定版本后发版
 `);
     process.exit(0);
   }
@@ -119,6 +119,7 @@ if (isMain) {
   Cargo.toml         ${before.cargo} → ${after.cargo}
   tauri.conf.json    ${before.tauri} → ${after.tauri}
 
-下一步发版: pnpm release   （打 v${version} + CI 创建 GitHub Release）
+下一步发版: pnpm release   # 默认在 package.json 上 patch 再发
+  或: pnpm release ${version}  # 用当前版本直接发（若 tag 已占用会自动再 +patch）
 `);
 }
