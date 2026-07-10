@@ -23,6 +23,21 @@ fn render_nginx_locations(locations: &[NginxLocationBlock]) -> String {
     })
 }
 
+fn inject_nginx_locations(mut nginx_content: String, locations: &[NginxLocationBlock]) -> String {
+    let rendered = render_nginx_locations(locations);
+    if rendered.is_empty() {
+        return nginx_content;
+    }
+    if nginx_content.contains("{{CUSTOM_LOCATIONS}}") {
+        return nginx_content.replace("{{CUSTOM_LOCATIONS}}", &rendered);
+    }
+    // 没有占位符，注入到 server block 最后一个 } 之前
+    if let Some(last_brace) = nginx_content.rfind('}') {
+        nginx_content.insert_str(last_brace, &rendered);
+    }
+    nginx_content
+}
+
 /// 拼接 tools 的 --build-context 片段（如 `--build-context tools=/path/tools`），未配置则返回空
 #[allow(dead_code)]
 pub(crate) fn tools_dir_build_args(custom_docker_extras_dir: &str) -> Vec<String> {
@@ -93,7 +108,7 @@ pub(crate) fn prepare_custom_docker_context(
             // nginx.conf 优先级：项目自带 > 兜底模板
             let nginx_content = find_project_nginx(artifact_path)
                 .unwrap_or_else(|| render_template(&config.frontend_nginx_template, &replacements));
-            let nginx_content = nginx_content.replace("{{CUSTOM_LOCATIONS}}", &render_nginx_locations(nginx_locations));
+            let nginx_content = inject_nginx_locations(nginx_content, nginx_locations);
             fs::write(&nginx_path, nginx_content)
                 .map_err(|e| format!("写入nginx配置失败: {}", e))?;
 
@@ -203,7 +218,7 @@ pub(crate) fn prepare_frontend_dist_context(
         .unwrap_or_else(|| {
             render_template(&config.frontend_nginx_template, &replacements)
         });
-    let nginx_content = nginx_content.replace("{{CUSTOM_LOCATIONS}}", &render_nginx_locations(nginx_locations));
+    let nginx_content = inject_nginx_locations(nginx_content, nginx_locations);
 
     if let Err(error) = fs::write(&dockerfile_path, dockerfile_content) {
         fs::remove_dir_all(&context_dir).ok();
