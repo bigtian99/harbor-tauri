@@ -3699,7 +3699,7 @@ body::before {
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
 }
 .log-viewer-header {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; gap: 12px;
   padding: 16px 20px; border-bottom: 1px solid #21262d;
 }
 .log-viewer-header h3 {
@@ -3707,9 +3707,10 @@ body::before {
   flex-shrink: 0;
 }
 .log-viewer-search {
-  flex: 1; max-width: 240px;
+  width: 200px; flex-shrink: 0;
   background: #161b22; border: 1px solid #30363d; border-radius: 6px;
   color: #c9d1d9; padding: 6px 10px; font-size: 12px; outline: none;
+  margin-left: auto;
 }
 .log-viewer-search:focus { border-color: #5eead4; }
 .log-viewer-search::placeholder { color: #484f58; }
