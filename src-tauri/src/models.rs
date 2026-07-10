@@ -294,6 +294,33 @@ pub(crate) struct SubChannelData {
     pub(crate) sub_channel_domain: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct VestApiItem {
+    pub(crate) id: String,
+    #[serde(rename = "appName")]
+    pub(crate) app_name: Option<String>,
+    #[serde(rename = "iconPath")]
+    pub(crate) icon_path: Option<String>,
+    #[serde(rename = "shortUrl")]
+    pub(crate) short_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct VestApiResponse {
+    pub(crate) code: Option<i32>,
+    pub(crate) message: Option<String>,
+    pub(crate) data: Option<VestApiItem>,
+}
+
+/// 统一落地页生成使用的数据（子渠道/马甲包）
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct LandingData {
+    pub id: String,
+    pub name: String,
+    pub logo: String,
+    pub download_url: String,
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub(crate) struct LandingPageResult {
     pub(crate) id: String,

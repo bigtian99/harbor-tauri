@@ -24,7 +24,8 @@ use history::{
     get_build_history, save_build_record, update_build_record_image,
 };
 use landing::{
-    fetch_sub_channels, generate_landing_pages, get_bundled_templates_dir, get_temp_dir,
+    fetch_sub_channels, fetch_vest_data, generate_landing_pages, generate_vest_landing_pages,
+    get_bundled_templates_dir, get_temp_dir,
     get_templates_diagnostic_log_path, preview_landing_page, upload_landing_to_ftp,
     list_template_dirs, list_template_infos, upload_template_zip, delete_template_dir,
 };
@@ -84,7 +85,9 @@ pub fn run() {
             update_build_record_image,
             delete_artifact_path,
             fetch_sub_channels,
+            fetch_vest_data,
             generate_landing_pages,
+            generate_vest_landing_pages,
             upload_landing_to_ftp,
             get_temp_dir,
             preview_landing_page,

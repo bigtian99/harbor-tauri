@@ -6,23 +6,27 @@ import { isTauriRuntime } from "../types";
 
 const LANDING_API_URL = "https://tksyadmin.tiankongshuyu.cn";
 
+export type LandingMode = "sub_channel" | "vest";
+
 interface UseLandingDeps {
   activeTab: TabType;
   setLog: (value: string) => void;
   setProgress: (value: number) => void;
   setProgressMessage: (value: string) => void;
+  opsAuthorization?: string;
 }
 
 /**
  * 落地页生成与 FTP 上传的全部状态与逻辑。
- * progress / progressMessage 由 App 持有并传入（构建流程也复用）。
- * 通知使用 Mantine Notifications 系统。
+ * 支持子渠道 (sub_channel) 和马甲包 (vest) 两种模式。
  */
 export function useLanding(deps: UseLandingDeps) {
-  const { activeTab, setLog, setProgress, setProgressMessage } = deps;
+  const { activeTab, setLog, setProgress, setProgressMessage, opsAuthorization } = deps;
 
   const [landingTemplateBase, setLandingTemplateBase] = useState("");
   const [landingIds, setLandingIds] = useState("");
+  const [landingMode, setLandingMode] = useState<LandingMode>("sub_channel");
+  const [vestAuthorization, setVestAuthorization] = useState("");
   const [landingOutputDir, setLandingOutputDir] = useState("");
   const [previewBaseUrl, setPreviewBaseUrl] = useState("");
   const [landingPreviewData, setLandingPreviewData] = useState<SubChannelData[]>([]);
@@ -34,8 +38,15 @@ export function useLanding(deps: UseLandingDeps) {
   const [templateIndices, setTemplateIndices] = useState<Record<string, number>>({});
   const landingDebounceRef = useRef<number | null>(null);
 
-  // 拉取子渠道并生成落地页（防抖预览与手动预览共用）
-  async function runLandingGeneration(showDoneToast: boolean) {
+  // 同步 opsAuthorization 到 vestAuthorization
+  useEffect(() => {
+    if (opsAuthorization && !vestAuthorization) {
+      setVestAuthorization(opsAuthorization);
+    }
+  }, [opsAuthorization]);
+
+  // 拉取子渠道并生成落地页
+  async function runSubChannelGeneration(showDoneToast: boolean) {
     setIsFetchingPreview(true);
     setLandingPreviewData([]);
     setLandingGenerated({});
@@ -48,27 +59,7 @@ export function useLanding(deps: UseLandingDeps) {
         ids: landingIds.trim(),
       });
       setLandingPreviewData(data);
-      setIsGenerating(true);
-      const results = await invoke<LandingPageResult[]>("generate_landing_pages", {
-        apiUrl: LANDING_API_URL,
-        ids: landingIds.trim(),
-        templateBase: landingTemplateBase,
-        outputDir: landingOutputDir.trim(),
-      });
-      const map: Record<string, LandingPageResult> = {};
-      for (const r of results) { map[r.id] = r; }
-      setLandingGenerated(map);
-      if (showDoneToast) {
-        const success = results.filter((r) => r.status === "success").length;
-        const failed = results.length - success;
-        notifications.show({
-          message: failed > 0
-            ? `生成完成: 成功 ${success} 个, 失败 ${failed} 个`
-            : `生成完成: 成功 ${success} 个`,
-          color: failed > 0 ? "yellow" : "teal",
-          autoClose: 3000,
-        });
-      }
+      await runGenerationAndCollect("generate_landing_pages", { templateBase: landingTemplateBase }, showDoneToast);
     } catch (e) {
       notifications.show({
         title: "操作失败",
@@ -82,8 +73,80 @@ export function useLanding(deps: UseLandingDeps) {
     }
   }
 
+  // 拉取马甲包并生成落地页
+  async function runVestGeneration(showDoneToast: boolean) {
+    setIsFetchingPreview(true);
+    setLandingPreviewData([]);
+    setLandingGenerated({});
+    setFtpUploadResults({});
+    setLog("");
+    setProgress(0);
+    try {
+      await runGenerationAndCollect("generate_vest_landing_pages", {
+        templateBase: landingTemplateBase,
+        authorization: vestAuthorization.trim(),
+      }, showDoneToast);
+    } catch (e) {
+      notifications.show({
+        title: "操作失败",
+        message: String(e),
+        color: "red",
+        autoClose: 5000,
+      });
+    } finally {
+      setIsFetchingPreview(false);
+      setIsGenerating(false);
+    }
+  }
+
+  async function runGenerationAndCollect(
+    command: string,
+    extraArgs: Record<string, string>,
+    showDoneToast: boolean,
+  ) {
+    setIsGenerating(true);
+    const args: Record<string, unknown> = {
+      apiUrl: LANDING_API_URL,
+      ids: landingIds.trim(),
+      outputDir: landingOutputDir.trim(),
+      ...extraArgs,
+    };
+    const results = await invoke<LandingPageResult[]>(command, args);
+    const map: Record<string, LandingPageResult> = {};
+    for (const r of results) { map[r.id] = r; }
+    setLandingGenerated(map);
+    if (showDoneToast) {
+      const success = results.filter((r) => r.status === "success").length;
+      const failed = results.length - success;
+      notifications.show({
+        message: failed > 0
+          ? `生成完成: 成功 ${success} 个, 失败 ${failed} 个`
+          : `生成完成: 成功 ${success} 个`,
+        color: failed > 0 ? "yellow" : "teal",
+        autoClose: 3000,
+      });
+    }
+  }
+
+  async function runLandingGeneration(showDoneToast: boolean) {
+    if (landingMode === "vest") {
+      await runVestGeneration(showDoneToast);
+    } else {
+      await runSubChannelGeneration(showDoneToast);
+    }
+  }
+
   async function handleLandingPreview() {
     if (!isTauriRuntime() || !landingIds.trim()) return;
+    if (landingMode === "vest" && !vestAuthorization.trim()) {
+      notifications.show({
+        title: "请先输入 Authorization",
+        message: "马甲包模式需要 Authorization 请求头",
+        color: "yellow",
+        autoClose: 3000,
+      });
+      return;
+    }
     await runLandingGeneration(true);
   }
 
@@ -102,7 +165,9 @@ export function useLanding(deps: UseLandingDeps) {
           return {
             id: r.id,
             local_dir: localDir,
-            remote_dir: `${r.id}/${r.type_code}`,
+            remote_dir: landingMode === "vest"
+              ? `vest/${r.id}`
+              : `${r.id}/${r.type_code}`,
           };
         });
       if (items.length === 0) {
@@ -197,6 +262,7 @@ export function useLanding(deps: UseLandingDeps) {
       setFtpUploadResults({});
       return;
     }
+    if (landingMode === "vest" && !vestAuthorization.trim()) return;
     landingDebounceRef.current = window.setTimeout(() => {
       runLandingGeneration(false);
     }, 800);
@@ -205,13 +271,16 @@ export function useLanding(deps: UseLandingDeps) {
         window.clearTimeout(landingDebounceRef.current);
       }
     };
-    // runLandingGeneration 依赖 hook 内状态，闭包捕获即可
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landingIds, landingOutputDir, landingTemplateBase]);
+  }, [landingIds, landingOutputDir, landingTemplateBase, landingMode, vestAuthorization]);
 
   return {
     landingIds,
     setLandingIds,
+    landingMode,
+    setLandingMode,
+    vestAuthorization,
+    setVestAuthorization,
     landingPreviewData,
     landingGenerated,
     ftpUploadResults,

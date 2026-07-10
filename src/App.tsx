@@ -200,6 +200,7 @@ function App() {
     setLog,
     setProgress,
     setProgressMessage,
+    opsAuthorization: config.ops_authorization,
   });
 
   function renderLog(text: string) {
@@ -1437,6 +1438,8 @@ function App() {
         {activeTab === "landing" && (
           <LandingPanel
             landingIds={landing.landingIds}
+            landingMode={landing.landingMode}
+            vestAuthorization={landing.vestAuthorization}
             landingPreviewData={landing.landingPreviewData}
             landingGenerated={landing.landingGenerated}
             ftpUploadResults={landing.ftpUploadResults}
@@ -1449,6 +1452,8 @@ function App() {
             landingOutputDir={landing.landingOutputDir}
             previewBaseUrl={landing.previewBaseUrl}
             setLandingIds={landing.setLandingIds}
+            setLandingMode={landing.setLandingMode}
+            setVestAuthorization={landing.setVestAuthorization}
             setTemplateIndices={landing.setTemplateIndices}
             onPreview={landing.handleLandingPreview}
             onFtpUpload={landing.handleFtpUpload}

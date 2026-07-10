@@ -34,10 +34,13 @@ import {
   Maximize2,
 } from "lucide-react";
 import type { SubChannelData, LandingPageResult, FtpUploadResult, TemplateInfo } from "../types";
+import type { LandingMode } from "../hooks/useLanding";
 import { isTauriRuntime } from "../types";
 
 interface LandingPanelProps {
   landingIds: string;
+  landingMode: LandingMode;
+  vestAuthorization: string;
   landingPreviewData: SubChannelData[];
   landingGenerated: Record<string, LandingPageResult>;
   ftpUploadResults: Record<string, FtpUploadResult>;
@@ -50,6 +53,8 @@ interface LandingPanelProps {
   landingOutputDir: string;
   previewBaseUrl: string;
   setLandingIds: (value: string) => void;
+  setLandingMode: (value: LandingMode) => void;
+  setVestAuthorization: (value: string) => void;
   setTemplateIndices: (value: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void;
   onPreview: () => void;
   onFtpUpload: () => void;
@@ -57,13 +62,13 @@ interface LandingPanelProps {
 }
 
 export function LandingPanel({
-  landingIds,
+  landingIds, landingMode, vestAuthorization,
   landingPreviewData, landingGenerated, ftpUploadResults,
   templateIndices, setTemplateIndices,
   isFetchingPreview, isGenerating, isUploadingToFtp,
   progress, progressMessage,
   landingOutputDir, previewBaseUrl,
-  setLandingIds,
+  setLandingIds, setLandingMode, setVestAuthorization,
   onPreview, onFtpUpload, onCopyAllLinks,
 }: LandingPanelProps) {
   const [animatingCards, setAnimatingCards] = useState<Record<string, string>>({});
@@ -246,12 +251,43 @@ export function LandingPanel({
             <Title order={3}>生成落地页</Title>
           </Group>
 
-          {/* 子渠道 IDs */}
+          {/* 模式切换 */}
+          <Group gap="xs" mb="xs">
+            <Button
+              size="xs"
+              variant={landingMode === "sub_channel" ? "filled" : "outline"}
+              color={landingMode === "sub_channel" ? "teal" : "gray"}
+              onClick={() => setLandingMode("sub_channel")}
+            >
+              子渠道
+            </Button>
+            <Button
+              size="xs"
+              variant={landingMode === "vest" ? "filled" : "outline"}
+              color={landingMode === "vest" ? "teal" : "gray"}
+              onClick={() => setLandingMode("vest")}
+            >
+              马甲包
+            </Button>
+          </Group>
+
+          {/* 马甲包 Authorization */}
+          {landingMode === "vest" && (
+            <TextInput
+              value={vestAuthorization}
+              onChange={(e) => setVestAuthorization(e.currentTarget.value)}
+              placeholder="Bearer token 或 Authorization 值"
+              label="Authorization"
+              type="password"
+            />
+          )}
+
+          {/* IDs */}
           <TextInput
             value={landingIds}
             onChange={(e) => setLandingIds(e.currentTarget.value)}
-            placeholder="例如: 154,155,156"
-            label="子渠道 IDs（逗号分隔）"
+            placeholder={landingMode === "vest" ? "例如: 512,513" : "例如: 154,155,156"}
+            label={landingMode === "vest" ? "马甲包 IDs（逗号分隔）" : "子渠道 IDs（逗号分隔）"}
           />
 
           {/* 操作按钮 */}
@@ -579,6 +615,104 @@ export function LandingPanel({
                               )}
                               {genResult?.status === "error" && (
                                 <Text size="xs" c="red" title={genResult.message}>失败</Text>
+                              )}
+                            </Group>
+                          </Table.Td>
+                        </Table.Tr>
+                      );
+                    })}
+                  </Table.Tbody>
+                </Table>
+              </Box>
+            </Paper>
+          )}
+
+          {/* 马甲包生成结果 */}
+          {landingMode === "vest" && Object.keys(landingGenerated).length > 0 && (
+            <Paper withBorder radius="md" style={{ overflow: "hidden" }}>
+              <Box style={{ overflowX: "auto" }}>
+                <Table highlightOnHover verticalSpacing="sm" horizontalSpacing="sm">
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>名称</Table.Th>
+                      <Table.Th>ID</Table.Th>
+                      <Table.Th style={{ textAlign: "center" }}>模板</Table.Th>
+                      <Table.Th style={{ textAlign: "center" }}>状态</Table.Th>
+                      <Table.Th style={{ textAlign: "right" }}>操作</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {Object.entries(landingGenerated).map(([id, genResult]) => {
+                      const ftpResult = ftpUploadResults[id];
+                      const currentTemplateIndex = getTemplateIndex(id);
+                      const hasMultipleTemplates = genResult?.template_dirs && genResult.template_dirs.length > 1;
+                      return (
+                        <Table.Tr key={id}>
+                          <Table.Td>
+                            <Text fw={600} size="sm">{genResult?.name || id}</Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text size="sm" c="dimmed">{id}</Text>
+                          </Table.Td>
+                          <Table.Td style={{ textAlign: "center" }}>
+                            {hasMultipleTemplates ? (
+                              <Group gap={4} justify="center" wrap="nowrap">
+                                <ActionIcon
+                                  size="sm" variant="subtle" color="gray"
+                                  onClick={() => switchTemplate(id, "prev")}
+                                >
+                                  <ChevronLeft size={14} />
+                                </ActionIcon>
+                                <Text size="xs" style={{ whiteSpace: "nowrap" }}>
+                                  {currentTemplateIndex + 1}/{genResult.template_dirs.length}
+                                </Text>
+                                <ActionIcon
+                                  size="sm" variant="subtle" color="gray"
+                                  onClick={() => switchTemplate(id, "next")}
+                                >
+                                  <ChevronRight size={14} />
+                                </ActionIcon>
+                              </Group>
+                            ) : (
+                              <Text size="xs" c="dimmed">1/1</Text>
+                            )}
+                          </Table.Td>
+                          <Table.Td style={{ textAlign: "center" }}>
+                            {genResult?.status === "success" ? (
+                              <Badge color="teal" variant="light">成功</Badge>
+                            ) : genResult?.status === "error" ? (
+                              <Badge color="red" variant="light">失败</Badge>
+                            ) : (
+                              <Badge color="yellow" variant="light">处理中</Badge>
+                            )}
+                          </Table.Td>
+                          <Table.Td style={{ textAlign: "right" }}>
+                            <Group gap="xs" justify="flex-end">
+                              {genResult?.status === "success" && (
+                                <Tooltip label="预览">
+                                  <ActionIcon
+                                    variant="light" color="teal" size="sm"
+                                    onClick={() => {
+                                    const src = getTemplateIframeSrc(genResult, currentTemplateIndex);
+                                    openInAppPreview(src, genResult.name);
+                                  }}
+                                  >
+                                    <Eye size={14} />
+                                  </ActionIcon>
+                                </Tooltip>
+                              )}
+                              {ftpResult && ftpResult.status === "success" && (
+                                <Tooltip label="复制链接">
+                                  <ActionIcon
+                                    variant="light" color="teal" size="sm"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(ftpResult.url);
+                                      notifications.show({ message: "已复制", color: "teal", autoClose: 1500 });
+                                    }}
+                                  >
+                                    <Copy size={14} />
+                                  </ActionIcon>
+                                </Tooltip>
                               )}
                             </Group>
                           </Table.Td>
