@@ -163,6 +163,8 @@ function App() {
 
   // ==================== Toast ====================
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
+  const [showLogViewer, setShowLogViewer] = useState(false);
+  const [logContent, setLogContent] = useState("");
   const toastTimerRef = useRef<number | null>(null);
   const branchLoadRequestRef = useRef(0);
   const opsModeInitializedRef = useRef(false);
@@ -1270,6 +1272,15 @@ function App() {
         opsMode={opsMode}
         onTabChange={handleTabChange}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onOpenLog={async () => {
+          try {
+            const log = await invoke<string>("read_diagnostic_log", { lines: 300 });
+            setLogContent(log);
+          } catch (e) {
+            setLogContent(String(e));
+          }
+          setShowLogViewer(true);
+        }}
       />
 
       <main className="content">
@@ -1484,6 +1495,18 @@ function App() {
           />
         )}
       </main>
+
+      {showLogViewer && (
+        <div className="log-viewer-overlay" onClick={() => setShowLogViewer(false)}>
+          <div className="log-viewer" onClick={(e) => e.stopPropagation()}>
+            <div className="log-viewer-header">
+              <h3>系统诊断日志（最新 300 行）</h3>
+              <button className="log-viewer-close" onClick={() => setShowLogViewer(false)}>✕</button>
+            </div>
+            <pre className="log-viewer-content">{logContent || "（无日志内容）"}</pre>
+          </div>
+        </div>
+      )}
 
       {toast.show && (
         <div className="toast">

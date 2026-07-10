@@ -1,6 +1,6 @@
 import {
   Container, Upload, Rocket, Settings, GitBranch, History, Globe, GitMerge,
-  ChevronLeft, ChevronRight, FileText, Zap
+  ChevronLeft, ChevronRight, FileText, Zap, ScrollText
 } from "lucide-react";
 import type { TabType } from "../types";
 import { isOpsTab } from "../opsNavigation";
@@ -11,9 +11,10 @@ interface SidebarProps {
   opsMode: boolean;
   onTabChange: (tab: TabType) => void;
   onToggleCollapse: () => void;
+  onOpenLog: () => void;
 }
 
-export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onToggleCollapse, onOpenLog }: SidebarProps) {
   const navItems: { tab: TabType; icon: React.ReactNode; label: string }[] = [
     { tab: "upload", icon: <Upload size={18} />, label: "上传推送" },
     { tab: "push", icon: <Rocket size={18} />, label: "镜像推送" },
@@ -54,6 +55,18 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
         </nav>
         {!opsMode && (
           <div className="sidebar-footer">
+            <button
+              className="sidebar-item"
+              onClick={onOpenLog}
+              data-label="系统日志"
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-top', `${rect.top + rect.height / 2}px`);
+              }}
+            >
+              <ScrollText size={18} />
+              {!sidebarCollapsed && <span>系统日志</span>}
+            </button>
             <button
               className="sidebar-item settings-item"
               onClick={() => onTabChange("config")}
