@@ -590,6 +590,21 @@ body::before {
   background: rgba(100, 255, 218, 0.05);
 }
 
+.nginx-preview {
+  margin-top: 8px;
+  padding: 12px;
+  background: #0a0f1a;
+  border: 1px solid #1e2a3d;
+  border-radius: 8px;
+  color: #a8b2d1;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 .build-btn {
   width: 100%;
   margin-top: 12px;

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   FileText, Package, CheckCircle, Copy, Loader2, Eye, EyeOff,
@@ -115,6 +116,7 @@ export function BranchPanel({
   setImageName, setImageTag, setExposePort, onNginxLocationsChange, setShowAdvancedSettings, setShowBuildLog,
   renderLog,
 }: BranchPanelProps) {
+  const [showNginxPreview, setShowNginxPreview] = useState(false);
   const showProgress = shouldShowBranchProgress(isBuilding, log, progress);
   const showResults = shouldShowBranchResults(isBuilding, artifactPath);
 
@@ -443,17 +445,46 @@ export function BranchPanel({
                         </button>
                       </div>
                     ))}
-                    <button
-                      type="button"
-                      className="add-btn"
-                      onClick={() => {
-                        const next = [...(nginxLocations ?? []), { path: "", proxy_pass: "", host: "" }];
-                        onNginxLocationsChange(next);
-                      }}
-                    >
-                      <Plus size={14} /> 添加 Location
-                    </button>
-                    <p className="template-hint">配置的代理会注入到 nginx.conf 的 {"{{CUSTOM_LOCATIONS}}"} 位置</p>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="add-btn"
+                        onClick={() => {
+                          const next = [...(nginxLocations ?? []), { path: "", proxy_pass: "", host: "" }];
+                          onNginxLocationsChange(next);
+                        }}
+                      >
+                        <Plus size={14} /> 添加 Location
+                      </button>
+                      {(nginxLocations ?? []).length > 0 && (
+                        <button
+                          type="button"
+                          className="add-btn"
+                          onClick={() => setShowNginxPreview(!showNginxPreview)}
+                        >
+                          <Eye size={14} /> {showNginxPreview ? "收起预览" : "预览 nginx.conf"}
+                        </button>
+                      )}
+                    </div>
+                    {showNginxPreview && (nginxLocations ?? []).length > 0 && (
+                      <pre className="nginx-preview">{(() => {
+                        const template = config.frontend_nginx_template || "";
+                        const locs = (nginxLocations ?? []).filter(l => l.path || l.proxy_pass);
+                        if (locs.length === 0) return template;
+                        const rendered = locs.map(l =>
+                          `\n    location ${l.path || "/api/"} {\n        proxy_pass ${l.proxy_pass || "http://backend/"};${l.host ? `\n        proxy_set_header Host ${l.host};` : ""}\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }`
+                        ).join("");
+                        if (template.includes("{{CUSTOM_LOCATIONS}}")) {
+                          return template.replace("{{CUSTOM_LOCATIONS}}", rendered);
+                        }
+                        const lastBrace = template.lastIndexOf("}");
+                        if (lastBrace > 0) {
+                          return template.slice(0, lastBrace) + rendered + "\n" + template.slice(lastBrace);
+                        }
+                        return template + rendered;
+                      })()}</pre>
+                    )}
+                    <p className="template-hint">配置的代理会注入到 nginx.conf 的 {"{{CUSTOM_LOCATIONS}}"} 位置或 server block 末尾</p>
                   </div>
                 )}
               </>
