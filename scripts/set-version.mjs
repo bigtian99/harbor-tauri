@@ -38,6 +38,8 @@ export function bump(v, kind) {
   throw new Error(`未知 bump: ${kind}`);
 }
 
+const CARGO_VERSION_RE = /^version\s*=\s*"([^"]+)"/m;
+
 export function syncVersions(version) {
   parseSemver(version); // validate
 
@@ -45,9 +47,13 @@ export function syncVersions(version) {
   pkg.version = version;
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
 
-  let cargo = readFileSync(cargoPath, "utf8");
-  const nextCargo = cargo.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version}"`);
-  if (nextCargo === cargo) throw new Error("Cargo.toml 未找到 version 字段");
+  // 去 BOM，避免 Windows/编辑器写入后 ^version 匹配失败
+  let cargo = readFileSync(cargoPath, "utf8").replace(/^﻿/, "");
+  if (!CARGO_VERSION_RE.test(cargo)) {
+    throw new Error("Cargo.toml 未找到 version 字段（[package] 下应有 version = \"x.y.z\"）");
+  }
+  // 已是目标版本时 replace 无变化也算成功（幂等）
+  const nextCargo = cargo.replace(CARGO_VERSION_RE, `version = "${version}"`);
   writeFileSync(cargoPath, nextCargo);
 
   const tauri = JSON.parse(readFileSync(tauriPath, "utf8"));
@@ -59,7 +65,8 @@ export function syncVersions(version) {
 
 export function readVersions() {
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8")).version;
-  const cargo = (readFileSync(cargoPath, "utf8").match(/^version\s*=\s*"([^"]+)"/m) || [])[1];
+  const cargoRaw = readFileSync(cargoPath, "utf8").replace(/^﻿/, "");
+  const cargo = (cargoRaw.match(CARGO_VERSION_RE) || [])[1];
   const tauri = JSON.parse(readFileSync(tauriPath, "utf8")).version;
   return { pkg, cargo, tauri };
 }
