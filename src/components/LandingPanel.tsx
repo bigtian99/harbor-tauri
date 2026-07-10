@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { notifications } from "@mantine/notifications";
@@ -969,7 +970,7 @@ export function LandingPanel({
                 color="gray"
                 size="compact-xs"
                 leftSection={<ExternalLink size={14} />}
-                onClick={() => window.open(previewOverlay.src, "_blank")}
+                onClick={() => openUrl(previewOverlay.src)}
               >
                 外部浏览器
               </Button>
