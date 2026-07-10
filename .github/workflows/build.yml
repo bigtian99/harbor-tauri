@@ -230,16 +230,20 @@ jobs:
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists — will upload/clobber assets"
-            # 若是 draft，发布成正式
-            gh release edit "$TAG" --draft=false --prerelease=false --latest 2>/dev/null || \
-              gh release edit "$TAG" --draft=false --prerelease=false || true
+            # 若是 draft，发布成正式（--latest 在部分 gh 版本不支持，失败忽略）
+            gh release edit "$TAG" --draft=false --prerelease=false || true
           else
             echo "Creating release $TAG"
+            # --latest 在旧 gh 上可能不存在；失败则退回不带 --latest
             gh release create "$TAG" \
               --title "$TAG" \
               --generate-notes \
+              --verify-tag \
               --latest \
-              --verify-tag
+              || gh release create "$TAG" \
+                --title "$TAG" \
+                --generate-notes \
+                --verify-tag
           fi
 
           # 上传全部安装包；--clobber 覆盖同名，避免 update asset 404
@@ -252,5 +256,6 @@ jobs:
           gh release upload "$TAG" "${files[@]}" --clobber
 
           echo "---- release assets ----"
-          gh release view "$TAG" --json tagName,isDraft,isLatest,assets \
-            --jq '{tag:.tagName, draft:.isDraft, latest:.isLatest, assets:[.assets[].name]}'
+          # 注意：部分 gh 版本没有 isLatest 字段，只用稳定字段
+          gh release view "$TAG" --json tagName,isDraft,isPrerelease,assets \
+            --jq '{tag:.tagName, draft:.isDraft, prerelease:.isPrerelease, assets:[.assets[].name]}'
