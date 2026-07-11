@@ -1207,11 +1207,13 @@ pub async fn build_and_push(
     // docker rmi 失败是常见情况（多 tag 共享、被其他镜像依赖等），不影响推送结果
     match remove_result {
         Ok(Ok(output)) if output.status.success() => {
-            crate::diag::diag_log("build", &format!("本地镜像已删除: {}", full_image));
+            crate::diag::diag_log("docker", &format!("本地镜像已删除: {}", full_image));
         }
         _ => {
-            crate::diag::diag_log("build", &format!("本地镜像清理跳过（不影响推送结果）: {}",
-                full_image));
+            crate::diag::diag_log(
+                "docker",
+                &format!("本地镜像清理跳过（不影响推送结果）: {}", full_image),
+            );
         }
     }
 
@@ -1395,11 +1397,13 @@ pub async fn push_local_image(
 
     match remove_result {
         Ok(Ok(output)) if output.status.success() => {
-            crate::diag::diag_log("build", &format!("本地标签已删除: {}", full_image));
+            crate::diag::diag_log("docker", &format!("本地标签已删除: {}", full_image));
         }
         _ => {
-            crate::diag::diag_log("build", &format!("本地标签清理跳过（不影响推送结果）: {}",
-                full_image));
+            crate::diag::diag_log(
+                "docker",
+                &format!("本地标签清理跳过（不影响推送结果）: {}", full_image),
+            );
         }
     }
 
