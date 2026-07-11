@@ -51,15 +51,17 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            diag::init(app.handle());
             landing::init_bundled_templates_dir(app.handle());
             // 初始化 SQLite 数据库
             if let Err(e) = db::init_db() {
-                eprintln!("[JarPorter] 初始化数据库失败: {}", e);
+                diag::diag_log("db", &format!("初始化数据库失败: {e}"));
             }
             // 启动本地静态预览服务器（仅 127.0.0.1），用于落地页预览
             preview_server::start(app);
             Ok(())
         })
+
         .invoke_handler(tauri::generate_handler![
             is_ops_mode,
             load_config,

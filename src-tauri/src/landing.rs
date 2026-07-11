@@ -5,7 +5,8 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
+
 use std::time::Duration;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Emitter, Manager};
@@ -901,43 +902,10 @@ pub async fn preview_landing_page(path: String, template_index: Option<usize>) -
 const BUNDLE_TEMPLATES_RESOURCE: &str = "../templates";
 
 static BUNDLED_TEMPLATES_DIR: OnceLock<PathBuf> = OnceLock::new();
-static TEMPLATES_LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
-static TEMPLATES_LOG_LOCK: Mutex<()> = Mutex::new(());
 
-/// 打包后 GUI 无控制台，诊断日志同时写入此文件（app_log_dir/templates-diagnostic.log）。
-fn init_templates_log_file(app: &AppHandle) -> PathBuf {
-    let log_dir = app
-        .path()
-        .app_log_dir()
-        .ok()
-        .or_else(|| dirs::config_dir().map(|d| d.join("jarporter").join("logs")))
-        .unwrap_or_else(|| std::env::temp_dir().join("jarporter-logs"));
-
-    let _ = fs::create_dir_all(&log_dir);
-    let log_path = log_dir.join("templates-diagnostic.log");
-    let _ = TEMPLATES_LOG_FILE.set(log_path.clone());
-    log_path
-}
-
-pub(crate) fn templates_diagnostic_log_path() -> Option<PathBuf> {
-    TEMPLATES_LOG_FILE.get().cloned()
-}
-
+/// 兼容转发：本文件与外部 `crate::landing::templates_log` 短暂共存
 pub(crate) fn templates_log(message: impl AsRef<str>) {
-    let line = format!("[JarPorter][templates] {}", message.as_ref());
-    eprintln!("{line}");
-    if let Some(path) = TEMPLATES_LOG_FILE.get() {
-        if let Ok(_guard) = TEMPLATES_LOG_LOCK.lock() {
-            if let Ok(mut file) = fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-            {
-                let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
-                let _ = writeln!(file, "[{ts}] {line}");
-            }
-        }
-    }
+    crate::diag::diag_log("templates", message);
 }
 
 fn list_template_subdirs(root: &Path) -> Vec<String> {
@@ -1048,13 +1016,16 @@ pub fn init_bundled_templates_dir(app: &AppHandle) {
         return;
     }
 
-    let log_path = init_templates_log_file(app);
-    templates_log(&format!(
-        "诊断日志文件: {}（打包版无控制台时可打开此文件排查）",
-        log_path.display()
-    ));
+    crate::diag::diag_log(
+        "templates",
+        &format!(
+            "诊断日志目录: {:?}（按天文件 diagnostic-YYYY-MM-DD.log）",
+            crate::diag::diagnostic_log_dir()
+        ),
+    );
 
     log_templates_startup_diagnostics(app);
+
 
     match app
         .path()
@@ -1165,9 +1136,10 @@ pub async fn get_bundled_templates_dir() -> Result<String, String> {
     if let Ok(exe) = std::env::current_exe() {
         templates_log(&format!("  current_exe={}", exe.display()));
     }
-    let log_hint = templates_diagnostic_log_path()
+    let log_hint = crate::diag::today_log_path()
         .map(|p| format!("\n诊断日志: {}", p.display()))
         .unwrap_or_default();
+
     Err(format!(
         "找不到模板目录，请确认 bundle.resources 包含 \"{}\" 并已重新打包。{log_hint}",
         BUNDLE_TEMPLATES_RESOURCE
