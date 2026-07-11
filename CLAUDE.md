@@ -73,35 +73,97 @@ pnpm release
 
 ## 日志规范（强制性）
 
-**每个功能开发都必须输出诊断日志**，方便通过"系统日志"查看器排查问题，不依赖控制台或外部工具。
+**每个功能开发都必须输出诊断日志**，方便通过「系统日志」查看器排查问题，不依赖控制台或外部工具。
 
-### Rust 后端日志
+### 现状结论（已落地）
 
-```rust
-// 关键路径——模板加载、API 调用、文件操作、错误
-templates_log(&format!("generate_landing_pages base={} — {}", gen_base.display(), summarize_templates_dir(&gen_base)));
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| 统一诊断 API | ✅ 已落地 | `crate::diag::diag_log(module, msg)`：写 stderr + 当天诊断文件 |
+| 按模块打标签 | ✅ 已落地 | 行格式 `[JarPorter][{module}] {message}`，可按 `[updater]` 等过滤 |
+| 按天滚动文件 | ✅ 已落地 | `app_log_dir/diagnostic-YYYY-MM-DD.log`（`diag::init` 于启动时设置目录） |
+| 侧边栏「系统日志」 | ✅ 已落地 | `read_diagnostic_log` 合并最近 ≤3 天文件，**新日志在前**，支持关键词搜索 |
+| 兼容入口 | ✅ 已落地 | `templates_log(msg)` ≡ `diag_log("templates", msg)` |
 
-// 一般信息
-eprintln!("[JarPorter] 检测到项目 nginx.conf: {}", candidate.display());
+**结论**：业务路径必须用 `diag_log` 带正确模块名；禁止业务路径仅用 `eprintln!`（系统日志看不到）。
 
-// 错误信息——必须包含足够的上下文（路径、参数、返回值）
-return Err(format!("获取渠道数据失败: {}", e));
+### 日志格式
+
+```text
+[YYYY-MM-DD HH:MM:SS] [JarPorter][模块名] 消息内容
 ```
 
-- `templates_log` 写入诊断日志文件（侧边栏"系统日志"可查看），同时输出到 stderr
-- `eprintln!` 仅输出到 stderr，不会出现在诊断日志中——仅在临时调试时用
-- **所有 Tauri 命令的新参数/新逻辑必须至少有一条 `templates_log`**，含输入参数和关键决策点
-- **模板匹配失败、API 返回异常、文件操作错误**必须记录实际路径和值
+示例：
+
+```text
+[2026-07-11 04:26:46] [JarPorter][updater] check_update: current=0.2.36, latest=0.2.37, needs_update=true
+[2026-07-11 04:27:01] [JarPorter][landing] generate_landing_pages base=... count=3
+[2026-07-11 04:27:10] [JarPorter][build] package_from_branch repo=... branch=main
+```
+
+系统日志搜索框输入 `[updater]` / `[landing]` / `[build]` 即可只看该模块。
+
+### 模块名约定（固定小写英文，禁止临时造词）
+
+| 模块名 | 对应代码 / 功能 |
+|--------|-----------------|
+| `templates` | 模板目录 init、list、上传/删除、资源 resolve |
+| `landing` | 渠道拉取、落地页生成、FTP 上传 |
+| `preview` | 本地预览 HTTP 服务（`preview_server`） |
+| `updater` | 检查更新、下载、安装 |
+| `build` | JAR/dist 构建推送、分支打包 `package_from_branch` |
+| `git` | 分支列表、worktree、commit 查询 |
+| `docker` | 本地镜像、tag、push、清理 |
+| `ops` | 运营/打包加速等 ops 相关命令 |
+| `settlement` | 结算模块 |
+| `history` | 构建历史读写 |
+| `config` | 配置 load/save |
+| `db` | 本地数据库初始化 |
+| `utils` | 通用工具、路径/进程等辅助逻辑 |
+| `app` | 启动总控、跨模块、无法归类时 |
+
+新增业务模块时：**先在本表加一行**，再写代码，禁止无表自创 tag。
+
+### Rust 后端日志（已落地）
+
+实现位于 `src-tauri/src/diag.rs`。统一 API：
+
+```rust
+crate::diag::diag_log("updater", &format!("check_update: current={cur}, latest={latest}"));
+crate::diag::diag_log("build", &format!("package_from_branch repo={repo} branch={branch}"));
+crate::diag::diag_log("landing", &format!("generate_landing_pages base={} count={}", base.display(), n));
+// 兼容
+templates_log("list_template_infos ok"); // ≡ diag_log("templates", ...)
+```
+
+行格式必须是：`[JarPorter][{module}] {message}`（文件中另有时间戳前缀）。
+
+**存储与读取**：
+
+- 写入：当天文件 `diagnostic-YYYY-MM-DD.log`（目录由 `diag::init` 设为 `app_log_dir`）
+- 读取：`read_diagnostic_log` 合并最近 **≤3 天** 的 `diagnostic-*.log`，新日志在前
+- 路径查询：`get_templates_diagnostic_log_path` 返回当天文件路径
+
+规则：
+
+1. **新功能 / 改现有命令**：关键路径必须 `crate::diag::diag_log(模块名, …)`；禁止业务路径仅用 `eprintln!`。
+2. **错误路径必打**：API 失败、路径不存在、匹配失败、文件 IO 错误——带实际路径/参数/返回值。
+3. **输入与决策点**：每个 Tauri 命令至少一条：入参摘要 + 关键分支（选了哪条路径）。
+4. **`eprintln!`**：禁止作为业务诊断手段；合入前要么删，要么改为 `diag_log`。
+5. **`templates_log`**：仅 templates 域兼容封装，内部转发 `diag_log("templates", …)`；其它模块不得冒用，应写自己的模块名。
 
 ### 前端日志
 
-- 关键 API 调用结果用 `notifications.show` 通知用户
-- 调试信息用 `console.error`（Tauri dev 模式可在终端看到）
-- 模板相关错误归入诊断日志的展示范围
+- 关键 API 结果：`notifications.show` 通知用户
+- 调试：`console.error`（dev 终端可见）
+- 需要事后排查的链路：走后端诊断日志，不要只打在浏览器控制台
 
-### 日志查看
+### 日志查看与验收
 
-侧边栏底部"系统日志"按钮，全局可访问，支持关键词搜索和高亮。开发完成后验证日志可读性：打开系统日志，搜索功能名，确认关键步骤有记录。
+- 入口：侧边栏底部 **「系统日志」** → `read_diagnostic_log`（最近 ≤3 天合并）
+- 搜索：`[模块名]` 过滤模块；再叠加关键词（如 `check_update`、`FTP`）
+- 开发完成自检：打开系统日志 → 搜本功能模块 tag → 确认关键步骤有记录且模块名正确
+- 当天文件：`get_templates_diagnostic_log_path`（打包后 GUI 无控制台时可直接打开该路径）
 
 ## CI/CD
 
