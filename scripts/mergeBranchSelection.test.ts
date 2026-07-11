@@ -7,7 +7,7 @@ function assertContains(source: string, expected: string, message: string) {
 }
 
 const dropdownSource = readFileSync("src/components/SearchableDropdown.tsx", "utf8");
-const mergePanelSource = readFileSync("src/components/MergePanel.tsx", "utf8");
+const mergeFormSource = readFileSync("src/components/merge/MergeFormSection.tsx", "utf8");
 
 assertContains(
   dropdownSource,
@@ -15,7 +15,7 @@ assertContains(
   "SearchableDropdown should support filtering without committing typed text",
 );
 
-const branchDropdowns = mergePanelSource.match(/<SearchableDropdown[\s\S]*?\/>/g) ?? [];
+const branchDropdowns = mergeFormSource.match(/<SearchableDropdown[\s\S]*?\/>/g) ?? [];
 const sourceBranchDropdown = branchDropdowns.find((block) => block.includes("value={sourceBranch}")) ?? "";
 const targetBranchDropdown = branchDropdowns.find((block) => block.includes("value={targetBranch}")) ?? "";
 

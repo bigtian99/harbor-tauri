@@ -89,7 +89,12 @@ assertEqual(fileTree[1].children?.[0].children?.[0].name, "App.tsx", "tree leave
 assertEqual(fileTree[1].children?.[0].children?.[1].fileIndex, 2, "nested leaves should keep their original file index");
 assertEqual(fileTree[1].children?.[1].path, "src/types.ts", "direct child files should keep full paths for titles");
 
-const mergePanelSource = readFileSync("src/components/MergePanel.tsx", "utf8");
+const mergePanelSource = [
+  readFileSync("src/components/MergePanel.tsx", "utf8"),
+  readFileSync("src/components/merge/useMergePanel.ts", "utf8"),
+  readFileSync("src/components/merge/CommitDiffModal.tsx", "utf8"),
+  readFileSync("src/components/merge/utils.tsx", "utf8"),
+].join("\n");
 const libSource = readFileSync("src-tauri/src/lib.rs", "utf8");
 const commitSource = readFileSync("src-tauri/src/commit.rs", "utf8");
 const typesSource = readFileSync("src/types.ts", "utf8");
