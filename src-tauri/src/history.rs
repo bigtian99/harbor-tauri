@@ -77,8 +77,8 @@ pub(crate) fn save_build_record_direct(record: BuildRecord) -> Result<(), String
     config.build_history.truncate(10);
     let path = get_config_path();
     let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    eprintln!("[JarPorter] 保存构建记录到: {}", path.display());
-    eprintln!("[JarPorter] 构建记录数量: {}", config.build_history.len());
+    crate::diag::diag_log("history", &format!("保存构建记录到: {}", path.display()));
+    crate::diag::diag_log("history", &format!("构建记录数量: {}", config.build_history.len()));
     fs::write(&path, &content).map_err(|e| format!("写入配置文件失败: {}", e))?;
     Ok(())
 }

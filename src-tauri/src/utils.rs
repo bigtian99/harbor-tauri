@@ -263,10 +263,8 @@ pub(crate) fn try_restore_node_modules(build_dir: &Path, cache_key: &str) -> Res
 
     if !link_output.status.success() {
         // 硬链接失败（跨文件系统），回退到复制
-        eprintln!(
-            "[JarPorter] 硬链接恢复失败，回退到复制: {}",
-            String::from_utf8_lossy(&link_output.stderr).trim()
-        );
+        crate::diag::diag_log("utils", &format!("硬链接恢复失败，回退到复制: {}",
+            String::from_utf8_lossy(&link_output.stderr).trim()));
         let copy_output = silent_command("cp")
             .args(["-a", cache_path.to_str().unwrap(), target.to_str().unwrap()])
             .output()
@@ -329,7 +327,7 @@ pub(crate) fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
             .len()
             .saturating_sub(MAX_CACHE_ENTRIES.saturating_sub(1));
         for (_, path) in dirs.iter().take(to_remove) {
-            eprintln!("[JarPorter] 淘汰旧缓存: {}", path.display());
+            crate::diag::diag_log("utils", &format!("淘汰旧缓存: {}", path.display()));
             fs::remove_dir_all(path).ok();
         }
     }
@@ -351,14 +349,12 @@ pub(crate) fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
 
     match link_result {
         Ok(output) if output.status.success() => {
-            eprintln!("[JarPorter] 硬链接保存缓存成功 (hash={})", cache_key);
+            crate::diag::diag_log("utils", &format!("硬链接保存缓存成功 (hash={})", cache_key));
         }
         _ => {
             // 硬链接失败，回退到复制
-            eprintln!(
-                "[JarPorter] 硬链接保存失败，回退到复制 (hash={})",
-                cache_key
-            );
+            crate::diag::diag_log("utils", &format!("硬链接保存失败，回退到复制 (hash={})",
+                cache_key));
             silent_command("cp")
                 .args(["-a", source.to_str().unwrap(), cache_path.to_str().unwrap()])
                 .output()
@@ -540,7 +536,7 @@ pub(crate) fn find_project_nginx(artifact_path: &Path) -> Option<String> {
     let project_dir = artifact_path.parent()?;
     let candidate = project_dir.join("nginx.conf");
     if candidate.is_file() {
-        eprintln!("[JarPorter] 检测到项目 nginx.conf: {}", candidate.display());
+        crate::diag::diag_log("utils", &format!("检测到项目 nginx.conf: {}", candidate.display()));
         Some(fs::read_to_string(&candidate).ok()?)
     } else {
         None

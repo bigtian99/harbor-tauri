@@ -47,7 +47,7 @@ pub fn start(app: &tauri::App) {
     let server = match Server::http("127.0.0.1:0") {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("[JarPorter] ⚠️ 预览服务器启动失败: {}", e);
+            crate::diag::diag_log("preview", &format!("⚠️ 预览服务器启动失败: {}", e));
             return;
         }
     };
@@ -58,11 +58,9 @@ pub fn start(app: &tauri::App) {
         .map(|addr| addr.port())
         .unwrap_or(0);
 
-    eprintln!(
-        "[JarPorter] 🔌 预览服务器已启动: http://127.0.0.1:{} (root={})",
+    crate::diag::diag_log("preview", &format!("🔌 预览服务器已启动: http://127.0.0.1:{} (root={})",
         port,
-        root.display()
-    );
+        root.display()));
 
     let info = PreviewServerInfo {
         port,

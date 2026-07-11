@@ -301,11 +301,9 @@ pub async fn package_from_branch(
     fs::create_dir_all(worktree_path.parent().unwrap())
         .map_err(|e| format!("创建 worktree 父目录失败: {}", e))?;
 
-    eprintln!(
-        "[JarPorter] Worktree 路径: {} (输出目录: {})",
+    crate::diag::diag_log("build", &format!("Worktree 路径: {} (输出目录: {})",
         worktree_path.display(),
-        output_base.display()
-    );
+        output_base.display()));
 
     // 处理前端子目录路径
     let build_dir = if let Some(ref dir) = frontend_dir {
@@ -706,11 +704,11 @@ pub async fn package_from_branch(
     let final_artifact_path = match copy_artifact_to_output_internal(&artifact_path, &artifact_dir)
     {
         Ok(copied_path) => {
-            eprintln!("[JarPorter] ✅ 产物已输出到: {}", copied_path);
+            crate::diag::diag_log("build", &format!("✅ 产物已输出到: {}", copied_path));
             copied_path
         }
         Err(e) => {
-            eprintln!("[JarPorter] ❌ 产物复制失败: {}", e);
+            crate::diag::diag_log("build", &format!("❌ 产物复制失败: {}", e));
             artifact_path.to_string_lossy().to_string()
         }
     };
@@ -720,11 +718,11 @@ pub async fn package_from_branch(
         let backend_src_path = PathBuf::from(backend_src);
         match copy_artifact_to_output_internal(&backend_src_path, &artifact_dir) {
             Ok(copied) => {
-                eprintln!("[JarPorter] ✅ 后端产物已输出到: {}", copied);
+                crate::diag::diag_log("build", &format!("✅ 后端产物已输出到: {}", copied));
                 Some(copied)
             }
             Err(e) => {
-                eprintln!("[JarPorter] ❌ 后端产物复制失败: {}", e);
+                crate::diag::diag_log("build", &format!("❌ 后端产物复制失败: {}", e));
                 Some(backend_src.clone())
             }
         }
@@ -745,7 +743,7 @@ pub async fn package_from_branch(
             for name in &dockerfile_names {
                 let df_in_worktree = search_dir.join(name);
                 if df_in_worktree.is_file() {
-                    eprintln!("[JarPorter] 📄 检测到自定义 Dockerfile: {}", df_in_worktree.display());
+                    crate::diag::diag_log("build", &format!("📄 检测到自定义 Dockerfile: {}", df_in_worktree.display()));
                     // 使用 worktree 作为 Docker 构建上下文（包含 Dockerfile、JAR、tools/ 等）
                     found_df_path = Some(df_in_worktree.to_string_lossy().to_string());
                     found_df_context = Some(worktree_path.to_string_lossy().to_string());
@@ -757,7 +755,7 @@ pub async fn package_from_branch(
             }
         }
         if found_df_path.is_none() {
-            eprintln!("[JarPorter] 未检测到自定义 Dockerfile（已检查: {:?}）", search_dirs);
+            crate::diag::diag_log("build", &format!("未检测到自定义 Dockerfile（已检查: {:?}）", search_dirs));
         }
         (found_df_path, found_df_context)
     };
@@ -772,7 +770,7 @@ pub async fn package_from_branch(
             }),
         )
         .ok();
-        eprintln!("[JarPorter] 保留 worktree 用于 Docker 构建: {}", worktree_path.display());
+        crate::diag::diag_log("build", &format!("保留 worktree 用于 Docker 构建: {}", worktree_path.display()));
     } else {
         // 没有自定义 Dockerfile，正常清理 worktree
         app.emit(
@@ -784,7 +782,7 @@ pub async fn package_from_branch(
         )
         .ok();
         cleanup_worktree(&repo_root, &worktree_path);
-        eprintln!("[JarPorter] Worktree 已清理: {}", worktree_path.display());
+        crate::diag::diag_log("build", &format!("Worktree 已清理: {}", worktree_path.display()));
     }
 
     app.emit(
@@ -850,9 +848,9 @@ pub async fn package_from_branch(
     };
 
     if let Err(e) = save_build_record_direct(record) {
-        eprintln!("[JarPorter] 保存构建记录失败: {}", e);
+        crate::diag::diag_log("build", &format!("保存构建记录失败: {}", e));
     } else {
-        eprintln!("[JarPorter] 构建记录已保存");
+        crate::diag::diag_log("build", "构建记录已保存");
     }
 
     Ok(PackageFromBranchResult {
@@ -936,7 +934,7 @@ pub fn cancel_build() -> Result<(), String> {
     CANCEL_FLAG.store(true, Ordering::SeqCst);
     // 杀掉当前运行的子进程
     if let Some(pid) = *CURRENT_PID.lock().unwrap() {
-        eprintln!("[JarPorter] 🛑 取消构建，终止进程 PID={}", pid);
+        crate::diag::diag_log("build", &format!("🛑 取消构建，终止进程 PID={}", pid));
         let _ = silent_command("kill").arg(pid.to_string()).output();
     }
     Ok(())
@@ -1017,7 +1015,7 @@ pub async fn build_and_push(
         if !df.is_file() {
             return Err(format!("自定义Dockerfile不存在: {}", df.display()));
         }
-        eprintln!("[JarPorter] 使用自定义Dockerfile，构建上下文: {}", ctx_path);
+        crate::diag::diag_log("build", &format!("使用自定义Dockerfile，构建上下文: {}", ctx_path));
         // worktree 作为构建上下文，Docker 构建完后清理
         DockerBuildContext {
             context_dir: ctx.clone(),
@@ -1030,7 +1028,7 @@ pub async fn build_and_push(
         if df.is_file() {
             let custom_content = fs::read_to_string(&df)
                 .map_err(|e| format!("读取自定义Dockerfile失败: {}", e))?;
-            eprintln!("[JarPorter] 使用自定义Dockerfile (独立上下文): {}", df_path);
+            crate::diag::diag_log("build", &format!("使用自定义Dockerfile (独立上下文): {}", df_path));
             prepare_custom_docker_context(
                 &config,
                 &artifact_path,
@@ -1209,13 +1207,11 @@ pub async fn build_and_push(
     // docker rmi 失败是常见情况（多 tag 共享、被其他镜像依赖等），不影响推送结果
     match remove_result {
         Ok(Ok(output)) if output.status.success() => {
-            eprintln!("[JarPorter] 本地镜像已删除: {}", full_image);
+            crate::diag::diag_log("build", &format!("本地镜像已删除: {}", full_image));
         }
         _ => {
-            eprintln!(
-                "[JarPorter] 本地镜像清理跳过（不影响推送结果）: {}",
-                full_image
-            );
+            crate::diag::diag_log("build", &format!("本地镜像清理跳过（不影响推送结果）: {}",
+                full_image));
         }
     }
 
@@ -1399,13 +1395,11 @@ pub async fn push_local_image(
 
     match remove_result {
         Ok(Ok(output)) if output.status.success() => {
-            eprintln!("[JarPorter] 本地标签已删除: {}", full_image);
+            crate::diag::diag_log("build", &format!("本地标签已删除: {}", full_image));
         }
         _ => {
-            eprintln!(
-                "[JarPorter] 本地标签清理跳过（不影响推送结果）: {}",
-                full_image
-            );
+            crate::diag::diag_log("build", &format!("本地标签清理跳过（不影响推送结果）: {}",
+                full_image));
         }
     }
 
