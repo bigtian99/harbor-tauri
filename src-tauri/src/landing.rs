@@ -19,7 +19,7 @@ const FTP_BASE_DIR: &str = "common.tiankongshuyu.fun";
 #[tauri::command]
 pub async fn fetch_sub_channels(api_url: String, ids: String) -> Result<Vec<SubChannelData>, String> {
     let url = format!("{}/api/sub-channel/list?ids={}", api_url.trim_end_matches('/'), ids);
-    eprintln!("[JarPorter] 请求渠道数据: {}", url);
+    crate::diag::diag_log("landing", &format!("请求渠道数据: {}", url));
 
     let response = reqwest::get(&url)
         .await
@@ -71,17 +71,20 @@ pub async fn generate_landing_pages(
     }
 
     let total = sub_channels.len();
-    eprintln!("[JarPorter] 开始生成 {} 个落地页", total);
+    crate::diag::diag_log("landing", &format!("开始生成 {} 个落地页", total));
     let gen_base = if template_base.trim().is_empty() {
         templates_root()
     } else {
         PathBuf::from(template_base.trim())
     };
-    templates_log(&format!(
-        "generate_landing_pages base={} — {}",
-        gen_base.display(),
-        summarize_templates_dir(&gen_base)
-    ));
+    crate::diag::diag_log(
+        "landing",
+        &format!(
+            "generate_landing_pages base={} — {}",
+            gen_base.display(),
+            summarize_templates_dir(&gen_base)
+        ),
+    );
 
     // 确保输出目录存在
     let output_base = Path::new(&output_dir);
@@ -126,17 +129,20 @@ pub async fn generate_landing_pages(
 
         if template_dirs.is_empty() {
             let available = list_template_subdirs(template_base_path);
-            templates_log(&format!(
-                "生成失败 channel={} type_code={} base={} — 无匹配模板；当前 base 下可用: [{}]",
-                channel.sub_channel_name,
-                channel.type_code,
-                template_base_path.display(),
-                if available.is_empty() {
-                    "无".to_string()
-                } else {
-                    available.join(", ")
-                }
-            ));
+            crate::diag::diag_log(
+                "landing",
+                &format!(
+                    "生成失败 channel={} type_code={} base={} — 无匹配模板；当前 base 下可用: [{}]",
+                    channel.sub_channel_name,
+                    channel.type_code,
+                    template_base_path.display(),
+                    if available.is_empty() {
+                        "无".to_string()
+                    } else {
+                        available.join(", ")
+                    }
+                ),
+            );
             results.push(LandingPageResult {
                 id: channel.id.clone(),
                 type_code: channel.type_code.clone(),
@@ -165,16 +171,19 @@ pub async fn generate_landing_pages(
                 first_template_output = template_output.clone();
             }
 
-            eprintln!(
-                "[JarPorter] 复制模板 {}: {} -> {}",
-                idx, template.display(), template_output.display()
+            crate::diag::diag_log(
+                "landing",
+                &format!(
+                    "复制模板 {}: {} -> {}",
+                    idx, template.display(), template_output.display()
+                ),
             );
 
             // 复制模板目录
             if let Err(e) = copy_dir_recursive(template, &template_output) {
                 all_success = false;
                 error_message = format!("复制模板 {} 失败: {}", idx, e);
-                eprintln!("[JarPorter] ❌ {}", error_message);
+                crate::diag::diag_log("landing", &format!("❌ {}", error_message));
                 break;
             }
 
@@ -188,9 +197,12 @@ pub async fn generate_landing_pages(
                             .collect()
                     })
                     .unwrap_or_default();
-                eprintln!(
-                    "[JarPorter] ✅ 模板 {} 复制完成，内容: {:?}",
-                    idx, entries
+                crate::diag::diag_log(
+                    "landing",
+                    &format!(
+                        "✅ 模板 {} 复制完成，内容: {:?}",
+                        idx, entries
+                    ),
                 );
             }
 
@@ -239,9 +251,12 @@ pub async fn generate_landing_pages(
             let verify_index = first_template_output.join("index.html");
             let file_exists = verify_index.exists();
             let file_size = fs::metadata(&verify_index).map(|m| m.len()).unwrap_or(0);
-            eprintln!(
-                "[JarPorter] ✅ 落地页生成成功: {} | output_dir={} | templates={} | index.html exists={} size={}",
-                channel.sub_channel_name, channel_output_str, template_dirs.len(), file_exists, file_size
+            crate::diag::diag_log(
+                "landing",
+                &format!(
+                    "✅ 落地页生成成功: {} | output_dir={} | templates={} | index.html exists={} size={}",
+                    channel.sub_channel_name, channel_output_str, template_dirs.len(), file_exists, file_size
+                ),
             );
             results.push(LandingPageResult {
                 id: channel.id.clone(),
@@ -363,18 +378,21 @@ pub async fn generate_vest_landing_pages(
     };
 
     let total = vest_items.len();
-    eprintln!("[JarPorter] 马甲包 开始生成 {} 个落地页", total);
+    crate::diag::diag_log("landing", &format!("马甲包 开始生成 {} 个落地页", total));
 
     let gen_base = if template_base.trim().is_empty() {
         templates_root()
     } else {
         PathBuf::from(template_base.trim())
     };
-    templates_log(&format!(
-        "generate_vest_landing_pages base={} — {}",
-        gen_base.display(),
-        summarize_templates_dir(&gen_base)
-    ));
+    crate::diag::diag_log(
+        "landing",
+        &format!(
+            "generate_vest_landing_pages base={} — {}",
+            gen_base.display(),
+            summarize_templates_dir(&gen_base)
+        ),
+    );
 
     // 收集所有模板目录
     let mut all_template_dirs: Vec<PathBuf> = Vec::new();
@@ -493,10 +511,13 @@ pub(crate) fn run_ftp_upload(
         match run_ftp_upload_once(local_dir, remote_dir) {
             Ok(()) => return Ok(()),
             Err(e) => {
-                eprintln!("[JarPorter] ⚠️ 上传失败 (第{}次): {}", attempt, e);
+                crate::diag::diag_log(
+                    "landing",
+                    &format!("⚠️ 上传失败 (第{}次): {}", attempt, e),
+                );
                 last_error = e;
                 if attempt < max_retries {
-                    eprintln!("[JarPorter] ⏳ 等待 2 秒后重试...");
+                    crate::diag::diag_log("landing", "⏳ 等待 2 秒后重试...");
                     std::thread::sleep(std::time::Duration::from_secs(2));
                 }
             }
@@ -702,7 +723,10 @@ fn upload_dir_native(client: &mut FtpClient, local_dir: &Path) -> Result<(), Str
             upload_dir_native(client, &path)?;
             client.cwd("..")?;
         } else if metadata.is_file() {
-            eprintln!("[JarPorter] 📤 FTP 上传文件: {} ({} bytes)", name, metadata.len());
+            crate::diag::diag_log(
+                "landing",
+                &format!("📤 FTP 上传文件: {} ({} bytes)", name, metadata.len()),
+            );
             client.upload_file(&name, &path)?;
         }
     }
@@ -757,7 +781,10 @@ pub async fn upload_landing_to_ftp(
         let handle = std::thread::spawn(move || {
             let local_dir = PathBuf::from(&item_clone.local_dir);
             if !local_dir.is_dir() {
-                eprintln!("[JarPorter] ❌ 本地目录不存在: {}", item_clone.local_dir);
+                crate::diag::diag_log(
+                    "landing",
+                    &format!("❌ 本地目录不存在: {}", item_clone.local_dir),
+                );
                 // 即使失败也更新进度
                 let mut c = completed_clone.lock().unwrap();
                 *c += 1;
@@ -775,12 +802,15 @@ pub async fn upload_landing_to_ftp(
                 };
             }
 
-            eprintln!("[JarPorter] 📤 上传: {}", item_clone.remote_dir);
+            crate::diag::diag_log(
+                "landing",
+                &format!("📤 上传: {}", item_clone.remote_dir),
+            );
 
             let result = match run_ftp_upload(&local_dir, &item_clone.remote_dir) {
                 Ok(()) => {
                     let url = format!("https://{}/{}/", FTP_BASE_DIR, &item_clone.remote_dir);
-                    eprintln!("[JarPorter] ✅ 上传成功: {}", url);
+                    crate::diag::diag_log("landing", &format!("✅ 上传成功: {}", url));
                     FtpUploadResult {
                         id: item_clone.id.clone(),
                         url,
@@ -789,7 +819,7 @@ pub async fn upload_landing_to_ftp(
                     }
                 }
                 Err(e) => {
-                    eprintln!("[JarPorter] ❌ 上传失败: {}", e);
+                    crate::diag::diag_log("landing", &format!("❌ 上传失败: {}", e));
                     FtpUploadResult {
                         id: item_clone.id.clone(),
                         url: String::new(),
@@ -1362,7 +1392,7 @@ pub async fn upload_template_zip(zip_path: String) -> Result<Vec<serde_json::Val
         })
         .collect();
 
-    eprintln!("[JarPorter] ✅ 模板上传完成: {:?}", results);
+    templates_log(&format!("✅ 模板上传完成: {:?}", results));
     Ok(results)
 }
 
@@ -1374,6 +1404,6 @@ pub async fn delete_template_dir(dir_name: String) -> Result<(), String> {
     }
     fs::remove_dir_all(&target)
         .map_err(|e| format!("删除模板目录 '{}' 失败: {}", dir_name, e))?;
-    eprintln!("[JarPorter] 🗑 已删除模板: {}", dir_name);
+    templates_log(&format!("🗑 已删除模板: {}", dir_name));
     Ok(())
 }
