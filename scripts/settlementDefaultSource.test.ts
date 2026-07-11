@@ -13,7 +13,8 @@ function assertNotContains(source: string, unexpected: string, message: string) 
 }
 
 const settlementPanel = readFileSync("src/components/SettlementPanel.tsx", "utf8");
-const appCss = readFileSync("src/App.css", "utf8");
+// OPT-011: App.css 仅 @import；结算样式在 styles/settlement.css
+const settlementCss = readFileSync("src/styles/settlement.css", "utf8");
 const tauriConfig = readFileSync("src-tauri/tauri.conf.json", "utf8");
 
 assertNotContains(
@@ -82,17 +83,17 @@ assertContains(
   "Settlement page should show the dated directory that will be used for this run",
 );
 assertContains(
-  appCss,
+  settlementCss,
   ".settlement-result-list",
   "Generated settlement files scroll container should have CSS",
 );
 assertContains(
-  appCss,
+  settlementCss,
   "max-height: 240px",
   "Generated settlement files scroll container should be height-bounded",
 );
 assertContains(
-  appCss,
+  settlementCss,
   "overflow-y: auto",
   "Generated settlement files scroll container should scroll vertically",
 );

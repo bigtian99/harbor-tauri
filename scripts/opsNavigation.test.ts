@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { isOpsTab, resolveOpsInitialTab, resolveTabForOpsMode } from "../src/opsNavigation";
+import { isOpsTab, resolveOpsInitialTab, resolveTabForOpsMode } from "../src/opsNavigation.ts";
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -31,20 +31,26 @@ assertEqual(resolveTabForOpsMode("settlement", true), "settlement", "ops tab cha
 assertEqual(resolveTabForOpsMode("config", true), "landing", "ops tab changes should reject hidden config tab");
 assertEqual(resolveTabForOpsMode("config", false), "config", "normal tab changes should keep config");
 
+// 前端重构后 ops 导航逻辑在 hooks/useAppConfig，App 仅接线 handleTabChange
 const appSource = readFileSync("src/App.tsx", "utf8");
+const appConfigSource = readFileSync("src/hooks/useAppConfig.ts", "utf8");
 
-if (!appSource.includes("resolveOpsInitialTab")) {
-  throw new Error("App should use resolveOpsInitialTab when entering ops mode");
+if (!appConfigSource.includes("resolveOpsInitialTab")) {
+  throw new Error("useAppConfig should use resolveOpsInitialTab when entering ops mode");
 }
 
-if (!appSource.includes("opsModeInitializedRef")) {
-  throw new Error("App should guard ops-mode landing initialization so menu clicks are not reset later");
+if (!appConfigSource.includes("opsModeInitializedRef")) {
+  throw new Error("useAppConfig should guard ops-mode landing initialization so menu clicks are not reset later");
 }
 
-if (!appSource.includes("handleTabChange")) {
-  throw new Error("App should route sidebar tab clicks through the ops-mode guard");
+if (!appConfigSource.includes("handleTabChange")) {
+  throw new Error("useAppConfig should expose handleTabChange for the ops-mode guard");
 }
 
-if (appSource.includes('setActiveTab("landing");')) {
-  throw new Error("App should not force every ops-mode check back to landing");
+if (!appSource.includes("app.handleTabChange")) {
+  throw new Error("App should route sidebar tab clicks through handleTabChange");
+}
+
+if (appConfigSource.includes('setActiveTab("landing");')) {
+  throw new Error("useAppConfig should not force every ops-mode check back to landing");
 }

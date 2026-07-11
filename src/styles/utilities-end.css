@@ -1,0 +1,117 @@
+/* utilities-end.css — hover tip + system log viewer (App.css 3772-3871) */
+/* 悬浮提示（fixed 定位，避免被 overflow 裁切） */
+.hover-tip-popup {
+  position: fixed;
+  z-index: 100000;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 8px 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: "SF Mono", "Fira Code", monospace;
+  border-radius: 6px;
+  border: 1px solid rgba(100, 255, 218, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  white-space: pre-wrap;
+  word-break: break-all;
+  pointer-events: none;
+  transform: translateY(-100%);
+  animation: hover-tip-in 0.12s ease;
+}
+
+@keyframes hover-tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-100% + 4px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes merge-modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 系统日志查看器 */
+.log-viewer-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+.log-viewer {
+  width: 90vw; max-width: 900px; max-height: 85vh;
+  background: #0d1117; border: 1px solid #30363d;
+  border-radius: 12px; display: flex; flex-direction: column;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+.log-viewer-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 20px; border-bottom: 1px solid #21262d;
+}
+.log-viewer-header h3 {
+  margin: 0; font-size: 15px; color: #c9d1d9; font-weight: 600;
+  flex-shrink: 0;
+}
+.log-viewer-title-icon { color: #5eead4; flex-shrink: 0; }
+.log-viewer-search-wrap {
+  position: relative; display: flex; align-items: center;
+  margin-left: auto; flex-shrink: 0;
+}
+.log-viewer-search-icon {
+  position: absolute; left: 8px; color: #484f58; pointer-events: none;
+}
+.log-viewer-search {
+  width: 200px;
+  background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+  color: #c9d1d9; padding: 6px 10px 6px 28px; font-size: 12px; outline: none;
+}
+.log-viewer-search:focus { border-color: #5eead4; }
+.log-viewer-search::placeholder { color: #484f58; }
+.log-viewer-search-clear {
+  position: absolute; right: 4px;
+  background: none; border: none; color: #8b949e;
+  cursor: pointer; padding: 2px; display: flex; align-items: center;
+  border-radius: 3px;
+}
+.log-viewer-search-clear:hover { color: #c9d1d9; background: #21262d; }
+.log-viewer-download {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex-shrink: 0;
+  background: rgba(94, 234, 212, 0.08);
+  border: 1px solid rgba(94, 234, 212, 0.25);
+  border-radius: 6px;
+  color: #5eead4;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.log-viewer-download:hover {
+  background: rgba(94, 234, 212, 0.16);
+  border-color: rgba(94, 234, 212, 0.45);
+}
+.log-highlight {
+  background: rgba(94,234,212,0.35);
+  color: #5eead4;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.log-viewer-close {
+  background: none; border: none; color: #8b949e; font-size: 18px;
+  cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+.log-viewer-close:hover { background: #21262d; color: #c9d1d9; }
+.log-viewer-content {
+  flex: 1; overflow: auto; margin: 0;
+  padding: 16px 20px;
+  background: #0d1117; color: #8b949e;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-all;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

@@ -21,7 +21,8 @@
     "version:major": "node scripts/set-version.mjs major",
     "release": "node scripts/release.mjs",
     "release:minor": "node scripts/release.mjs minor",
-    "release:major": "node scripts/release.mjs major"
+    "release:major": "node scripts/release.mjs major",
+    "test": "node --experimental-strip-types --test scripts/*.test.ts"
   },
   "dependencies": {
     "@mantine/core": "^9.4.0",

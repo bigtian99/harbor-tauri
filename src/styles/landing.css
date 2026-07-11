@@ -1,0 +1,13 @@
+/* landing.css — split from App.css (OPT-011), lines 827-837 */
+
+/* 落地页模板轮播动画 —— 被模板预览卡片（LandingPanel）引用 */
+@keyframes slideInFromLeft {
+  from { opacity: 0; transform: translateX(-20px) scale(0.8); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes slideInFromRight {
+  from { opacity: 0; transform: translateX(20px) scale(0.8); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+

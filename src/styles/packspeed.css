@@ -1,0 +1,170 @@
+/* packspeed.css — split from App.css (OPT-011), lines 659-826 */
+
+.pack-speed-actions {
+  display: flex;
+  margin-top: 12px;
+}
+
+.pack-speed-actions .build-btn {
+  margin-top: 0;
+}
+
+.auth-input-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.auth-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.auth-login-btn {
+  flex: 0 0 auto;
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.pack-type-options {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.16);
+  background: rgba(10, 25, 47, 0.5);
+}
+
+.pack-type-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  min-height: 34px;
+  padding: 7px 14px;
+  border-radius: 7px;
+  color: #8892b0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pack-type-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pack-type-option:hover,
+.pack-type-option.active {
+  color: #5eead4;
+  background: rgba(100, 255, 218, 0.1);
+}
+
+.secondary-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(100, 255, 218, 0.18);
+  background: rgba(15, 52, 96, 0.42);
+  color: #ccd6f6;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.secondary-action-btn:hover:not(:disabled) {
+  border-color: rgba(100, 255, 218, 0.34);
+  background: rgba(15, 52, 96, 0.62);
+  color: #5eead4;
+}
+
+.secondary-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .auth-input-row {
+    flex-direction: column;
+  }
+}
+
+.pack-speed-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.16);
+  background: rgba(15, 52, 96, 0.34);
+  color: #ccd6f6;
+}
+
+.pack-speed-result.success {
+  border-color: rgba(53, 208, 127, 0.38);
+}
+
+.pack-speed-result.warning {
+  border-color: rgba(255, 196, 87, 0.38);
+}
+
+.pack-speed-result div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pack-speed-result strong {
+  font-size: 13px;
+  color: #e6f1ff;
+}
+
+.pack-speed-result span {
+  color: #a8b2d1;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.cancel-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  background: rgba(255, 80, 80, 0.12);
+  color: #ff6464;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.25s ease;
+}
+
+.cancel-btn:hover {
+  background: rgba(255, 80, 80, 0.22);
+  border-color: rgba(255, 100, 100, 0.5);
+  color: #ff8080;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+

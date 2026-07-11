@@ -58,9 +58,11 @@ const typesSource = readFileSync("src/types.ts", "utf8");
 const sidebarSource = readFileSync("src/components/Sidebar.tsx", "utf8");
 const panelSource = readFileSync("src/components/PackSpeedPanel.tsx", "utf8");
 const appSource = readFileSync("src/App.tsx", "utf8");
+const appConfigSource = readFileSync("src/hooks/useAppConfig.ts", "utf8");
+
 const libSource = readFileSync("src-tauri/src/lib.rs", "utf8");
 const modelsSource = readFileSync("src-tauri/src/models.rs", "utf8");
-const utilsSource = readFileSync("src-tauri/src/utils.rs", "utf8");
+const utilsSource = readFileSync("src-tauri/src/utils/config_io.rs", "utf8");
 const opsSource = readFileSync("src-tauri/src/ops.rs", "utf8");
 const opsCapabilitySource = readFileSync("src-tauri/capabilities/ops-login.json", "utf8");
 
@@ -81,9 +83,9 @@ assertContains(panelSource, "event.payload.packType", "Pack speed panel should s
 assertContains(panelSource, 'setIdsText(syncedIds.join("\\n"))', "Synced IDs should use newline-separated input text");
 assertContains(panelSource, "支持英文逗号", "Sub channel ID help text should mention English comma support");
 assertContains(appSource, "<PackSpeedPanel", "App should render the pack speed panel");
-assertNotContains(appSource, 'ops_authorization: ""', "App should not ship a default Authorization value in initial config");
+assertNotContains(appConfigSource, 'ops_authorization: ""', "App config should not ship a default Authorization value in initial config");
 assertNotContains(appSource, "const updatedConfig = { ...config, ops_authorization: authorization.trim() };", "App should not persist ops Authorization to local config");
-assertContains(appSource, "ops_authorization: token", "App should keep ops Authorization only in memory");
+assertContains(appConfigSource, "ops_authorization: token", "useAppConfig should keep ops Authorization only in memory");
 assertContains(libSource, "batch_pack_sub_channels", "Tauri should register the batch pack command");
 assertContains(libSource, "open_ops_login_window", "Tauri should register the embedded ops login command");
 assertContains(libSource, "close_ops_login_window", "Tauri should register the embedded ops login close command");

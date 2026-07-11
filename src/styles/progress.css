@@ -1,0 +1,191 @@
+/* progress.css — split from App.css (OPT-011), lines 838-1026 */
+
+.build-progress,
+.progress-section {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(15, 52, 96, 0.3);
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.1);
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.progress-message {
+  font-size: 12px;
+  color: #ccd6f6;
+  font-weight: 500;
+}
+
+.progress-percent {
+  font-size: 12px;
+  font-weight: 700;
+  color: #5eead4;
+  text-shadow: 0 0 10px rgba(100, 255, 218, 0.5);
+}
+
+.progress-track {
+  height: 6px;
+  background: rgba(10, 10, 26, 0.6);
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.progress-fill,
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #5eead4 0%, #48c9b0 100%);
+  border-radius: 4px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 10px rgba(100, 255, 218, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill::after,
+.progress-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.log-panel {
+  margin-top: 10px;
+  background: rgba(10, 10, 26, 0.8);
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px solid rgba(100, 255, 218, 0.12);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s ease;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.log-panel.success {
+  border-color: rgba(100, 255, 218, 0.4);
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(100, 255, 218, 0.15);
+  background: linear-gradient(135deg, rgba(10, 10, 26, 0.9), rgba(15, 52, 96, 0.3));
+}
+
+.log-panel pre {
+  font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+  font-size: 12px;
+  color: #a8b2d1;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.log-section {
+  margin-top: 10px;
+}
+
+.log-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(100, 255, 218, 0.06);
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: #5eead4;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.log-toggle-btn:hover {
+  background: rgba(100, 255, 218, 0.12);
+  border-color: rgba(100, 255, 218, 0.4);
+}
+
+.success-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.success-icon {
+  color: #5eead4;
+  flex-shrink: 0;
+  margin-top: 1px;
+  filter: drop-shadow(0 0 8px rgba(100, 255, 218, 0.5));
+}
+
+.image-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: rgba(100, 255, 218, 0.08);
+  border: 1px solid rgba(100, 255, 218, 0.25);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(100, 255, 218, 0.1);
+}
+
+.image-url-label {
+  font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+  font-size: 11px;
+  color: #8892b0;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.image-url-value {
+  font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+  font-size: 11px;
+  color: #5eead4;
+  word-break: break-all;
+  flex: 1;
+  user-select: all;
+  font-weight: 500;
+}
+
+.copy-btn {
+  padding: 5px 10px;
+  border: 1px solid #5eead4;
+  border-radius: 6px;
+  background: transparent;
+  color: #5eead4;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copy-btn:hover {
+  background: rgba(100, 255, 218, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(100, 255, 218, 0.3);
+}
+
+.copy-btn.copied {
+  background: rgba(100, 255, 218, 0.25);
+  border-color: #48c9b0;
+  box-shadow: 0 0 16px rgba(100, 255, 218, 0.4);
+}
+

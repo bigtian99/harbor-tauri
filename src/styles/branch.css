@@ -1,0 +1,345 @@
+/* branch.css — split from App.css (OPT-011), lines 1082-1424 */
+
+.branch-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.branch-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(100, 255, 218, 0.12);
+  background: rgba(15, 52, 96, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.path-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(100, 255, 218, 0.08);
+  border: 1px solid rgba(100, 255, 218, 0.15);
+}
+
+.path-link-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.path-link-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8892b0;
+  font-size: 13px;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.path-link-label svg {
+  flex-shrink: 0;
+}
+
+.dockerfile-indicator {
+  background: rgba(100, 255, 218, 0.06);
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 2px;
+}
+
+.dockerfile-indicator .path-link-label {
+  color: #5eead4;
+}
+
+.path-link-btn {
+  background: none;
+  border: none;
+  color: #5eead4;
+  font-size: 13px;
+  font-family: monospace;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  text-align: left;
+  word-break: break-all;
+}
+
+.path-link-btn:hover {
+  background: rgba(100, 255, 218, 0.15);
+  text-decoration: underline;
+}
+
+.path-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.path-picker-row input {
+  flex: 1;
+}
+
+.path-picker-btn {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.25);
+  background: rgba(15, 52, 96, 0.55);
+  color: #5eead4;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.path-picker-btn:hover {
+  border-color: rgba(100, 255, 218, 0.5);
+  background: rgba(100, 255, 218, 0.12);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(100, 255, 218, 0.14);
+}
+
+.path-picker-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.branch-command-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(10, 10, 26, 0.45);
+  border: 1px solid rgba(100, 255, 218, 0.12);
+  color: #8892b0;
+  font-size: 12px;
+}
+
+.branch-command-preview code {
+  color: #5eead4;
+  font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #8892b0;
+  user-select: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.checkbox-label:hover {
+  color: #e0e0e0;
+  background: rgba(100, 255, 218, 0.05);
+}
+
+.checkbox-label input[type="checkbox"] {
+  display: none;
+}
+
+.checkbox-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: rgba(100, 255, 218, 0.15);
+  border-radius: 11px;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.checkbox-toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: #8892b0;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkbox-toggle {
+  background: rgba(100, 255, 218, 0.4);
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkbox-toggle::after {
+  left: 21px;
+  background: #5eead4;
+  box-shadow: 0 0 8px rgba(100, 255, 218, 0.5);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group + .form-group {
+  margin-top: 16px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+}
+
+.form-group select {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.15);
+  background: rgba(15, 52, 96, 0.4);
+  color: #e0e0e0;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.form-group select:hover:not(:disabled) {
+  border-color: rgba(100, 255, 218, 0.3);
+  background: rgba(15, 52, 96, 0.6);
+}
+
+.form-group select:focus {
+  border-color: #5eead4;
+  background: rgba(15, 52, 96, 0.7);
+  box-shadow:
+    0 0 0 3px rgba(100, 255, 218, 0.12),
+    0 4px 16px rgba(100, 255, 218, 0.15);
+}
+
+.form-group select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* 可搜索下拉框样式 */
+.searchable-dropdown-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.searchable-dropdown {
+  position: relative;
+  width: 100%;
+}
+
+.searchable-dropdown-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.15);
+  background: rgba(15, 52, 96, 0.4);
+  color: #e0e0e0;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.searchable-dropdown-input:hover:not(:disabled) {
+  border-color: rgba(100, 255, 218, 0.3);
+  background: rgba(15, 52, 96, 0.6);
+}
+
+.searchable-dropdown-input:focus {
+  border-color: #5eead4;
+  background: rgba(15, 52, 96, 0.7);
+  box-shadow:
+    0 0 0 3px rgba(100, 255, 218, 0.12),
+    0 4px 16px rgba(100, 255, 218, 0.15);
+}
+
+.searchable-dropdown-input::placeholder {
+  color: #8892b0;
+}
+
+.searchable-dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  background: rgba(15, 52, 96, 0.95);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+}
+
+.searchable-dropdown-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.searchable-dropdown-list::-webkit-scrollbar-track {
+  background: rgba(100, 255, 218, 0.05);
+  border-radius: 3px;
+}
+
+.searchable-dropdown-list::-webkit-scrollbar-thumb {
+  background: rgba(100, 255, 218, 0.2);
+  border-radius: 3px;
+}
+
+.searchable-dropdown-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 255, 218, 0.3);
+}
+
+.searchable-dropdown-item {
+  padding: 10px 14px;
+  color: #e0e0e0;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-bottom: 1px solid rgba(100, 255, 218, 0.05);
+}
+
+.searchable-dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.searchable-dropdown-item:hover {
+  background: rgba(100, 255, 218, 0.15);
+  color: #5eead4;
+}
+
+.searchable-dropdown-item.selected {
+  background: rgba(100, 255, 218, 0.2);
+  color: #5eead4;
+  font-weight: 500;
+}
+
+.searchable-dropdown-empty {
+  padding: 12px 14px;
+  color: #8892b0;
+  font-size: 13px;
+  text-align: center;
+  font-style: italic;
+}
+

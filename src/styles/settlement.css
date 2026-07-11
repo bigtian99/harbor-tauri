@@ -1,0 +1,11 @@
+/* settlement.css — split from App.css (OPT-011), lines 3763-3771 */
+
+.settlement-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+

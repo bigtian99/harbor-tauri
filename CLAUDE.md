@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 JarPorter is a Tauri 2.0 desktop app that packages JAR files or frontend `dist` directories into Docker images and pushes them to a Harbor registry. It also supports branch-based packaging via git worktree isolation.
 
+**应用根目录**：本仓库 `jar-to-harbor/`（勿把父目录 `Desktop/tauri` 当成 app 根）。
+
 ## Build & Development Commands
 
 ```bash
@@ -23,15 +25,38 @@ pnpm tauri:build:arm64      # macOS ARM64
 pnpm tauri:build:x64        # macOS x64
 pnpm tauri:build:universal  # macOS universal
 
+# OPS 构建（裁剪非运营菜单，见 docs/ops-vs-full.md）
+pnpm tauri:build:ops
+pnpm tauri:build:ops:win64
+
+# 版本号（唯一入口，同步 package.json / Cargo.toml / tauri.conf.json）
+pnpm version:set <x.y.z>
+pnpm version:patch   # 或 minor / major
+
 # Release (tag + push)
 pnpm release
 ```
 
+**冒烟清单**：发版前见 [docs/smoke-checklist.md](docs/smoke-checklist.md)。
+
 ## Architecture
 
-**Frontend** (`src/`): React 19 + TypeScript + Vite. Single-page app with three tabs — upload push, branch packaging, and Harbor config. The main UI logic lives in `App.tsx` (~1270 lines).
+**Frontend** (`src/`): React 19 + TypeScript + Vite。主 UI 逻辑在 `App.tsx` 与各 `components/*Panel`。
 
-**Backend** (`src-tauri/src/`): Rust via Tauri 2.0. All core logic is in `lib.rs` (~1450 lines). The frontend communicates with the backend via `invoke()` calls to Tauri commands.
+**Backend** (`src-tauri/src/`): Rust via Tauri 2.0。入口 `lib.rs` 注册 command；业务在 `build` / `landing` / `settlement` 等模块。
+
+### UI 双轨约定（OPT-018）
+
+| 体系 | 面板 | 说明 |
+|------|------|------|
+| **Mantine** | Landing、Settlement、Merge、PackSpeed 等运营向 | 优先用 `@mantine/core` + notifications |
+| **现有 CSS** | Upload、Branch、Push、History、Config、侧栏 | 沿用 `App.css` / 面板样式 |
+
+新代码：**不要引入第三套 UI 体系**。新增运营功能跟 Mantine；新增构建/推送跟现有 CSS。
+
+### OPS vs 完整版
+
+见 [docs/ops-vs-full.md](docs/ops-vs-full.md)。
 
 **Key Tauri commands** (defined in `lib.rs`, invoked from `App.tsx`):
 - `load_config` / `save_config` — persist Harbor settings to `~/.config/jarporter/config.json`
@@ -85,7 +110,8 @@ pnpm release
 | 侧边栏「系统日志」 | ✅ 已落地 | `read_diagnostic_log` 合并最近 ≤3 天文件，**新日志在前**，支持关键词搜索 |
 | 兼容入口 | ✅ 已落地 | `templates_log(msg)` ≡ `diag_log("templates", msg)` |
 
-**结论**：业务路径必须用 `diag_log` 带正确模块名；禁止业务路径仅用 `eprintln!`（系统日志看不到）。
+**结论**：业务路径必须用 `diag_log` 带正确模块名；禁止业务路径仅用 `eprintln!`（系统日志看不到）。  
+**敏感信息**：`diag_log` 会脱敏 `password` / `token` / `Bearer` / `authorization` 等字段值，业务侧仍勿主动拼接明文密钥。
 
 ### 日志格式
 

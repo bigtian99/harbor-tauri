@@ -14,6 +14,7 @@ import "./Modal.css";
 import type { CommitDiffFileTreeNode } from "../commitDiff";
 import type { HarborConfig, GitBranchOption, LocalMergeCheck, RemoteBranchListResult, CommitInfo, AuthorInfo, CommitDiffResult, MergeConflictDetail } from "../types";
 import { isTauriRuntime } from "../types";
+import { avatarColor, avatarInitials } from "../avatarUrl";
 
 interface MergePanelProps {
   config: HarborConfig;
@@ -21,23 +22,6 @@ interface MergePanelProps {
 }
 
 type MergeOverlayPhase = "idle" | "running" | "success" | "error";
-
-function gravatarUrl(email: string, size = 40): string {
-  // ponytail: simple md5 hash — inline to avoid pulling a crypto dep
-  const normalized = email.trim().toLowerCase();
-  let hash = "";
-  for (let i = 0; i < normalized.length; i++) {
-    hash += ("0" + normalized.charCodeAt(i).toString(16)).slice(-2);
-  }
-  // Simple string hash (not md5, but good enough for unique colors)
-  let h = 0;
-  for (let i = 0; i < normalized.length; i++) {
-    h = ((h << 5) - h) + normalized.charCodeAt(i);
-    h |= 0;
-  }
-  const color = Math.abs(h).toString(16).slice(0, 6);
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(normalized)}&size=${size}&background=${color}&color=fff`;
-}
 
 interface ConflictBlock {
   /** 该块在 target 面板中的起始行（1-based） */
@@ -1092,11 +1076,13 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
                     title={`${a.name} · ${a.count} 次提交`}
                     onClick={() => setSelectedAuthor(selectedAuthor === a.name ? "" : a.name)}
                   >
-                    <img
-                      src={gravatarUrl(a.email || a.name, 24)}
-                      alt={a.name}
+                    <span
                       className="merge-author-avatar"
-                    />
+                      style={{ background: avatarColor(a.email || a.name) }}
+                      aria-hidden
+                    >
+                      {avatarInitials(a.name || a.email)}
+                    </span>
                     <span className="merge-author-name">{a.name}</span>
                     <span className="merge-author-count">{a.count}</span>
                   </button>

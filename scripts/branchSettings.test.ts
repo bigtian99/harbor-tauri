@@ -1,7 +1,7 @@
 import {
   getRememberedBranchAdvancedSettings,
   rememberBranchRepoSettings,
-} from "../src/branchSettings";
+} from "../src/branchSettings.ts";
 import { readFileSync } from "node:fs";
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
@@ -75,16 +75,22 @@ assertEqual(
   "saving repo A should not overwrite repo B's expose port",
 );
 
+// 前端重构后分支记忆逻辑在 hooks/useBranchPack，App 仅在 loadConfig 后调用 applyRememberedConfig
 const appSource = readFileSync("src/App.tsx", "utf8");
+const branchPackSource = readFileSync("src/hooks/useBranchPack.ts", "utf8");
 
-if (!appSource.includes("restoreRememberedBranchAdvancedSettings(savedConfig, savedConfig.last_repo_path)")) {
-  throw new Error("loadConfig should restore branch advanced settings through the shared helper");
+if (!branchPackSource.includes("restoreRememberedBranchAdvancedSettings(savedConfig, savedConfig.last_repo_path)")) {
+  throw new Error("applyRememberedConfig should restore branch advanced settings through the shared helper");
 }
 
-if (!appSource.includes("rememberBranchRepoSettings(")) {
+if (!branchPackSource.includes("rememberBranchRepoSettings(")) {
   throw new Error("branch settings should save advanced settings per repository");
 }
 
-if (appSource.includes("setBranchExposePort(savedConfig.last_expose_port)")) {
-  throw new Error("loadConfig should not bypass expose port fallback with savedConfig.last_expose_port");
+if (!appSource.includes("applyRememberedConfig") && !appSource.includes("onConfigLoadedRef")) {
+  throw new Error("App should wire loadConfig success to applyRememberedConfig");
+}
+
+if (branchPackSource.includes("setBranchExposePort(savedConfig.last_expose_port)")) {
+  throw new Error("loadConfig path should not bypass expose port fallback with savedConfig.last_expose_port");
 }

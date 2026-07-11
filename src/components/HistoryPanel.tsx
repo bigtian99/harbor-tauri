@@ -7,17 +7,7 @@ import {
 import type { BuildRecord } from "../types";
 import { getProjectName } from "../types";
 import { HoverTip } from "./HoverTip";
-
-function gravatarUrl(email: string, size = 28): string {
-  const normalized = email.trim().toLowerCase();
-  let h = 0;
-  for (let i = 0; i < normalized.length; i++) {
-    h = ((h << 5) - h) + normalized.charCodeAt(i);
-    h |= 0;
-  }
-  const color = Math.abs(h).toString(16).slice(0, 6);
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(normalized || "?")}&size=${size}&background=${color}&color=fff`;
-}
+import { avatarColor, avatarInitials } from "../avatarUrl";
 
 interface HistoryPanelProps {
   buildHistory: BuildRecord[];
@@ -207,12 +197,14 @@ export function HistoryPanel({
                       )}
                     </div>
                     {record.author && (
-                      <img
-                        src={gravatarUrl(record.email || record.author, 24)}
-                        alt={record.author}
+                      <span
                         className="history-record-avatar"
+                        style={{ background: avatarColor(record.email || record.author) }}
                         title={record.author}
-                      />
+                        aria-hidden
+                      >
+                        {avatarInitials(record.author || record.email || "?")}
+                      </span>
                     )}
                     <div className="history-record-info">
                       <div className="history-record-meta">

@@ -4,7 +4,7 @@ import {
   getBranchPushSummary,
   shouldShowBranchProgress,
   shouldShowBranchResults,
-} from "../src/branchImageResults";
+} from "../src/branchImageResults.ts";
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {

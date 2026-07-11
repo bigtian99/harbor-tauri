@@ -42,11 +42,147 @@ fn lock_log() -> std::sync::MutexGuard<'static, ()> {
     LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// 脱敏：避免 password/token 等写入诊断文件与 stderr。
+/// ponytail: 简单扫描即可；复杂密钥形态再加规则。
+pub(crate) fn redact_secrets(input: &str) -> String {
+    let mut out = input.to_string();
+
+    // Bearer <token>
+    out = redact_prefix_token(&out, "Bearer ");
+
+    // key=value / key: value（大小写不敏感 key）
+    for key in [
+        "password",
+        "passwd",
+        "token",
+        "authorization",
+        "secret",
+        "api_key",
+        "apikey",
+        "access_key",
+    ] {
+        out = redact_key_value(&out, key);
+    }
+
+    out
+}
+
+/// ASCII 关键字匹配；用 byte find，但只在 char boundary 上切分。
+/// `to_ascii_lowercase` 不改变非 ASCII 字节，故 lower 与 input 边界一致。
+fn redact_prefix_token(input: &str, prefix: &str) -> String {
+    let lower = input.to_ascii_lowercase();
+    let p = prefix.to_ascii_lowercase();
+    let mut result = String::with_capacity(input.len());
+    let mut offset = 0;
+    while offset < input.len() {
+        if let Some(rel) = lower[offset..].find(&p) {
+            let start = offset + rel;
+            result.push_str(&input[offset..start]);
+            let after_prefix = start + prefix.len();
+            result.push_str(&input[start..after_prefix]);
+            // 吞掉 token：直到空白（按 char 推进）
+            let mut end = after_prefix;
+            for (i, c) in input[after_prefix..].char_indices() {
+                if c.is_whitespace() {
+                    end = after_prefix + i;
+                    break;
+                }
+                end = after_prefix + i + c.len_utf8();
+            }
+            result.push_str("***");
+            offset = end;
+        } else {
+            result.push_str(&input[offset..]);
+            break;
+        }
+    }
+    result
+}
+
+fn redact_key_value(input: &str, key: &str) -> String {
+    let lower = input.to_ascii_lowercase();
+    let key_l = key.to_ascii_lowercase();
+    let mut result = String::with_capacity(input.len());
+    let mut offset = 0;
+    while offset < input.len() {
+        if let Some(rel) = lower[offset..].find(&key_l) {
+            let start = offset + rel;
+            // 关键字需在「边界」：前一字符非字母数字下划线（或开头）
+            let ok_boundary = start == 0
+                || !input[..start]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+            if !ok_boundary {
+                // 跳过这一匹配点，从 start+1 的下一 char 继续
+                let next = input[start..]
+                    .chars()
+                    .next()
+                    .map(|c| start + c.len_utf8())
+                    .unwrap_or(input.len());
+                result.push_str(&input[offset..next]);
+                offset = next;
+                continue;
+            }
+            result.push_str(&input[offset..start]);
+            let mut j = start + key.len();
+            // 空白
+            while j < input.len() {
+                let b = input.as_bytes()[j];
+                if b == b' ' || b == b'\t' {
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            if j < input.len() && (input.as_bytes()[j] == b'=' || input.as_bytes()[j] == b':') {
+                // 含 key + 空白 + 分隔符
+                result.push_str(&input[start..j + 1]);
+                j += 1;
+                while j < input.len() {
+                    let b = input.as_bytes()[j];
+                    if b == b' ' || b == b'\t' {
+                        result.push(b as char);
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                }
+                // value：按 char 直到空白或分隔
+                let value_start = j;
+                for (i, c) in input[value_start..].char_indices() {
+                    if c.is_whitespace() || c == ',' || c == ';' || c == '&' || c == '"' {
+                        j = value_start + i;
+                        break;
+                    }
+                    j = value_start + i + c.len_utf8();
+                }
+                result.push_str("***");
+                offset = j;
+                continue;
+            }
+            // 有 key 但无 =/: ，当作普通文本
+            let next = input[start..]
+                .chars()
+                .next()
+                .map(|c| start + c.len_utf8())
+                .unwrap_or(input.len());
+            result.push_str(&input[offset..next]);
+            offset = next;
+        } else {
+            result.push_str(&input[offset..]);
+            break;
+        }
+    }
+    result
+}
+
 /// 写入 stderr + 当天诊断文件。module 为小写模块名。
 pub fn diag_log(module: &str, message: impl AsRef<str>) {
     // 单次 now：path 日期与行内时间戳一致，避免跨午夜 skew
     let now = chrono::Local::now();
-    let line = format!("[JarPorter][{module}] {}", message.as_ref());
+    let safe = redact_secrets(message.as_ref());
+    let line = format!("[JarPorter][{module}] {safe}");
     eprintln!("{line}");
 
     let Some(dir) = LOG_DIR.get() else {
@@ -84,18 +220,67 @@ pub async fn read_diagnostic_log(lines: Option<usize>) -> Result<String, String>
         .map_err(|e| format!("读取日志任务异常: {e}"))?
 }
 
+/// 导出完整诊断日志（最近 ≤3 天 + 旧文件回退）到用户指定路径，**旧→新**。
+#[tauri::command]
+pub async fn export_diagnostic_log(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || export_diagnostic_log_sync(path))
+        .await
+        .map_err(|e| format!("导出日志任务异常: {e}"))?
+}
+
+fn export_diagnostic_log_sync(path: String) -> Result<String, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("导出路径为空".to_string());
+    }
+    let out = PathBuf::from(path);
+    let lines = collect_diagnostic_lines()?;
+    if lines.is_empty() {
+        return Err("暂无诊断日志可导出".to_string());
+    }
+    // 文件按时间序（旧→新），便于外部编辑器查看
+    let content = lines.join("\n");
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+        }
+    }
+    fs::write(&out, content.as_bytes()).map_err(|e| format!("写入失败 {}: {e}", out.display()))?;
+    // 避免在持锁外再抢锁写同一套日志；用 diag_log 即可
+    drop(lines);
+    diag_log(
+        "app",
+        &format!("export_diagnostic_log → {} (ok)", out.display()),
+    );
+    Ok(out.to_string_lossy().to_string())
+}
+
 fn read_diagnostic_log_sync(max_lines: usize) -> Result<String, String> {
+    let all_lines = collect_diagnostic_lines()?;
+    if all_lines.is_empty() {
+        return Ok(String::new());
+    }
+    // 文件内旧→新；整体 reverse 后 take
+    Ok(all_lines
+        .into_iter()
+        .rev()
+        .take(max_lines)
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+/// 收集诊断行（文件时间序：旧→新）。空表示尚无日志。
+fn collect_diagnostic_lines() -> Result<Vec<String>, String> {
     let dir = diagnostic_log_dir().ok_or_else(|| "诊断日志尚未初始化".to_string())?;
     let day_files = list_recent_day_files(&dir, 3);
 
     let mut all_lines: Vec<String> = Vec::new();
     let mut read_errors: Vec<String> = Vec::new();
 
-    // 与写路径同锁，避免读到半行（持锁时间 = 读文件时长，可接受）
+    // 与写路径同锁，避免读到半行
     let _guard = lock_log();
 
     if day_files.is_empty() {
-        // 升级回退：尚无按日文件时展示旧 templates-diagnostic.log，避免系统日志空白
         let legacy = dir.join("templates-diagnostic.log");
         if legacy.is_file() {
             match fs::read_to_string(&legacy) {
@@ -129,20 +314,10 @@ fn read_diagnostic_log_sync(max_lines: usize) -> Result<String, String> {
     }
     drop(_guard);
 
-    if all_lines.is_empty() {
-        if !read_errors.is_empty() {
-            return Err(format!("读取日志失败: {}", read_errors.join("; ")));
-        }
-        return Ok(String::new());
+    if all_lines.is_empty() && !read_errors.is_empty() {
+        return Err(format!("读取日志失败: {}", read_errors.join("; ")));
     }
-
-    // 文件内旧→新；整体 reverse 后 take
-    Ok(all_lines
-        .into_iter()
-        .rev()
-        .take(max_lines)
-        .collect::<Vec<_>>()
-        .join("\n"))
+    Ok(all_lines)
 }
 
 /// 返回最多 `max_days` 个 `diagnostic-YYYY-MM-DD.log`，按日期升序。
@@ -241,5 +416,34 @@ mod tests {
         let line = format!("[JarPorter][{module}] {message}");
         assert!(line.contains("[updater]"));
         assert!(line.starts_with("[JarPorter][updater]"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_password_and_bearer() {
+        let s = redact_secrets("login password=s3cret ok Bearer abcd1234 path=/tmp");
+        assert!(!s.contains("s3cret"), "password value must be redacted: {s}");
+        assert!(!s.contains("abcd1234"), "bearer token must be redacted: {s}");
+        assert!(s.contains("password=***"), "expected password=*** got {s}");
+        assert!(s.contains("Bearer ***"), "expected Bearer *** got {s}");
+        assert!(s.contains("path=/tmp"), "non-secret must remain: {s}");
+    }
+
+    #[test]
+    fn redact_secrets_masks_authorization_colon() {
+        let s = redact_secrets("Authorization: tok_xyz next");
+        assert!(!s.contains("tok_xyz"), "{s}");
+        assert!(s.contains("***"), "{s}");
+    }
+
+    #[test]
+    fn redact_secrets_handles_chinese_without_panic() {
+        // 回归：旧实现按字节 i+=1，在「诊」等多字节字符上 panic
+        let s = redact_secrets("诊断日志目录创建失败: /tmp/x 写入诊断文件失败");
+        assert!(s.contains("诊断"), "{s}");
+        assert_eq!(s, "诊断日志目录创建失败: /tmp/x 写入诊断文件失败");
+        let mixed = redact_secrets("诊断 password=密文token Bearer ab12 完成");
+        assert!(!mixed.contains("ab12"), "{mixed}");
+        assert!(mixed.contains("诊断"), "{mixed}");
+        assert!(mixed.contains("password=***"), "{mixed}");
     }
 }

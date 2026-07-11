@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   FileText, Package, CheckCircle, Copy, Loader2, Eye, EyeOff,
-  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User, Plus, Trash2
+  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User
 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "./SearchableDropdown";
+import { SpringProfileSection } from "./branch/SpringProfileSection";
+import { BranchAdvancedSettings } from "./branch/BranchAdvancedSettings";
 import "./Modal.css";
 import type {
   BranchProjectType, HarborConfig,
@@ -116,7 +117,6 @@ export function BranchPanel({
   setImageName, setImageTag, setExposePort, onNginxLocationsChange, setShowAdvancedSettings, setShowBuildLog,
   renderLog,
 }: BranchPanelProps) {
-  const [showNginxPreview, setShowNginxPreview] = useState(false);
   const showProgress = shouldShowBranchProgress(isBuilding, log, progress);
   const showResults = shouldShowBranchResults(isBuilding, artifactPath);
 
@@ -293,24 +293,12 @@ export function BranchPanel({
         )}
 
         {branchProjectType === "maven" && (
-          <div className="form-group">
-            <label>Spring Profile</label>
-            <SearchableDropdown
-              value={springProfile}
-              options={springProfiles}
-              onChange={onSpringProfileChange}
-              placeholder={isLoadingProfiles ? "扫描中..." : springProfiles.length === 0 ? "未检测到 profile 配置文件" : "选择 profile..."}
-              disabled={isLoadingProfiles}
-              loading={isLoadingProfiles}
-            />
-            <p className="template-hint">
-              {springProfile
-                ? `将执行: mvn clean package -DskipTests -Dspring.profiles.active=${springProfile}`
-                : springProfiles.length > 0
-                  ? `检测到 ${springProfiles.length} 个 profile: ${springProfiles.join(", ")}`
-                  : "留空则不添加 -Dspring.profiles.active 参数"}
-            </p>
-          </div>
+          <SpringProfileSection
+            springProfile={springProfile}
+            springProfiles={springProfiles}
+            isLoadingProfiles={isLoadingProfiles}
+            onSpringProfileChange={onSpringProfileChange}
+          />
         )}
 
         <div className="branch-command-preview">
@@ -350,146 +338,21 @@ export function BranchPanel({
         )}
 
         {(branchProjectType === "maven" || branchProjectType === "npm") && (
-          <div className="advanced-settings">
-            <div
-              className="advanced-settings-header"
-              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-            >
-              <span>{showAdvancedSettings ? '▼' : '▶'}</span>
-              <span>高级设置</span>
-              <span className="template-hint" style={{ marginLeft: '8px' }}>可选：自定义镜像名称和标签</span>
-              {branchHasDockerfile && (
-                <span className="dockerfile-badge" title="检测到项目根目录有 Dockerfile，将使用自定义 Dockerfile 构建">
-                  <FileText size={12} /> 自定义 Dockerfile
-                </span>
-              )}
-            </div>
-            {showAdvancedSettings && (
-              <>
-                <div className="form-group">
-                  <label>镜像名称</label>
-                  <input
-                    type="text"
-                    value={imageName}
-                    onChange={(e) => setImageName(e.target.value)}
-                    placeholder={branchProjectType === "npm" ? "例如: my-frontend（小写）" : "例如: sdk（小写，不含项目名）"}
-                  />
-                  <p className="template-hint">留空则自动推断；Harbor 项目名在配置中填写，推送时自动拼接</p>
-                </div>
-                <div className="form-group">
-                  <label>JAR 暴露端口</label>
-                  <input
-                    type="text"
-                    value={exposePort}
-                    onChange={(e) => setExposePort(e.target.value)}
-                    placeholder={config.expose_port || "例如: 8181"}
-                  />
-                  <p className="template-hint">留空则使用配置中的默认端口 {config.expose_port || "8181"}</p>
-                </div>
-                <div className="form-group">
-                  <label>镜像标签</label>
-                  <input
-                    type="text"
-                    value={imageTag}
-                    onChange={(e) => setImageTag(e.target.value)}
-                    placeholder="留空自动生成"
-                  />
-                  <p className="template-hint">留空则自动生成 分支名-v.YY.MM.DD.HH.MM</p>
-                </div>
-                {branchProjectType === "npm" && (
-                  <div className="form-group">
-                    <label>nginx Location 代理</label>
-                    {(nginxLocations ?? []).map((loc, i) => (
-                      <div key={i} className="location-row">
-                        <input
-                          type="text"
-                          placeholder="路径, 如 /test-api/"
-                          value={loc.path}
-                          onChange={(e) => {
-                            const next = [...(nginxLocations ?? [])];
-                            next[i] = { ...next[i], path: e.target.value };
-                            onNginxLocationsChange(next);
-                          }}
-                        />
-                        <input
-                          type="text"
-                          placeholder="proxy_pass"
-                          value={loc.proxy_pass}
-                          onChange={(e) => {
-                            const next = [...(nginxLocations ?? [])];
-                            next[i] = { ...next[i], proxy_pass: e.target.value };
-                            onNginxLocationsChange(next);
-                          }}
-                        />
-                        <input
-                          type="text"
-                          placeholder="Host (可选)"
-                          value={loc.host}
-                          onChange={(e) => {
-                            const next = [...(nginxLocations ?? [])];
-                            next[i] = { ...next[i], host: e.target.value };
-                            onNginxLocationsChange(next);
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="icon-btn danger"
-                          title="删除"
-                          onClick={() => {
-                            const next = [...(nginxLocations ?? [])];
-                            next.splice(i, 1);
-                            onNginxLocationsChange(next);
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
-                      <button
-                        type="button"
-                        className="add-btn"
-                        onClick={() => {
-                          const next = [...(nginxLocations ?? []), { path: "", proxy_pass: "", host: "" }];
-                          onNginxLocationsChange(next);
-                        }}
-                      >
-                        <Plus size={14} /> 添加 Location
-                      </button>
-                      {(nginxLocations ?? []).length > 0 && (
-                        <button
-                          type="button"
-                          className="add-btn"
-                          onClick={() => setShowNginxPreview(!showNginxPreview)}
-                        >
-                          <Eye size={14} /> {showNginxPreview ? "收起预览" : "预览 nginx.conf"}
-                        </button>
-                      )}
-                    </div>
-                    {showNginxPreview && (nginxLocations ?? []).length > 0 && (
-                      <pre className="nginx-preview">{(() => {
-                        const template = config.frontend_nginx_template || "";
-                        const locs = (nginxLocations ?? []).filter(l => l.path || l.proxy_pass);
-                        if (locs.length === 0) return template;
-                        const rendered = locs.map(l =>
-                          `\n    location ${l.path || "/api/"} {\n        proxy_pass ${l.proxy_pass || "http://backend/"};${l.host ? `\n        proxy_set_header Host ${l.host};` : ""}\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }`
-                        ).join("");
-                        if (template.includes("{{CUSTOM_LOCATIONS}}")) {
-                          return template.replace("{{CUSTOM_LOCATIONS}}", rendered);
-                        }
-                        const lastBrace = template.lastIndexOf("}");
-                        if (lastBrace > 0) {
-                          return template.slice(0, lastBrace) + rendered + "\n" + template.slice(lastBrace);
-                        }
-                        return template + rendered;
-                      })()}</pre>
-                    )}
-                    <p className="template-hint">配置的代理会注入到 nginx.conf 的 {"{{CUSTOM_LOCATIONS}}"} 位置或 server block 末尾</p>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          <BranchAdvancedSettings
+            branchProjectType={branchProjectType}
+            showAdvancedSettings={showAdvancedSettings}
+            setShowAdvancedSettings={setShowAdvancedSettings}
+            branchHasDockerfile={branchHasDockerfile}
+            imageName={imageName}
+            setImageName={setImageName}
+            exposePort={exposePort}
+            setExposePort={setExposePort}
+            imageTag={imageTag}
+            setImageTag={setImageTag}
+            nginxLocations={nginxLocations}
+            onNginxLocationsChange={onNginxLocationsChange}
+            config={config}
+          />
         )}
 
         <div className="form-group">

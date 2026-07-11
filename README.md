@@ -2,6 +2,8 @@
 
 Tauri 2.0 桌面应用，将 JAR 包或前端 `dist` 目录打包为 Docker 镜像并推送到 Harbor registry。同时集成分支打包、落地页生成、结算单等运营工具。
 
+> **仓库根**：本目录 `jar-to-harbor/` 即为应用根。父目录中的杂项脚本不属于本应用。
+
 ## 功能导览
 
 ![](screenshots/01-upload.png)
@@ -152,14 +154,22 @@ pnpm tauri
 # 生产构建
 pnpm tauri:build
 
+# OPS 裁剪版（见 docs/ops-vs-full.md）
+pnpm tauri:build:ops
+
 # 架构构建
 pnpm tauri:build:arm64
 pnpm tauri:build:x64
 pnpm tauri:build:universal
 
+# 版本（唯一入口）
+pnpm version:patch
+
 # 发布 (tag + push)
 pnpm release
 ```
+
+发版前冒烟：[docs/smoke-checklist.md](docs/smoke-checklist.md)
 
 ## 静态 Web Docker 镜像
 
