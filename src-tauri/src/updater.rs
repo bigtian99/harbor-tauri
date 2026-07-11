@@ -108,7 +108,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     let client = match http_client(REQUEST_TIMEOUT) {
         Ok(c) => c,
         Err(e) => {
-            crate::landing::templates_log(&format!("check_update: {e}"));
+            crate::diag::diag_log("updater", &format!("check_update: {e}"));
             return Ok(empty_update(current_version, String::new()));
         }
     };
@@ -116,7 +116,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     let response = match client.get(GITHUB_API_LATEST).send() {
         Ok(r) => r,
         Err(e) => {
-            crate::landing::templates_log(&format!(
+            crate::diag::diag_log("updater", &format!(
                 "check_update: network error fetching {}, error={}",
                 GITHUB_API_LATEST, e
             ));
@@ -126,7 +126,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
 
     if !response.status().is_success() {
         let status = response.status();
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "check_update: non-200 status {} from {}",
             status.as_u16(),
             GITHUB_API_LATEST
@@ -135,7 +135,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     }
 
     let json: serde_json::Value = response.json().map_err(|e| {
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "check_update: failed to parse JSON response from {}, error={}",
             GITHUB_API_LATEST, e
         ));
@@ -147,7 +147,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     let release_notes = json["body"].as_str().unwrap_or("").trim().to_string();
 
     let Ok(current) = semver::Version::parse(&current_version) else {
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "check_update: failed to parse current version '{}' as semver",
             current_version
         ));
@@ -155,7 +155,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     };
 
     let Ok(latest) = semver::Version::parse(&latest_version) else {
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "check_update: failed to parse latest version '{}' as semver",
             latest_version
         ));
@@ -163,7 +163,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     };
 
     if latest <= current {
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "check_update: current={}, latest={}, needs_update=false (up to date)",
             current_version, latest_version
         ));
@@ -191,7 +191,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
                 .to_string();
             asset_id = asset["id"].as_u64().unwrap_or(0);
             file_size = asset["size"].as_u64().unwrap_or(0);
-            crate::landing::templates_log(&format!(
+            crate::diag::diag_log("updater", &format!(
                 "check_update: matched asset name={}, id={}, size={}",
                 name, asset_id, file_size
             ));
@@ -200,12 +200,12 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     }
 
     if download_url.is_empty() {
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "check_update: current={}, latest={}, needs_update=false (no matching {} dmg asset found)",
             current_version, latest_version, arch
         ));
     } else {
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "check_update: current={}, latest={}, needs_update=true, url={}, asset_id={}, size={}, notes_len={}",
             current_version, latest_version, download_url, asset_id, file_size, release_notes.len()
         ));
@@ -238,14 +238,14 @@ fn download_dmg_file(
             "https://api.github.com/repos/{}/releases/assets/{}",
             GITHUB_REPO, asset_id
         );
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "download_and_install: try API asset url={}",
             api_url
         ));
         match try_download(client, &api_url, true, expected_size, dmg_path, app) {
             Ok(n) => return Ok(n),
             Err(e) => {
-                crate::landing::templates_log(&format!(
+                crate::diag::diag_log("updater", &format!(
                     "download_and_install: API asset failed: {}",
                     e
                 ));
@@ -256,14 +256,14 @@ fn download_dmg_file(
     }
 
     if !download_url.is_empty() {
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "download_and_install: try browser url={}",
             download_url
         ));
         match try_download(client, download_url, false, expected_size, dmg_path, app) {
             Ok(n) => return Ok(n),
             Err(e) => {
-                crate::landing::templates_log(&format!(
+                crate::diag::diag_log("updater", &format!(
                     "download_and_install: browser url failed: {}",
                     e
                 ));
@@ -418,7 +418,7 @@ fn download_and_install_blocking(
     asset_id: u64,
     expected_size: u64,
 ) -> Result<(), String> {
-    crate::landing::templates_log(&format!(
+    crate::diag::diag_log("updater", &format!(
         "download_and_install: starting url={}, asset_id={}, expected_size={}",
         download_url, asset_id, expected_size
     ));
@@ -466,7 +466,7 @@ fn download_and_install_blocking(
         &app,
     )?;
 
-    crate::landing::templates_log(&format!(
+    crate::diag::diag_log("updater", &format!(
         "download_and_install: download complete, file={}, size={}",
         dmg_path.display(),
         size
@@ -505,7 +505,7 @@ fn download_and_install_blocking(
             stderr.trim(),
             stdout.trim()
         );
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "download_and_install: mount failed, dmg={}, error={}",
             dmg_path.display(),
             err_msg
@@ -531,7 +531,7 @@ fn download_and_install_blocking(
             )
         })?;
 
-    crate::landing::templates_log(&format!(
+    crate::diag::diag_log("updater", &format!(
         "download_and_install: mounted at {}",
         mount_point
     ));
@@ -591,7 +591,7 @@ fn download_and_install_blocking(
             .args(["detach", &mount_point, "-quiet"])
             .output();
         let _ = fs::remove_file(&dmg_path);
-        crate::landing::templates_log(&format!(
+        crate::diag::diag_log("updater", &format!(
             "download_and_install: copy failed, from={}, to={}",
             mounted_app.display(),
             target_app.display()
@@ -604,7 +604,7 @@ fn download_and_install_blocking(
         .output();
     let _ = fs::remove_file(&dmg_path);
 
-    crate::landing::templates_log(&format!(
+    crate::diag::diag_log("updater", &format!(
         "download_and_install: install complete, app copied to {}",
         target_app.display()
     ));
