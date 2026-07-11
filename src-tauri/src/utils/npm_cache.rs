@@ -67,72 +67,82 @@ pub(crate) fn npm_cache_dir() -> PathBuf {
         .join("npm-cache")
 }
 
-/// 根据 lock 文件内容生成 hash 作为缓存 key
+/// 根据 lock 文件内容生成 hash 作为缓存 key。
+/// 在 build_dir 找不到时向上找一层（monorepo 根 lock）。
 pub(crate) fn lock_file_hash(build_dir: &Path) -> Option<String> {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
     let lock_files = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"];
-    let lock_path = lock_files
-        .iter()
-        .map(|f| build_dir.join(f))
-        .find(|p| p.is_file())?;
+    let mut candidates = vec![build_dir.to_path_buf()];
+    if let Some(parent) = build_dir.parent() {
+        candidates.push(parent.to_path_buf());
+    }
+
+    let lock_path = candidates.into_iter().find_map(|dir| {
+        lock_files
+            .iter()
+            .map(|f| dir.join(f))
+            .find(|p| p.is_file())
+    })?;
 
     let content = fs::read(&lock_path).ok()?;
     let mut hasher = DefaultHasher::new();
     content.hash(&mut hasher);
-    Some(format!("{:016x}", hasher.finish()))
+    let key = format!("{:016x}", hasher.finish());
+    crate::diag::diag_log(
+        "build",
+        &format!(
+            "npm 缓存 key={} lock={}",
+            &key[..12.min(key.len())],
+            lock_path.display()
+        ),
+    );
+    Some(key)
 }
 
-/// 尝试从缓存恢复 node_modules，返回 true 表示成功
-/// 优先使用硬链接 (cp -al)，同文件系统下几乎瞬时完成（0.1s vs 30s）
+/// 尝试从缓存恢复 node_modules，返回 true 表示成功。
+/// 策略：macOS clonefile (`cp -cR`) → 硬链接 (`cp -al`) → 完整复制 (`cp -a`)。
 pub(crate) fn try_restore_node_modules(build_dir: &Path, cache_key: &str) -> Result<bool, String> {
     let cache_path = npm_cache_dir().join(cache_key).join("node_modules");
     let target = build_dir.join("node_modules");
 
     if !cache_path.is_dir() {
+        crate::diag::diag_log(
+            "build",
+            &format!("npm 缓存未命中 path={}", cache_path.display()),
+        );
         return Ok(false);
     }
 
-    // 清理已有 node_modules
-    if target.exists() {
-        fs::remove_dir_all(&target).ok();
-    }
+    let src = cache_path.to_str().unwrap();
+    let dst = target.to_str().unwrap();
+    let started = std::time::Instant::now();
 
-    // 优先尝试硬链接 (cp -al)，同文件系统下 100K+ 文件几乎瞬时完成
-    // npm install 对已安装的包会跳过，不修改硬链接文件；需要更新时会先删除再写入，不会污染缓存
-    let link_output = super::silent_command("cp")
-        .args([
-            "-al",
-            cache_path.to_str().unwrap(),
-            target.to_str().unwrap(),
-        ])
-        .output()
-        .map_err(|e| format!("cp 命令执行失败: {}", e))?;
-
-    if !link_output.status.success() {
-        // 硬链接失败（跨文件系统），回退到复制
-        crate::diag::diag_log(
-            "utils",
-            &format!(
-                "硬链接恢复失败，回退到复制: {}",
-                String::from_utf8_lossy(&link_output.stderr).trim()
-            ),
-        );
-        let copy_output = super::silent_command("cp")
-            .args(["-a", cache_path.to_str().unwrap(), target.to_str().unwrap()])
-            .output()
-            .map_err(|e| format!("cp 命令执行失败: {}", e))?;
-
-        if !copy_output.status.success() {
-            return Err(format!(
-                "缓存恢复失败: {}",
-                String::from_utf8_lossy(&copy_output.stderr)
-            ));
+    let try_cp = |args: &[&str]| -> bool {
+        if target.exists() {
+            let _ = fs::remove_dir_all(&target);
         }
-    }
+        super::silent_command("cp")
+            .args(args)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    };
 
-    // 校验缓存恢复是否成功：检查 node_modules 是否有内容（至少一个子目录）
+    // 1) macOS APFS clone  2) 硬链接  3) 完整复制
+    let method = if cfg!(target_os = "macos") && try_cp(&["-cR", src, dst]) {
+        "clone"
+    } else if try_cp(&["-al", src, dst]) {
+        "hardlink"
+    } else {
+        crate::diag::diag_log("build", "硬链接恢复失败，回退完整复制");
+        if !try_cp(&["-a", src, dst]) {
+            return Err("缓存恢复失败: clone/hardlink/copy 均未成功".to_string());
+        }
+        "copy"
+    };
+
     let has_content = fs::read_dir(&target)
         .map(|mut entries| entries.next().is_some())
         .unwrap_or(false);
@@ -141,6 +151,15 @@ pub(crate) fn try_restore_node_modules(build_dir: &Path, cache_key: &str) -> Res
         return Err("缓存恢复后 node_modules 为空".to_string());
     }
 
+    crate::diag::diag_log(
+        "build",
+        &format!(
+            "npm 缓存命中 hash={} method={} cost_ms={}",
+            &cache_key[..12.min(cache_key.len())],
+            method,
+            started.elapsed().as_millis()
+        ),
+    );
     Ok(true)
 }
 
@@ -204,20 +223,38 @@ pub(crate) fn save_node_modules_to_cache(build_dir: &Path, cache_key: &str) {
     match link_result {
         Ok(output) if output.status.success() => {
             crate::diag::diag_log(
-                "utils",
-                &format!("硬链接保存缓存成功 (hash={})", cache_key),
+                "build",
+                &format!("npm 缓存已保存(hardlink) hash={}", cache_key),
             );
         }
         _ => {
-            // 硬链接失败，回退到复制
             crate::diag::diag_log(
-                "utils",
-                &format!("硬链接保存失败，回退到复制 (hash={})", cache_key),
+                "build",
+                &format!("npm 缓存 hardlink 失败，回退复制 hash={}", cache_key),
             );
-            super::silent_command("cp")
+            let copy = super::silent_command("cp")
                 .args(["-a", source.to_str().unwrap(), cache_path.to_str().unwrap()])
-                .output()
-                .ok();
+                .output();
+            match copy {
+                Ok(o) if o.status.success() => {
+                    crate::diag::diag_log(
+                        "build",
+                        &format!("npm 缓存已保存(copy) hash={}", cache_key),
+                    );
+                }
+                Ok(o) => {
+                    crate::diag::diag_log(
+                        "build",
+                        &format!(
+                            "npm 缓存保存失败: {}",
+                            String::from_utf8_lossy(&o.stderr).trim()
+                        ),
+                    );
+                }
+                Err(e) => {
+                    crate::diag::diag_log("build", &format!("npm 缓存保存失败: {e}"));
+                }
+            }
         }
     }
 }

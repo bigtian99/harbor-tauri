@@ -27,8 +27,21 @@ pub async fn build_and_push(
     dockerfile_context: Option<String>,
     expose_port: Option<String>,
     nginx_locations: Vec<NginxLocationBlock>,
+    // 并行推送时区分角色，如 "前端" / "后端"；进度消息会带 [标签]
+    progress_label: Option<String>,
 ) -> Result<String, String> {
     reset_cancel_flag();
+    let label = progress_label
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let emit = |app: &tauri::AppHandle, pct: u32, msg: &str, stage: &str| {
+        let text = match &label {
+            Some(l) => format!("[{}] {}", l, msg),
+            None => msg.to_string(),
+        };
+        emit_progress(app, pct, &text, stage);
+    };
     let mut config = load_config_sync()?;
     if let Some(port) = expose_port {
         if !port.trim().is_empty() {
@@ -49,7 +62,7 @@ pub async fn build_and_push(
     let full_image = format!("{}/{}:{}", config.harbor_url, repository, final_tag);
 
     // 步骤1: 准备Docker构建上下文
-    emit_progress(&app, 10, "📝 准备 Docker 构建上下文...", "build");
+    emit(&app, 10, "📝 准备 Docker 构建上下文...", "build");
 
     let build_context = if let Some(ref ctx_path) = dockerfile_context {
         // 有自定义 Dockerfile，使用 worktree 作为构建上下文
@@ -110,7 +123,7 @@ pub async fn build_and_push(
     };
 
     // 步骤2: docker build (阻塞操作放到线程池)
-    emit_progress(&app, 25, "🔨 构建 Docker 镜像...", "build");
+    emit(&app, 25, "🔨 构建 Docker 镜像...", "build");
 
     let df_path_str = build_context.dockerfile_path.to_string_lossy().to_string();
     let context_dir = build_context.context_dir.clone();
@@ -168,21 +181,24 @@ pub async fn build_and_push(
         ));
     }
 
-    // 步骤3: docker login
-    emit_progress(&app, 55, "🔐 登录 Harbor 镜像仓库...", "push");
-    docker_login_harbor(
+    // 步骤3: docker login（进程内同账号只真正 login 一次）
+    emit(&app, 55, "🔐 登录 Harbor 镜像仓库...", "push");
+    let did_login = docker_login_harbor(
         config.harbor_url.clone(),
         config.username.clone(),
         config.password.clone(),
     )
     .await?;
+    if !did_login {
+        emit(&app, 58, "🔐 复用已有 Harbor 登录", "push");
+    }
 
     // 步骤4: docker push
-    emit_progress(&app, 75, "📤 推送镜像到 Harbor...", "push");
+    emit(&app, 75, "📤 推送镜像到 Harbor...", "push");
     docker_push_image(full_image.clone()).await?;
 
     // 步骤5: 推送成功后删除本地镜像，避免本机堆积历史 tag（失败不影响结果）
-    emit_progress(&app, 92, "🧹 清理本地镜像缓存...", "cleanup");
+    emit(&app, 92, "🧹 清理本地镜像缓存...", "cleanup");
     docker_rmi_best_effort(
         full_image.clone(),
         "本地镜像已删除",
@@ -190,7 +206,7 @@ pub async fn build_and_push(
     )
     .await;
 
-    emit_progress(&app, 100, "✅ 推送完成!", "done");
+    emit(&app, 100, "✅ 推送完成!", "done");
 
     Ok(format!("✅ 镜像推送成功!\n\n完整镜像: {}", full_image))
 }
@@ -255,14 +271,17 @@ pub async fn push_local_image(
     .await
     .map_err(|e| format!("标签线程异常: {}", e))??;
 
-    // 步骤2: docker login
+    // 步骤2: docker login（进程内同账号只真正 login 一次）
     emit_progress(&app, 35, "🔐 登录 Harbor 镜像仓库...", "push");
-    docker_login_harbor(
+    let did_login = docker_login_harbor(
         config.harbor_url.clone(),
         config.username.clone(),
         config.password.clone(),
     )
     .await?;
+    if !did_login {
+        emit_progress(&app, 40, "🔐 复用已有 Harbor 登录", "push");
+    }
 
     // 步骤3: docker push
     emit_progress(&app, 60, "📤 推送镜像到 Harbor...", "push");

@@ -118,7 +118,11 @@ export function BranchPanel({
   renderLog,
 }: BranchPanelProps) {
   const showProgress = shouldShowBranchProgress(isBuilding, log, progress);
-  const showResults = shouldShowBranchResults(isBuilding, artifactPath);
+  const showResults = shouldShowBranchResults(
+    isBuilding,
+    artifactPath,
+    branchImageResults.length > 0 || !!branchFullImage,
+  );
 
   // 分支名映射：显示时去掉 origin/ 前缀，值保持完整 ref
   const branchDisplayMap = Object.fromEntries(

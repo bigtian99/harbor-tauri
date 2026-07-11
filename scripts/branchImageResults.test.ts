@@ -74,6 +74,12 @@ assertEqual(
 );
 
 assertEqual(
+  shouldShowBranchResults(true, "/tmp/dist", true),
+  true,
+  "partial push success should show image rows immediately while other side is still pushing",
+);
+
+assertEqual(
   shouldShowBranchResults(false, "/tmp/dist"),
   true,
   "branch result links should show after package and push are no longer running",

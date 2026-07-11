@@ -48,7 +48,9 @@ export interface BranchPackageActionDeps extends BranchPackageActionState {
   setBackendArtifactPath: (value: string) => void;
   setWorktreePath: (value: string) => void;
   setCustomDockerfile: (value: string) => void;
-  setBranchFullImage: (value: string) => void;
+  setBranchFullImage: (
+    value: string | ((prev: string) => string),
+  ) => void;
   setBranchImageResults: (
     value: BranchImageResult[] | ((prev: BranchImageResult[]) => BranchImageResult[]),
   ) => void;
@@ -288,7 +290,7 @@ export async function handlePackageFromBranch(deps: BranchPackageActionDeps) {
                   exposePort: branchExposePort || null,
                   nginxLocations: [],
                 });
-                pushLogs.push(`📦: ${resultStr}`);
+                // ponytail: 成功结果已有摘要+完整镜像行，不把「镜像推送成功」塞进日志
                 const imgMatch = resultStr.match(/完整镜像:\s*(.+)/);
                 if (imgMatch) {
                   const image = imgMatch[1].trim();
@@ -305,15 +307,91 @@ export async function handlePackageFromBranch(deps: BranchPackageActionDeps) {
                   }
                 }
                 setBranchFullImage(imageList.join("\n"));
-                setLog(`✅ 分支打包并推送镜像完成\n\n${result.log}\n\n${pushLogs.join("\n")}`);
+                setLog(`✅ 分支打包并推送镜像完成\n\n${result.log}`);
                 setActiveTab("branch");
                 return;
               }
 
+              // npm：前端 / 后端镜像并行 build_and_push；谁先完成谁立刻回显
+              // ponytail: CANCEL_FLAG/CURRENT_PID 全局一份，取消时可能只杀其中一个 docker 进程
               setProgress(60);
-              setProgressMessage("🚀 推送前端镜像...");
-              try {
-                const feResult = await invoke<string>("build_and_push", {
+              setProgressMessage(
+                hasBackend ? "🚀 并行推送前端与后端镜像..." : "🚀 推送前端镜像...",
+              );
+
+              const roleLabel = (role: "frontend" | "backend") =>
+                role === "frontend" ? "前端" : "后端";
+
+              const applyImageResult = (role: "frontend" | "backend", image: string) => {
+                setBranchImageResults((prev) => {
+                  const next = [
+                    ...prev.filter((r) => r.role !== role),
+                    createBranchImageResult(role, image),
+                  ];
+                  next.sort((a, b) =>
+                    a.role === b.role ? 0 : a.role === "frontend" ? -1 : 1,
+                  );
+                  return next;
+                });
+                // 与 results 同步的展示文案（前端在前）
+                setBranchFullImage((prev) => {
+                  const lines = prev
+                    .split("\n")
+                    .map((l) => l.trim())
+                    .filter(Boolean)
+                    .filter((l) => !l.startsWith(role === "frontend" ? "前端:" : "后端:"));
+                  const label = role === "frontend" ? "前端" : "后端";
+                  lines.push(`${label}: ${image}`);
+                  lines.sort((a, b) => {
+                    const ra = a.startsWith("前端") ? 0 : 1;
+                    const rb = b.startsWith("前端") ? 0 : 1;
+                    return ra - rb;
+                  });
+                  return lines.join("\n");
+                });
+                setProgressMessage(`✅ ${roleLabel(role)}镜像已推送`);
+                showToast(`${roleLabel(role)}镜像推送成功`);
+              };
+
+              type PushOutcome =
+                | { role: "frontend" | "backend"; ok: true }
+                | { role: "frontend" | "backend"; ok: false; error: unknown };
+
+              const pushOne = async (
+                role: "frontend" | "backend",
+                args: Record<string, unknown>,
+              ): Promise<PushOutcome> => {
+                try {
+                  const value = await invoke<string>("build_and_push", {
+                    ...args,
+                    // 始终带角色标签，单推前端时也一致
+                    progressLabel: roleLabel(role),
+                  });
+                  const imgMatch = value.match(/完整镜像:\s*(.+)/);
+                  if (imgMatch) {
+                    const image = imgMatch[1].trim();
+                    applyImageResult(role, image);
+                    if (role === "frontend") {
+                      try {
+                        await invoke("update_build_record_image", {
+                          imageName: effectiveImageName,
+                          imageTag: image,
+                        });
+                        await loadBuildHistory();
+                      } catch {
+                        /* 忽略 */
+                      }
+                    }
+                  }
+                  return { role, ok: true };
+                } catch (error) {
+                  setProgressMessage(`❌ ${roleLabel(role)}推送失败`);
+                  return { role, ok: false, error };
+                }
+              };
+
+              const pushTasks: Promise<PushOutcome>[] = [
+                pushOne("frontend", {
                   jarPath: result.artifact_path,
                   imageName: frontendImageName,
                   imageTag: branchImageTag,
@@ -321,32 +399,11 @@ export async function handlePackageFromBranch(deps: BranchPackageActionDeps) {
                   dockerfilePath: null,
                   dockerfileContext: null,
                   nginxLocations: nginxLocations,
-                });
-                pushLogs.push(`📦 前端: ${feResult}`);
-                const feMatch = feResult.match(/完整镜像:\s*(.+)/);
-                if (feMatch) {
-                  const image = feMatch[1].trim();
-                  imageList.push(`前端: ${image}`);
-                  setBranchImageResults([createBranchImageResult("frontend", image)]);
-                  try {
-                    await invoke("update_build_record_image", {
-                      imageName: effectiveImageName,
-                      imageTag: image,
-                    });
-                    await loadBuildHistory();
-                  } catch {
-                    /* 忽略 */
-                  }
-                }
-              } catch (feErr) {
-                pushLogs.push(`❌ 前端推送失败: ${feErr}`);
-              }
-
+                }),
+              ];
               if (hasBackend) {
-                setProgress(80);
-                setProgressMessage("🚀 推送后端 JAR 镜像...");
-                try {
-                  const beResult = await invoke<string>("build_and_push", {
+                pushTasks.push(
+                  pushOne("backend", {
                     jarPath: result.backend_artifact_path,
                     imageName: backendImageName,
                     imageTag: branchImageTag,
@@ -355,25 +412,22 @@ export async function handlePackageFromBranch(deps: BranchPackageActionDeps) {
                     dockerfileContext: null,
                     exposePort: branchExposePort || null,
                     nginxLocations: [],
-                  });
-                  pushLogs.push(`📦 后端: ${beResult}`);
-                  const beMatch = beResult.match(/完整镜像:\s*(.+)/);
-                  if (beMatch) {
-                    const image = beMatch[1].trim();
-                    imageList.push(`后端: ${image}`);
-                    setBranchImageResults((prev) => [
-                      ...prev,
-                      createBranchImageResult("backend", image),
-                    ]);
-                  }
-                } catch (beErr) {
-                  pushLogs.push(`❌ 后端推送失败: ${beErr}`);
-                }
+                  }),
+                );
               }
 
-              setBranchFullImage(imageList.join("\n"));
+              const outcomes = await Promise.all(pushTasks);
+              // 串行汇总失败，避免并行回调改 pushLogs 丢行
+              for (const out of outcomes) {
+                if (!out.ok) {
+                  pushLogs.push(`❌ ${roleLabel(out.role)}推送失败: ${out.error}`);
+                }
+              }
+              const summary = getBranchPushSummary(pushLogs, hasBackend);
               setLog(
-                `${getBranchPushSummary(pushLogs, hasBackend)}\n\n${result.log}\n\n${pushLogs.join("\n")}`,
+                pushLogs.length > 0
+                  ? `${summary}\n\n${result.log}\n\n${pushLogs.join("\n")}`
+                  : `${summary}\n\n${result.log}`,
               );
               setActiveTab("branch");
             } catch (pushErr) {

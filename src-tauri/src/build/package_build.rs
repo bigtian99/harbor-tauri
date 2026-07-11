@@ -107,18 +107,31 @@ fn run_npm_build(
     // 前端构建（与后端并行进行）
     // 检查缓存，依赖未变则跳过 install
     let cached = if let Some(key) = lock_file_hash(worktree_for_build) {
+        let short = &key[..12.min(key.len())];
+        emit_progress(
+            app,
+            51,
+            format!("📦 检查依赖缓存 (hash={})...", short),
+            "build",
+        );
+        // 恢复可能要几十秒，先把文案说清楚，避免误以为在 install
+        emit_progress(
+            app,
+            52,
+            format!("📦 尝试从缓存恢复 node_modules (hash={})...", short),
+            "build",
+        );
         match try_restore_node_modules(worktree_for_build, &key) {
             Ok(true) => {
-                let msg = format!("✅ 命中缓存 (hash={})，跳过 {} install", &key[..12], pm);
-                emit_progress(app, 52, &msg, "build");
+                let msg = format!("✅ 命中缓存 (hash={})，跳过 {} install", short, pm);
+                emit_progress(app, 58, &msg, "build");
                 logs.push(msg);
                 true
             }
             Ok(false) => {
                 let msg = format!(
                     "❓ 缓存未命中 (hash={})，执行 {} install...",
-                    &key[..12],
-                    pm
+                    short, pm
                 );
                 emit_progress(app, 52, &msg, "build");
                 logs.push(format!("cache miss (hash={})", key));
@@ -138,12 +151,12 @@ fn run_npm_build(
         false
     };
     if !cached {
-        // npm install 进度
+        // npm install 进度（仅未命中缓存时）
         let install_msg = if backend_handle.is_some() {
             format!("📦 执行 {} install... | ☕ 后端并行打包中", pm)
         } else {
             format!(
-                "📦 执行 {} install（首次下载依赖，可能需要几分钟）...",
+                "📦 执行 {} install（首次/依赖变更，可能需要几分钟）...",
                 pm
             )
         };
@@ -162,7 +175,7 @@ fn run_npm_build(
             emit_progress(
                 app,
                 60,
-                format!("💾 保存 node_modules 到缓存 (hash={})...", &key[..12]),
+                format!("💾 保存 node_modules 到缓存 (hash={})...", &key[..12.min(key.len())]),
                 "build",
             );
             save_node_modules_to_cache(worktree_for_build, &key);

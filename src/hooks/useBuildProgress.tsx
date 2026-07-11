@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { CheckCircle, Copy } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { isTauriRuntime } from "../types";
 
@@ -24,6 +24,16 @@ interface BuildProgressPayload {
 interface UseBuildProgressDeps {
   /** 复制成功后的 toast；不传则静默 */
   showToast?: (message: string, duration?: number) => void;
+}
+
+/** 镜像地址只走面板上的「完整镜像」行，日志里不重复展示 */
+function stripFullImageLines(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !/完整镜像\s*:/.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /**
@@ -63,44 +73,20 @@ export function useBuildProgress(deps: UseBuildProgressDeps = {}) {
   }
 
   function renderLog(text: string): ReactNode {
-    const imageMatch = text.match(/完整镜像:\s*(.+)/);
-    if (imageMatch) {
-      const imageUrl = imageMatch[1].trim();
-      const prefix = text.substring(0, text.indexOf("完整镜像:"));
-      return (
-        <>
-          <pre>{prefix}</pre>
-          <div className="image-url-row">
-            <span className="image-url-label">完整镜像:</span>
-            <span className="image-url-value" title={imageUrl}>{imageUrl}</span>
-            <button
-              className={`copy-btn ${copied ? "copied" : ""}`}
-              onClick={() => handleCopyImage(imageUrl)}
-              title="复制镜像地址"
-            >
-              {copied ? (
-                <>
-                  <CheckCircle size={14} /> 已复制
-                </>
-              ) : (
-                <>
-                  <Copy size={14} /> 复制
-                </>
-              )}
-            </button>
-          </div>
-        </>
-      );
+    // ponytail: 完整镜像只在结果区展示，日志只保留过程
+    const cleaned = stripFullImageLines(text);
+    if (!cleaned) {
+      return <pre>（无过程日志）</pre>;
     }
-    if (text.includes("✅")) {
+    if (cleaned.includes("✅")) {
       return (
         <div className="success-message">
           <CheckCircle size={20} className="success-icon" />
-          <pre>{text}</pre>
+          <pre>{cleaned}</pre>
         </div>
       );
     }
-    return <pre>{text}</pre>;
+    return <pre>{cleaned}</pre>;
   }
 
   /** 开始一轮构建/推送前重置进度与日志相关状态 */

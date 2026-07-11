@@ -33,7 +33,8 @@ pub async fn package_from_branch(
 
     let package_message = match project_type {
         PackageProjectType::Maven => "☕ 执行 Maven 打包...".to_string(),
-        PackageProjectType::Npm => "📦 执行 npm install...".to_string(),
+        // ponytail: 别写 install——多数情况走缓存，文案会误导
+        PackageProjectType::Npm => "📦 准备前端依赖...".to_string(),
     };
     emit_progress(&app, 50, package_message, "build");
 

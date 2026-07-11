@@ -4,6 +4,11 @@ use crate::build::docker_output;
 use crate::models::HarborConfig;
 use crate::utils::silent_docker_command;
 use std::io::Write;
+use std::sync::Mutex;
+
+/// 进程内已成功 login 的 Harbor 会话（url|user|password），避免并行推重复 docker login。
+// ponytail: 全局一份；改密码/账号后 key 变会重新 login
+static HARBOR_LOGIN_SESSION: Mutex<Option<String>> = Mutex::new(None);
 
 /// Harbor 必填项校验。
 pub(crate) fn require_harbor_config(config: &HarborConfig) -> Result<(), String> {
@@ -27,42 +32,62 @@ pub(crate) fn resolve_final_tag(image_tag: String) -> String {
     }
 }
 
-/// `docker login` Harbor（password-stdin），在阻塞线程中执行。
+fn harbor_session_key(harbor_url: &str, username: &str, password: &str) -> String {
+    format!("{harbor_url}\0{username}\0{password}")
+}
+
+/// `docker login` Harbor（password-stdin）。
+/// 返回 `true` 表示本次真正执行了 login；`false` 表示本进程已登录过同一账号，直接跳过。
 pub(crate) async fn docker_login_harbor(
     harbor_url: String,
     username: String,
     password: String,
-) -> Result<(), String> {
-    let login_result: Result<std::process::Output, String> =
-        tauri::async_runtime::spawn_blocking(move || {
-            let mut child = silent_docker_command()
-                .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()
-                .map_err(|e| format!("启动docker login失败: {}", e))?;
+) -> Result<bool, String> {
+    let session_key = harbor_session_key(&harbor_url, &username, &password);
 
-            if let Some(mut stdin) = child.stdin.take() {
-                stdin
-                    .write_all(password.as_bytes())
-                    .map_err(|e| e.to_string())?;
-            }
+    let login_result: Result<bool, String> = tauri::async_runtime::spawn_blocking(move || {
+        // 持锁贯穿「查会话 → login → 记会话」，并行推时只会有一个真正 login
+        let mut session = HARBOR_LOGIN_SESSION
+            .lock()
+            .map_err(|_| "Harbor 登录锁异常".to_string())?;
+        if session.as_ref() == Some(&session_key) {
+            crate::diag::diag_log(
+                "docker",
+                &format!("跳过 docker login（会话内已登录）: {}", harbor_url),
+            );
+            return Ok(false);
+        }
 
-            let output = child
-                .wait_with_output()
-                .map_err(|e| format!("docker login失败: {}", e))?;
-            Ok(output)
-        })
-        .await
-        .map_err(|e| format!("登录线程异常: {}", e))?;
+        let mut child = silent_docker_command()
+            .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("启动docker login失败: {}", e))?;
 
-    let login_output = login_result?;
-    if !login_output.status.success() {
-        let stderr = String::from_utf8_lossy(&login_output.stderr);
-        return Err(format!("docker login失败:\n{}", stderr));
-    }
-    Ok(())
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(password.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("docker login失败: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("docker login失败:\n{}", stderr));
+        }
+
+        *session = Some(session_key);
+        crate::diag::diag_log("docker", &format!("docker login 成功: {}", harbor_url));
+        Ok(true)
+    })
+    .await
+    .map_err(|e| format!("登录线程异常: {}", e))?;
+
+    login_result
 }
 
 /// `docker push`，在阻塞线程中执行。
