@@ -1,7 +1,8 @@
 //! 落地页生成、预览与 FTP 上传。
 //!
 //! 模块划分：
-//! - [`generate`] — 渠道/马甲拉取与落地页生成
+//! - [`generate`] — 子渠道拉取与落地页生成
+//! - [`vest`] — 马甲包拉取与落地页生成
 //! - [`ftp`] — 原生 FTP 客户端与上传
 //! - [`templates`] — 模板目录解析与管理
 //!
@@ -10,18 +11,18 @@
 //! - 预览只读，不改写生成结果
 //! - 预览服务器仅绑 127.0.0.1（见 `preview_server`）
 
-mod generate;
 mod ftp;
+mod generate;
 mod templates;
+mod vest;
 
-pub use generate::{
-    fetch_sub_channels, fetch_vest_data, generate_landing_pages, generate_vest_landing_pages,
-};
+pub use generate::{fetch_sub_channels, generate_landing_pages};
 pub use ftp::upload_landing_to_ftp;
 pub use templates::{
     delete_template_dir, get_bundled_templates_dir, init_bundled_templates_dir, list_template_dirs,
     list_template_infos, upload_template_zip,
 };
+pub use vest::{fetch_vest_data, generate_vest_landing_pages};
 pub(crate) use templates::templates_root;
 /// 兼容：`crate::landing::templates_log` ≡ `diag_log("templates", …)`
 #[allow(unused_imports)]
@@ -87,4 +88,3 @@ pub async fn preview_landing_page(path: String, template_index: Option<usize>) -
 
     Ok(())
 }
-
