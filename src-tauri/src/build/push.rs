@@ -1,10 +1,17 @@
+//! 镜像构建与推送 Tauri 命令：`build_and_push` / `push_local_image` / `list_local_images`。
+
+use crate::build::push_helpers::{
+    docker_login_harbor, docker_push_image, docker_rmi_best_effort, require_harbor_config,
+    resolve_final_tag,
+};
 use crate::build::{docker_output, emit_progress, reset_cancel_flag, resolve_harbor_repository};
 use crate::config_cmd::load_config_sync;
-use crate::docker::{prepare_custom_docker_context, prepare_frontend_dist_context, prepare_jar_context};
+use crate::docker::{
+    prepare_custom_docker_context, prepare_frontend_dist_context, prepare_jar_context,
+};
 use crate::models::{ArtifactType, DockerBuildContext, NginxLocationBlock};
 use crate::utils::{silent_docker_command, CANCEL_FLAG, CURRENT_PID};
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::Ordering;
@@ -29,34 +36,17 @@ pub async fn build_and_push(
         }
     }
     let artifact_type = ArtifactType::from_option(artifact_type)?;
-
-    if config.harbor_url.is_empty()
-        || config.username.is_empty()
-        || config.password.is_empty()
-        || config.project.is_empty()
-    {
-        return Err("请先配置Harbor信息".to_string());
-    }
+    require_harbor_config(&config)?;
 
     let artifact_path = PathBuf::from(&jar_path);
     if !artifact_path.exists() {
         return Err(format!("产物路径不存在: {}", jar_path));
     }
 
-    // 生成标签: v.YY.MM.DD.HH.MM
-    let final_tag = if image_tag.is_empty() || image_tag == "latest" {
-        let now = chrono::Local::now();
-        now.format("v.%y.%m.%d.%H.%M").to_string()
-    } else {
-        image_tag
-    };
-
+    let final_tag = resolve_final_tag(image_tag);
     let image_name_lower = image_name.to_lowercase();
     let repository = resolve_harbor_repository(&image_name_lower, &config.project)?;
-    let full_image = format!(
-        "{}/{}:{}",
-        config.harbor_url, repository, final_tag
-    );
+    let full_image = format!("{}/{}:{}", config.harbor_url, repository, final_tag);
 
     // 步骤1: 准备Docker构建上下文
     emit_progress(&app, 10, "📝 准备 Docker 构建上下文...", "build");
@@ -72,7 +62,10 @@ pub async fn build_and_push(
         if !df.is_file() {
             return Err(format!("自定义Dockerfile不存在: {}", df.display()));
         }
-        crate::diag::diag_log("build", &format!("使用自定义Dockerfile，构建上下文: {}", ctx_path));
+        crate::diag::diag_log(
+            "build",
+            &format!("使用自定义Dockerfile，构建上下文: {}", ctx_path),
+        );
         // worktree 作为构建上下文，Docker 构建完后清理
         DockerBuildContext {
             context_dir: ctx.clone(),
@@ -85,7 +78,10 @@ pub async fn build_and_push(
         if df.is_file() {
             let custom_content = fs::read_to_string(&df)
                 .map_err(|e| format!("读取自定义Dockerfile失败: {}", e))?;
-            crate::diag::diag_log("build", &format!("使用自定义Dockerfile (独立上下文): {}", df_path));
+            crate::diag::diag_log(
+                "build",
+                &format!("使用自定义Dockerfile (独立上下文): {}", df_path),
+            );
             prepare_custom_docker_context(
                 &config,
                 &artifact_path,
@@ -172,79 +168,27 @@ pub async fn build_and_push(
         ));
     }
 
-    // 步骤3: docker login (阻塞操作放到线程池)
+    // 步骤3: docker login
     emit_progress(&app, 55, "🔐 登录 Harbor 镜像仓库...", "push");
+    docker_login_harbor(
+        config.harbor_url.clone(),
+        config.username.clone(),
+        config.password.clone(),
+    )
+    .await?;
 
-    let harbor_url = config.harbor_url.clone();
-    let username = config.username.clone();
-    let password = config.password.clone();
-
-    let login_result = tauri::async_runtime::spawn_blocking(move || {
-        let mut child = silent_docker_command()
-            .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("启动docker login失败: {}", e))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(password.as_bytes())
-                .map_err(|e| e.to_string())?;
-        }
-
-        let output = child
-            .wait_with_output()
-            .map_err(|e| format!("docker login失败: {}", e));
-        output
-    })
-    .await
-    .map_err(|e| format!("登录线程异常: {}", e))?;
-
-    let login_output = login_result?;
-    if !login_output.status.success() {
-        let stderr = String::from_utf8_lossy(&login_output.stderr);
-        return Err(format!("docker login失败:\n{}", stderr));
-    }
-
-    // 步骤4: docker push (阻塞操作放到线程池)
+    // 步骤4: docker push
     emit_progress(&app, 75, "📤 推送镜像到 Harbor...", "push");
-
-    let full_image_push = full_image.clone();
-    let push_result = tauri::async_runtime::spawn_blocking(move || {
-        docker_output(&["push", &full_image_push])
-    })
-    .await
-    .map_err(|e| format!("推送线程异常: {}", e))?;
-
-    let push_output = push_result.map_err(|e| format!("执行docker push失败: {}", e))?;
-    if !push_output.status.success() {
-        let stderr = String::from_utf8_lossy(&push_output.stderr);
-        return Err(format!("docker push失败:\n{}", stderr));
-    }
+    docker_push_image(full_image.clone()).await?;
 
     // 步骤5: 推送成功后删除本地镜像，避免本机堆积历史 tag（失败不影响结果）
     emit_progress(&app, 92, "🧹 清理本地镜像缓存...", "cleanup");
-
-    let full_image_remove = full_image.clone();
-    let remove_result = tauri::async_runtime::spawn_blocking(move || {
-        docker_output(&["rmi", &full_image_remove])
-    })
+    docker_rmi_best_effort(
+        full_image.clone(),
+        "本地镜像已删除",
+        "本地镜像清理跳过（不影响推送结果）",
+    )
     .await;
-
-    // docker rmi 失败是常见情况（多 tag 共享、被其他镜像依赖等），不影响推送结果
-    match remove_result {
-        Ok(Ok(output)) if output.status.success() => {
-            crate::diag::diag_log("docker", &format!("本地镜像已删除: {}", full_image));
-        }
-        _ => {
-            crate::diag::diag_log(
-                "docker",
-                &format!("本地镜像清理跳过（不影响推送结果）: {}", full_image),
-            );
-        }
-    }
 
     emit_progress(&app, 100, "✅ 推送完成!", "done");
 
@@ -261,14 +205,7 @@ pub async fn push_local_image(
 ) -> Result<String, String> {
     reset_cancel_flag();
     let config = load_config_sync()?;
-
-    if config.harbor_url.is_empty()
-        || config.username.is_empty()
-        || config.password.is_empty()
-        || config.project.is_empty()
-    {
-        return Err("请先配置Harbor信息".to_string());
-    }
+    require_harbor_config(&config)?;
 
     let local_image = local_image.trim().to_string();
     if local_image.is_empty() {
@@ -281,25 +218,15 @@ pub async fn push_local_image(
     }
 
     let repository = resolve_harbor_repository(&image_name_lower, &config.project)?;
-
-    let final_tag = if image_tag.is_empty() || image_tag == "latest" {
-        let now = chrono::Local::now();
-        now.format("v.%y.%m.%d.%H.%M").to_string()
-    } else {
-        image_tag
-    };
-
-    let full_image = format!(
-        "{}/{}:{}",
-        config.harbor_url, repository, final_tag
-    );
+    let final_tag = resolve_final_tag(image_tag);
+    let full_image = format!("{}/{}:{}", config.harbor_url, repository, final_tag);
 
     // 步骤1: docker tag <local_image> <full_image>
     emit_progress(&app, 10, "🏷️ 镜像打标签...", "build");
 
     let local_image_tag = local_image.clone();
     let full_image_tag = full_image.clone();
-    let _tag_result = tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || {
         if CANCEL_FLAG.load(Ordering::SeqCst) {
             return Err("操作已取消".to_string());
         }
@@ -330,76 +257,25 @@ pub async fn push_local_image(
 
     // 步骤2: docker login
     emit_progress(&app, 35, "🔐 登录 Harbor 镜像仓库...", "push");
-
-    let harbor_url = config.harbor_url.clone();
-    let username = config.username.clone();
-    let password = config.password.clone();
-
-    let login_result = tauri::async_runtime::spawn_blocking(move || {
-        let mut child = silent_docker_command()
-            .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("启动docker login失败: {}", e))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(password.as_bytes())
-                .map_err(|e| e.to_string())?;
-        }
-
-        let output = child
-            .wait_with_output()
-            .map_err(|e| format!("docker login失败: {}", e));
-        output
-    })
-    .await
-    .map_err(|e| format!("登录线程异常: {}", e))?;
-
-    let login_output = login_result?;
-    if !login_output.status.success() {
-        let stderr = String::from_utf8_lossy(&login_output.stderr);
-        return Err(format!("docker login失败:\n{}", stderr));
-    }
+    docker_login_harbor(
+        config.harbor_url.clone(),
+        config.username.clone(),
+        config.password.clone(),
+    )
+    .await?;
 
     // 步骤3: docker push
     emit_progress(&app, 60, "📤 推送镜像到 Harbor...", "push");
-
-    let full_image_push = full_image.clone();
-    let push_result = tauri::async_runtime::spawn_blocking(move || {
-        docker_output(&["push", &full_image_push])
-    })
-    .await
-    .map_err(|e| format!("推送线程异常: {}", e))?;
-
-    let push_output = push_result.map_err(|e| format!("执行docker push失败: {}", e))?;
-    if !push_output.status.success() {
-        let stderr = String::from_utf8_lossy(&push_output.stderr);
-        return Err(format!("docker push失败:\n{}", stderr));
-    }
+    docker_push_image(full_image.clone()).await?;
 
     // 步骤4: 清理 Harbor 标签副本，不删除原始本地镜像
     emit_progress(&app, 90, "🧹 清理本地标签...", "cleanup");
-
-    let full_image_remove = full_image.clone();
-    let remove_result = tauri::async_runtime::spawn_blocking(move || {
-        docker_output(&["rmi", &full_image_remove])
-    })
+    docker_rmi_best_effort(
+        full_image.clone(),
+        "本地标签已删除",
+        "本地标签清理跳过（不影响推送结果）",
+    )
     .await;
-
-    match remove_result {
-        Ok(Ok(output)) if output.status.success() => {
-            crate::diag::diag_log("docker", &format!("本地标签已删除: {}", full_image));
-        }
-        _ => {
-            crate::diag::diag_log(
-                "docker",
-                &format!("本地标签清理跳过（不影响推送结果）: {}", full_image),
-            );
-        }
-    }
 
     emit_progress(&app, 100, "✅ 推送完成!", "done");
 
@@ -425,4 +301,3 @@ pub fn list_local_images() -> Result<Vec<String>, String> {
         .collect();
     Ok(images)
 }
-

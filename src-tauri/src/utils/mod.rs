@@ -85,6 +85,7 @@ mod tests {
 
         for file_name in [
             "build/package.rs",
+            "build/package_worktree.rs",
             "build/detect.rs",
             "commit.rs",
             "git.rs",
@@ -100,6 +101,10 @@ mod tests {
             let module_source = std::fs::read_to_string(&path).unwrap_or_else(|e| {
                 panic!("read {}: {}", path.display(), e)
             });
+            // package.rs 可能仅为编排、无子进程；有 spawn 的文件须走 silent_command
+            if file_name == "build/package.rs" && !module_source.contains("Command::") {
+                continue;
+            }
             assert!(
                 module_source.contains("silent_command("),
                 "{file_name} should route Windows-visible child processes through silent_command"
