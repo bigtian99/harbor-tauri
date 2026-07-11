@@ -4,7 +4,7 @@ use std::{collections::HashMap, path::Path};
 
 use calamine::{open_workbook_auto, Data, Reader};
 
-use super::{AccountData, ChannelData, SettlementData};
+use super::types::{AccountData, ChannelData, SettlementData};
 
 pub(super) fn read_first_sheet(path: &Path) -> Result<Vec<Vec<Data>>, String> {
     let mut workbook = open_workbook_auto(path)

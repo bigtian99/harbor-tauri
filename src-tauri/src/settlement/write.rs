@@ -4,7 +4,7 @@ use std::{collections::HashMap, path::{Path, PathBuf}};
 
 use rust_xlsxwriter::{Color, Format, FormatAlign, FormatBorder, Workbook, Worksheet, XlsxError};
 
-use super::{AccountData, SettlementData, SettlementLine};
+use super::types::{AccountData, SettlementData, SettlementLine};
 
 pub(super) fn generate_account_workbook(
     account: &AccountData,

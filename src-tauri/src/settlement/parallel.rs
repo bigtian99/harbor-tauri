@@ -13,7 +13,8 @@ use std::{
 use tauri::Emitter;
 
 use super::{
-    write::generate_account_workbook, AccountData, SettlementData, SettlementProgressPayload,
+    types::{AccountData, SettlementData, SettlementProgressPayload},
+    write::generate_account_workbook,
 };
 
 pub(super) fn generate_accounts_parallel(
