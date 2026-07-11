@@ -2,6 +2,7 @@ mod build;
 mod commit;
 mod config_cmd;
 mod db;
+mod diag;
 mod docker;
 mod git;
 mod history;
@@ -24,10 +25,10 @@ use history::{
     clear_build_history, delete_artifact_path, delete_build_record,
     get_build_history, save_build_record, update_build_record_image,
 };
+use diag::{get_templates_diagnostic_log_path, read_diagnostic_log};
 use landing::{
     fetch_sub_channels, fetch_vest_data, generate_landing_pages, generate_vest_landing_pages,
     get_bundled_templates_dir, get_temp_dir,
-    get_templates_diagnostic_log_path, read_diagnostic_log,
     preview_landing_page, upload_landing_to_ftp,
     list_template_dirs, list_template_infos, upload_template_zip, delete_template_dir,
 };

@@ -1174,30 +1174,7 @@ pub async fn get_bundled_templates_dir() -> Result<String, String> {
     ))
 }
 
-#[tauri::command]
-pub async fn get_templates_diagnostic_log_path() -> Result<String, String> {
-    templates_diagnostic_log_path()
-        .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| "诊断日志尚未初始化，请重启应用后再试".to_string())
-}
-
-/// 读取诊断日志内容（最多返回最近 N 行，**新日志在前**）
-#[tauri::command]
-pub async fn read_diagnostic_log(lines: Option<usize>) -> Result<String, String> {
-    let path = templates_diagnostic_log_path()
-        .ok_or_else(|| "诊断日志尚未初始化".to_string())?;
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("读取日志失败: {}", e))?;
-    let max_lines = lines.unwrap_or(200);
-    // 文件按时间 append（旧→新）；展示时 reverse，新在前
-    Ok(content
-        .lines()
-        .rev()
-        .take(max_lines)
-        .collect::<Vec<_>>()
-        .join("\n"))
-}
-
+// 诊断日志命令已迁至 crate::diag（Task 1 为消同名 #[tauri::command] 冲突先挪走注册）
 // ========== 模板管理功能 ==========
 
 /// 获取打包内置 templates 根目录（只读，由 init_bundled_templates_dir 在 setup 时解析）
