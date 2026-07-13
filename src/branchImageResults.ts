@@ -54,7 +54,6 @@ export function shouldShowBranchResults(
   return !isBuilding;
 }
 
-export function shouldShowBranchProgress(isBuilding: boolean, log: string, progress: number) {
-  if (isBuilding) return true;
-  return log.includes("❌") && progress > 0 && progress < 100;
+export function shouldShowBranchProgress(isBuilding: boolean, _log: string, _progress: number) {
+  return isBuilding;
 }

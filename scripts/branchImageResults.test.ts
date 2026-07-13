@@ -93,8 +93,8 @@ assertEqual(
 
 assertEqual(
   shouldShowBranchProgress(false, "❌ docker build失败", 25),
-  true,
-  "progress should remain visible after a failed push stops before 100 percent",
+  false,
+  "progress should hide after build has ended (isBuilding=false), even if it failed",
 );
 
 assertEqual(
