@@ -1,6 +1,6 @@
 import {
   AlertTriangle, ArrowRight, CheckCircle, ExternalLink, FileText, FolderOpen,
-  GitBranch, GitCommit, GitMerge, Info, Loader2, RefreshCw, Search
+  GitBranch, GitCommit, GitMerge, Info, Loader2, RefreshCw, Search, Tag
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "../SearchableDropdown";
@@ -17,6 +17,11 @@ interface MergeFormSectionProps {
   branchNames: string[];
   isLoadingBranches: boolean;
   pushAfterMerge: boolean;
+  tagAfterMerge: boolean;
+  tagName: string;
+  tagMessage: string;
+  defaultTagName: string;
+  defaultTagMessage: string;
   isChecking: boolean;
   isMerging: boolean;
   checkResult: LocalMergeCheck | null;
@@ -41,6 +46,9 @@ interface MergeFormSectionProps {
   onSourceBranchChange: (value: string) => void;
   onTargetBranchChange: (value: string) => void;
   onPushAfterMergeChange: (checked: boolean) => void;
+  onTagAfterMergeChange: (checked: boolean) => void;
+  onTagNameChange: (value: string) => void;
+  onTagMessageChange: (value: string) => void;
   onCheck: () => void;
   onMerge: () => void;
   onLoadConflictDiff: (filePath: string) => void;
@@ -59,6 +67,11 @@ export function MergeFormSection({
   branchNames,
   isLoadingBranches,
   pushAfterMerge,
+  tagAfterMerge,
+  tagName,
+  tagMessage,
+  defaultTagName,
+  defaultTagMessage,
   isChecking,
   isMerging,
   checkResult,
@@ -83,6 +96,9 @@ export function MergeFormSection({
   onSourceBranchChange,
   onTargetBranchChange,
   onPushAfterMergeChange,
+  onTagAfterMergeChange,
+  onTagNameChange,
+  onTagMessageChange,
   onCheck,
   onMerge,
   onLoadConflictDiff,
@@ -363,6 +379,52 @@ export function MergeFormSection({
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* 合并后打 tag */}
+      <div className="merge-toolbar">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={tagAfterMerge}
+            onChange={(e) => onTagAfterMergeChange(e.target.checked)}
+          />
+          <span className="checkbox-toggle"></span>
+          <span><Tag size={14} style={{ marginRight: 4 }} />合并后打 tag 并推送</span>
+        </label>
+      </div>
+      {tagAfterMerge && (
+        <div className="form-group" style={{ marginBottom: 12 }}>
+          <label>Tag 名称</label>
+          <input
+            type="text"
+            className="path-input"
+            placeholder={defaultTagName}
+            value={tagName}
+            onChange={(e) => onTagNameChange(e.target.value)}
+            style={{ fontFamily: "monospace" }}
+          />
+          <label style={{ marginTop: 8 }}>Tag 内容（可修改）</label>
+          <textarea
+            className="path-input"
+            rows={4}
+            placeholder={defaultTagMessage || "无差异提交"}
+            value={tagMessage}
+            onChange={(e) => onTagMessageChange(e.target.value)}
+            style={{
+              fontFamily: "monospace",
+              fontSize: "0.85em",
+              resize: "vertical",
+              minHeight: 60,
+            }}
+          />
+          <p className="template-hint">
+            将在合并 commit 上创建此 tag 并推送 origin
+            {tagName.trim() === "" && defaultTagName && (
+              <>（如不修改将使用默认：{defaultTagName}）</>
+            )}
+          </p>
         </div>
       )}
 

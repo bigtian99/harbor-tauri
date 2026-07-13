@@ -439,11 +439,55 @@ fn emit_merge_progress(app: &tauri::AppHandle, percent: u8, message: &str) {
     );
 }
 
+/// 在 worktree 中打 tag 并推送到远程。
+/// tag 打在当前 HEAD（合并 commit）上，`tag_message` 作为 tag 的 message（-m）。
+fn tag_and_push(worktree_path: &PathBuf, tag_name: &str, tag_message: &str, _remote_target: &str) -> Result<(), String> {
+    // git tag <tag_name> HEAD -m "<tag_message>"
+    let args: Vec<String> = if tag_message.is_empty() {
+        vec!["tag".into(), tag_name.into(), "HEAD".into()]
+    } else {
+        vec!["tag".into(), tag_name.into(), "HEAD".into(), "-m".into(), tag_message.into()]
+    };
+    let args_slice: Vec<&str> = args.iter().map(String::as_str).collect();
+    let (tag_ok, _, tag_err) = run_git_capture(worktree_path, &args_slice);
+    if !tag_ok {
+        let first_line = tag_err
+            .lines()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("打 tag 失败")
+            .trim()
+            .to_string();
+        return Err(format!("创建 tag 失败：{first_line}"));
+    }
+
+    // git push origin <tag_name>
+    let (push_ok, _, push_err) = run_git_capture(
+        worktree_path,
+        &["push", "origin", tag_name],
+    );
+    if !push_ok {
+        let first_line = push_err
+            .lines()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("推送 tag 失败")
+            .trim()
+            .to_string();
+        // tag 已经创建成功，只是 push 失败，清理本地 tag
+        let _ = run_git_capture(worktree_path, &["tag", "-d", tag_name]);
+        return Err(format!("推送 tag 失败：{first_line}"));
+    }
+
+    Ok(())
+}
+
 /// 把远程 source 合并进远程 target，全程基于远程引用，不切换主仓库当前工作区分支。
 ///
 /// 在隔离 worktree 中检出 target（如 `origin/master`），执行
 /// `git merge --no-ff source`（如 `origin/feature`），再按需 push 到远程目标分支。
 /// 冲突时 abort 并清理 worktree；主仓库 HEAD 与未提交改动保持不变。
+///
+/// 如果提供了 `tag`（非空），合并推送后在合并 commit 上打 tag 并推送到远程；
+/// `tag_message` 为 tag 的消息（-m 内容），由前端从差异提交去重后生成。
 #[tauri::command]
 pub async fn merge_remote_branches(
     app: tauri::AppHandle,
@@ -451,9 +495,13 @@ pub async fn merge_remote_branches(
     source: String,
     target: String,
     push: bool,
+    tag: String,
+    tag_message: String,
 ) -> Result<String, String> {
     let source = source.trim().to_string();
     let target = target.trim().to_string();
+    let tag_name = tag.trim().to_string();
+    let tag_msg = tag_message.trim().to_string();
     if source.is_empty() || target.is_empty() {
         return Err("源分支和目标分支都不能为空".to_string());
     }
@@ -562,9 +610,36 @@ pub async fn merge_remote_branches(
                         &repo_root,
                         &["fetch", "origin", &remote_target_branch],
                     );
-                    Ok(format!(
-                        "已将 {source} 合并进 origin/{remote_target_branch} 并推送到远程"
-                    ))
+
+                    // 合并推送成功后，如果用户指定了 tag，则打 tag 并推送 tag
+                    if !tag_name.is_empty() {
+                        emit_merge_progress(
+                            &app_for_merge,
+                            85,
+                            &format!("打 tag {} 并推送...", tag_name),
+                        );
+                        let r = tag_and_push(
+                            &worktree_path,
+                            &tag_name,
+                            &tag_msg,
+                            &remote_target_branch,
+                        );
+                        if r.is_ok() {
+                            Ok(format!(
+                                "已将 {source} 合并进 origin/{remote_target_branch} 并推送到远程\n已打 tag {tag_name} 并推送"
+                            ))
+                        } else {
+                            // tag 失败不影响合并结果，在 summary 中提示
+                            Ok(format!(
+                                "已将 {source} 合并进 origin/{remote_target_branch} 并推送到远程\n⚠ 推送 tag {tag_name} 失败：{}",
+                                r.unwrap_err()
+                            ))
+                        }
+                    } else {
+                        Ok(format!(
+                            "已将 {source} 合并进 origin/{remote_target_branch} 并推送到远程"
+                        ))
+                    }
                 } else {
                     let first_line = p_err
                         .lines()
@@ -580,9 +655,39 @@ pub async fn merge_remote_branches(
                     &repo_root,
                     &["branch", "-f", &remote_target_branch, &merge_sha],
                 );
-                Ok(format!(
-                    "已将 {source} 合并进 {target}（未推送远程）"
-                ))
+
+                // 不推送远程但用户指定了 tag：在 worktree 打 tag（本地），合并摘要中提示
+                let prefix = format!(
+                    "已将 {source} 合并进 {target}{}",
+                    if push { "" } else { "（未推送远程）" }
+                );
+                if !tag_name.is_empty() {
+                    emit_merge_progress(
+                        &app_for_merge,
+                        85,
+                        &format!("打本地 tag {}...", tag_name),
+                    );
+                    let r = tag_and_push(
+                        &worktree_path,
+                        &tag_name,
+                        &tag_msg,
+                        &remote_target_branch,
+                    );
+                    if r.is_ok() {
+                        Ok(format!(
+                            "{}（tag {tag_name} 仅推送到远程，本地目标分支未推送）",
+                            prefix
+                        ))
+                    } else {
+                        Ok(format!(
+                            "{}，但打 tag {tag_name} 失败：{}",
+                            prefix,
+                            r.unwrap_err()
+                        ))
+                    }
+                } else {
+                    Ok(prefix)
+                }
             } else {
                 Ok(format!("已将 {source} 合并进 {target}"))
             }
@@ -596,6 +701,12 @@ pub async fn merge_remote_branches(
         if merge_result.is_ok() {
             emit_merge_progress(&app_for_merge, 100, "合并完成");
         }
+
+        crate::diag::diag_log("git", &format!(
+            "merge_remote_branches source={source} target={target} push={push} tag={tag_name} tag_msg_len={} ok={}",
+            tag_msg.len(),
+            merge_result.is_ok()
+        ));
 
         merge_result
     })

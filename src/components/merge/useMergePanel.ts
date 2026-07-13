@@ -23,6 +23,11 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
   const [isChecking, setIsChecking] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [pushAfterMerge, setPushAfterMerge] = useState(true);
+  // 合并后打 tag
+  const [tagAfterMerge, setTagAfterMerge] = useState(false);
+  const [tagName, setTagName] = useState("");
+  // 可编辑的 tag 内容（默认从差异提交去重生成）
+  const [tagMessage, setTagMessage] = useState("");
   // 源分支相对目标分支多出的提交（合并会带入这些提交）
   const [diffCommits, setDiffCommits] = useState<CommitInfo[]>([]);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
@@ -131,6 +136,8 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     setCollapsedCommitDiffDirs(new Set());
     setConflictDetail(null);
     setActiveConflictBlock(-1);
+    setTagAfterMerge(false);
+    setTagName("");
     targetLineRefs.current = {};
     sourceLineRefs.current = {};
     commitDiffLineRefs.current = {};
@@ -265,13 +272,41 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     }
   }, [sourceBranch, targetBranch, resolvedRepoPath, handleCheck]);
 
+  // 勾选打 tag 时，从差异提交去重自动生成 tag 内容（带序号），用户可自行修改
+  const autoTagMessage = useMemo(() => {
+    if (!tagAfterMerge || diffCommits.length === 0) return "";
+    const seen = new Set<string>();
+    const lines: string[] = [];
+    let idx = 1;
+    for (const c of diffCommits) {
+      const firstLine = c.message.split("\n")[0].trim();
+      if (firstLine && !seen.has(firstLine)) {
+        seen.add(firstLine);
+        lines.push(`${idx}. ${firstLine}`);
+        idx++;
+      }
+    }
+    return lines.join("\n");
+  }, [tagAfterMerge, diffCommits]);
+
+  // diffCommits 加载完成后自动填充 tagMessage，但只填一次（首次加载或用户清空时）
+  useEffect(() => {
+    if (!tagAfterMerge) return;
+    if (diffCommits.length === 0) return;
+    setTagMessage((prev) => prev || autoTagMessage);
+  }, [diffCommits, tagAfterMerge, autoTagMessage]);
+
   const handleMerge = useCallback(async () => {
     if (!checkResult?.canMerge || !sourceBranch || !targetBranch) return;
     const targetRemoteName = (targetBranch || "").replace(/^origin\//, "");
+    const tagInfo = tagAfterMerge && tagName.trim()
+      ? `\n合并后打 tag「${tagName.trim()}」并推送\nTag 内容：${tagMessage}`
+      : "";
     if (!window.confirm(
       `确认把 ${sourceBranch} 合并进 ${targetBranch}？\n` +
       `将在隔离 worktree 中执行 git merge --no-ff ${sourceBranch}，不会切换当前工作区分支` +
-      `${pushAfterMerge ? `\n合并后推送到远程 origin/${targetRemoteName}` : "\n合并结果仅更新本地分支引用，不推送远程"}`
+      `${pushAfterMerge ? `\n合并后推送到远程 origin/${targetRemoteName}` : "\n合并结果仅更新本地分支引用，不推送远程"}` +
+      tagInfo
     )) {
       return;
     }
@@ -286,6 +321,8 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
         source: sourceBranch,
         target: targetBranch,
         push: pushAfterMerge,
+        tag: tagAfterMerge ? tagName.trim() : "",
+        tagMessage: tagAfterMerge ? tagMessage : "",
       });
       setMergeProgress(100);
       setMergeProgressMessage("合并完成");
@@ -303,7 +340,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       setMergeResultMessage(message);
       setMergeOverlayPhase("error");
     }
-  }, [checkResult, resolvedRepoPath, sourceBranch, targetBranch, repoPath, pushAfterMerge, loadBranches, closeMergeOverlay]);
+  }, [checkResult, resolvedRepoPath, sourceBranch, targetBranch, repoPath, pushAfterMerge, tagAfterMerge, tagName, tagMessage, loadBranches, closeMergeOverlay]);
 
   const canMerge = checkResult?.canMerge === true;
   const isSameBranch = Boolean(sourceBranch && targetBranch && sourceBranch === targetBranch);
@@ -486,6 +523,28 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       ? "can-merge"
       : "has-conflict";
 
+  // 勾选打 tag 时自动生成默认 tag 名（用户可修改）
+  const defaultTagName = useMemo(() => {
+    if (!sourceBranch || !targetBranch) return "";
+    const src = sourceBranch.replace(/^origin\//, "");
+    const dst = targetBranch.replace(/^origin\//, "");
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    return `merge-${src}-to-${dst}-${dateStr}`;
+  }, [sourceBranch, targetBranch]);
+
+  const handleTagAfterMergeChange = useCallback((checked: boolean) => {
+    setTagAfterMerge(checked);
+    if (checked) {
+      setTagName(defaultTagName);
+      setTagMessage(autoTagMessage);
+    } else {
+      setTagName("");
+      setTagMessage("");
+    }
+  }, [defaultTagName, autoTagMessage, tagMessage]);
+
   const handleSourceBranchChange = useCallback((v: string) => {
     setSourceBranch(v);
     setCheckResult(null);
@@ -494,6 +553,9 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     setDiffError("");
     setDiffCommitSearch("");
     setSelectedAuthor("");
+    setTagAfterMerge(false);
+    setTagName("");
+    setTagMessage("");
   }, []);
 
   const handleTargetBranchChange = useCallback((v: string) => {
@@ -504,6 +566,16 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     setDiffError("");
     setDiffCommitSearch("");
     setSelectedAuthor("");
+    // 切换到 master/main 时自动开启打 tag
+    const normalized = v.replace(/^origin\//, "");
+    if (normalized === "master" || normalized === "main") {
+      // 等 diffCommits 加载后再自动填内容，这里先开启开关、填入默认 tag 名
+      setTagAfterMerge(true);
+    } else {
+      setTagAfterMerge(false);
+      setTagName("");
+      setTagMessage("");
+    }
   }, []);
 
   return {
@@ -576,5 +648,13 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     jumpConflictBlock,
     onOpenDirectory,
     config,
+    tagAfterMerge,
+    tagName,
+    tagMessage,
+    handleTagAfterMergeChange,
+    setTagName,
+    setTagMessage,
+    defaultTagName,
+    autoTagMessage,
   };
 }

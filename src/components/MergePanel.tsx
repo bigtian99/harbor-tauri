@@ -67,6 +67,11 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
         branchNames={m.branchNames}
         isLoadingBranches={m.isLoadingBranches}
         pushAfterMerge={m.pushAfterMerge}
+        tagAfterMerge={m.tagAfterMerge}
+        tagName={m.tagName}
+        tagMessage={m.tagMessage}
+        defaultTagName={m.defaultTagName}
+        defaultTagMessage={m.autoTagMessage}
         isChecking={m.isChecking}
         isMerging={m.isMerging}
         checkResult={m.checkResult}
@@ -91,6 +96,9 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
         onSourceBranchChange={m.handleSourceBranchChange}
         onTargetBranchChange={m.handleTargetBranchChange}
         onPushAfterMergeChange={m.setPushAfterMerge}
+        onTagAfterMergeChange={m.handleTagAfterMergeChange}
+        onTagNameChange={m.setTagName}
+        onTagMessageChange={m.setTagMessage}
         onCheck={m.handleCheck}
         onMerge={m.handleMerge}
         onLoadConflictDiff={m.loadConflictDiff}
