@@ -10,6 +10,12 @@ import {
 import { resolveOpsInitialTab, resolveTabForOpsMode } from "../opsNavigation";
 
 
+export type DiagDateInfo = {
+  date: string;
+  size: number;
+  lines: number;
+};
+
 function withSessionConfigDefaults(config: HarborConfig): HarborConfig {
   return { ...config, ops_authorization: config.ops_authorization ?? "" };
 }
@@ -77,6 +83,8 @@ export function useAppConfig(deps: UseAppConfigDeps) {
   const [showLogViewer, setShowLogViewer] = useState(false);
   const [logContent, setLogContent] = useState("");
   const [logSearch, setLogSearch] = useState("");
+  const [logDates, setLogDates] = useState<DiagDateInfo[]>([]);
+  const [logDay, setLogDay] = useState<string | null>(null); // null = 最近 3 天（默认）
   const opsModeInitializedRef = useRef(false);
 
   const handleTabChange = useCallback(
@@ -223,13 +231,51 @@ export function useAppConfig(deps: UseAppConfigDeps) {
   }
 
   async function openDiagnosticLog() {
+    setLogDay(null);
     try {
-      const content = await invoke<string>("read_diagnostic_log", { lines: 300 });
+      const content = await invoke<string>("read_diagnostic_log", {
+        lines: 300,
+        day: null,
+      });
       setLogContent(content);
+      // 同时刷新日期下拉
+      try {
+        const dates = await invoke<DiagDateInfo[]>("list_diagnostic_log_dates");
+        setLogDates(dates);
+      } catch {
+        // 非 Tauri 环境/未初始化：忽略
+      }
     } catch (e) {
       setLogContent(String(e));
     }
     setShowLogViewer(true);
+  }
+
+  /**
+   * 切换诊断日志日期。
+   * - `day === null`：取消过滤，回到「最近 ≤3 天合并」默认行为。
+   * - `day === "YYYY-MM-DD"`：仅读该日文件。
+   */
+  async function selectDiagnosticDay(day: string | null): Promise<void> {
+    setLogDay(day);
+    try {
+      const content = await invoke<string>("read_diagnostic_log", {
+        lines: 300,
+        day: day ?? null,
+      });
+      setLogContent(content);
+    } catch (e) {
+      setLogContent(String(e));
+    }
+  }
+
+  async function refreshDiagnosticDates(): Promise<void> {
+    try {
+      const dates = await invoke<DiagDateInfo[]>("list_diagnostic_log_dates");
+      setLogDates(dates);
+    } catch {
+      // 非 Tauri 环境/未初始化：忽略
+    }
   }
 
   async function downloadDiagnosticLog(
@@ -257,6 +303,26 @@ export function useAppConfig(deps: UseAppConfigDeps) {
       showToast?.(`日志已导出：${saved}`);
     } catch (e) {
       showToast?.(`导出失败：${String(e)}`);
+    }
+  }
+
+  /** 在文件管理器中定位当前诊断日志文件（按下拉选中的日期，默认今天）。 */
+  async function revealDiagnosticLogFile(
+    showToast?: (message: string) => void,
+  ): Promise<void> {
+    if (!isTauriRuntime()) {
+      showToast?.("浏览器环境下无法打开日志目录");
+      return;
+    }
+    try {
+      const todayPath = await invoke<string>("get_templates_diagnostic_log_path");
+      // 选中某一天时，把文件名里的日期替换成该日期
+      const path = logDay
+        ? todayPath.replace(/diagnostic-\d{4}-\d{2}-\d{2}\.log$/, `diagnostic-${logDay}.log`)
+        : todayPath;
+      await invoke("open_directory", { path });
+    } catch (e) {
+      showToast?.(`打开日志目录失败：${String(e)}`);
     }
   }
 
@@ -327,6 +393,10 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     logContent,
     logSearch,
     setLogSearch,
+    logDates,
+    logDay,
+    selectDiagnosticDay,
+    refreshDiagnosticDates,
     handleTabChange,
     loadConfig,
     handleSaveConfig,
@@ -339,5 +409,6 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     handleManualCheckUpdate,
     openDiagnosticLog,
     downloadDiagnosticLog,
+    revealDiagnosticLogFile,
   };
 }

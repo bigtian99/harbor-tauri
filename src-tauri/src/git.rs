@@ -164,9 +164,10 @@ pub async fn list_git_branches_from_url(url: String) -> Result<Vec<GitBranchOpti
                 let parts: Vec<&str> = line.splitn(2, '\t').collect();
                 if parts.len() == 2 {
                     let ref_name = parts[1].trim();
-                    // refs/heads/xxx → xxx
+                    // refs/heads/xxx → origin/xxx，与 list_known_git_branches 格式一致，
+                    // 确保后续 clone 后在仓库中能通过 origin/<name> 找到该分支
                     ref_name.strip_prefix("refs/heads/").map(|name| GitBranchOption {
-                        name: name.to_string(),
+                        name: format!("origin/{}", name),
                     })
                 } else {
                     None
@@ -189,7 +190,7 @@ pub async fn clone_repo(url: String) -> Result<String, String> {
         .map_err(|e| format!("克隆线程异常: {}", e))?
 }
 
-/// 同步版：确保远程 URL 对应的本地缓存仓库存在（存在则 fetch 更新，不存在则浅克隆），返回缓存目录。
+/// 同步版：确保远程 URL 对应的本地缓存仓库存在（存在则 fetch 更新，不存在则全量克隆），返回缓存目录。
 pub(crate) fn ensure_cloned_repo(url: &str) -> Result<PathBuf, String> {
     let name = repo_name_from_url(url);
     let cache_dir = dirs::cache_dir()
@@ -199,14 +200,27 @@ pub(crate) fn ensure_cloned_repo(url: &str) -> Result<PathBuf, String> {
         .join(&name);
 
     if cache_dir.exists() {
-        silent_command("git")
-            .args(["fetch", "--all", "--prune"])
+        // 旧版本可能留下 shallow clone，需要 unshallow 才能正确计算 merge-base
+        let is_shallow = std::process::Command::new("git")
+            .args(["rev-parse", "--is-shallow-repository"])
             .current_dir(&cache_dir)
             .output()
-            .map_err(|e| format!("git fetch 失败: {}", e))?;
-    } else {
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "true")
+            .unwrap_or(false);
+        if is_shallow {
+            // ponytail: 删掉 shallow clone 重新全量克隆，比 fetch --unshallow 更可靠
+            fs::remove_dir_all(&cache_dir).ok();
+        } else {
+            silent_command("git")
+                .args(["fetch", "--all", "--prune"])
+                .current_dir(&cache_dir)
+                .output()
+                .map_err(|e| format!("git fetch 失败: {}", e))?;
+        }
+    }
+    if !cache_dir.exists() {
         let output = silent_command("git")
-            .args(["clone", "--depth", "1", "--no-single-branch", url])
+            .args(["clone", "--no-single-branch", url])
             .arg(&cache_dir)
             .output()
             .map_err(|e| format!("git clone 失败: {}", e))?;
@@ -223,7 +237,7 @@ pub(crate) fn ensure_cloned_repo(url: &str) -> Result<PathBuf, String> {
 /// 把用户输入（本地目录或 Git URL）解析成本地仓库根路径。
 /// - Git URL：调 ensure_cloned_repo 克隆/更新到缓存目录后返回。
 /// - 本地目录：直接 repo_root_for。
-fn resolve_repo_root(input: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_repo_root(input: &str) -> Result<PathBuf, String> {
     let input = input.trim();
     if input.is_empty() {
         return Err("仓库路径不能为空".to_string());
@@ -316,7 +330,7 @@ pub async fn check_remote_merge(
             &["merge-tree", "--write-tree", "--no-messages", &target, &source],
         );
         if stderr.contains("unknown option") || stderr.contains("usage:") {
-            // 老版本回退
+            // 老版本回退：用 merge-base + merge-tree（无 --write-tree）
             let (base_ok, base_out, _) = run_git_capture(&repo_root, &["merge-base", &target, &source]);
             if !base_ok {
                 return Ok(LocalMergeCheck {

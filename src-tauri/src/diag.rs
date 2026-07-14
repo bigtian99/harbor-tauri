@@ -211,13 +211,34 @@ pub async fn get_templates_diagnostic_log_path() -> Result<String, String> {
         .ok_or_else(|| "诊断日志尚未初始化，请重启应用后再试".to_string())
 }
 
-/// 读取最近 ≤3 个按日诊断文件（及旧版单文件回退），**新日志在前**。
+/// 读取诊断日志：**新日志在前**。
+///
+/// - `day = None`（默认）：合并最近 ≤3 个按日文件 + 旧版 `templates-diagnostic.log` 回退
+/// - `day = Some("YYYY-MM-DD")`：只读该日文件，不存在返回空字符串
 #[tauri::command]
-pub async fn read_diagnostic_log(lines: Option<usize>) -> Result<String, String> {
+pub async fn read_diagnostic_log(
+    lines: Option<usize>,
+    day: Option<String>,
+) -> Result<String, String> {
+    if let Some(ref d) = day {
+        validate_day(d)?;
+    }
     let max_lines = lines.unwrap_or(300);
-    tauri::async_runtime::spawn_blocking(move || read_diagnostic_log_sync(max_lines))
+    let day_owned = day;
+    tauri::async_runtime::spawn_blocking(move || {
+        read_diagnostic_log_sync(max_lines, day_owned.as_deref())
+    })
+    .await
+    .map_err(|e| format!("读取日志任务异常: {e}"))?
+}
+
+/// 列出所有可读的按日日志日期（`diagnostic-YYYY-MM-DD.log`），按日期**降序**。
+/// 未初始化或无任何按日文件时返回空数组。
+#[tauri::command]
+pub async fn list_diagnostic_log_dates() -> Result<Vec<DiagDateInfo>, String> {
+    tauri::async_runtime::spawn_blocking(list_diagnostic_log_dates_sync)
         .await
-        .map_err(|e| format!("读取日志任务异常: {e}"))?
+        .map_err(|e| format!("日志日期列表任务异常: {e}"))?
 }
 
 /// 导出完整诊断日志（最近 ≤3 天 + 旧文件回退）到用户指定路径，**旧→新**。
@@ -228,13 +249,31 @@ pub async fn export_diagnostic_log(path: String) -> Result<String, String> {
         .map_err(|e| format!("导出日志任务异常: {e}"))?
 }
 
+#[derive(serde::Serialize)]
+pub struct DiagDateInfo {
+    pub date: String,
+    pub size: u64,
+    pub lines: u64,
+}
+
+fn validate_day(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("无效的日期格式：(空字符串)".to_string());
+    }
+    if is_yyyy_mm_dd(s) {
+        Ok(())
+    } else {
+        Err(format!("无效的日期格式: {s}（期望 YYYY-MM-DD）"))
+    }
+}
+
 fn export_diagnostic_log_sync(path: String) -> Result<String, String> {
     let path = path.trim();
     if path.is_empty() {
         return Err("导出路径为空".to_string());
     }
     let out = PathBuf::from(path);
-    let lines = collect_diagnostic_lines()?;
+    let lines = collect_diagnostic_lines_window()?;
     if lines.is_empty() {
         return Err("暂无诊断日志可导出".to_string());
     }
@@ -255,8 +294,12 @@ fn export_diagnostic_log_sync(path: String) -> Result<String, String> {
     Ok(out.to_string_lossy().to_string())
 }
 
-fn read_diagnostic_log_sync(max_lines: usize) -> Result<String, String> {
-    let all_lines = collect_diagnostic_lines()?;
+fn read_diagnostic_log_sync(max_lines: usize, day: Option<&str>) -> Result<String, String> {
+    let all_lines = if let Some(d) = day {
+        collect_diagnostic_lines_for_day(d)?
+    } else {
+        collect_diagnostic_lines_window()?
+    };
     if all_lines.is_empty() {
         return Ok(String::new());
     }
@@ -269,8 +312,8 @@ fn read_diagnostic_log_sync(max_lines: usize) -> Result<String, String> {
         .join("\n"))
 }
 
-/// 收集诊断行（文件时间序：旧→新）。空表示尚无日志。
-fn collect_diagnostic_lines() -> Result<Vec<String>, String> {
+/// 收集诊断行（最近 ≤3 天 + 旧文件回退，文件时间序：旧→新）。空表示尚无日志。
+fn collect_diagnostic_lines_window() -> Result<Vec<String>, String> {
     let dir = diagnostic_log_dir().ok_or_else(|| "诊断日志尚未初始化".to_string())?;
     let day_files = list_recent_day_files(&dir, 3);
 
@@ -318,6 +361,67 @@ fn collect_diagnostic_lines() -> Result<Vec<String>, String> {
         return Err(format!("读取日志失败: {}", read_errors.join("; ")));
     }
     Ok(all_lines)
+}
+
+/// 按日期收集单日日志行（文件时间序：旧→新）。
+/// 不存在该日文件视为"当日无日志"，返回空 Vec（不报错）。
+fn collect_diagnostic_lines_for_day(day: &str) -> Result<Vec<String>, String> {
+    validate_day(day)?;
+    let dir = match diagnostic_log_dir() {
+        Some(d) => d,
+        None => return Ok(Vec::new()),
+    };
+    let path = dir.join(format!("diagnostic-{day}.log"));
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    let _guard = lock_log();
+    let content = fs::read_to_string(&path)
+        .map_err(|e| format!("读取 {} 失败: {e}", path.display()))?;
+    drop(_guard);
+    Ok(content.lines().map(|s| s.to_string()).collect())
+}
+
+/// 列出有日志的日期信息，按日期降序。
+fn list_diagnostic_log_dates_sync() -> Result<Vec<DiagDateInfo>, String> {
+    let dir = match diagnostic_log_dir() {
+        Some(d) => d,
+        None => return Ok(Vec::new()),
+    };
+    let Ok(rd) = fs::read_dir(&dir) else {
+        return Ok(Vec::new());
+    };
+    let mut items: Vec<DiagDateInfo> = Vec::new();
+    for entry in rd.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let Some(date) = name
+            .strip_prefix("diagnostic-")
+            .and_then(|s| s.strip_suffix(".log"))
+        else {
+            continue;
+        };
+        if !is_yyyy_mm_dd(date) {
+            continue;
+        }
+        let meta = match fs::metadata(&path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let size = meta.len();
+        let lines = fs::read_to_string(&path)
+            .map(|c| c.lines().count() as u64)
+            .unwrap_or(0);
+        items.push(DiagDateInfo {
+            date: date.to_string(),
+            size,
+            lines,
+        });
+    }
+    items.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(items)
 }
 
 /// 返回最多 `max_days` 个 `diagnostic-YYYY-MM-DD.log`，按日期升序。
@@ -445,5 +549,82 @@ mod tests {
         assert!(!mixed.contains("ab12"), "{mixed}");
         assert!(mixed.contains("诊断"), "{mixed}");
         assert!(mixed.contains("password=***"), "{mixed}");
+    }
+
+    #[test]
+    fn validate_day_accepts_rejects_and_empty() {
+        assert!(validate_day("2026-07-12").is_ok());
+        assert!(validate_day("2026-07-01").is_ok());
+        assert!(validate_day("2026-7-12").is_err());
+        assert!(validate_day("2026-13-01").is_err());
+        assert!(validate_day("2026-00-10").is_err());
+        assert!(validate_day("2026-07-32").is_err());
+        assert!(validate_day("not-a-date").is_err());
+        assert!(validate_day("").is_err());
+        assert!(matches!(
+            validate_day("2026-07-12").map(|_| ()),
+            Ok(())
+        ));
+    }
+
+    #[test]
+    fn diags_date_path_format_and_selection() {
+        // 验证「列表」逻辑会筛选出合法日期、过滤无效文件
+        let dir = std::env::temp_dir().join(format!(
+            "jarporter-diag-test-dates-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let cases = [
+            ("diagnostic-2026-07-08.log", "line-old1\n"),
+            ("diagnostic-2026-07-09.log", "line-old2\nline-old3\n"),
+            ("diagnostic-2026-07-10.log", "line-new1\n"),
+            ("diagnostic-2026-07-11.log", "line-new2\nline-new3\nline-new4\n"),
+            ("diagnostic-2026-13-99.log", "bad-date\n"),   // 伪日期应过滤
+            ("diagnostic-xxxx-yy-zz.log", "bad-name\n"),  // 非法命名应过滤
+            ("templates-diagnostic.log", "old-legacy\n"),  // 旧日志不进日期列表
+            ("junk.txt", "x\n"),
+        ];
+        for (name, content) in cases {
+            fs::write(dir.join(name), content).unwrap();
+        }
+
+        // is_yyyy_mm_dd 过滤
+        assert!(is_yyyy_mm_dd("2026-07-08"));
+        assert!(!is_yyyy_mm_dd("2026-13-99"));
+        assert!(!is_yyyy_mm_dd("xxxx-yy-zz"));
+
+        // 路径拼接
+        let day = "2026-07-10";
+        let p = dir.join(format!("diagnostic-{day}.log"));
+        assert!(p.is_file(), "path join wrong: {}", p.display());
+        let content = fs::read_to_string(&p).unwrap();
+        assert_eq!(content.lines().count(), 1);
+
+        // 清理
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn diags_date_iso_sort_desc() {
+        // 直接验证 Dict 序 == 时间降序（YYYY-MM-DD 字典序 === 时间序）
+        let mut dates = vec![
+            "2026-07-08".to_string(),
+            "2026-07-11".to_string(),
+            "2026-07-09".to_string(),
+            "2026-07-10".to_string(),
+        ];
+        dates.sort_by(|a, b| b.cmp(a));
+        assert_eq!(
+            dates,
+            vec![
+                "2026-07-11".to_string(),
+                "2026-07-10".to_string(),
+                "2026-07-09".to_string(),
+                "2026-07-08".to_string(),
+            ]
+        );
     }
 }

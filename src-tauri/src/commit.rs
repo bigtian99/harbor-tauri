@@ -37,14 +37,9 @@ pub async fn get_last_commit(
     repo_path: String,
     branch: Option<String>,
 ) -> Result<LastCommitInfo, String> {
-    let repo_path = PathBuf::from(repo_path);
-    if !repo_path.is_dir() {
-        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
-    }
-
     let branch = branch.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = repo_root_for(&repo_path)?;
+        let repo_root = crate::git::resolve_repo_root(&repo_path)?;
         let rev = if branch.trim().is_empty() {
             "HEAD".to_string()
         } else {
@@ -88,14 +83,9 @@ pub async fn get_commit_authors(
     repo_path: String,
     branch: Option<String>,
 ) -> Result<Vec<AuthorInfo>, String> {
-    let repo_path = PathBuf::from(repo_path);
-    if !repo_path.is_dir() {
-        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
-    }
-
     let branch = branch.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = repo_root_for(&repo_path)?;
+        let repo_root = crate::git::resolve_repo_root(&repo_path)?;
         let rev = if branch.trim().is_empty() {
             "HEAD".to_string()
         } else {
@@ -142,11 +132,6 @@ pub async fn get_commit_list(
     author_filter: Option<String>,
     message_filter: Option<String>,
 ) -> Result<CommitListResult, String> {
-    let repo_path = PathBuf::from(repo_path);
-    if !repo_path.is_dir() {
-        return Err(format!("仓库路径不是目录: {}", repo_path.display()));
-    }
-
     let branch = branch.unwrap_or_default();
     let author_filter = author_filter.unwrap_or_default();
     let message_filter = message_filter.unwrap_or_default();
@@ -154,7 +139,7 @@ pub async fn get_commit_list(
     let page_size = page_size.unwrap_or(10).max(1).min(50);
 
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = repo_root_for(&repo_path)?;
+        let repo_root = crate::git::resolve_repo_root(&repo_path)?;
         let rev = if branch.trim().is_empty() {
             "HEAD".to_string()
         } else {
@@ -258,28 +243,29 @@ pub async fn list_branch_diff_commits(
     source: String,
     target: String,
 ) -> Result<Vec<CommitInfo>, String> {
-    let repo_path = PathBuf::from(repo_path);
     let source = source.trim().to_string();
     let target = target.trim().to_string();
     if source.is_empty() || target.is_empty() {
         return Err("源分支和目标分支都不能为空".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = repo_root_for(&repo_path)?;
-        // URL 合并场景可能来自浅克隆缓存仓库。差异提交需要完整历史，否则 target..source
-        // 可能少算甚至返回空。这里先确保远程引用和历史完整。
+        let repo_root = crate::git::resolve_repo_root(&repo_path)?;
+        // 差异提交需要完整历史，确保远程引用最新
         let is_shallow = git_output(&repo_root, &["rev-parse", "--is-shallow-repository"])
             .map(|s| s.trim() == "true")
             .unwrap_or(false);
-        let fetch_args = if is_shallow {
-            vec!["fetch", "--all", "--prune", "--unshallow"]
+        if is_shallow {
+            // ponytail: 用户本地仓库可能是 shallow clone，需要 unshallow 才能正确计算 target..source
+            let _ = silent_command("git")
+                .args(["fetch", "--all", "--prune", "--unshallow"])
+                .current_dir(&repo_root)
+                .output();
         } else {
-            vec!["fetch", "--all", "--prune"]
-        };
-        let _ = silent_command("git")
-            .args(fetch_args)
-            .current_dir(&repo_root)
-            .output();
+            let _ = silent_command("git")
+                .args(["fetch", "--all", "--prune"])
+                .current_dir(&repo_root)
+                .output();
+        }
 
         let rev_range = format!("{target}..{source}");
         let output = git_output(

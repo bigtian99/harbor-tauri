@@ -25,7 +25,10 @@ use history::{
     clear_build_history, delete_artifact_path, delete_build_record,
     get_build_history, save_build_record, update_build_record_image,
 };
-use diag::{export_diagnostic_log, get_templates_diagnostic_log_path, read_diagnostic_log};
+use diag::{
+    export_diagnostic_log, get_templates_diagnostic_log_path,
+    list_diagnostic_log_dates, read_diagnostic_log,
+};
 
 use landing::{
     fetch_sub_channels, fetch_vest_data, generate_landing_pages, generate_vest_landing_pages,
@@ -101,6 +104,7 @@ pub fn run() {
             get_bundled_templates_dir,
             get_templates_diagnostic_log_path,
             read_diagnostic_log,
+            list_diagnostic_log_dates,
             export_diagnostic_log,
             get_preview_server_info,
 

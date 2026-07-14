@@ -213,66 +213,61 @@ pub async fn check_dockerfile(repo_path: String, branch: String) -> Result<bool,
 
 #[tauri::command]
 pub async fn detect_spring_profiles(repo_path: String, branch: String) -> Result<Vec<String>, String> {
-    let repo_path_str = repo_path.trim();
-    let branch = branch.trim();
-    if repo_path_str.is_empty() || branch.is_empty() {
+    let repo_path = repo_path.trim().to_string();
+    let branch = branch.trim().to_string();
+    if repo_path.is_empty() || branch.is_empty() {
         return Ok(Vec::new());
     }
 
-    // Git URL 需要先克隆到缓存目录
-    let repo_root = if crate::git::is_git_url(repo_path_str) {
-        crate::git::ensure_cloned_repo(repo_path_str)?
-    } else {
-        let p = PathBuf::from(repo_path_str);
-        if !p.is_dir() {
-            return Err(format!("仓库路径不是目录: {}", p.display()));
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = crate::git::resolve_repo_root(&repo_path)?;
+
+        // 用 git ls-tree 列出指定分支中所有 application-*.yml / application-*.properties 文件
+        let output = silent_command("git")
+            .args(["ls-tree", "-r", "--name-only", &branch])
+            .current_dir(&repo_root)
+            .output()
+            .map_err(|e| format!("执行 git ls-tree 失败: {}", e))?;
+
+        if !output.status.success() {
+            return Ok(Vec::new());
         }
-        repo_root_for(&p)?
-    };
 
-    // 用 git ls-tree 列出指定分支中所有 application-*.yml / application-*.properties 文件
-    let output = silent_command("git")
-        .args(["ls-tree", "-r", "--name-only", branch])
-        .current_dir(&repo_root)
-        .output()
-        .map_err(|e| format!("执行 git ls-tree 失败: {}", e))?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut profiles = Vec::new();
 
-    if !output.status.success() {
-        return Ok(Vec::new());
-    }
+        for line in stdout.lines() {
+            let file_name = line.rsplit('/').next().unwrap_or(line);
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut profiles = Vec::new();
-
-    for line in stdout.lines() {
-        let file_name = line.rsplit('/').next().unwrap_or(line);
-
-        // 匹配 application-{profile}.yml 或 application-{profile}.properties
-        let prefix = "application-";
-        if file_name.starts_with(prefix) {
-            let rest = &file_name[prefix.len()..];
-            // 去掉扩展名
-            let profile = if let Some(pos) = rest.rfind('.') {
-                &rest[..pos]
-            } else {
-                rest
-            };
-            // 过滤：不能为空、不能包含路径分隔符、不能是纯数字
-            if !profile.is_empty()
-                && !profile.contains('/')
-                && !profile.contains('\\')
-                && profile
-                    .chars()
-                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-                && !profiles.contains(&profile.to_string())
-            {
-                profiles.push(profile.to_string());
+            // 匹配 application-{profile}.yml 或 application-{profile}.properties
+            let prefix = "application-";
+            if file_name.starts_with(prefix) {
+                let rest = &file_name[prefix.len()..];
+                // 去掉扩展名
+                let profile = if let Some(pos) = rest.rfind('.') {
+                    &rest[..pos]
+                } else {
+                    rest
+                };
+                // 过滤：不能为空、不能包含路径分隔符、不能是纯数字
+                if !profile.is_empty()
+                    && !profile.contains('/')
+                    && !profile.contains('\\')
+                    && profile
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                    && !profiles.contains(&profile.to_string())
+                {
+                    profiles.push(profile.to_string());
+                }
             }
         }
-    }
 
-    profiles.sort();
-    Ok(profiles)
+        profiles.sort();
+        Ok(profiles)
+    })
+    .await
+    .map_err(|e| format!("检测 Spring Profile 线程异常: {e}"))?
 }
 
 #[tauri::command]

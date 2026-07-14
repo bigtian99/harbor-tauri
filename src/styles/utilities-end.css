@@ -58,6 +58,30 @@
   flex-shrink: 0;
 }
 .log-viewer-title-icon { color: #5eead4; flex-shrink: 0; }
+.log-viewer-day-select {
+  flex: 0 0 auto;
+  min-width: 280px;
+  width: 300px;
+  max-width: 360px;
+  height: 36px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #c9d1d9;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 36px;
+  outline: none;
+  cursor: pointer;
+}
+.log-viewer-day-select:focus { border-color: #5eead4; }
+.log-viewer-day-select option {
+  background: #161b22;
+  color: #c9d1d9;
+  font-size: 14px;
+  padding: 10px 14px;
+}
 .log-viewer-search-wrap {
   position: relative; display: flex; align-items: center;
   margin-left: auto; flex-shrink: 0;
@@ -67,8 +91,10 @@
 }
 .log-viewer-search {
   width: 200px;
+  height: 36px;
+  box-sizing: border-box;
   background: #161b22; border: 1px solid #30363d; border-radius: 6px;
-  color: #c9d1d9; padding: 6px 10px 6px 28px; font-size: 12px; outline: none;
+  color: #c9d1d9; padding: 0 10px 0 28px; font-size: 12px; outline: none;
 }
 .log-viewer-search:focus { border-color: #5eead4; }
 .log-viewer-search::placeholder { color: #484f58; }

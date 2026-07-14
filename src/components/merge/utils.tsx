@@ -84,6 +84,18 @@ export function parseConflictBlocks(diff: string): ConflictBlock[] {
   return blocks;
 }
 
+/** 匹配自动生成的合并提交信息，这些不应出现在 tag 内容中 */
+const AUTO_MERGE_PATTERNS = [
+  /^Merge (remote-tracking )?branch '/i,
+  /^Merge branch '/i,
+  /^Merge pull request #/i,
+  /^Merge remote-tracking branch /i,
+];
+
+export function isAutoMergeMessage(message: string): boolean {
+  return AUTO_MERGE_PATTERNS.some((p) => p.test(message));
+}
+
 export function summarizeMergeError(error: unknown): string {
   const msg = String(error).trim();
   if (!msg) return "合并失败，请稍后重试";

@@ -9,7 +9,7 @@ import type {
   TabType,
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
-import { isTauriRuntime, isGitUrl } from "../types";
+import { isTauriRuntime } from "../types";
 import { getRememberedBranchAdvancedSettings, rememberBranchRepoSettings } from "../branchSettings";
 import { prependPathHistory } from "./branch/pathHistory";
 import { useBranchCommits } from "./branch/useBranchCommits";
@@ -279,10 +279,8 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setSpringProfile("");
     if (value.trim() && repoPath) {
       await loadSpringProfiles(repoPath, value);
-      if (!isGitUrl(repoPath)) {
-        loadLastCommit(repoPath, value);
-        loadCommitList(repoPath, value, 1);
-      }
+      loadLastCommit(repoPath, value);
+      loadCommitList(repoPath, value, 1);
     } else {
       setSpringProfiles([]);
       setLastCommit(null);

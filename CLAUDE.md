@@ -107,7 +107,7 @@ pnpm release
 | 统一诊断 API | ✅ 已落地 | `crate::diag::diag_log(module, msg)`：写 stderr + 当天诊断文件 |
 | 按模块打标签 | ✅ 已落地 | 行格式 `[JarPorter][{module}] {message}`，可按 `[updater]` 等过滤 |
 | 按天滚动文件 | ✅ 已落地 | `app_log_dir/diagnostic-YYYY-MM-DD.log`（`diag::init` 于启动时设置目录） |
-| 侧边栏「系统日志」 | ✅ 已落地 | `read_diagnostic_log` 合并最近 ≤3 天文件，**新日志在前**，支持关键词搜索 |
+| 侧边栏「系统日志」 | ✅ 已落地 | `read_diagnostic_log` 默认合并最近 ≤3 天，**新日志在前**，支持关键词搜索与日期下拉切换 |
 | 兼容入口 | ✅ 已落地 | `templates_log(msg)` ≡ `diag_log("templates", msg)` |
 
 **结论**：业务路径必须用 `diag_log` 带正确模块名；禁止业务路径仅用 `eprintln!`（系统日志看不到）。  
@@ -167,7 +167,8 @@ templates_log("list_template_infos ok"); // ≡ diag_log("templates", ...)
 **存储与读取**：
 
 - 写入：当天文件 `diagnostic-YYYY-MM-DD.log`（目录由 `diag::init` 设为 `app_log_dir`）
-- 读取：`read_diagnostic_log` 合并最近 **≤3 天** 的 `diagnostic-*.log`，新日志在前
+- 读取：`read_diagnostic_log` 默认合并最近 **≤3 天** 的 `diagnostic-*.log`，新日志在前；传 `{ day: "YYYY-MM-DD" }` 时仅读该日
+- 列日期：`list_diagnostic_log_dates` 返回 `[{date, size, lines}]`（按日期降序），供 UI 日期下拉
 - 路径查询：`get_templates_diagnostic_log_path` 返回当天文件路径
 
 规则：
@@ -186,7 +187,8 @@ templates_log("list_template_infos ok"); // ≡ diag_log("templates", ...)
 
 ### 日志查看与验收
 
-- 入口：侧边栏底部 **「系统日志」** → `read_diagnostic_log`（最近 ≤3 天合并）
+- 入口：侧边栏底部 **「系统日志」** → `read_diagnostic_log`（默认最近 ≤3 天合并）
+- 按日期切换：顶部日期下拉默认「最近 3 天」；选 `YYYY-MM-DD` 时传 `{ day }` 仅读该日；选项来自 `list_diagnostic_log_dates`
 - 搜索：`[模块名]` 过滤模块；再叠加关键词（如 `check_update`、`FTP`）
 - 开发完成自检：打开系统日志 → 搜本功能模块 tag → 确认关键步骤有记录且模块名正确
 - 当天文件：`get_templates_diagnostic_log_path`（打包后 GUI 无控制台时可直接打开该路径）

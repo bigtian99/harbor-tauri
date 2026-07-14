@@ -9,7 +9,7 @@ import type {
 } from "../../types";
 import { isTauriRuntime } from "../../types";
 import type { MergeOverlayPhase } from "./types";
-import { parseChangedLines, parseConflictBlocks, summarizeMergeError } from "./utils";
+import { isAutoMergeMessage, parseChangedLines, parseConflictBlocks, summarizeMergeError } from "./utils";
 
 export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: string) => void) {
   const [repoPath, setRepoPath] = useState("");
@@ -280,7 +280,8 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     let idx = 1;
     for (const c of diffCommits) {
       const firstLine = c.message.split("\n")[0].trim();
-      if (firstLine && !seen.has(firstLine)) {
+      // 过滤自动生成的合并提交信息
+      if (firstLine && !seen.has(firstLine) && !isAutoMergeMessage(firstLine)) {
         seen.add(firstLine);
         lines.push(`${idx}. ${firstLine}`);
         idx++;

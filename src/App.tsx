@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { CheckCircle, ScrollText, Search, X, Download } from "lucide-react";
+import { CheckCircle, ScrollText, Search, X, Download, FolderOpen } from "lucide-react";
 
 
 import { Sidebar } from "./components/Sidebar";
@@ -327,6 +327,23 @@ function App() {
             <div className="log-viewer-header">
               <ScrollText size={18} className="log-viewer-title-icon" />
               <h3>系统诊断日志</h3>
+              <select
+                className="log-viewer-day-select"
+                value={app.logDay ?? ""}
+                title="切换日志日期"
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  void app.selectDiagnosticDay(v ? v : null);
+                }}
+              >
+                <option value="">最近 3 天</option>
+                {app.logDates.map((d) => (
+                  <option key={d.date} value={d.date}>
+                    {d.date}（{d.lines} 行 / {(d.size / 1024).toFixed(1)} KB）
+                  </option>
+                ))}
+              </select>
               <div className="log-viewer-search-wrap">
                 <Search size={14} className="log-viewer-search-icon" />
                 <input
@@ -344,6 +361,15 @@ function App() {
                   </button>
                 )}
               </div>
+              <button
+                type="button"
+                className="log-viewer-download"
+                title="在文件管理器中打开日志文件"
+                onClick={() => void app.revealDiagnosticLogFile(showToast)}
+              >
+                <FolderOpen size={16} />
+                目录
+              </button>
               <button
                 type="button"
                 className="log-viewer-download"

@@ -175,7 +175,7 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
       if (branchProjectType === "maven" && targetBranch) {
         await loadSpringProfiles(nextRepoPath, targetBranch, requestId);
       }
-      if (targetBranch && !isUrl) {
+      if (targetBranch) {
         loadLastCommit(nextRepoPath, targetBranch, requestId);
         loadCommitList(nextRepoPath, targetBranch, 1, undefined, undefined, requestId);
       }
