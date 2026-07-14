@@ -72,6 +72,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
         tagMessage={m.tagMessage}
         defaultTagName={m.defaultTagName}
         defaultTagMessage={m.autoTagMessage}
+        useQuickMerge={m.useQuickMerge}
         isChecking={m.isChecking}
         isMerging={m.isMerging}
         checkResult={m.checkResult}
@@ -97,6 +98,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
         onTargetBranchChange={m.handleTargetBranchChange}
         onPushAfterMergeChange={m.setPushAfterMerge}
         onTagAfterMergeChange={m.handleTagAfterMergeChange}
+        onUseQuickMergeChange={m.setUseQuickMerge}
         onTagNameChange={m.setTagName}
         onTagMessageChange={m.setTagMessage}
         onCheck={m.handleCheck}

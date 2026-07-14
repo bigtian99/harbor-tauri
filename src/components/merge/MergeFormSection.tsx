@@ -22,6 +22,7 @@ interface MergeFormSectionProps {
   tagMessage: string;
   defaultTagName: string;
   defaultTagMessage: string;
+  useQuickMerge: boolean;
   isChecking: boolean;
   isMerging: boolean;
   checkResult: LocalMergeCheck | null;
@@ -47,6 +48,7 @@ interface MergeFormSectionProps {
   onTargetBranchChange: (value: string) => void;
   onPushAfterMergeChange: (checked: boolean) => void;
   onTagAfterMergeChange: (checked: boolean) => void;
+  onUseQuickMergeChange: (checked: boolean) => void;
   onTagNameChange: (value: string) => void;
   onTagMessageChange: (value: string) => void;
   onCheck: () => void;
@@ -72,6 +74,7 @@ export function MergeFormSection({
   tagMessage,
   defaultTagName,
   defaultTagMessage,
+  useQuickMerge,
   isChecking,
   isMerging,
   checkResult,
@@ -97,6 +100,7 @@ export function MergeFormSection({
   onTargetBranchChange,
   onPushAfterMergeChange,
   onTagAfterMergeChange,
+  onUseQuickMergeChange,
   onTagNameChange,
   onTagMessageChange,
   onCheck,
@@ -189,6 +193,24 @@ export function MergeFormSection({
           />
           <span className="checkbox-toggle"></span>
           <span>合并后推送到远程</span>
+        </label>
+        <label className="checkbox-label" style={{ marginLeft: 16 }}>
+          <input
+            type="checkbox"
+            checked={tagAfterMerge}
+            onChange={(e) => onTagAfterMergeChange(e.target.checked)}
+          />
+          <span className="checkbox-toggle"></span>
+          <span><Tag size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} />合并后打 tag 并推送</span>
+        </label>
+        <label className="checkbox-label" style={{ marginLeft: 16 }}>
+          <input
+            type="checkbox"
+            checked={useQuickMerge}
+            onChange={(e) => onUseQuickMergeChange(e.target.checked)}
+          />
+          <span className="checkbox-toggle"></span>
+          <span>快捷模式：rc-master → master</span>
         </label>
         <button
           type="button"
@@ -382,18 +404,6 @@ export function MergeFormSection({
         </div>
       )}
 
-      {/* 合并后打 tag */}
-      <div className="merge-toolbar">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={tagAfterMerge}
-            onChange={(e) => onTagAfterMergeChange(e.target.checked)}
-          />
-          <span className="checkbox-toggle"></span>
-          <span><Tag size={14} style={{ marginRight: 4 }} />合并后打 tag 并推送</span>
-        </label>
-      </div>
       {tagAfterMerge && (
         <div className="form-group" style={{ marginBottom: 12 }}>
           <label>Tag 名称</label>

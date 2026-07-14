@@ -23,6 +23,8 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
   const [isChecking, setIsChecking] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [pushAfterMerge, setPushAfterMerge] = useState(true);
+  // 快捷开关：默认 rc-master → master 并打 tag
+  const [useQuickMerge, setUseQuickMerge] = useState(false);
   // 合并后打 tag
   const [tagAfterMerge, setTagAfterMerge] = useState(false);
   const [tagName, setTagName] = useState("");
@@ -100,6 +102,13 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       if (result.branches.length === 0) {
         notifications.show({ message: "该仓库没有远程分支", color: "blue", autoClose: 2500 });
       }
+      // 快捷开关开启时，自动填入 rc-master → master
+      if (useQuickMerge) {
+        const rcMaster = result.branches.find((b) => b.name === "origin/rc-master");
+        const master = result.branches.find((b) => b.name === "origin/master");
+        if (rcMaster) setSourceBranch("origin/rc-master");
+        if (master) setTargetBranch("origin/master");
+      }
     } catch (e) {
       notifications.show({ title: "读取分支失败", message: String(e), color: "red", autoClose: 6000 });
       setBranches([]);
@@ -107,7 +116,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     } finally {
       setIsLoadingBranches(false);
     }
-  }, []);
+  }, [useQuickMerge]);
 
   const branchNames = branches.map((b) => b.name);
   // 联动过滤：源分支下拉排除已选的目标分支，目标分支下拉排除已选的源分支，
@@ -567,9 +576,9 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     setDiffError("");
     setDiffCommitSearch("");
     setSelectedAuthor("");
-    // 切换到 master/main 时自动开启打 tag
+    // 快捷开关开启时，或切换到 master/main 时自动开启打 tag
     const normalized = v.replace(/^origin\//, "");
-    if (normalized === "master" || normalized === "main") {
+    if (useQuickMerge || normalized === "master" || normalized === "main") {
       // 等 diffCommits 加载后再自动填内容，这里先开启开关、填入默认 tag 名
       setTagAfterMerge(true);
     } else {
@@ -577,7 +586,21 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       setTagName("");
       setTagMessage("");
     }
-  }, []);
+  }, [useQuickMerge]);
+
+  // 快捷模式开启时，如果已有分支数据则立即填充
+  useEffect(() => {
+    if (useQuickMerge && branches.length > 0) {
+      const rcMaster = branches.find((b) => b.name === "origin/rc-master");
+      const master = branches.find((b) => b.name === "origin/master");
+      if (rcMaster && sourceBranch !== "origin/rc-master") {
+        setSourceBranch("origin/rc-master");
+      }
+      if (master && targetBranch !== "origin/master") {
+        setTargetBranch("origin/master");
+      }
+    }
+  }, [useQuickMerge, branches, sourceBranch, targetBranch]);
 
   return {
     repoPath,
@@ -657,5 +680,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     setTagMessage,
     defaultTagName,
     autoTagMessage,
+    useQuickMerge,
+    setUseQuickMerge,
   };
 }
