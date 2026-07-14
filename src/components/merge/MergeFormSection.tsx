@@ -1,10 +1,11 @@
 import {
   AlertTriangle, ArrowRight, CheckCircle, ExternalLink, FileText, FolderOpen,
-  GitBranch, GitCommit, GitMerge, Info, Loader2, RefreshCw, Search, Tag
+  GitBranch, GitCommit, GitMerge, Info, Loader2, RefreshCw, Search, Settings, Tag
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "../SearchableDropdown";
 import { avatarColor, avatarInitials } from "../../avatarUrl";
+import { QuickMergeConfigModal } from "./QuickMergeConfigModal";
 import type { AuthorInfo, CommitInfo, HarborConfig, LocalMergeCheck } from "../../types";
 
 interface MergeFormSectionProps {
@@ -23,6 +24,7 @@ interface MergeFormSectionProps {
   defaultTagName: string;
   defaultTagMessage: string;
   useQuickMerge: boolean;
+  showQuickMergeConfig: boolean;
   isChecking: boolean;
   isMerging: boolean;
   checkResult: LocalMergeCheck | null;
@@ -49,6 +51,10 @@ interface MergeFormSectionProps {
   onPushAfterMergeChange: (checked: boolean) => void;
   onTagAfterMergeChange: (checked: boolean) => void;
   onUseQuickMergeChange: (checked: boolean) => void;
+  onShowQuickMergeConfig: (show: boolean) => void;
+  onQuickMergeConfigSaved: (source: string, target: string) => void;
+  quickMergeSource: string;
+  quickMergeTarget: string;
   onTagNameChange: (value: string) => void;
   onTagMessageChange: (value: string) => void;
   onCheck: () => void;
@@ -75,6 +81,7 @@ export function MergeFormSection({
   defaultTagName,
   defaultTagMessage,
   useQuickMerge,
+  showQuickMergeConfig,
   isChecking,
   isMerging,
   checkResult,
@@ -101,6 +108,10 @@ export function MergeFormSection({
   onPushAfterMergeChange,
   onTagAfterMergeChange,
   onUseQuickMergeChange,
+  onShowQuickMergeConfig,
+  onQuickMergeConfigSaved,
+  quickMergeSource,
+  quickMergeTarget,
   onTagNameChange,
   onTagMessageChange,
   onCheck,
@@ -210,8 +221,21 @@ export function MergeFormSection({
             onChange={(e) => onUseQuickMergeChange(e.target.checked)}
           />
           <span className="checkbox-toggle"></span>
-          <span>快捷模式：rc-master → master</span>
+          <span>预设分支</span>
         </label>
+        <button
+          type="button"
+          className="path-picker-btn"
+          style={{ marginLeft: 4, padding: "0 8px", position: "relative", zIndex: 10 }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onShowQuickMergeConfig(true);
+          }}
+          title="配置预设的源分支和目标分支"
+        >
+          <Settings size={14} style={{ display: 'block' }} />
+        </button>
         <button
           type="button"
           className="path-picker-btn"
@@ -468,6 +492,18 @@ export function MergeFormSection({
           )}
           <br />源/目标均为远程分支引用；主仓库当前分支与未提交改动不会被切换或覆盖。
         </p>
+      )}
+
+      {/* 快捷模式配置弹窗 */}
+      {showQuickMergeConfig && (
+        <QuickMergeConfigModal
+          config={config}
+          branchNames={branchNames}
+          initialSource={quickMergeSource}
+          initialTarget={quickMergeTarget}
+          onClose={() => onShowQuickMergeConfig(false)}
+          onSaved={onQuickMergeConfigSaved}
+        />
       )}
     </div>
   );

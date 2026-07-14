@@ -51,6 +51,9 @@ export interface HarborConfig {
   custom_docker_extras_dir: string;
   // 历史打包记录
   build_history: BuildRecord[];
+  // 快捷合并配置
+  quick_merge_source?: string;
+  quick_merge_target?: string;
 }
 
 export interface PackageFromBranchResult {

@@ -23,8 +23,16 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
   const [isChecking, setIsChecking] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [pushAfterMerge, setPushAfterMerge] = useState(true);
-  // 快捷开关：默认 rc-master → master 并打 tag
+  // 快捷开关：使用配置的分支自动填充
   const [useQuickMerge, setUseQuickMerge] = useState(false);
+  const [showQuickMergeConfig, setShowQuickMergeConfig] = useState(false);
+  // 预设分支（本地缓存，弹窗保存后立即可用；同时跟随 config 同步）
+  const [quickMergeSource, setQuickMergeSource] = useState(config.quick_merge_source || "origin/rc-master");
+  const [quickMergeTarget, setQuickMergeTarget] = useState(config.quick_merge_target || "origin/master");
+  useEffect(() => {
+    setQuickMergeSource(config.quick_merge_source || "origin/rc-master");
+    setQuickMergeTarget(config.quick_merge_target || "origin/master");
+  }, [config.quick_merge_source, config.quick_merge_target]);
   // 合并后打 tag
   const [tagAfterMerge, setTagAfterMerge] = useState(false);
   const [tagName, setTagName] = useState("");
@@ -102,12 +110,12 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       if (result.branches.length === 0) {
         notifications.show({ message: "该仓库没有远程分支", color: "blue", autoClose: 2500 });
       }
-      // 快捷开关开启时，自动填入 rc-master → master
-      if (useQuickMerge) {
-        const rcMaster = result.branches.find((b) => b.name === "origin/rc-master");
-        const master = result.branches.find((b) => b.name === "origin/master");
-        if (rcMaster) setSourceBranch("origin/rc-master");
-        if (master) setTargetBranch("origin/master");
+      // 快捷开关开启时，自动填入配置的分支
+      if (useQuickMerge && quickMergeSource && quickMergeTarget) {
+        const source = result.branches.find((b) => b.name === quickMergeSource);
+        const target = result.branches.find((b) => b.name === quickMergeTarget);
+        if (source) setSourceBranch(quickMergeSource);
+        if (target) setTargetBranch(quickMergeTarget);
       }
     } catch (e) {
       notifications.show({ title: "读取分支失败", message: String(e), color: "red", autoClose: 6000 });
@@ -116,7 +124,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     } finally {
       setIsLoadingBranches(false);
     }
-  }, [useQuickMerge]);
+  }, [useQuickMerge, quickMergeSource, quickMergeTarget]);
 
   const branchNames = branches.map((b) => b.name);
   // 联动过滤：源分支下拉排除已选的目标分支，目标分支下拉排除已选的源分支，
@@ -568,6 +576,19 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     setTagMessage("");
   }, []);
 
+  // 弹窗保存预设分支后：更新本地值；若快捷开关已开则立即填充并打 tag
+  const handleQuickMergeConfigSaved = useCallback((source: string, target: string) => {
+    setQuickMergeSource(source);
+    setQuickMergeTarget(target);
+    if (useQuickMerge && branches.length > 0) {
+      const src = branches.find((b) => b.name === source);
+      const tgt = branches.find((b) => b.name === target);
+      if (src) setSourceBranch(source);
+      if (tgt) setTargetBranch(target);
+      if (tgt) setTagAfterMerge(true);
+    }
+  }, [useQuickMerge, branches]);
+
   const handleTargetBranchChange = useCallback((v: string) => {
     setTargetBranch(v);
     setCheckResult(null);
@@ -590,17 +611,17 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
 
   // 快捷模式开启时，如果已有分支数据则立即填充
   useEffect(() => {
-    if (useQuickMerge && branches.length > 0) {
-      const rcMaster = branches.find((b) => b.name === "origin/rc-master");
-      const master = branches.find((b) => b.name === "origin/master");
-      if (rcMaster && sourceBranch !== "origin/rc-master") {
-        setSourceBranch("origin/rc-master");
+    if (useQuickMerge && branches.length > 0 && quickMergeSource && quickMergeTarget) {
+      const source = branches.find((b) => b.name === quickMergeSource);
+      const target = branches.find((b) => b.name === quickMergeTarget);
+      if (source && sourceBranch !== quickMergeSource) {
+        setSourceBranch(quickMergeSource);
       }
-      if (master && targetBranch !== "origin/master") {
-        setTargetBranch("origin/master");
+      if (target && targetBranch !== quickMergeTarget) {
+        setTargetBranch(quickMergeTarget);
       }
     }
-  }, [useQuickMerge, branches, sourceBranch, targetBranch]);
+  }, [useQuickMerge, branches, sourceBranch, targetBranch, quickMergeSource, quickMergeTarget]);
 
   return {
     repoPath,
@@ -682,5 +703,10 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     autoTagMessage,
     useQuickMerge,
     setUseQuickMerge,
+    showQuickMergeConfig,
+    setShowQuickMergeConfig,
+    handleQuickMergeConfigSaved,
+    quickMergeSource,
+    quickMergeTarget,
   };
 }
