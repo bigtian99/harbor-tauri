@@ -727,3 +727,40 @@ pub async fn merge_remote_branches(
     .await
     .map_err(|e| format!("合并线程异常: {e}"))?
 }
+
+/// 获取仓库远程最新版本 tag（如 v1.0、v2.5.3），用于合并面板默认 tag 名计算。
+/// 返回 None 表示没有找到版本 tag。
+#[tauri::command]
+pub async fn get_latest_tag(repo_path: String) -> Result<Option<String>, String> {
+    let repo_root = tauri::async_runtime::spawn_blocking(move || resolve_repo_root(&repo_path))
+        .await
+        .map_err(|e| format!("解析仓库线程异常: {e}"))??;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        // 先 fetch tags 确保最新
+        let _ = silent_command("git")
+            .args(["fetch", "--tags", "--force"])
+            .current_dir(&repo_root)
+            .output();
+
+        // 按版本号降序排列 tag，取第一个
+        let (ok, stdout, _) = run_git_capture(&repo_root, &["tag", "--sort=-version:refname"]);
+        if !ok {
+            return Ok(None);
+        }
+
+        let version_tag = stdout
+            .lines()
+            .find(|line| {
+                let t = line.trim();
+                t.starts_with('v')
+                    && t.len() > 2
+                    && t[1..].chars().next().map_or(false, |c| c.is_ascii_digit())
+            })
+            .map(|s| s.trim().to_string());
+
+        Ok(version_tag)
+    })
+    .await
+    .map_err(|e| format!("获取 tag 线程异常: {e}"))?
+}

@@ -39,6 +39,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
   // 可编辑的 tag 内容（默认从差异提交去重生成）
   const [tagMessage, setTagMessage] = useState("");
   // 源分支相对目标分支多出的提交（合并会带入这些提交）
+  const [latestTag, setLatestTag] = useState(""); // 远程最新版本 tag
   const [diffCommits, setDiffCommits] = useState<CommitInfo[]>([]);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [diffLoaded, setDiffLoaded] = useState(false);
@@ -107,6 +108,10 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       const result = await invoke<RemoteBranchListResult>("list_remote_branches", { repoPath: input.trim() });
       setResolvedRepoPath(result.repoPath);
       setBranches(result.branches);
+      // 获取远程最新版本 tag，用于默认 tag 名计算
+      invoke<string | null>("get_latest_tag", { repoPath: input.trim() })
+        .then((tag) => { if (tag) setLatestTag(tag); })
+        .catch(() => {});
       if (result.branches.length === 0) {
         notifications.show({ message: "该仓库没有远程分支", color: "blue", autoClose: 2500 });
       }
@@ -155,6 +160,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     setActiveConflictBlock(-1);
     setTagAfterMerge(false);
     setTagName("");
+    setLatestTag("");
     targetLineRefs.current = {};
     sourceLineRefs.current = {};
     commitDiffLineRefs.current = {};
@@ -541,8 +547,17 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       ? "can-merge"
       : "has-conflict";
 
-  // 勾选打 tag 时自动生成默认 tag 名（用户可修改）
+  // 从远程最新版本 tag 计算下一个版本号（v1.0 → v2.0）
+  const nextTag = useMemo(() => {
+    if (!latestTag) return "";
+    const m = latestTag.match(/^v(\d+)/);
+    if (!m) return "";
+    return `v${parseInt(m[1], 10) + 1}.0`;
+  }, [latestTag]);
+
+  // 默认 tag 名：优先用远程 tag 推算的下一版本，否则回退到 merge-分支-日期 格式
   const defaultTagName = useMemo(() => {
+    if (nextTag) return nextTag;
     if (!sourceBranch || !targetBranch) return "";
     const src = sourceBranch.replace(/^origin\//, "");
     const dst = targetBranch.replace(/^origin\//, "");
@@ -550,7 +565,14 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     const pad = (n: number) => String(n).padStart(2, "0");
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
     return `merge-${src}-to-${dst}-${dateStr}`;
-  }, [sourceBranch, targetBranch]);
+  }, [nextTag, sourceBranch, targetBranch]);
+
+  // 启用 tag 时自动填入默认 tag 名（v2.0、v3.0 等），覆盖勾选和自动开启两条路径
+  useEffect(() => {
+    if (tagAfterMerge && defaultTagName && !tagName) {
+      setTagName(defaultTagName);
+    }
+  }, [tagAfterMerge, defaultTagName, tagName]);
 
   const handleTagAfterMergeChange = useCallback((checked: boolean) => {
     setTagAfterMerge(checked);
@@ -619,6 +641,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       }
       if (target && targetBranch !== quickMergeTarget) {
         setTargetBranch(quickMergeTarget);
+        setTagAfterMerge(true);
       }
     }
   }, [useQuickMerge, branches, sourceBranch, targetBranch, quickMergeSource, quickMergeTarget]);
@@ -696,6 +719,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     tagAfterMerge,
     tagName,
     tagMessage,
+    latestTag,
     handleTagAfterMergeChange,
     setTagName,
     setTagMessage,

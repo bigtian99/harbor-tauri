@@ -23,6 +23,7 @@ interface MergeFormSectionProps {
   tagMessage: string;
   defaultTagName: string;
   defaultTagMessage: string;
+  latestTag: string;
   useQuickMerge: boolean;
   showQuickMergeConfig: boolean;
   isChecking: boolean;
@@ -80,6 +81,7 @@ export function MergeFormSection({
   tagMessage,
   defaultTagName,
   defaultTagMessage,
+  latestTag,
   useQuickMerge,
   showQuickMergeConfig,
   isChecking,
@@ -223,19 +225,21 @@ export function MergeFormSection({
           <span className="checkbox-toggle"></span>
           <span>预设分支</span>
         </label>
-        <button
-          type="button"
-          className="path-picker-btn"
-          style={{ marginLeft: 4, padding: "0 8px", position: "relative", zIndex: 10 }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onShowQuickMergeConfig(true);
-          }}
-          title="配置预设的源分支和目标分支"
-        >
-          <Settings size={14} style={{ display: 'block' }} />
-        </button>
+        {branchNames.length > 0 && (
+          <button
+            type="button"
+            className="path-picker-btn"
+            style={{ marginLeft: 4, padding: "0 8px", position: "relative", zIndex: 10 }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onShowQuickMergeConfig(true);
+            }}
+            title="配置预设的源分支和目标分支"
+          >
+            <Settings size={14} style={{ display: 'block' }} />
+          </button>
+        )}
         <button
           type="button"
           className="path-picker-btn"
@@ -430,11 +434,15 @@ export function MergeFormSection({
 
       {tagAfterMerge && (
         <div className="form-group" style={{ marginBottom: 12 }}>
+          {latestTag && (
+            <p className="template-hint" style={{ marginBottom: 4 }}>
+              远程最新 tag：<code>{latestTag}</code>，默认 tag 为下一版本 <code>{defaultTagName}</code>
+            </p>
+          )}
           <label>Tag 名称</label>
           <input
             type="text"
             className="path-input"
-            placeholder={defaultTagName}
             value={tagName}
             onChange={(e) => onTagNameChange(e.target.value)}
             style={{ fontFamily: "monospace" }}
@@ -455,9 +463,6 @@ export function MergeFormSection({
           />
           <p className="template-hint">
             将在合并 commit 上创建此 tag 并推送 origin
-            {tagName.trim() === "" && defaultTagName && (
-              <>（如不修改将使用默认：{defaultTagName}）</>
-            )}
           </p>
         </div>
       )}

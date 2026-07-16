@@ -72,6 +72,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
         tagMessage={m.tagMessage}
         defaultTagName={m.defaultTagName}
         defaultTagMessage={m.autoTagMessage}
+        latestTag={m.latestTag}
         useQuickMerge={m.useQuickMerge}
         showQuickMergeConfig={m.showQuickMergeConfig}
         isChecking={m.isChecking}
