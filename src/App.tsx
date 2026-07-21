@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { CheckCircle, ScrollText, Search, X, Download, FolderOpen } from "lucide-react";
+import { CalendarDays, CheckCircle, ChevronDown, ScrollText, Search, X, Download, FolderOpen } from "lucide-react";
 
 
 import { Sidebar } from "./components/Sidebar";
@@ -14,7 +14,7 @@ import { SettlementPanel } from "./components/SettlementPanel";
 import { PackSpeedPanel } from "./components/PackSpeedPanel";
 import { UpdateModal } from "./components/UpdateModal";
 import { useLanding } from "./hooks/useLanding";
-import { useAppConfig } from "./hooks/useAppConfig";
+import { useAppConfig, type DiagDateInfo } from "./hooks/useAppConfig";
 import { useBuildProgress, useToast } from "./hooks/useBuildProgress";
 import { useUploadPush } from "./hooks/useUploadPush";
 import { useBranchPack } from "./hooks/useBranchPack";
@@ -22,6 +22,106 @@ import "./App.css";
 
 import type { HarborConfig, TabType } from "./types";
 import { isTauriRuntime } from "./types";
+
+/** 系统日志日期 card 选择器（替代原生 select） */
+function LogDayPicker({
+  logDay,
+  logDates,
+  onSelect,
+}: {
+  logDay: string | null;
+  logDates: DiagDateInfo[];
+  onSelect: (day: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const label = logDay
+    ? (() => {
+        const hit = logDates.find((d) => d.date === logDay);
+        if (!hit) return logDay;
+        return `${hit.date} · ${hit.lines} 行`;
+      })()
+    : "最近 3 天";
+
+  const pick = (day: string | null) => {
+    onSelect(day);
+    setOpen(false);
+  };
+
+  return (
+    <div className="log-day-picker" ref={rootRef}>
+      <button
+        type="button"
+        className={`log-day-trigger${open ? " open" : ""}`}
+        title="切换日志日期"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <CalendarDays size={14} className="log-day-trigger-icon" aria-hidden />
+        <span className="log-day-trigger-label">{label}</span>
+        <ChevronDown size={14} className="log-day-trigger-chevron" aria-hidden />
+      </button>
+      {open && (
+        <div
+          className="log-day-panel"
+          role="listbox"
+          aria-label="日志日期"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={!logDay}
+            className={`log-day-card${!logDay ? " selected" : ""}`}
+            onClick={() => pick(null)}
+          >
+            <span className="log-day-card-date">最近 3 天</span>
+            <span className="log-day-card-meta">合并视图 · 新日志在前</span>
+            {!logDay && <CheckCircle size={14} className="log-day-card-check" aria-hidden />}
+          </button>
+          {logDates.map((d) => {
+            const selected = logDay === d.date;
+            return (
+              <button
+                key={d.date}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={`log-day-card${selected ? " selected" : ""}`}
+                onClick={() => pick(d.date)}
+              >
+                <span className="log-day-card-date">{d.date}</span>
+                <span className="log-day-card-meta">
+                  {d.lines} 行 · {(d.size / 1024).toFixed(1)} KB
+                </span>
+                {selected && <CheckCircle size={14} className="log-day-card-check" aria-hidden />}
+              </button>
+            );
+          })}
+          {logDates.length === 0 && (
+            <div className="log-day-empty">暂无按日日志文件</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>("upload");
@@ -159,6 +259,7 @@ function App() {
             onPushImage={upload.handlePushImage}
             onCancelBuild={build.handleCancelBuild}
             onRefreshImages={upload.loadLocalImages}
+            onRemoveImage={upload.removeLocalImage}
             setLocalImage={upload.setPushLocalImage}
             setImageName={upload.setPushImageName}
             setImageTag={upload.setPushImageTag}
@@ -327,23 +428,11 @@ function App() {
             <div className="log-viewer-header">
               <ScrollText size={18} className="log-viewer-title-icon" />
               <h3>系统诊断日志</h3>
-              <select
-                className="log-viewer-day-select"
-                value={app.logDay ?? ""}
-                title="切换日志日期"
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  void app.selectDiagnosticDay(v ? v : null);
-                }}
-              >
-                <option value="">最近 3 天</option>
-                {app.logDates.map((d) => (
-                  <option key={d.date} value={d.date}>
-                    {d.date}（{d.lines} 行 / {(d.size / 1024).toFixed(1)} KB）
-                  </option>
-                ))}
-              </select>
+              <LogDayPicker
+                logDay={app.logDay}
+                logDates={app.logDates}
+                onSelect={(day) => { void app.selectDiagnosticDay(day); }}
+              />
               <div className="log-viewer-search-wrap">
                 <Search size={14} className="log-viewer-search-icon" />
                 <input

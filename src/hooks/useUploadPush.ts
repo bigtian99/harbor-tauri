@@ -11,6 +11,12 @@ import {
 } from "../types";
 import { useEffect } from "react";
 
+/** 与后端 list_local_images 对齐 */
+export type LocalImageInfo = {
+  reference: string;
+  in_use: boolean;
+};
+
 interface UseUploadPushDeps {
   config: HarborConfig;
   setActiveTab: (tab: TabType) => void;
@@ -58,7 +64,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
   const [pushImageName, setPushImageName] = useState("");
   const [pushImageTag, setPushImageTag] = useState("latest");
   const [pushFullImage, setPushFullImage] = useState("");
-  const [pushLocalImageOptions, setPushLocalImageOptions] = useState<string[]>([]);
+  const [pushLocalImageOptions, setPushLocalImageOptions] = useState<LocalImageInfo[]>([]);
   const [pushIsLoadingImages, setPushIsLoadingImages] = useState(false);
 
   const handleDragEvents = useCallback((e: React.DragEvent) => {
@@ -177,13 +183,52 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     if (!isTauriRuntime()) return;
     setPushIsLoadingImages(true);
     try {
-      const images = await invoke<string[]>("list_local_images");
+      const images = await invoke<LocalImageInfo[]>("list_local_images");
       setPushLocalImageOptions(images);
     } catch (e) {
       console.error("加载本地镜像列表失败:", e);
       setPushLocalImageOptions([]);
     } finally {
       setPushIsLoadingImages(false);
+    }
+  }
+
+  async function removeLocalImage(image: string) {
+    if (!isTauriRuntime()) {
+      showToast("请在桌面端删除本地镜像");
+      return;
+    }
+    const ref = image.trim();
+    if (!ref) return;
+
+    const info = pushLocalImageOptions.find((x) => x.reference === ref);
+    if (info?.in_use) {
+      showToast("该镜像正被容器使用，无法删除");
+      return;
+    }
+
+    // 二次确认：误点不可恢复
+    if (
+      !window.confirm(
+        `确认删除本地镜像？\n\n${ref}\n\n将执行 docker rmi，删除后不可恢复。`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await invoke("remove_local_image", { image: ref });
+      setPushLocalImageOptions((prev) => prev.filter((x) => x.reference !== ref));
+      if (pushLocalImage === ref) {
+        setPushLocalImage("");
+      }
+      showToast(`已删除: ${ref}`);
+    } catch (e) {
+      const msg = String(e);
+      showToast(msg.includes("容器") ? "镜像被容器占用，无法删除" : `删除失败: ${e}`);
+      setLog(`❌ 删除本地镜像失败:\n${e}`);
+      // 占用状态可能过期，刷新列表
+      void loadLocalImages();
     }
   }
 
@@ -319,6 +364,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     pushLocalImageOptions,
     pushIsLoadingImages,
     loadLocalImages,
+    removeLocalImage,
     handlePushImage,
   };
 }

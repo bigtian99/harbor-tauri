@@ -13,7 +13,7 @@ pub use detect::{
     open_directory,
 };
 pub use package::package_from_branch;
-pub use push::{build_and_push, list_local_images, push_local_image};
+pub use push::{build_and_push, list_local_images, push_local_image, remove_local_image};
 
 use crate::utils::{silent_docker_command, CANCEL_FLAG, CURRENT_PID};
 use std::process::Stdio;

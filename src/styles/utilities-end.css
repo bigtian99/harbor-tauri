@@ -58,29 +58,140 @@
   flex-shrink: 0;
 }
 .log-viewer-title-icon { color: #5eead4; flex-shrink: 0; }
-.log-viewer-day-select {
+
+/* 日志日期 card 选择器 */
+.log-day-picker {
+  position: relative;
   flex: 0 0 auto;
-  min-width: 280px;
-  width: 300px;
-  max-width: 360px;
-  height: 36px;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  color: #c9d1d9;
-  padding: 0 14px;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 36px;
-  outline: none;
-  cursor: pointer;
+  min-width: 200px;
+  max-width: 320px;
 }
-.log-viewer-day-select:focus { border-color: #5eead4; }
-.log-viewer-day-select option {
-  background: #161b22;
+.log-day-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 200px;
+  height: 36px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, #1a2230 0%, #161b22 100%);
+  border: 1px solid #30363d;
+  border-radius: 10px;
   color: #c9d1d9;
-  font-size: 14px;
-  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.log-day-trigger:hover {
+  border-color: rgba(94, 234, 212, 0.45);
+  background: linear-gradient(180deg, #1e2a3a 0%, #1a2230 100%);
+}
+.log-day-trigger.open,
+.log-day-trigger:focus-visible {
+  border-color: #5eead4;
+  box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.14);
+}
+.log-day-trigger-icon {
+  color: #5eead4;
+  flex-shrink: 0;
+}
+.log-day-trigger-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.log-day-trigger-chevron {
+  color: #8b949e;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.log-day-trigger.open .log-day-trigger-chevron {
+  transform: rotate(180deg);
+  color: #5eead4;
+}
+.log-day-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(320px, 80vw);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 20;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  animation: logDayIn 0.15s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(94, 234, 212, 0.25) transparent;
+}
+@keyframes logDayIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.log-day-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  color: #c9d1d9;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.log-day-card:hover {
+  border-color: rgba(94, 234, 212, 0.35);
+  background: #1a2230;
+}
+.log-day-card.selected {
+  border-color: #5eead4;
+  background: linear-gradient(135deg, rgba(94, 234, 212, 0.12), rgba(22, 27, 34, 0.95));
+  box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.15);
+}
+.log-day-card-date {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e6edf3;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.log-day-card.selected .log-day-card-date {
+  color: #5eead4;
+}
+.log-day-card-meta {
+  font-size: 11px;
+  color: #8b949e;
+}
+.log-day-card-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: #5eead4;
+}
+.log-day-empty {
+  padding: 14px;
+  text-align: center;
+  color: #8b949e;
+  font-size: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .log-day-panel { animation: none; }
+  .log-day-trigger-chevron { transition: none; }
 }
 .log-viewer-search-wrap {
   position: relative; display: flex; align-items: center;

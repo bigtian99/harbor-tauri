@@ -1,4 +1,4 @@
-//! 镜像构建与推送 Tauri 命令：`build_and_push` / `push_local_image` / `list_local_images`。
+//! 镜像构建与推送 Tauri 命令：`build_and_push` / `push_local_image` / `list_local_images` / `remove_local_image`。
 
 use crate::build::push_helpers::{
     docker_login_harbor, docker_push_image, docker_rmi_best_effort, require_harbor_config,
@@ -11,10 +11,21 @@ use crate::docker::{
 };
 use crate::models::{ArtifactType, DockerBuildContext, NginxLocationBlock};
 use crate::utils::{silent_docker_command, CANCEL_FLAG, CURRENT_PID};
+use serde::Serialize;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::Ordering;
+
+/// 本地镜像条目（含是否被容器占用）
+#[derive(Debug, Clone, Serialize)]
+pub struct LocalImageInfo {
+    /// repository:tag
+    pub reference: String,
+    /// 是否被任意容器（含已停止）引用，占用中禁止删除
+    pub in_use: bool,
+}
 
 #[tauri::command]
 pub async fn build_and_push(
@@ -301,22 +312,165 @@ pub async fn push_local_image(
     Ok(format!("✅ 镜像推送成功!\n\n完整镜像: {}", full_image))
 }
 
-/// 列出本地所有 Docker 镜像（格式: repository:tag）
+/// 收集被容器占用的镜像 ID / 引用（含已停止容器）
+fn collect_in_use_image_keys() -> HashSet<String> {
+    let mut used = HashSet::new();
+
+    // ImageID: sha256:…（完整）
+    if let Ok(output) = docker_output(&["ps", "-a", "--no-trunc", "--format", "{{.ImageID}}"]) {
+        if output.status.success() {
+            for line in String::from_utf8_lossy(&output.stdout).lines() {
+                let id = line.trim();
+                if id.is_empty() {
+                    continue;
+                }
+                used.insert(id.to_string());
+                // 短 ID（12 位）也记一份，兼容 images 输出
+                if let Some(short) = id.strip_prefix("sha256:") {
+                    if short.len() >= 12 {
+                        used.insert(short[..12].to_string());
+                    }
+                    used.insert(short.to_string());
+                } else if id.len() >= 12 {
+                    used.insert(id[..12].to_string());
+                }
+            }
+        }
+    }
+
+    // Image 字段可能是 repo:tag 或短 ID
+    if let Ok(output) = docker_output(&["ps", "-a", "--format", "{{.Image}}"]) {
+        if output.status.success() {
+            for line in String::from_utf8_lossy(&output.stdout).lines() {
+                let img = line.trim();
+                if !img.is_empty() {
+                    used.insert(img.to_string());
+                }
+            }
+        }
+    }
+
+    used
+}
+
+/// 列出本地 Docker 镜像，并标记是否被容器占用
 #[tauri::command]
-pub fn list_local_images() -> Result<Vec<String>, String> {
-    let output = docker_output(&["images", "--format", "{{.Repository}}:{{.Tag}}"])
-        .map_err(|e| format!("执行docker images失败: {}", e))?;
+pub fn list_local_images() -> Result<Vec<LocalImageInfo>, String> {
+    let output = docker_output(&[
+        "images",
+        "--format",
+        "{{.Repository}}:{{.Tag}}\t{{.ID}}",
+    ])
+    .map_err(|e| format!("执行docker images失败: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("docker images失败:\n{}", stderr));
     }
 
+    let used = collect_in_use_image_keys();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let images: Vec<String> = stdout
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty() && !l.starts_with('<'))
-        .collect();
+    let mut images: Vec<LocalImageInfo> = Vec::new();
+
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let (reference, id) = match line.split_once('\t') {
+            Some((r, i)) => (r.trim(), i.trim()),
+            None => (line, ""),
+        };
+        if reference.is_empty() || reference.starts_with('<') {
+            continue;
+        }
+
+        let in_use = used.contains(reference)
+            || (!id.is_empty()
+                && (used.contains(id)
+                    || used.contains(&id.replace("sha256:", ""))
+                    || (id.len() >= 12 && used.contains(&id[..12]))
+                    || id
+                        .strip_prefix("sha256:")
+                        .map(|s| s.len() >= 12 && used.contains(&s[..12]))
+                        .unwrap_or(false)));
+
+        images.push(LocalImageInfo {
+            reference: reference.to_string(),
+            in_use,
+        });
+    }
+
+    crate::diag::diag_log(
+        "docker",
+        &format!(
+            "list_local_images: total={}, in_use={}",
+            images.len(),
+            images.iter().filter(|i| i.in_use).count()
+        ),
+    );
     Ok(images)
+}
+
+/// 删除本地 Docker 镜像（`docker rmi`）。占用中的镜像拒绝删除。
+#[tauri::command]
+pub fn remove_local_image(image: String) -> Result<(), String> {
+    let image = image.trim().to_string();
+    if image.is_empty() {
+        return Err("镜像引用不能为空".into());
+    }
+    crate::diag::diag_log("docker", &format!("remove_local_image: {image}"));
+
+    // 二次保险：服务端再查一次占用，防止 UI 状态过期
+    let used = collect_in_use_image_keys();
+    if used.contains(&image) {
+        let msg = format!("镜像正被容器使用，无法删除: {image}");
+        crate::diag::diag_log("docker", &format!("remove_local_image blocked: {image}"));
+        return Err(msg);
+    }
+    // 再按 image id 粗匹配（list 时带的 ID 可能只在前端）
+    if let Ok(output) = docker_output(&["images", "--format", "{{.Repository}}:{{.Tag}}\t{{.ID}}"]) {
+        if output.status.success() {
+            for line in String::from_utf8_lossy(&output.stdout).lines() {
+                if let Some((r, id)) = line.split_once('\t') {
+                    if r.trim() == image {
+                        let id = id.trim();
+                        let blocked = used.contains(id)
+                            || used.contains(&id.replace("sha256:", ""))
+                            || (id.len() >= 12 && used.contains(&id[..12]));
+                        if blocked {
+                            let msg = format!("镜像正被容器使用，无法删除: {image}");
+                            crate::diag::diag_log(
+                                "docker",
+                                &format!("remove_local_image blocked by id: {image}"),
+                            );
+                            return Err(msg);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    let output = docker_output(&["rmi", &image])
+        .map_err(|e| format!("执行 docker rmi 失败: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        crate::diag::diag_log(
+            "docker",
+            &format!("remove_local_image failed: {image} — {stderr}"),
+        );
+        // 友好化 conflict 文案
+        if stderr.contains("must force") || stderr.contains("is using its referenced image") {
+            return Err(format!(
+                "镜像正被容器使用，无法删除: {image}\n（请先停止并删除相关容器）"
+            ));
+        }
+        return Err(format!("删除镜像失败:\n{stderr}"));
+    }
+
+    crate::diag::diag_log("docker", &format!("remove_local_image ok: {image}"));
+    Ok(())
 }
