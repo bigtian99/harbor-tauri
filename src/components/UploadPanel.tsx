@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import type { ArtifactType } from "../types";
 import { getPathName } from "../types";
+import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
 
 interface UploadPanelProps {
   artifactType: ArtifactType;
@@ -20,7 +21,7 @@ interface UploadPanelProps {
   log: string;
   // 推送成功后的镜像地址（独立展示，不依赖日志折叠框）
   fullImage: string;
-  copied: boolean;
+  copied: string | null;
   onCopyImage: (imageUrl: string) => void;
   onArtifactTypeChange: (type: ArtifactType) => void;
   onSelectFile: () => void;
@@ -47,6 +48,9 @@ export function UploadPanel({
   setImageName, setImageTag, setExposePort, setShowImageConfig, setShowBuildLog,
   renderLog,
 }: UploadPanelProps) {
+  const fullImageCopied = fullImage ? isCopyHighlighted(copied, fullImage) : false;
+  const fullImageCopyText = fullImage ? normalizeCopyText(fullImage) : "";
+
   return (
     <div className="upload-panel">
       <div className="artifact-type-selector">
@@ -182,7 +186,7 @@ export function UploadPanel({
           className="path-links"
           style={{ marginTop: 10, border: 'none', background: 'transparent', padding: 0 }}
         >
-          <div className="path-link-item image-url-row">
+          <div className={`path-link-item image-url-row ${fullImageCopied ? "copied" : ""}`}>
             <span className="path-link-label">🐳 完整镜像:</span>
             <span className="image-url-value">
               {fullImage.split('\n').map((line, i) => (
@@ -190,11 +194,11 @@ export function UploadPanel({
               ))}
             </span>
             <button
-              className={`copy-btn ${copied ? "copied" : ""}`}
-              onClick={() => onCopyImage(fullImage.replace(/\n/g, '  '))}
+              className={`copy-btn ${fullImageCopied ? "copied" : ""}`}
+              onClick={() => onCopyImage(fullImageCopyText)}
               title="复制镜像地址"
             >
-              {copied ? (
+              {fullImageCopied ? (
                 <>
                   <CheckCircle size={14} /> 已复制
                 </>

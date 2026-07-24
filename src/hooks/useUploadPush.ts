@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, ask } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ArtifactType, HarborConfig, TabType } from "../types";
 import {
@@ -22,7 +22,7 @@ interface UseUploadPushDeps {
   setActiveTab: (tab: TabType) => void;
   setLog: (value: string | ((prev: string) => string)) => void;
   setIsBuilding: (value: boolean) => void;
-  setCopied: (value: boolean) => void;
+  setCopied: (value: string | null) => void;
   setProgress: (value: number) => void;
   setProgressMessage: (value: string) => void;
   showToast: (message: string, duration?: number) => void;
@@ -138,7 +138,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       return;
     }
     setIsBuilding(true);
-    setCopied(false);
+    setCopied(null);
     setProgress(0);
     setProgressMessage("🚀 开始构建和推送镜像...");
     setLog("");
@@ -208,11 +208,15 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     }
 
     // 二次确认：误点不可恢复
-    if (
-      !window.confirm(
-        `确认删除本地镜像？\n\n${ref}\n\n将执行 docker rmi，删除后不可恢复。`,
-      )
-    ) {
+    const confirmed = isTauriRuntime()
+      ? await ask(`确认删除本地镜像？\n\n${ref}\n\n将执行 docker rmi，删除后不可恢复。`, {
+          title: "删除镜像",
+          kind: "warning",
+        })
+      : window.confirm(
+          `确认删除本地镜像？\n\n${ref}\n\n将执行 docker rmi，删除后不可恢复。`,
+        );
+    if (!confirmed) {
       return;
     }
 
@@ -251,7 +255,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       return;
     }
     setIsBuilding(true);
-    setCopied(false);
+    setCopied(null);
     setProgress(0);
     setProgressMessage("🏷️ 镜像打标签...");
     setLog("");

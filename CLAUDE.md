@@ -193,6 +193,77 @@ templates_log("list_template_infos ok"); // ≡ diag_log("templates", ...)
 - 开发完成自检：打开系统日志 → 搜本功能模块 tag → 确认关键步骤有记录且模块名正确
 - 当天文件：`get_templates_diagnostic_log_path`（打包后 GUI 无控制台时可直接打开该路径）
 
+## Rust Backend
+
+```bash
+cargo check           # 快速编译检查
+cargo build           # debug 构建
+cargo clippy          # lint
+cargo test            # 全部测试
+cargo test -p jarporter -- <filter>  # 单项测试
+```
+
+### 模块结构
+
+| 文件/目录 | 职责 |
+|-----------|------|
+| `lib.rs` | 所有 Tauri command 注册与路由 |
+| `main.rs` | 入口，调 `diag::init` + `db::init_db` |
+| `build/` | JAR/dist 构建推送、分支打包 `package_from_branch`、前端目录/Spring profile 检测、npm 脚本、npm 缓存 |
+| `landing/` | 渠道拉取 (`fetch_sub_channels`)、模板渲染 (`render_template`)、落地页生成、FTP 上传 |
+| `preview_server.rs` | 本地 HTTP 预览服务器（`tiny_http`，只读，`127.0.0.1`） |
+| `docker.rs` | `docker ps`/`images`、tag/push/rmi 封装 |
+| `git.rs` | 分支列表、worktree、commit 查询 |
+| `config_cmd.rs` | Tauri command：`load_config` / `save_config` |
+| `history.rs` | 构建历史 SQLite 读写、构建记录更新 |
+| `db.rs` | 本地数据库 `init_db`（创建 `build_history` 表） |
+| `diag.rs` | 诊断日志：`diag_log(module, msg)` |
+| `updater.rs` | 版本更新检查与安装 |
+| `ops.rs` / `settlement/` | 运营/结算模块 |
+| `models.rs` | 共享数据结构 |
+| `utils/` | 进程命令、路径、文件 I/O 辅助 |
+
+## Frontend Hooks 架构
+
+App.tsx 是状态中枢，通过 hooks 获取状态+action，以 props 注入各 Panel 组件（单向数据流）。
+
+| Hook | 产出的关键状态 / 方法 |
+|------|----------------------|
+| `useAppConfig` | `config`, `loadBuildHistory`, `handleTabChange` |
+| `useBuildProgress` | `isBuilding`, `log`, `progress`, `copied`, `handleCopyImage`, `renderLog`, `beginBuild` |
+| `useUploadPush` | `artifactPath`, `fullImage`, `pushLocalImage`, `handleBuildAndPush`, `handlePushImage`, `loadLocalImages`, `removeLocalImage` |
+| `useBranchPack` | `repoPath`, `branchImageResults`, `handlePackageFromBranch` |
+| `useLanding` | `landingIds`, `handleLandingPreview`, `handleFtpUpload` |
+
+**Props 不跨层透传**：Panel 需要的所有回调/状态都在 App.tsx 中显式传入，子组件不自行调用 hooks 获取业务数据。
+
+### `isTauriRuntime()` 守卫模式
+
+所有调用 Tauri API（`invoke`、`@tauri-apps/plugin-dialog` 等）的代码必须先检查 `isTauriRuntime()`，浏览器 dev 模式下返回 mock 行为或 toast 提示。
+
+```typescript
+import { isTauriRuntime } from "../types";
+if (!isTauriRuntime()) { showToast("请在桌面端操作"); return; }
+```
+
+### 复制按钮状态
+
+`useBuildProgress` 的 `copied` 是 `string | null`（被复制的镜像 URL），各按钮独立判断 `copied === item.image`。点击后持久高亮，新构建 `beginBuild()` 时重置为 `null`。
+
+`@tauri-apps/plugin-dialog` 的 `ask` 用于二次确认（如删除镜像），`open` 用于文件/目录选择；非 Tauri 环境回退 `window.confirm`。
+
+## CSS 文件映射
+
+| CSS 文件 | 覆盖的组件/面板 |
+|----------|----------------|
+| `App.css` | 全局布局、侧栏、按钮 |
+| `upload.css` | UploadPanel、PushImagePanel（含 `.image-picker`、`.image-card`） |
+| `branch.css` | BranchPanel（含 `.path-picker-row`、`.path-link-item`） |
+| `progress.css` | 共用进度条、`.copy-btn`、`.image-url-row`（`copied` 整行高亮） |
+| `history.css` | HistoryPanel |
+| `merge.css` | MergePanel |
+| `Modal.css` | 提交列表 Modal |
+
 ## CI/CD
 
 GitHub Actions workflow (`build.yml`) builds for macOS (ARM64 + x64), Linux x64, and Windows x64 on tag push (`v*`). Uses pnpm 9, Node 20, and Rust stable.

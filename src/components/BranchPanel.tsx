@@ -13,6 +13,7 @@ import type {
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
+import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
 
 interface BranchPanelProps {
   // 项目类型
@@ -61,7 +62,7 @@ interface BranchPanelProps {
   progressMessage: string;
   log: string;
   showBuildLog: boolean;
-  copied: boolean;
+  copied: string | null;
   // 回调
   onBranchProjectTypeChange: (type: BranchProjectType) => void;
   onRepoPathChange: (path: string) => void;
@@ -133,6 +134,12 @@ export function BranchPanel({
   );
   const branchDisplayNames = Object.keys(branchDisplayMap);
   const currentBranchDisplay = branchDisplayMap[branchName] || branchName;
+  const branchFallbackCopied =
+    branchImageResults.length === 0 && branchFullImage
+      ? isCopyHighlighted(copied, branchFullImage)
+      : false;
+  const branchFallbackCopyText = branchFullImage ? normalizeCopyText(branchFullImage) : "";
+
   return (
     <div className="branch-panel">
       <div className="artifact-type-selector">
@@ -406,18 +413,20 @@ export function BranchPanel({
       {showResults && (
         <div className="path-links">
           {branchImageResults.length > 0 ? (
-            branchImageResults.map((item) => (
-              <div key={`${item.role}-${item.image}`} className="path-link-item image-url-row">
+            branchImageResults.map((item) => {
+                const isCopied = copied === item.image;
+                return (
+              <div key={`${item.role}-${item.image}`} className={`path-link-item image-url-row ${isCopied ? "copied" : ""}`}>
                 <span className="path-link-label">🐳 {item.label}:</span>
                 <span className="image-url-value">
                   <span style={{ display: 'block' }} title={item.image}>{item.image}</span>
                 </span>
                 <button
-                  className={`copy-btn ${copied ? "copied" : ""}`}
+                  className={`copy-btn ${isCopied ? "copied" : ""}`}
                   onClick={() => onCopyImage(item.image)}
                   title={item.copyLabel}
                 >
-                  {copied ? (
+                  {isCopied ? (
                     <>
                       <CheckCircle size={14} /> 已复制
                     </>
@@ -428,9 +437,10 @@ export function BranchPanel({
                   )}
                 </button>
               </div>
-            ))
+                );
+              })
           ) : branchFullImage && (
-            <div className="path-link-item image-url-row">
+            <div className={`path-link-item image-url-row ${branchFallbackCopied ? "copied" : ""}`}>
               <span className="path-link-label">🐳 完整镜像:</span>
               <span className="image-url-value">
                 {branchFullImage.split('\n').map((line, i) => (
@@ -438,11 +448,11 @@ export function BranchPanel({
                 ))}
               </span>
               <button
-                className={`copy-btn ${copied ? "copied" : ""}`}
-                onClick={() => onCopyImage(branchFullImage.replace(/\n/g, '  '))}
+                className={`copy-btn ${branchFallbackCopied ? "copied" : ""}`}
+                onClick={() => onCopyImage(branchFallbackCopyText)}
                 title="复制镜像地址"
               >
-                {copied ? (
+                {branchFallbackCopied ? (
                   <>
                     <CheckCircle size={14} /> 已复制
                   </>

@@ -404,7 +404,86 @@
 }
 
 
-/* ── 本地镜像 card 选择器 ── */
+/* ── 本地镜像选择器 ── */
+.image-picker {
+  --img-accent: #5eead4;
+  --img-accent-dim: rgba(94, 234, 212, 0.14);
+  --img-border: rgba(100, 255, 218, 0.16);
+  --img-surface: rgba(6, 16, 34, 0.82);
+  --img-muted: #7b8ba8;
+  --img-text: #d7e0f2;
+  --card-hue: 168;
+}
+
+.image-picker-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.image-picker-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--img-accent);
+  min-width: 0;
+}
+
+.image-picker-title label {
+  margin-bottom: 0;
+  color: #e6edf8;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.image-picker-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.image-picker-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.image-picker-stat.ready {
+  color: #5eead4;
+  background: rgba(94, 234, 212, 0.1);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+}
+
+.image-picker-stat.busy {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.image-picker-count {
+  flex-shrink: 0;
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #9fb0c9;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  padding: 3px 8px;
+  line-height: 1.2;
+}
+
 .image-picker-search {
   position: relative;
   flex: 1;
@@ -418,39 +497,38 @@
   transform: translateY(-50%);
   width: 14px;
   height: 14px;
-  color: #5eead4;
+  color: var(--img-accent);
   opacity: 0.55;
   pointer-events: none;
   z-index: 1;
 }
 
-/* 提高选择器优先级，避免被 .form-group input 的 padding 盖掉导致图标重叠 */
 .form-group .image-picker-search-input,
 .image-picker-search-input {
   width: 100%;
-  padding: 10px 14px 10px 40px !important;
-  border-radius: 10px;
-  border: 1px solid rgba(100, 255, 218, 0.15);
-  background: rgba(15, 52, 96, 0.4);
+  padding: 11px 14px 11px 38px !important;
+  border-radius: 11px;
+  border: 1px solid var(--img-border);
+  background: rgba(15, 52, 96, 0.48);
   color: #e0e0e0;
   font-size: 13px;
   outline: none;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
   box-sizing: border-box;
 }
 
 .image-picker-search-input:hover:not(:disabled) {
-  border-color: rgba(100, 255, 218, 0.3);
-  background: rgba(15, 52, 96, 0.6);
+  border-color: rgba(100, 255, 218, 0.34);
+  background: rgba(15, 52, 96, 0.62);
 }
 
 .image-picker-search-input:focus {
-  border-color: #5eead4;
-  background: rgba(15, 52, 96, 0.7);
+  border-color: var(--img-accent);
+  background: rgba(15, 52, 96, 0.78);
   box-shadow:
     0 0 0 3px rgba(100, 255, 218, 0.12),
-    0 4px 16px rgba(100, 255, 218, 0.15);
+    0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
 .image-picker-search-input::placeholder {
@@ -459,95 +537,193 @@
   font-size: 13px;
 }
 
+.image-picker-shell {
+  margin-top: 10px;
+  border-radius: 14px;
+  border: 1px solid var(--img-border);
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(94, 234, 212, 0.07), transparent 42%),
+    linear-gradient(180deg, rgba(18, 46, 84, 0.45) 0%, var(--img-surface) 55%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 28px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
 .image-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
-  margin-top: 12px;
-  max-height: 280px;
+  max-height: 340px;
   overflow-y: auto;
-  padding: 2px;
+  padding: 12px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(100, 255, 218, 0.25) transparent;
+  scrollbar-color: rgba(100, 255, 218, 0.3) transparent;
 }
 
 .image-card-grid::-webkit-scrollbar { width: 6px; }
 .image-card-grid::-webkit-scrollbar-thumb {
-  background: rgba(100, 255, 218, 0.22);
+  background: rgba(100, 255, 218, 0.24);
   border-radius: 3px;
 }
 
 .image-card {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: stretch;
   text-align: left;
-  padding: 12px 12px 12px 10px;
+  padding: 12px;
   border-radius: 12px;
   border: 1px solid rgba(100, 255, 218, 0.12);
   background:
-    linear-gradient(145deg, rgba(15, 52, 96, 0.45) 0%, rgba(10, 20, 40, 0.55) 100%);
-  color: #e0e0e0;
+    linear-gradient(
+      145deg,
+      hsla(var(--card-hue), 55%, 42%, 0.14) 0%,
+      rgba(12, 28, 52, 0.88) 48%
+    );
+  color: var(--img-text);
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-  min-height: 68px;
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+  min-height: 88px;
   position: relative;
+  overflow: hidden;
+}
+
+.image-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -20% -40% auto;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: hsla(var(--card-hue), 70%, 55%, 0.12);
+  filter: blur(8px);
+  pointer-events: none;
 }
 
 .image-card:hover {
-  border-color: rgba(100, 255, 218, 0.4);
-  background:
-    linear-gradient(145deg, rgba(100, 255, 218, 0.1) 0%, rgba(15, 52, 96, 0.55) 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  border-color: hsla(var(--card-hue), 70%, 60%, 0.55);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
 }
 
 .image-card.selected {
   border-color: #5eead4;
   background:
-    linear-gradient(145deg, rgba(100, 255, 218, 0.16) 0%, rgba(15, 52, 96, 0.65) 100%);
+    linear-gradient(145deg, rgba(94, 234, 212, 0.2) 0%, rgba(14, 40, 72, 0.92) 55%);
+  box-shadow:
+    0 0 0 1px rgba(94, 234, 212, 0.28),
+    0 14px 30px rgba(94, 234, 212, 0.12);
+}
+
+.image-card.selected::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: #5eead4;
+  box-shadow: 0 0 12px rgba(94, 234, 212, 0.55);
+}
+
+.image-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.image-card-avatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  color: #ecfeff;
+  background:
+    linear-gradient(
+      145deg,
+      hsla(var(--card-hue), 72%, 58%, 0.55),
+      hsla(var(--card-hue), 55%, 28%, 0.75)
+    );
+  border: 1px solid hsla(var(--card-hue), 70%, 65%, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 6px 14px hsla(var(--card-hue), 60%, 30%, 0.35);
+}
+
+.image-card-avatar-letter {
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.image-card-avatar-glyph {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  opacity: 0.55;
+}
+
+.image-card.selected .image-card-avatar {
+  border-color: rgba(94, 234, 212, 0.65);
   box-shadow:
     0 0 0 1px rgba(94, 234, 212, 0.25),
-    0 8px 24px rgba(100, 255, 218, 0.12);
+    0 0 18px rgba(94, 234, 212, 0.28);
 }
 
-.image-card-icon {
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #5eead4;
-  background: rgba(100, 255, 218, 0.08);
-  border: 1px solid rgba(100, 255, 218, 0.15);
+.image-card.in-use:not(.selected) .image-card-avatar {
+  background: linear-gradient(145deg, rgba(251, 191, 36, 0.45), rgba(120, 70, 10, 0.7));
+  border-color: rgba(251, 191, 36, 0.45);
 }
 
-.image-card.selected .image-card-icon {
-  background: rgba(100, 255, 218, 0.18);
-  border-color: rgba(100, 255, 218, 0.4);
-  box-shadow: 0 0 12px rgba(100, 255, 218, 0.2);
-}
-
-.image-card-body {
-  flex: 1;
+.image-card-text {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  flex: 1;
+  padding-top: 1px;
 }
 
-.image-card-repo {
+.image-card-path {
   font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
-  color: #ccd6f6;
-  line-height: 1.35;
-  word-break: break-all;
+  color: var(--img-muted);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
-.image-card.selected .image-card-repo {
+.image-card-path-local {
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.image-card-name {
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f2f6ff;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-card.selected .image-card-name {
   color: #5eead4;
 }
 
@@ -556,23 +732,39 @@
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  margin-top: 2px;
 }
 
 .image-card-tag {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   max-width: 100%;
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #5eead4;
-  background: rgba(100, 255, 218, 0.1);
-  border: 1px solid rgba(100, 255, 218, 0.22);
+  color: #9af0df;
+  background: rgba(94, 234, 212, 0.12);
+  border: 1px solid rgba(94, 234, 212, 0.28);
   font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-card-badge-ready {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
   white-space: nowrap;
 }
 
@@ -580,15 +772,16 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
-  margin-top: 0;
+  margin-left: auto;
 }
 
 .image-card-check {
   flex-shrink: 0;
-  color: #5eead4;
-  filter: drop-shadow(0 0 6px rgba(100, 255, 218, 0.45));
+  color: var(--img-accent);
+  display: inline-flex;
+  filter: drop-shadow(0 0 8px rgba(94, 234, 212, 0.55));
 }
 
 .image-card-delete {
@@ -599,11 +792,11 @@
   height: 28px;
   padding: 0;
   border-radius: 8px;
-  border: 1px solid rgba(248, 113, 113, 0.25);
-  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(248, 113, 113, 0.1);
   color: #f87171;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0.72;
   transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
@@ -613,28 +806,32 @@
 }
 
 .image-card-delete:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.2);
-  border-color: rgba(248, 113, 113, 0.55);
-  transform: scale(1.05);
+  background: rgba(248, 113, 113, 0.22);
+  border-color: rgba(248, 113, 113, 0.58);
+  transform: scale(1.06);
 }
 
 .image-card-delete:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
   transform: none;
 }
 
 .image-card.removing {
-  opacity: 0.55;
+  opacity: 0.5;
   pointer-events: none;
 }
 
 .image-card.in-use {
-  border-color: rgba(251, 191, 36, 0.28);
+  border-color: rgba(251, 191, 36, 0.26);
 }
 
 .image-card.in-use:hover {
-  border-color: rgba(251, 191, 36, 0.5);
+  border-color: rgba(251, 191, 36, 0.48);
+}
+
+.image-card.in-use.selected {
+  border-color: #5eead4;
 }
 
 .image-card-badge-in-use {
@@ -652,39 +849,104 @@
   white-space: nowrap;
 }
 
-.image-card-delete:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.image-card.in-use .image-card-delete {
-  border-color: rgba(251, 191, 36, 0.35);
-  background: rgba(251, 191, 36, 0.08);
-  color: #fbbf24;
-  opacity: 0.85;
-}
-
 .image-card-empty {
-  margin-top: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 20px 16px;
-  border-radius: 12px;
-  border: 1px dashed rgba(100, 255, 218, 0.18);
-  background: rgba(15, 52, 96, 0.25);
-  color: #8892b0;
+  gap: 12px;
+  padding: 36px 18px;
+  color: var(--img-muted);
+  font-size: 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.image-card-empty-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.image-card-empty-copy strong {
+  color: #c9d6ea;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.image-card-empty-copy span {
+  color: var(--img-muted);
   font-size: 12px;
 }
 
 .image-card-empty .spin {
-  color: #5eead4;
+  color: var(--img-accent);
+}
+
+.image-selected-bar {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  background:
+    linear-gradient(90deg, rgba(94, 234, 212, 0.12), rgba(94, 234, 212, 0.05));
+  color: var(--img-accent);
+  min-width: 0;
+}
+
+.image-selected-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: rgba(94, 234, 212, 0.14);
+  border: 1px solid rgba(94, 234, 212, 0.3);
+}
+
+.image-selected-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.image-selected-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.image-selected-ref {
+  flex: 1;
+  min-width: 0;
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e7fff8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  padding: 0;
+}
+
+.image-picker-hint {
+  margin-top: 10px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .image-card {
+  .image-card,
+  .image-picker-search-input,
+  .image-card-delete {
     transition: none;
   }
   .image-card:hover {

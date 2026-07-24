@@ -316,41 +316,133 @@ pub async fn push_local_image(
 fn collect_in_use_image_keys() -> HashSet<String> {
     let mut used = HashSet::new();
 
-    // ImageID: sha256:…（完整）
-    if let Ok(output) = docker_output(&["ps", "-a", "--no-trunc", "--format", "{{.ImageID}}"]) {
+    // Image 字段：可能是 repo:tag、无 tag 短名、或短 ID
+    if let Ok(output) = docker_output(&["ps", "-a", "--format", "{{.Image}}"]) {
         if output.status.success() {
             for line in String::from_utf8_lossy(&output.stdout).lines() {
-                let id = line.trim();
-                if id.is_empty() {
-                    continue;
-                }
-                used.insert(id.to_string());
-                // 短 ID（12 位）也记一份，兼容 images 输出
-                if let Some(short) = id.strip_prefix("sha256:") {
-                    if short.len() >= 12 {
-                        used.insert(short[..12].to_string());
-                    }
-                    used.insert(short.to_string());
-                } else if id.len() >= 12 {
-                    used.insert(id[..12].to_string());
-                }
+                remember_in_use_key(&mut used, line);
             }
         }
     }
 
-    // Image 字段可能是 repo:tag 或短 ID
-    if let Ok(output) = docker_output(&["ps", "-a", "--format", "{{.Image}}"]) {
+    // Docker 29+：`docker ps --format {{.ImageID}}` 已不可用，改用 inspect 取真实 digest
+    if let Ok(output) = docker_output(&["ps", "-aq"]) {
         if output.status.success() {
-            for line in String::from_utf8_lossy(&output.stdout).lines() {
-                let img = line.trim();
-                if !img.is_empty() {
-                    used.insert(img.to_string());
+            let ids: Vec<String> = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect();
+            if !ids.is_empty() {
+                let mut args: Vec<String> = vec![
+                    "inspect".into(),
+                    "--format".into(),
+                    "{{.Image}}\t{{.Config.Image}}".into(),
+                ];
+                args.extend(ids);
+                let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
+                if let Ok(insp) = docker_output(&args_ref) {
+                    if insp.status.success() {
+                        for line in String::from_utf8_lossy(&insp.stdout).lines() {
+                            let line = line.trim();
+                            if line.is_empty() {
+                                continue;
+                            }
+                            if let Some((image_id, config_image)) = line.split_once('\t') {
+                                remember_in_use_key(&mut used, image_id);
+                                remember_in_use_key(&mut used, config_image);
+                            } else {
+                                remember_in_use_key(&mut used, line);
+                            }
+                        }
+                    } else {
+                        let stderr = String::from_utf8_lossy(&insp.stderr);
+                        crate::diag::diag_log(
+                            "docker",
+                            &format!("collect_in_use inspect failed: {}", stderr.trim()),
+                        );
+                    }
                 }
             }
         }
     }
 
     used
+}
+
+/// 写入占用集合，并补齐 `name` ↔ `name:latest`、digest 短 ID 别名
+fn remember_in_use_key(used: &mut HashSet<String>, raw: &str) {
+    let key = raw.trim();
+    if key.is_empty() {
+        return;
+    }
+    used.insert(key.to_string());
+
+    if let Some(digest) = key.strip_prefix("sha256:") {
+        used.insert(digest.to_string());
+        if digest.len() >= 12 {
+            used.insert(digest[..12].to_string());
+        }
+        return;
+    }
+
+    // 12 位短 ID 不当作仓库名
+    if key.len() == 12 && key.chars().all(|c| c.is_ascii_hexdigit()) {
+        return;
+    }
+
+    match split_repo_tag(key) {
+        Some((repo, tag)) if tag.eq_ignore_ascii_case("latest") => {
+            used.insert(repo.to_string());
+        }
+        None => {
+            used.insert(format!("{key}:latest"));
+        }
+        Some(_) => {}
+    }
+}
+
+/// 拆 `repo:tag`（忽略 registry 端口里的冒号）
+fn split_repo_tag(reference: &str) -> Option<(&str, &str)> {
+    let last_colon = reference.rfind(':')?;
+    let last_slash = reference.rfind('/').map(|i| i as isize).unwrap_or(-1);
+    if (last_colon as isize) <= last_slash {
+        return None;
+    }
+    let tag = &reference[last_colon + 1..];
+    if tag.is_empty() {
+        return None;
+    }
+    Some((&reference[..last_colon], tag))
+}
+
+fn reference_in_used_set(reference: &str, used: &HashSet<String>) -> bool {
+    if used.contains(reference) {
+        return true;
+    }
+    match split_repo_tag(reference) {
+        Some((repo, tag)) if tag.eq_ignore_ascii_case("latest") => used.contains(repo),
+        None => used.contains(&format!("{reference}:latest")),
+        Some(_) => false,
+    }
+}
+
+fn image_id_in_used_set(id: &str, used: &HashSet<String>) -> bool {
+    if id.is_empty() {
+        return false;
+    }
+    if used.contains(id) {
+        return true;
+    }
+    let bare = id.strip_prefix("sha256:").unwrap_or(id);
+    if used.contains(bare) {
+        return true;
+    }
+    bare.len() >= 12 && used.contains(&bare[..12])
+}
+
+fn is_image_in_use(reference: &str, id: &str, used: &HashSet<String>) -> bool {
+    reference_in_used_set(reference, used) || image_id_in_used_set(id, used)
 }
 
 /// 列出本地 Docker 镜像，并标记是否被容器占用
@@ -385,15 +477,7 @@ pub fn list_local_images() -> Result<Vec<LocalImageInfo>, String> {
             continue;
         }
 
-        let in_use = used.contains(reference)
-            || (!id.is_empty()
-                && (used.contains(id)
-                    || used.contains(&id.replace("sha256:", ""))
-                    || (id.len() >= 12 && used.contains(&id[..12]))
-                    || id
-                        .strip_prefix("sha256:")
-                        .map(|s| s.len() >= 12 && used.contains(&s[..12]))
-                        .unwrap_or(false)));
+        let in_use = is_image_in_use(reference, id, &used);
 
         images.push(LocalImageInfo {
             reference: reference.to_string(),
@@ -423,34 +507,24 @@ pub fn remove_local_image(image: String) -> Result<(), String> {
 
     // 二次保险：服务端再查一次占用，防止 UI 状态过期
     let used = collect_in_use_image_keys();
-    if used.contains(&image) {
-        let msg = format!("镜像正被容器使用，无法删除: {image}");
-        crate::diag::diag_log("docker", &format!("remove_local_image blocked: {image}"));
-        return Err(msg);
-    }
-    // 再按 image id 粗匹配（list 时带的 ID 可能只在前端）
+    let mut image_id = String::new();
     if let Ok(output) = docker_output(&["images", "--format", "{{.Repository}}:{{.Tag}}\t{{.ID}}"]) {
         if output.status.success() {
             for line in String::from_utf8_lossy(&output.stdout).lines() {
                 if let Some((r, id)) = line.split_once('\t') {
                     if r.trim() == image {
-                        let id = id.trim();
-                        let blocked = used.contains(id)
-                            || used.contains(&id.replace("sha256:", ""))
-                            || (id.len() >= 12 && used.contains(&id[..12]));
-                        if blocked {
-                            let msg = format!("镜像正被容器使用，无法删除: {image}");
-                            crate::diag::diag_log(
-                                "docker",
-                                &format!("remove_local_image blocked by id: {image}"),
-                            );
-                            return Err(msg);
-                        }
+                        image_id = id.trim().to_string();
                         break;
                     }
                 }
             }
         }
+    }
+
+    if is_image_in_use(&image, &image_id, &used) {
+        let msg = format!("镜像正被容器使用，无法删除: {image}");
+        crate::diag::diag_log("docker", &format!("remove_local_image blocked: {image}"));
+        return Err(msg);
     }
 
     let output = docker_output(&["rmi", &image])
@@ -462,10 +536,16 @@ pub fn remove_local_image(image: String) -> Result<(), String> {
             "docker",
             &format!("remove_local_image failed: {image} — {stderr}"),
         );
-        // 友好化 conflict 文案
-        if stderr.contains("must force") || stderr.contains("is using its referenced image") {
+        if stderr.contains("is using its referenced image")
+            || (stderr.contains("container") && stderr.contains("using"))
+        {
             return Err(format!(
                 "镜像正被容器使用，无法删除: {image}\n（请先停止并删除相关容器）"
+            ));
+        }
+        if stderr.contains("must force") || stderr.contains("referenced in multiple repositories") {
+            return Err(format!(
+                "无法删除 {image}：镜像仍被其它标签或依赖引用（可先删其它标签，或 docker rmi -f）"
             ));
         }
         return Err(format!("删除镜像失败:\n{stderr}"));
@@ -474,3 +554,55 @@ pub fn remove_local_image(image: String) -> Result<(), String> {
     crate::diag::diag_log("docker", &format!("remove_local_image ok: {image}"));
     Ok(())
 }
+
+#[cfg(test)]
+mod in_use_tests {
+    use super::*;
+
+    #[test]
+    fn latest_alias_matches_untagged_container_image() {
+        let mut used = HashSet::new();
+        remember_in_use_key(&mut used, "parse-video");
+        assert!(used.contains("parse-video"));
+        assert!(used.contains("parse-video:latest"));
+        assert!(is_image_in_use("parse-video:latest", "b36b70d7194e", &used));
+    }
+
+    #[test]
+    fn tagged_latest_also_marks_bare_name() {
+        let mut used = HashSet::new();
+        remember_in_use_key(&mut used, "parse-video:latest");
+        assert!(reference_in_used_set("parse-video", &used));
+        assert!(reference_in_used_set("parse-video:latest", &used));
+    }
+
+    #[test]
+    fn digest_short_id_aliases() {
+        let mut used = HashSet::new();
+        remember_in_use_key(
+            &mut used,
+            "sha256:b36b70d7194e10149da5d40d44a3a595b5a18c4892b7de4f540712e845c73d8f",
+        );
+        assert!(image_id_in_used_set("b36b70d7194e", &used));
+        assert!(image_id_in_used_set(
+            "sha256:b36b70d7194e10149da5d40d44a3a595b5a18c4892b7de4f540712e845c73d8f",
+            &used
+        ));
+    }
+
+    #[test]
+    fn registry_port_not_treated_as_tag() {
+        assert_eq!(
+            split_repo_tag("localhost:5000/app"),
+            None,
+            "port colon must not split as tag"
+        );
+        assert_eq!(
+            split_repo_tag("localhost:5000/app:v1"),
+            Some(("localhost:5000/app", "v1"))
+        );
+    }
+}
+
+
+

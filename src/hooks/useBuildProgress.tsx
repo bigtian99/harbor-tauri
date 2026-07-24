@@ -48,7 +48,8 @@ export function useBuildProgress(deps: UseBuildProgressDeps = {}) {
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
   const [progressStage, setProgressStage] = useState<BuildProgressStage | "">("");
-  const [copied, setCopied] = useState(false);
+  /** 被复制的镜像地址（null=未复制），各按钮独立判断 */
+  const [copied, setCopied] = useState<string | null>(null);
   const [showBuildLog, setShowBuildLog] = useState(false);
 
   async function handleCancelBuild() {
@@ -63,9 +64,8 @@ export function useBuildProgress(deps: UseBuildProgressDeps = {}) {
   async function handleCopyImage(imageUrl: string) {
     try {
       await navigator.clipboard.writeText(imageUrl);
-      setCopied(true);
+      setCopied(imageUrl);
       showToast?.("镜像地址已复制到剪贴板");
-      setTimeout(() => setCopied(false), 2000);
     } catch (e) {
       console.error("复制失败:", e);
       showToast?.(`复制失败: ${e}`);
@@ -92,7 +92,7 @@ export function useBuildProgress(deps: UseBuildProgressDeps = {}) {
   /** 开始一轮构建/推送前重置进度与日志相关状态 */
   const beginBuild = useCallback((message: string) => {
     setIsBuilding(true);
-    setCopied(false);
+    setCopied(null);
     setProgress(0);
     setProgressMessage(message);
     setProgressStage("");

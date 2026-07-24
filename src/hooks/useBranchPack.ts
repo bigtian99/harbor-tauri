@@ -24,7 +24,7 @@ interface UseBranchPackDeps {
   setActiveTab: (tab: TabType) => void;
   setLog: (value: string | ((prev: string) => string)) => void;
   setIsBuilding: (value: boolean) => void;
-  setCopied: (value: boolean) => void;
+  setCopied: (value: string | null) => void;
   setProgress: (value: number) => void;
   setProgressMessage: (value: string) => void;
   showToast: (message: string, duration?: number) => void;

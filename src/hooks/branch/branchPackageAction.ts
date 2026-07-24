@@ -38,7 +38,7 @@ export interface BranchPackageActionDeps extends BranchPackageActionState {
   setActiveTab: (tab: TabType) => void;
   setLog: (value: string | ((prev: string) => string)) => void;
   setIsBuilding: (value: boolean) => void;
-  setCopied: (value: boolean) => void;
+  setCopied: (value: string | null) => void;
   setProgress: (value: number) => void;
   setProgressMessage: (value: string) => void;
   showToast: (message: string, duration?: number) => void;
@@ -170,7 +170,7 @@ export async function handlePackageFromBranch(deps: BranchPackageActionDeps) {
   }
   setIsBuilding(true);
   setActiveTab("branch");
-  setCopied(false);
+  setCopied(null);
   setProgress(0);
   setProgressMessage("⬇️ 开始更新分支代码...");
   setLog("");
