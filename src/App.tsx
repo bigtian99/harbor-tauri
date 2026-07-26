@@ -20,8 +20,10 @@ import { useUploadPush } from "./hooks/useUploadPush";
 import { useBranchPack } from "./hooks/useBranchPack";
 import "./App.css";
 
-import type { HarborConfig, TabType } from "./types";
-import { isTauriRuntime } from "./types";
+import type { HarborConfig, TabType, BuildRecord } from "./types";
+import { isTauriRuntime, resolveHarborRepository } from "./types";
+import { invoke } from "@tauri-apps/api/core";
+import { resolveHistoryJarPushConfig } from "./historyJarPush.ts";
 
 /** 系统日志日期 card 选择器（替代原生 select） */
 function LogDayPicker({
@@ -195,6 +197,82 @@ function App() {
     [app.openArtifactPath, showToast],
   );
 
+  const [pushingRecordId, setPushingRecordId] = useState<string | null>(null);
+  /** 历史页推送会话：推送中及完成后仍显示进度/日志，离开历史 tab 后清除 */
+  const [historyPushUi, setHistoryPushUi] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== "history") {
+      setHistoryPushUi(false);
+      setPushingRecordId(null);
+    }
+  }, [activeTab]);
+
+  const handleHistoryPushJar = useCallback(
+    async (record: BuildRecord) => {
+      if (!isTauriRuntime()) {
+        showToast("请在桌面端推送 Harbor");
+        return;
+      }
+      if (build.isBuilding) {
+        showToast("已有构建任务进行中");
+        return;
+      }
+      const resolved = resolveHistoryJarPushConfig(record, app.config);
+      if (!resolved) {
+        showToast("该记录没有可推送的 JAR");
+        return;
+      }
+      if (!app.config.harbor_url || !app.config.username || !app.config.password || !app.config.project) {
+        showToast("请先完善 Harbor 配置");
+        setActiveTab("config");
+        return;
+      }
+      const repoCheck = resolveHarborRepository(resolved.imageName, app.config.project);
+      if (!repoCheck.ok) {
+        showToast(repoCheck.error);
+        return;
+      }
+
+      setHistoryPushUi(true);
+      setPushingRecordId(record.id);
+      build.setIsBuilding(true);
+      build.setCopied(null);
+      build.setProgress(0);
+      build.setProgressMessage("🚀 历史记录推送 Harbor...");
+      build.setLog("");
+      build.setShowBuildLog(true);
+      try {
+        const result = await invoke<string>("build_and_push", {
+          jarPath: resolved.jarPath,
+          imageName: resolved.imageName,
+          imageTag: resolved.imageTag,
+          artifactType: "jar",
+          exposePort: resolved.exposePort || null,
+          nginxLocations: [],
+        });
+        const imgMatch = result.match(/完整镜像:\s*(.+)/);
+        const fullImage = imgMatch?.[1]?.trim() || `${resolved.imageName}:${resolved.imageTag}`;
+        await invoke("update_build_record_push", {
+          recordId: record.id,
+          imageName: resolved.imageName,
+          imageTag: fullImage,
+        });
+        await app.loadBuildHistory();
+        build.setLog(`✅ 历史 JAR 已推送 Harbor\n\n完整镜像: ${fullImage}`);
+        showToast("推送成功");
+      } catch (e) {
+        build.setLog(`❌ 历史 JAR 推送失败:\n${e}`);
+        showToast(`推送失败: ${e}`);
+      } finally {
+        build.setIsBuilding(false);
+        setPushingRecordId(null);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [app.config, app.loadBuildHistory, build.isBuilding, showToast],
+  );
+
   return (
     <div className="app">
       <Sidebar
@@ -355,11 +433,22 @@ function App() {
             expandedRecordId={null}
             collapsedProjects={new Set()}
             historySearch=""
+            isBuilding={build.isBuilding}
+            showPushProgress={historyPushUi}
+            pushingRecordId={pushingRecordId}
+            progress={build.progress}
+            progressMessage={build.progressMessage}
+            log={build.log}
+            showBuildLog={build.showBuildLog}
             onLoadHistory={app.loadBuildHistory}
             onClearHistory={() => app.clearBuildHistory(showToast)}
             onDeleteRecord={(record) => app.deleteBuildRecord(record, showToast)}
             onOpenArtifact={openArtifactPath}
             onCopyImage={build.handleCopyImage}
+            onPushJar={(record) => { void handleHistoryPushJar(record); }}
+            onCancelBuild={build.handleCancelBuild}
+            setShowBuildLog={build.setShowBuildLog}
+            renderLog={build.renderLog}
           />
         )}
 

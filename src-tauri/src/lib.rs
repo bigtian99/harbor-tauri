@@ -24,7 +24,7 @@ use config_cmd::{load_config, save_config};
 use git::{list_git_branches, list_git_branches_from_url, clone_repo, list_remote_branches, check_remote_merge, merge_remote_branches, get_merge_conflict_diff, get_latest_tag};
 use history::{
     clear_build_history, delete_artifact_path, delete_build_record,
-    get_build_history, save_build_record, update_build_record_image,
+    get_build_history, save_build_record, update_build_record_image, update_build_record_push,
 };
 use diag::{
     export_diagnostic_log, get_templates_diagnostic_log_path,
@@ -95,6 +95,7 @@ pub fn run() {
             clear_build_history,
             delete_build_record,
             update_build_record_image,
+            update_build_record_push,
             delete_artifact_path,
             fetch_sub_channels,
             fetch_vest_data,

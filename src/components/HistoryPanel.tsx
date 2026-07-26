@@ -2,12 +2,23 @@ import { useState, useMemo, useEffect } from "react";
 import {
   History, CheckCircle, Copy, Trash2, RefreshCw, Search,
   FolderOpen, FileText, BookOpen, BookMarked, Folder,
-  Coffee, Package, Wrench, ChevronRight, Clock
+  Coffee, Package, Wrench, ChevronRight, Clock, Rocket, Loader2,
+  XCircle, Eye, EyeOff,
 } from "lucide-react";
+import type { ReactNode } from "react";
+import { ask } from "@tauri-apps/plugin-dialog";
 import type { BuildRecord } from "../types";
-import { getProjectName } from "../types";
+import { getProjectName, isTauriRuntime } from "../types";
 import { HoverTip } from "./HoverTip";
 import { avatarColor, avatarInitials } from "../avatarUrl";
+import { historyCanPushJar } from "../historyJarPush.ts";
+
+async function confirmDanger(message: string, title: string): Promise<boolean> {
+  if (isTauriRuntime()) {
+    return ask(message, { title, kind: "warning" });
+  }
+  return window.confirm(message);
+}
 
 interface HistoryPanelProps {
   buildHistory: BuildRecord[];
@@ -15,16 +26,31 @@ interface HistoryPanelProps {
   expandedRecordId: string | null;
   collapsedProjects: Set<string>;
   historySearch: string;
+  isBuilding?: boolean;
+  /** 仅历史页发起的推送会话才展示进度/日志（避免其它页残留 log） */
+  showPushProgress?: boolean;
+  pushingRecordId?: string | null;
+  progress?: number;
+  progressMessage?: string;
+  log?: string;
+  showBuildLog?: boolean;
   onLoadHistory: () => void;
   onClearHistory: () => void;
   onDeleteRecord: (record: BuildRecord) => void;
   onOpenArtifact: (path: string) => void;
   onCopyImage: (url: string) => void;
+  onPushJar?: (record: BuildRecord) => void;
+  onCancelBuild?: () => void;
+  setShowBuildLog?: (show: boolean) => void;
+  renderLog?: (text: string) => ReactNode;
 }
 
 export function HistoryPanel({
   buildHistory, isLoadingHistory, expandedRecordId, collapsedProjects, historySearch,
-  onLoadHistory, onClearHistory, onDeleteRecord, onOpenArtifact, onCopyImage,
+  isBuilding = false, showPushProgress = false, pushingRecordId = null,
+  progress = 0, progressMessage = "", log = "", showBuildLog = false,
+  onLoadHistory, onClearHistory, onDeleteRecord, onOpenArtifact, onCopyImage, onPushJar,
+  onCancelBuild, setShowBuildLog, renderLog,
 }: HistoryPanelProps) {
   const [search, setSearch] = useState(historySearch);
   const [expandedId, setExpandedId] = useState<string | null>(expandedRecordId);
@@ -142,6 +168,44 @@ export function HistoryPanel({
 
       {/* 右侧打包记录 */}
       <div className="history-content">
+        {showPushProgress && (isBuilding || Boolean(log)) && (
+          <div className="history-push-progress">
+            {isBuilding && (
+              <div className="progress-section">
+                <div className="progress-info">
+                  <span className="progress-message">{progressMessage || "推送中..."}</span>
+                  <span className="progress-percent">{progress}%</span>
+                </div>
+                <div className="progress-track">
+                  <div className="progress-bar" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            )}
+            {isBuilding && onCancelBuild && (
+              <button type="button" className="cancel-btn" onClick={onCancelBuild}>
+                <XCircle size={16} /> 取消推送
+              </button>
+            )}
+            {log && setShowBuildLog && renderLog && (
+              <div className="log-section">
+                <button
+                  type="button"
+                  className="log-toggle-btn"
+                  onClick={() => setShowBuildLog(!showBuildLog)}
+                  title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
+                >
+                  {showBuildLog ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
+                </button>
+                {showBuildLog && (
+                  <div className={`log-panel ${log.includes("✅") ? "success" : ""}`}>
+                    {renderLog(log)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {!selectedProject ? (
           <div className="history-content-empty">
             <div className="history-content-empty-icon">
@@ -169,9 +233,13 @@ export function HistoryPanel({
                   <button
                     className="history-action-btn danger"
                     onClick={() => {
-                      if (confirm('确定要清空所有打包历史吗？删除后将同时清理产物文件。')) {
-                        onClearHistory();
-                      }
+                      void (async () => {
+                        const ok = await confirmDanger(
+                          "确定要清空所有打包历史吗？\n\n删除后将同时清理产物文件，且不可恢复。",
+                          "清空历史",
+                        );
+                        if (ok) onClearHistory();
+                      })();
                     }}
                   >
                     <Trash2 size={14} />
@@ -257,6 +325,23 @@ export function HistoryPanel({
                       )}
                     </div>
                     <div className="history-record-actions">
+                      {onPushJar && historyCanPushJar(record) && (
+                        <button
+                          className="history-record-action history-record-action-push"
+                          disabled={isBuilding}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPushJar(record);
+                          }}
+                          title="推送 JAR 到 Harbor"
+                        >
+                          {pushingRecordId === record.id ? (
+                            <Loader2 size={14} className="spin" />
+                          ) : (
+                            <Rocket size={14} />
+                          )}
+                        </button>
+                      )}
                       <button
                         className="history-record-action"
                         onClick={() => onOpenArtifact(record.artifact_path)}
@@ -282,10 +367,15 @@ export function HistoryPanel({
                       </button>
                       <button
                         className="history-record-action danger"
-                        onClick={() => {
-                          if (confirm('确定要删除这条记录吗？删除后将同时清理产物文件。')) {
-                            onDeleteRecord(record);
-                          }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void (async () => {
+                            const ok = await confirmDanger(
+                              `确定要删除这条打包记录吗？\n\n分支：${record.branch}\n产物将一并清理，删除后不可恢复。`,
+                              "删除记录",
+                            );
+                            if (ok) onDeleteRecord(record);
+                          })();
                         }}
                         title="删除记录"
                       >

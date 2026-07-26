@@ -62,12 +62,52 @@ pub async fn update_build_record_image(image_name: String, image_tag: String) ->
     let mut config = load_config_sync()?;
     if let Some(record) = config.build_history.first_mut() {
         record.image_name = Some(image_name);
-        record.image_tag = Some(image_tag);
+        record.image_tag = Some(image_tag.clone());
         record.status = "pushed".to_string();
         let path = get_config_path();
         let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
         fs::write(&path, content).map_err(|e| e.to_string())?;
+        crate::diag::diag_log(
+            "history",
+            &format!("update_build_record_image: first record → pushed tag={image_tag}"),
+        );
     }
+    Ok(())
+}
+
+/// 按记录 id 标记推送完成（历史页一键推 Harbor）
+#[tauri::command]
+pub async fn update_build_record_push(
+    record_id: String,
+    image_name: String,
+    image_tag: String,
+) -> Result<(), String> {
+    let record_id = record_id.trim().to_string();
+    if record_id.is_empty() {
+        return Err("record_id 不能为空".into());
+    }
+    let mut config = load_config_sync()?;
+    let Some(record) = config
+        .build_history
+        .iter_mut()
+        .find(|r| r.id == record_id)
+    else {
+        crate::diag::diag_log(
+            "history",
+            &format!("update_build_record_push: id={record_id} not found"),
+        );
+        return Err(format!("未找到构建记录: {record_id}"));
+    };
+    record.image_name = Some(image_name.clone());
+    record.image_tag = Some(image_tag.clone());
+    record.status = "pushed".to_string();
+    let path = get_config_path();
+    let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    crate::diag::diag_log(
+        "history",
+        &format!("update_build_record_push: id={record_id} → pushed image={image_name} tag={image_tag}"),
+    );
     Ok(())
 }
 
