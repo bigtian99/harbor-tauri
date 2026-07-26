@@ -8,8 +8,8 @@ import { MergeFormSection } from "./merge/MergeFormSection";
 
 export type { MergePanelProps } from "./merge/types";
 
-export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
-  const m = useMergePanel(config, onOpenDirectory);
+export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge }: MergePanelProps) {
+  const m = useMergePanel(config, onOpenDirectory, onPackageAfterMerge);
 
   return (
     <div className="merge-panel">
@@ -67,6 +67,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
         branchNames={m.branchNames}
         isLoadingBranches={m.isLoadingBranches}
         pushAfterMerge={m.pushAfterMerge}
+        packageAfterMerge={m.packageAfterMerge}
         tagAfterMerge={m.tagAfterMerge}
         tagName={m.tagName}
         tagMessage={m.tagMessage}
@@ -99,6 +100,7 @@ export function MergePanel({ config, onOpenDirectory }: MergePanelProps) {
         onSourceBranchChange={m.handleSourceBranchChange}
         onTargetBranchChange={m.handleTargetBranchChange}
         onPushAfterMergeChange={m.setPushAfterMerge}
+        onPackageAfterMergeChange={m.setPackageAfterMerge}
         onTagAfterMergeChange={m.handleTagAfterMergeChange}
         onUseQuickMergeChange={m.setUseQuickMerge}
         onShowQuickMergeConfig={m.setShowQuickMergeConfig}

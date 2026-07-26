@@ -3,6 +3,8 @@ import type { HarborConfig } from "../../types";
 export interface MergePanelProps {
   config: HarborConfig;
   onOpenDirectory: (path: string) => void;
+  /** 合并成功且勾选同步打包时回调 */
+  onPackageAfterMerge?: (args: { repoPath: string; targetBranch: string }) => void;
 }
 
 export type MergeOverlayPhase = "idle" | "running" | "success" | "error";

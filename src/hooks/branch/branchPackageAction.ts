@@ -123,7 +123,17 @@ export async function saveBranchSettings(deps: {
   }
 }
 
-export async function handlePackageFromBranch(deps: BranchPackageActionDeps) {
+/** 合并后同步打包等场景：覆盖仓库/分支/是否推 Harbor（避免 setState 未 flush） */
+export type BranchPackageOverrides = {
+  repoPath?: string;
+  branchName?: string;
+  autoPushImage?: boolean;
+};
+
+export async function handlePackageFromBranch(
+  deps: BranchPackageActionDeps,
+  overrides?: BranchPackageOverrides,
+) {
   const {
     config,
     setConfig,
@@ -144,17 +154,17 @@ export async function handlePackageFromBranch(deps: BranchPackageActionDeps) {
     setCustomDockerfile,
     setBranchFullImage,
     setBranchImageResults,
-    repoPath,
-    branchName,
     branchProjectType,
     frontendDir,
     selectedBuildScript,
-    autoPushImage,
     packageWithBackend,
     springProfile,
     branchExposePort,
     nginxLocations,
   } = deps;
+  const repoPath = overrides?.repoPath ?? deps.repoPath;
+  const branchName = overrides?.branchName ?? deps.branchName;
+  const autoPushImage = overrides?.autoPushImage ?? deps.autoPushImage;
 
   if (!isTauriRuntime()) {
     setLog("❌ 当前是浏览器预览环境，分支打包请在 Tauri 桌面窗口中操作");

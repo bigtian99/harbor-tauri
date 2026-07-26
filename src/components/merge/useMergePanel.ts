@@ -10,8 +10,13 @@ import type {
 import { isTauriRuntime } from "../../types";
 import type { MergeOverlayPhase } from "./types";
 import { isAutoMergeMessage, parseChangedLines, parseConflictBlocks, summarizeMergeError } from "./utils";
+import { mergeSyncPackageConfirmHint } from "../../mergeSyncPackage";
 
-export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: string) => void) {
+export function useMergePanel(
+  config: HarborConfig,
+  onOpenDirectory: (path: string) => void,
+  onPackageAfterMerge?: (args: { repoPath: string; targetBranch: string }) => void,
+) {
   const [repoPath, setRepoPath] = useState("");
   // 解析后的本地仓库路径（URL 输入时为缓存克隆目录），后续 check/merge 都用它
   const [resolvedRepoPath, setResolvedRepoPath] = useState("");
@@ -23,6 +28,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
   const [isChecking, setIsChecking] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [pushAfterMerge, setPushAfterMerge] = useState(true);
+  const [packageAfterMerge, setPackageAfterMerge] = useState(true);
   // 快捷开关：使用配置的分支自动填充
   const [useQuickMerge, setUseQuickMerge] = useState(false);
   const [showQuickMergeConfig, setShowQuickMergeConfig] = useState(false);
@@ -326,11 +332,15 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     const tagInfo = tagAfterMerge && tagName.trim()
       ? `\n合并后打 tag「${tagName.trim()}」并推送\nTag 内容：${tagMessage}`
       : "";
+    const packageInfo = packageAfterMerge
+      ? `\n${mergeSyncPackageConfirmHint(targetBranch)}`
+      : "";
     if (!window.confirm(
       `确认把 ${sourceBranch} 合并进 ${targetBranch}？\n` +
       `将在隔离 worktree 中执行 git merge --no-ff ${sourceBranch}，不会切换当前工作区分支` +
       `${pushAfterMerge ? `\n合并后推送到远程 origin/${targetRemoteName}` : "\n合并结果仅更新本地分支引用，不推送远程"}` +
-      tagInfo
+      tagInfo +
+      packageInfo
     )) {
       return;
     }
@@ -354,6 +364,12 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       setMergeOverlayPhase("success");
       setCheckResult(null);
       await loadBranches(repoPath);
+      if (packageAfterMerge) {
+        onPackageAfterMerge?.({
+          repoPath: resolvedRepoPath,
+          targetBranch,
+        });
+      }
       mergeAutoCloseTimer.current = setTimeout(() => {
         closeMergeOverlay();
       }, 2000);
@@ -364,7 +380,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
       setMergeResultMessage(message);
       setMergeOverlayPhase("error");
     }
-  }, [checkResult, resolvedRepoPath, sourceBranch, targetBranch, repoPath, pushAfterMerge, tagAfterMerge, tagName, tagMessage, loadBranches, closeMergeOverlay]);
+  }, [checkResult, resolvedRepoPath, sourceBranch, targetBranch, repoPath, pushAfterMerge, packageAfterMerge, tagAfterMerge, tagName, tagMessage, loadBranches, closeMergeOverlay, onPackageAfterMerge]);
 
   const canMerge = checkResult?.canMerge === true;
   const isSameBranch = Boolean(sourceBranch && targetBranch && sourceBranch === targetBranch);
@@ -655,6 +671,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     branchNames,
     isLoadingBranches,
     pushAfterMerge,
+    packageAfterMerge,
     isChecking,
     isMerging,
     checkResult,
@@ -678,6 +695,7 @@ export function useMergePanel(config: HarborConfig, onOpenDirectory: (path: stri
     handleSourceBranchChange,
     handleTargetBranchChange,
     setPushAfterMerge,
+    setPackageAfterMerge,
     handleCheck,
     handleMerge,
     loadConflictDiff,

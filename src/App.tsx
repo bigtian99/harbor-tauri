@@ -367,6 +367,9 @@ function App() {
           <MergePanel
             config={app.config}
             onOpenDirectory={openArtifactPath}
+            onPackageAfterMerge={({ repoPath, targetBranch }) => {
+              void branch.packageFromMergeTarget(repoPath, targetBranch);
+            }}
           />
         )}
 

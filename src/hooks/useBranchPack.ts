@@ -11,6 +11,7 @@ import type {
 import type { BranchImageResult } from "../branchImageResults";
 import { isTauriRuntime } from "../types";
 import { getRememberedBranchAdvancedSettings, rememberBranchRepoSettings } from "../branchSettings";
+import { shouldPushHarborAfterMerge } from "../mergeSyncPackage";
 import { prependPathHistory } from "./branch/pathHistory";
 import { useBranchCommits } from "./branch/useBranchCommits";
 import { useBranchGitLoad } from "./branch/useBranchGitLoad";
@@ -196,6 +197,83 @@ export function useBranchPack(deps: UseBranchPackDeps) {
       branchExposePort,
       nginxLocations,
     });
+  }
+
+  /**
+   * 合并成功后同步打包：写入分支页可见状态，并用 overrides 强制仓库/目标分支/Harbor 规则。
+   */
+  async function packageFromMergeTarget(mergeRepoPath: string, targetBranch: string) {
+    const path = mergeRepoPath.trim();
+    const branch = targetBranch.trim();
+    if (!path || !branch) return;
+
+    const autoPush = shouldPushHarborAfterMerge(branch);
+    const remembered = getRememberedBranchAdvancedSettings(config, path);
+
+    let nextProjectType: BranchProjectType = branchProjectType;
+    let nextFrontendDir = frontendDir;
+    let nextBuildScript = selectedBuildScript;
+    let nextPackageWithBackend = packageWithBackend;
+
+    if (config.remember_branch_settings) {
+      const lastRepo = (config.last_repo_path || "").trim();
+      if (!lastRepo || lastRepo === path) {
+        if (config.last_project_type === "npm" || config.last_project_type === "maven") {
+          nextProjectType = config.last_project_type;
+        }
+        if (config.last_frontend_dir) nextFrontendDir = config.last_frontend_dir;
+        if (config.last_build_script) nextBuildScript = config.last_build_script;
+        if (config.last_package_with_backend !== undefined) {
+          nextPackageWithBackend = config.last_package_with_backend;
+        }
+      }
+    }
+
+    setRepoPath(path);
+    setBranchName(branch);
+    setAutoPushImage(autoPush);
+    setSpringProfile(remembered.springProfile);
+    setBranchExposePort(remembered.exposePort);
+    setNginxLocations(remembered.nginxLocations ?? []);
+    setBranchProjectType(nextProjectType);
+    setFrontendDir(nextFrontendDir);
+    setSelectedBuildScript(nextBuildScript);
+    setPackageWithBackend(nextPackageWithBackend);
+
+    await runPackageFromBranch(
+      {
+        config,
+        setConfig,
+        setActiveTab,
+        setLog,
+        setIsBuilding,
+        setCopied,
+        setProgress,
+        setProgressMessage,
+        showToast,
+        loadBuildHistory,
+        imageName,
+        setImageName,
+        imageTag,
+        setArtifactPath,
+        setBackendArtifactPath,
+        setWorktreePath,
+        setCustomDockerfile,
+        setBranchFullImage,
+        setBranchImageResults,
+        repoPath: path,
+        branchName: branch,
+        branchProjectType: nextProjectType,
+        frontendDir: nextFrontendDir,
+        selectedBuildScript: nextBuildScript,
+        autoPushImage: autoPush,
+        packageWithBackend: nextPackageWithBackend,
+        springProfile: remembered.springProfile,
+        branchExposePort: remembered.exposePort,
+        nginxLocations: remembered.nginxLocations ?? [],
+      },
+      { repoPath: path, branchName: branch, autoPushImage: autoPush },
+    );
   }
 
   async function handleSelectRepo() {
@@ -403,6 +481,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     loadNpmScripts,
     handleSelectRepo,
     handlePackageFromBranch,
+    packageFromMergeTarget,
     handleBranchProjectTypeChange,
     handleRepoPathChange,
     handleDropRepoPath,

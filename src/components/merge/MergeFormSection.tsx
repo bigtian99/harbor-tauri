@@ -18,6 +18,7 @@ interface MergeFormSectionProps {
   branchNames: string[];
   isLoadingBranches: boolean;
   pushAfterMerge: boolean;
+  packageAfterMerge: boolean;
   tagAfterMerge: boolean;
   tagName: string;
   tagMessage: string;
@@ -50,6 +51,7 @@ interface MergeFormSectionProps {
   onSourceBranchChange: (value: string) => void;
   onTargetBranchChange: (value: string) => void;
   onPushAfterMergeChange: (checked: boolean) => void;
+  onPackageAfterMergeChange: (checked: boolean) => void;
   onTagAfterMergeChange: (checked: boolean) => void;
   onUseQuickMergeChange: (checked: boolean) => void;
   onShowQuickMergeConfig: (show: boolean) => void;
@@ -76,6 +78,7 @@ export function MergeFormSection({
   branchNames,
   isLoadingBranches,
   pushAfterMerge,
+  packageAfterMerge,
   tagAfterMerge,
   tagName,
   tagMessage,
@@ -108,6 +111,7 @@ export function MergeFormSection({
   onSourceBranchChange,
   onTargetBranchChange,
   onPushAfterMergeChange,
+  onPackageAfterMergeChange,
   onTagAfterMergeChange,
   onUseQuickMergeChange,
   onShowQuickMergeConfig,
@@ -206,6 +210,17 @@ export function MergeFormSection({
           />
           <span className="checkbox-toggle"></span>
           <span>合并后推送到远程</span>
+        </label>
+        <label className="checkbox-label" style={{ marginLeft: 16 }}>
+          <input
+            type="checkbox"
+            checked={packageAfterMerge}
+            onChange={(e) => onPackageAfterMergeChange(e.target.checked)}
+          />
+          <span className="checkbox-toggle"></span>
+          <span title="目标分支名含 rc-master 时打包并推 Harbor，否则只打包">
+            合并后同步打包
+          </span>
         </label>
         <label className="checkbox-label" style={{ marginLeft: 16 }}>
           <input
