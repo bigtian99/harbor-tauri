@@ -470,6 +470,12 @@
   border: 1px solid rgba(251, 191, 36, 0.3);
 }
 
+.image-picker-stat.running {
+  color: #fb7185;
+  background: rgba(251, 113, 133, 0.1);
+  border: 1px solid rgba(251, 113, 133, 0.32);
+}
+
 .image-picker-count {
   flex-shrink: 0;
   font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
@@ -686,6 +692,11 @@
   border-color: rgba(251, 191, 36, 0.45);
 }
 
+.image-card.running:not(.selected) .image-card-avatar {
+  background: linear-gradient(145deg, rgba(251, 113, 133, 0.5), rgba(120, 30, 50, 0.72));
+  border-color: rgba(251, 113, 133, 0.5);
+}
+
 .image-card-text {
   min-width: 0;
   display: flex;
@@ -834,6 +845,18 @@
   border-color: #5eead4;
 }
 
+.image-card.running {
+  border-color: rgba(251, 113, 133, 0.3);
+}
+
+.image-card.running:hover {
+  border-color: rgba(251, 113, 133, 0.5);
+}
+
+.image-card.running.selected {
+  border-color: #5eead4;
+}
+
 .image-card-badge-in-use {
   display: inline-flex;
   align-items: center;
@@ -846,6 +869,21 @@
   color: #fbbf24;
   background: rgba(251, 191, 36, 0.12);
   border: 1px solid rgba(251, 191, 36, 0.35);
+  white-space: nowrap;
+}
+
+.image-card-badge-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fb7185;
+  background: rgba(251, 113, 133, 0.12);
+  border: 1px solid rgba(251, 113, 133, 0.38);
   white-space: nowrap;
 }
 

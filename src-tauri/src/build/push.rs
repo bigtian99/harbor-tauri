@@ -21,10 +21,12 @@ use std::sync::atomic::Ordering;
 /// 本地镜像条目（含是否被容器占用）
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalImageInfo {
-    /// repository:tag
+    /// repository:tag（来自 `docker images`，不是 `docker ps`）
     pub reference: String,
     /// 是否被任意容器（含已停止）引用，占用中禁止删除
     pub in_use: bool,
+    /// 是否有**运行中**容器正在使用（用于 UI 角标，不影响删除判定）
+    pub running: bool,
 }
 
 #[tauri::command]
@@ -312,12 +314,18 @@ pub async fn push_local_image(
     Ok(format!("✅ 镜像推送成功!\n\n完整镜像: {}", full_image))
 }
 
-/// 收集被容器占用的镜像 ID / 引用（含已停止容器）
-fn collect_in_use_image_keys() -> HashSet<String> {
+/// 收集被容器占用的镜像 ID / 引用。
+/// `include_stopped=true` → `docker ps -a`（删除拦截）；`false` → 仅运行中（UI 角标）。
+fn collect_container_image_keys(include_stopped: bool) -> HashSet<String> {
     let mut used = HashSet::new();
 
     // Image 字段：可能是 repo:tag、无 tag 短名、或短 ID
-    if let Ok(output) = docker_output(&["ps", "-a", "--format", "{{.Image}}"]) {
+    let ps_format: &[&str] = if include_stopped {
+        &["ps", "-a", "--format", "{{.Image}}"]
+    } else {
+        &["ps", "--format", "{{.Image}}"]
+    };
+    if let Ok(output) = docker_output(ps_format) {
         if output.status.success() {
             for line in String::from_utf8_lossy(&output.stdout).lines() {
                 remember_in_use_key(&mut used, line);
@@ -326,7 +334,12 @@ fn collect_in_use_image_keys() -> HashSet<String> {
     }
 
     // Docker 29+：`docker ps --format {{.ImageID}}` 已不可用，改用 inspect 取真实 digest
-    if let Ok(output) = docker_output(&["ps", "-aq"]) {
+    let ps_ids: &[&str] = if include_stopped {
+        &["ps", "-aq"]
+    } else {
+        &["ps", "-q"]
+    };
+    if let Ok(output) = docker_output(ps_ids) {
         if output.status.success() {
             let ids: Vec<String> = String::from_utf8_lossy(&output.stdout)
                 .lines()
@@ -359,7 +372,10 @@ fn collect_in_use_image_keys() -> HashSet<String> {
                         let stderr = String::from_utf8_lossy(&insp.stderr);
                         crate::diag::diag_log(
                             "docker",
-                            &format!("collect_in_use inspect failed: {}", stderr.trim()),
+                            &format!(
+                                "collect_container_image_keys(include_stopped={include_stopped}) inspect failed: {}",
+                                stderr.trim()
+                            ),
                         );
                     }
                 }
@@ -368,6 +384,16 @@ fn collect_in_use_image_keys() -> HashSet<String> {
     }
 
     used
+}
+
+/// 任意容器引用（含已停止）——用于删除拦截
+fn collect_in_use_image_keys() -> HashSet<String> {
+    collect_container_image_keys(true)
+}
+
+/// 仅运行中容器 —— 用于 UI「运行中」角标
+fn collect_running_image_keys() -> HashSet<String> {
+    collect_container_image_keys(false)
 }
 
 /// 写入占用集合，并补齐 `name` ↔ `name:latest`、digest 短 ID 别名
@@ -461,6 +487,7 @@ pub fn list_local_images() -> Result<Vec<LocalImageInfo>, String> {
     }
 
     let used = collect_in_use_image_keys();
+    let running_keys = collect_running_image_keys();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut images: Vec<LocalImageInfo> = Vec::new();
 
@@ -478,19 +505,22 @@ pub fn list_local_images() -> Result<Vec<LocalImageInfo>, String> {
         }
 
         let in_use = is_image_in_use(reference, id, &used);
+        let running = is_image_in_use(reference, id, &running_keys);
 
         images.push(LocalImageInfo {
             reference: reference.to_string(),
             in_use,
+            running,
         });
     }
 
     crate::diag::diag_log(
         "docker",
         &format!(
-            "list_local_images: total={}, in_use={}",
+            "list_local_images: source=docker-images total={}, in_use={}, running={}",
             images.len(),
-            images.iter().filter(|i| i.in_use).count()
+            images.iter().filter(|i| i.in_use).count(),
+            images.iter().filter(|i| i.running).count()
         ),
     );
     Ok(images)

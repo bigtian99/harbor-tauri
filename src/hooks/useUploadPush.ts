@@ -13,8 +13,12 @@ import { useEffect } from "react";
 
 /** 与后端 list_local_images 对齐 */
 export type LocalImageInfo = {
+  /** repository:tag，来自 docker images */
   reference: string;
+  /** 任意容器引用（含已停止）——禁止删除 */
   in_use: boolean;
+  /** 有运行中容器 —— 仅 UI 角标 */
+  running: boolean;
 };
 
 interface UseUploadPushDeps {
@@ -203,7 +207,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
 
     const info = pushLocalImageOptions.find((x) => x.reference === ref);
     if (info?.in_use) {
-      showToast("该镜像正被容器使用，无法删除");
+      showToast("该镜像仍有容器引用（含已停止），无法删除");
       return;
     }
 

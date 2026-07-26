@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  Rocket, Loader2, Eye, EyeOff, XCircle, CheckCircle, Copy, RefreshCw, Box, Search, Trash2, Lock, Tag, Container, Package, X
+  Rocket, Loader2, Eye, EyeOff, XCircle, CheckCircle, Copy, RefreshCw, Box, Search, Trash2, Lock, Tag, Package, X, Play
 } from "lucide-react";
 import type { LocalImageInfo } from "../hooks/useUploadPush";
 
@@ -72,15 +72,23 @@ export function PushImagePanel({
     const list = !q
       ? localImageOptions
       : localImageOptions.filter((img) => img.reference.toLowerCase().includes(q));
-    // 可推送的排前面，占用中沉底——选镜像时更直观
-    return [...list].sort((a, b) => Number(a.in_use) - Number(b.in_use));
+    // 可推送 → 仅停止容器引用 → 运行中；选镜像时更直观
+    const rank = (img: LocalImageInfo) => (img.running ? 2 : img.in_use ? 1 : 0);
+    return [...list].sort((a, b) => rank(a) - rank(b));
   }, [localImageOptions, query]);
 
   const readyCount = useMemo(
     () => filteredImages.filter((img) => !img.in_use).length,
     [filteredImages],
   );
-  const busyCount = filteredImages.length - readyCount;
+  const runningCount = useMemo(
+    () => filteredImages.filter((img) => img.running).length,
+    [filteredImages],
+  );
+  const referencedCount = useMemo(
+    () => filteredImages.filter((img) => img.in_use && !img.running).length,
+    [filteredImages],
+  );
 
   const handleQueryChange = (value: string) => {
     setQuery(value);
@@ -120,7 +128,7 @@ export function PushImagePanel({
       <div className="form-group image-picker">
         <div className="image-picker-label-row">
           <div className="image-picker-title">
-            <Container size={15} aria-hidden />
+            <Package size={15} aria-hidden />
             <label>本地镜像引用</label>
           </div>
           {!isLoadingImages && localImageOptions.length > 0 && (
@@ -129,13 +137,19 @@ export function PushImagePanel({
                 <Package size={11} aria-hidden />
                 {readyCount}
               </span>
-              {busyCount > 0 && (
-                <span className="image-picker-stat busy" title="容器占用中">
+              {referencedCount > 0 && (
+                <span className="image-picker-stat busy" title="有已停止容器引用，不可删除">
                   <Lock size={11} aria-hidden />
-                  {busyCount}
+                  {referencedCount}
                 </span>
               )}
-              <span className="image-picker-count" title="当前列表数量">
+              {runningCount > 0 && (
+                <span className="image-picker-stat running" title="有运行中容器">
+                  <Play size={11} aria-hidden />
+                  {runningCount}
+                </span>
+              )}
+              <span className="image-picker-count" title="docker images 数量">
                 {query.trim()
                   ? `${filteredImages.length}/${localImageOptions.length}`
                   : localImageOptions.length}
@@ -222,7 +236,7 @@ export function PushImagePanel({
                     className={[
                       "image-card",
                       selected ? "selected" : "",
-                      img.in_use ? "in-use" : "",
+                      img.running ? "running" : img.in_use ? "in-use" : "",
                       isRemoving ? "removing" : "",
                     ]
                       .filter(Boolean)
@@ -230,9 +244,11 @@ export function PushImagePanel({
                     style={{ ["--card-hue" as string]: String(hue) }}
                     onClick={() => !isRemoving && handleSelectCard(img.reference)}
                     title={
-                      img.in_use
-                        ? `${img.reference}\n（有容器占用，不可删除）`
-                        : img.reference
+                      img.running
+                        ? `${img.reference}\n（有运行中容器，不可删除）`
+                        : img.in_use
+                          ? `${img.reference}\n（有已停止容器引用，不可删除）`
+                          : img.reference
                     }
                   >
                     <div className="image-card-main">
@@ -252,10 +268,15 @@ export function PushImagePanel({
                             <Tag size={10} aria-hidden />
                             {tag}
                           </span>
-                          {img.in_use ? (
-                            <span className="image-card-badge-in-use" title="有容器正在使用此镜像">
+                          {img.running ? (
+                            <span className="image-card-badge-running" title="有运行中容器正在使用此镜像">
+                              <Play size={10} aria-hidden />
+                              运行中
+                            </span>
+                          ) : img.in_use ? (
+                            <span className="image-card-badge-in-use" title="有已停止容器引用此镜像">
                               <Lock size={10} aria-hidden />
-                              使用中
+                              有引用
                             </span>
                           ) : (
                             <span className="image-card-badge-ready">可推送</span>
