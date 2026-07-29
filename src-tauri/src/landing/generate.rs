@@ -4,7 +4,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Emitter;
 
-use super::templates::{list_template_subdirs, summarize_templates_dir, templates_root};
+use super::templates::{
+    find_matching_template_dirs, generation_template_roots, list_template_subdirs,
+    summarize_templates_dir,
+};
 
 #[tauri::command]
 pub async fn fetch_sub_channels(api_url: String, ids: String) -> Result<Vec<SubChannelData>, String> {
@@ -62,17 +65,18 @@ pub async fn generate_landing_pages(
 
     let total = sub_channels.len();
     crate::diag::diag_log("landing", &format!("开始生成 {} 个落地页", total));
-    let gen_base = if template_base.trim().is_empty() {
-        templates_root()
-    } else {
-        PathBuf::from(template_base.trim())
-    };
+    let gen_roots = generation_template_roots(&template_base);
+    let gen_summary = gen_roots
+        .iter()
+        .map(|r| format!("{} — {}", r.display(), summarize_templates_dir(r)))
+        .collect::<Vec<_>>()
+        .join("; ");
     crate::diag::diag_log(
         "landing",
         &format!(
-            "generate_landing_pages base={} — {}",
-            gen_base.display(),
-            summarize_templates_dir(&gen_base)
+            "generate_landing_pages roots=[{}] count={}",
+            gen_summary,
+            total
         ),
     );
 
@@ -95,37 +99,27 @@ pub async fn generate_landing_pages(
             }),
         ).ok();
 
-        // 查找所有匹配的模板目录（以 type_code 开头的目录）
-        let base = if template_base.trim().is_empty() {
-            templates_root()
-        } else {
-            PathBuf::from(template_base.trim())
-        };
-        let template_base_path = base.as_path();
-        let mut template_dirs: Vec<PathBuf> = Vec::new();
-        if let Ok(entries) = fs::read_dir(template_base_path) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                let name_lower = name.to_lowercase();
-                let tc_lower = channel.type_code.to_lowercase();
-                if name_lower == tc_lower || name_lower.starts_with(&format!("{}-", tc_lower)) {
-                    if entry.path().is_dir() {
-                        template_dirs.push(entry.path());
-                    }
-                }
-            }
-        }
-        template_dirs.sort();
+        // 查找所有匹配的模板目录（可写优先；以 type_code 开头的目录）
+        let template_dirs = find_matching_template_dirs(&channel.type_code, &gen_roots);
 
         if template_dirs.is_empty() {
-            let available = list_template_subdirs(template_base_path);
+            let available: Vec<String> = gen_roots
+                .iter()
+                .flat_map(|r| list_template_subdirs(r))
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
             crate::diag::diag_log(
                 "landing",
                 &format!(
-                    "生成失败 channel={} type_code={} base={} — 无匹配模板；当前 base 下可用: [{}]",
+                    "生成失败 channel={} type_code={} roots=[{}] — 无匹配模板；可用: [{}]",
                     channel.sub_channel_name,
                     channel.type_code,
-                    template_base_path.display(),
+                    gen_roots
+                        .iter()
+                        .map(|r| r.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     if available.is_empty() {
                         "无".to_string()
                     } else {

@@ -238,6 +238,120 @@ pub(crate) fn writable_templates_root() -> PathBuf {
         .join("templates")
 }
 
+/// 模板扫描根目录：可写优先，再打包/资源目录。
+///
+/// 关键因：`tauri dev` 下上传写到源码 `templates/`，而 `templates_root()` 指向
+/// `target/debug/_up_/templates`（资源副本）。若生成/预览只读后者，上传的模板
+/// 会进列表却预览 404、生成也用不到。
+pub(crate) fn template_scan_roots() -> Vec<PathBuf> {
+    let writable = writable_templates_root();
+    let bundled = templates_root();
+    let mut roots = Vec::with_capacity(2);
+    if writable.is_dir() {
+        roots.push(writable.clone());
+    }
+    if bundled != writable && bundled.is_dir() {
+        roots.push(bundled);
+    } else if roots.is_empty() {
+        roots.push(bundled);
+    }
+    roots
+}
+
+/// 按目录名解析模板路径：可写目录优先，其次打包资源。
+pub(crate) fn resolve_template_dir(name: &str) -> Option<PathBuf> {
+    if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
+        return None;
+    }
+    for root in template_scan_roots() {
+        let candidate = root.join(name);
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// 生成/扫描用的根目录列表。
+/// - `template_base` 为空，或等于打包资源根：返回可写优先的双根
+/// - 否则：仅使用显式传入的目录（自定义路径）
+pub(crate) fn generation_template_roots(template_base: &str) -> Vec<PathBuf> {
+    let trimmed = template_base.trim();
+    if trimmed.is_empty() {
+        return template_scan_roots();
+    }
+    let explicit = PathBuf::from(trimmed);
+    if explicit == templates_root() {
+        return template_scan_roots();
+    }
+    vec![explicit]
+}
+
+/// 在多个根下按 type_code 匹配模板目录（可写优先，同名去重），按目录名排序。
+pub(crate) fn find_matching_template_dirs(type_code: &str, roots: &[PathBuf]) -> Vec<PathBuf> {
+    use std::collections::HashSet;
+    let tc_lower = type_code.to_lowercase();
+    let mut seen = HashSet::new();
+    let mut dirs = Vec::new();
+    for root in roots {
+        if let Ok(entries) = fs::read_dir(root) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let name_lower = name.to_lowercase();
+                if name_lower != tc_lower && !name_lower.starts_with(&format!("{tc_lower}-")) {
+                    continue;
+                }
+                if !entry.path().is_dir() {
+                    continue;
+                }
+                if seen.insert(name) {
+                    dirs.push(entry.path());
+                }
+            }
+        }
+    }
+    dirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    dirs
+}
+
+/// 收集多个根下全部模板子目录（可写优先，同名去重），按目录名排序。
+pub(crate) fn collect_all_template_dirs(roots: &[PathBuf]) -> Vec<PathBuf> {
+    use std::collections::HashSet;
+    let mut seen = HashSet::new();
+    let mut dirs = Vec::new();
+    for root in roots {
+        for name in list_template_subdirs(root) {
+            if seen.insert(name.clone()) {
+                dirs.push(root.join(name));
+            }
+        }
+    }
+    dirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    dirs
+}
+
+/// 解析 `__templates__/{dir}/...` 相对路径到真实文件，并返回用于路径穿越校验的根。
+pub(crate) fn resolve_template_preview_path(rel: &str) -> Option<(PathBuf, PathBuf)> {
+    let rel = rel.trim_start_matches('/');
+    if rel.is_empty() {
+        return None;
+    }
+    let path = Path::new(rel);
+    let mut comps = path.components();
+    let first = match comps.next() {
+        Some(std::path::Component::Normal(s)) => s.to_string_lossy().to_string(),
+        _ => return None,
+    };
+    let template_dir = resolve_template_dir(&first)?;
+    let rest: PathBuf = comps.as_path().to_path_buf();
+    let full = if rest.as_os_str().is_empty() {
+        template_dir.clone()
+    } else {
+        template_dir.join(rest)
+    };
+    Some((template_dir, full))
+}
+
 #[tauri::command]
 pub async fn get_bundled_templates_dir() -> Result<String, String> {
     if let Some(dir) = BUNDLED_TEMPLATES_DIR.get() {

@@ -23,7 +23,7 @@ pub use templates::{
     list_template_infos, upload_template_zip,
 };
 pub use vest::{fetch_vest_data, generate_vest_landing_pages};
-pub(crate) use templates::templates_root;
+pub(crate) use templates::resolve_template_preview_path;
 /// 兼容：`crate::landing::templates_log` ≡ `diag_log("templates", …)`
 #[allow(unused_imports)]
 pub(crate) use templates::templates_log;

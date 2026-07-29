@@ -1,10 +1,12 @@
 use crate::models::{LandingData, LandingPageResult, VestApiResponse};
 use crate::utils::{copy_dir_recursive, render_template};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tauri::Emitter;
 
-use super::templates::{summarize_templates_dir, templates_root};
+use super::templates::{
+    collect_all_template_dirs, generation_template_roots, summarize_templates_dir,
+};
 
 #[tauri::command]
 pub async fn fetch_vest_data(
@@ -103,33 +105,32 @@ pub async fn generate_vest_landing_pages(
     let total = vest_items.len();
     crate::diag::diag_log("landing", &format!("马甲包 开始生成 {} 个落地页", total));
 
-    let gen_base = if template_base.trim().is_empty() {
-        templates_root()
-    } else {
-        PathBuf::from(template_base.trim())
-    };
+    let gen_roots = generation_template_roots(&template_base);
+    let gen_summary = gen_roots
+        .iter()
+        .map(|r| format!("{} — {}", r.display(), summarize_templates_dir(r)))
+        .collect::<Vec<_>>()
+        .join("; ");
     crate::diag::diag_log(
         "landing",
         &format!(
-            "generate_vest_landing_pages base={} — {}",
-            gen_base.display(),
-            summarize_templates_dir(&gen_base)
+            "generate_vest_landing_pages roots=[{}] count={}",
+            gen_summary, total
         ),
     );
 
-    // 收集所有模板目录
-    let mut all_template_dirs: Vec<PathBuf> = Vec::new();
-    if let Ok(entries) = fs::read_dir(gen_base.as_path()) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() {
-                all_template_dirs.push(entry.path());
-            }
-        }
-    }
-    all_template_dirs.sort();
+    // 收集所有模板目录（可写优先）
+    let all_template_dirs = collect_all_template_dirs(&gen_roots);
 
     if all_template_dirs.is_empty() {
-        return Err(format!("模板目录为空: {}", gen_base.display()));
+        return Err(format!(
+            "模板目录为空: {}",
+            gen_roots
+                .iter()
+                .map(|r| r.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
 
     let template_dir_strs: Vec<String> = all_template_dirs

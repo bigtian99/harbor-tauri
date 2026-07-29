@@ -2,28 +2,19 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use super::resolve::{
-    list_template_subdirs, summarize_templates_dir, templates_log, templates_root,
+    list_template_subdirs, summarize_templates_dir, template_scan_roots, templates_log,
     writable_templates_root,
 };
-
-/// 合并打包模板与用户上传模板目录名（去重）
-fn all_template_roots() -> Vec<PathBuf> {
-    let mut roots = vec![templates_root()];
-    let writable = writable_templates_root();
-    if writable != roots[0] && writable.is_dir() {
-        roots.push(writable);
-    }
-    roots
-}
 
 #[tauri::command]
 pub async fn list_template_dirs() -> Result<Vec<String>, String> {
     let mut seen = HashSet::new();
     let mut dirs: Vec<String> = Vec::new();
-    for root in all_template_roots() {
+    // 可写优先：同名时用户上传覆盖打包模板
+    for root in template_scan_roots() {
         for name in list_template_subdirs(&root) {
             if seen.insert(name.clone()) {
                 dirs.push(name);
@@ -110,7 +101,8 @@ fn read_template_category(dir: &Path) -> Option<String> {
 pub async fn list_template_infos() -> Result<Vec<TemplateInfo>, String> {
     let mut infos: Vec<TemplateInfo> = Vec::new();
     let mut seen = HashSet::new();
-    for root in all_template_roots() {
+    // 可写优先：同名时用户上传覆盖打包模板（预览/生成与此一致）
+    for root in template_scan_roots() {
         templates_log(&format!(
             "list_template_infos 扫描 {} — {}",
             root.display(),
@@ -149,6 +141,11 @@ pub async fn upload_template_zip(zip_path: String) -> Result<Vec<serde_json::Val
     let root = writable_templates_root();
     // 确保 templates 目录存在
     fs::create_dir_all(&root).map_err(|e| format!("创建模板目录失败: {}", e))?;
+    templates_log(&format!(
+        "upload_template_zip zip={} → writable={}",
+        zip_path,
+        root.display()
+    ));
 
     let mut extracted_dirs: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
 
@@ -214,7 +211,11 @@ pub async fn upload_template_zip(zip_path: String) -> Result<Vec<serde_json::Val
         })
         .collect();
 
-    templates_log(&format!("✅ 模板上传完成: {:?}", results));
+    templates_log(&format!(
+        "✅ 模板上传完成 → {} | {:?}",
+        root.display(),
+        results
+    ));
     Ok(results)
 }
 

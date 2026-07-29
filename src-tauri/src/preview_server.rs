@@ -96,14 +96,28 @@ fn handle_request(request: tiny_http::Request, root: &Path) {
     let decoded = percent_decode(path_only);
     let rel = decoded.trim_start_matches('/');
 
-    // __templates__/ 前缀映射到项目 templates 目录（模板预览），其余走落地页输出根目录。
-    // 两者复用同一套路径穿越防护。
-    let (base_root, rel, is_template_preview) = match rel.strip_prefix("__templates__/") {
-        Some(stripped) => (crate::landing::templates_root(), stripped, true),
-        None => (root.to_path_buf(), rel, false),
+    // __templates__/ 前缀：按目录名在「可写模板优先、其次打包资源」中解析。
+    // 其余路径走落地页输出根目录。两者复用同一套路径穿越防护。
+    let (base_root, full, is_template_preview) = match rel.strip_prefix("__templates__/") {
+        Some(stripped) => {
+            match crate::landing::resolve_template_preview_path(stripped) {
+                Some((template_dir, full_path)) => (template_dir, full_path, true),
+                None => {
+                    crate::diag::diag_log(
+                        "preview",
+                        &format!("模板预览 404: __templates__/{stripped}（可写/打包目录均未找到）"),
+                    );
+                    let _ = request.respond(Response::empty(404));
+                    return;
+                }
+            }
+        }
+        None => {
+            let full = root.join(rel);
+            (root.to_path_buf(), full, false)
+        }
     };
 
-    let full = base_root.join(rel);
     let root_canon = base_root
         .canonicalize()
         .unwrap_or_else(|_| base_root.to_path_buf());
