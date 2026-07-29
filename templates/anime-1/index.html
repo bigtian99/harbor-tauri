@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="template-category" content="动漫" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>{{NAME}} - 官方下载</title>
+  <meta name="description" content="{{NAME}} — 墨点章扉风格落地页" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&family=Noto+Sans+SC:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --void: #090909;
+      --cream: #f3ecd8;
+      --ink: #111;
+      --gold: #ffd400;
+      --stamp: #c41e3a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--void);
+      color: var(--cream);
+      line-height: 1.55;
+      overflow-x: hidden;
+    }
+    .tone {
+      background-image: radial-gradient(rgba(243,236,216,0.14) 1.1px, transparent 1.1px);
+      background-size: 7px 7px;
+    }
+    .masthead {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 22px 28px 18px;
+      border-bottom: 1px solid rgba(243,236,216,0.25);
+    }
+    .chapter {
+      font-family: "Shippori Mincho", "Songti SC", serif;
+      font-weight: 800;
+      font-size: clamp(28px, 5vw, 44px);
+      letter-spacing: 0.12em;
+      writing-mode: horizontal-tb;
+    }
+    .stamp {
+      flex: 0 0 auto;
+      width: 78px;
+      height: 78px;
+      border: 3px solid var(--stamp);
+      color: var(--stamp);
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-family: "Shippori Mincho", serif;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 0.2em;
+      transform: rotate(-18deg);
+      box-shadow: inset 0 0 0 2px rgba(196,30,58,0.35);
+      opacity: 0.95;
+    }
+
+    .splash {
+      position: relative;
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 0;
+      min-height: 560px;
+      margin: 18px 18px 0;
+      border: 2px solid rgba(243,236,216,0.55);
+      overflow: hidden;
+    }
+    .splash-art {
+      position: relative;
+      background: #1a1a1a;
+      border-right: 2px solid rgba(243,236,216,0.4);
+    }
+    .splash-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: grayscale(0.15) contrast(1.12);
+      min-height: 420px;
+    }
+    .ink-blot {
+      position: absolute;
+      width: 180px;
+      height: 180px;
+      background: radial-gradient(circle at 40% 40%, #000 0 42%, transparent 58%);
+      opacity: 0.55;
+      pointer-events: none;
+      filter: blur(0.4px);
+    }
+    .ink-blot.tl { top: -40px; left: -50px; }
+    .ink-blot.br { right: -30px; bottom: -50px; width: 220px; height: 220px; }
+
+    .splash-copy {
+      position: relative;
+      padding: 36px 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .splash-copy::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, transparent 0 62%, rgba(255,212,0,0.08) 62%),
+        radial-gradient(rgba(243,236,216,0.12) 1px, transparent 1px);
+      background-size: auto, 6px 6px;
+      pointer-events: none;
+    }
+    .kicker {
+      position: relative;
+      display: inline-block;
+      background: var(--gold);
+      color: var(--ink);
+      font-weight: 900;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      padding: 5px 10px;
+      margin-bottom: 16px;
+    }
+    .logo {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      border: 3px solid var(--cream);
+      border-radius: 22px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      background: #333;
+    }
+    .logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    h1 {
+      position: relative;
+      font-family: "Shippori Mincho", "Songti SC", serif;
+      font-size: clamp(34px, 5vw, 52px);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+      line-height: 1.15;
+    }
+    .tagline {
+      position: relative;
+      max-width: 340px;
+      font-size: 14px;
+      opacity: 0.9;
+      margin-bottom: 22px;
+      border-left: 3px solid var(--gold);
+      padding-left: 12px;
+    }
+    .btns {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .btns a { transition: transform 0.15s ease; }
+    .btns a:hover { transform: translateY(-2px); }
+    .btns img { width: 148px; height: auto; display: block; }
+    .qr-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .qr-code {
+      background: var(--cream);
+      padding: 8px;
+      border: 2px solid var(--ink);
+    }
+    .qr-code canvas { display: block; width: 108px; height: 108px; }
+    .qr-tip { font-size: 12px; line-height: 1.6; opacity: 0.85; }
+    .qr-tip a { color: var(--gold); font-weight: 900; opacity: 1; }
+
+    .triptych {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      padding: 22px 18px;
+    }
+    .cell {
+      position: relative;
+      border: 2px solid rgba(243,236,216,0.45);
+      min-height: 170px;
+      overflow: hidden;
+      background: #141414;
+    }
+    .cell img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      opacity: 0.78;
+      min-height: 170px;
+    }
+    .cell figcaption {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      padding: 14px 12px 12px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.88));
+      font-family: "Shippori Mincho", serif;
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: 0.08em;
+    }
+    .cell small {
+      display: block;
+      margin-top: 4px;
+      font-family: "Noto Sans SC", sans-serif;
+      font-size: 11px;
+      font-weight: 400;
+      opacity: 0.8;
+      letter-spacing: 0;
+    }
+
+    .rail {
+      margin: 8px 18px 28px;
+      padding: 18px;
+      border: 2px dashed rgba(255,212,0,0.55);
+      background: rgba(255,212,0,0.04);
+    }
+    .rail h2 {
+      font-family: "Shippori Mincho", serif;
+      font-size: 24px;
+      letter-spacing: 0.1em;
+      margin-bottom: 14px;
+    }
+    .rail-row {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+    }
+    .rail-row img {
+      flex: 0 0 auto;
+      width: 112px;
+      height: 112px;
+      object-fit: cover;
+      border: 2px solid rgba(243,236,216,0.5);
+      filter: contrast(1.05);
+    }
+    .foot {
+      text-align: center;
+      padding: 16px;
+      font-size: 12px;
+      opacity: 0.55;
+      border-top: 1px solid rgba(243,236,216,0.2);
+    }
+
+    @media (max-width: 860px) {
+      .splash { grid-template-columns: 1fr; min-height: 0; }
+      .splash-art { border-right: none; border-bottom: 2px solid rgba(243,236,216,0.4); max-height: 280px; }
+      .splash-art img { min-height: 240px; }
+      .triptych { grid-template-columns: 1fr; }
+      .splash-copy { padding: 28px 20px; }
+      .qr-wrap { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body class="tone">
+  <header class="masthead">
+    <div class="chapter">{{NAME}} · 章扉</div>
+    <div class="stamp">連載中</div>
+  </header>
+
+  <section class="splash">
+    <div class="splash-art">
+      <img src="./image/hero-fantasy.png" alt="展示图" />
+      <div class="ink-blot tl" aria-hidden="true"></div>
+      <div class="ink-blot br" aria-hidden="true"></div>
+    </div>
+    <div class="splash-copy">
+      <div class="kicker">CHAPTER SPLASH</div>
+      <div class="logo">
+        <img src="{{LOGO}}" alt="{{NAME}}图标" onerror="this.onerror=null;this.src='./image/logo.png'" />
+      </div>
+      <h1>{{NAME}}</h1>
+      <p class="tagline">墨色开篇，一格入戏。海量高清连载，沉浸追更。</p>
+      <div class="btns">
+        <a id="ios-download-btn" href="javascript:void(0);" aria-label="iOS下载"><img src="./image/Group7.png" alt="苹果下载" /></a>
+        <a id="android-download-btn" href="javascript:void(0);" aria-label="安卓下载" target="_blank" rel="noopener noreferrer"><img src="./image/Group6.png" alt="安卓下载" /></a>
+      </div>
+      <div class="qr-wrap" id="qr-section">
+        <div class="qr-code" id="qrcode-container"></div>
+        <div class="qr-tip">
+          📱 扫描二维码 · 立即下载 Android 版<br />
+          <a id="qr-download-link" href="{{DOWNLOAD_URL}}" target="_blank" rel="noopener noreferrer">点此下载 APK</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="triptych">
+    <figure class="cell">
+      <img src="./image/slices/cover-04.jpg" alt="" />
+      <figcaption>海量更新<small>每日连载不断更</small></figcaption>
+    </figure>
+    <figure class="cell">
+      <img src="./image/slices/cover-05.jpg" alt="" />
+      <figcaption>沉浸阅读<small>全屏细节拉满</small></figcaption>
+    </figure>
+    <figure class="cell">
+      <img src="./image/slices/cover-10.jpg" alt="" />
+      <figcaption>题材广阔<small>热血恋爱奇幻都有</small></figcaption>
+    </figure>
+  </section>
+
+  <section class="rail">
+    <h2>本卷插页</h2>
+    <div class="rail-row">
+      <img src="./image/slices/cover-01.png" alt="插页" />
+      <img src="./image/slices/cover-02.png" alt="插页" />
+      <img src="./image/slices/cover-03.png" alt="插页" />
+      <img src="./image/slices/cover-06.png" alt="插页" />
+      <img src="./image/slices/cover-07.png" alt="插页" />
+      <img src="./image/slices/cover-08.png" alt="插页" />
+      <img src="./image/slices/cover-09.png" alt="插页" />
+      <img src="./image/slices/cover-11.png" alt="插页" />
+      <img src="./image/slices/cover-12.png" alt="插页" />
+      <img src="./image/hero-sky.png" alt="插页" />
+    </div>
+  </section>
+
+  <footer class="foot">{{NAME}} 官方下载页 · 墨点章扉风格</footer>
+
+  <script src="./vendor/qrcode.min.js"></script>
+  <script>
+  (function() {
+    var androidDownloadUrl = "{{DOWNLOAD_URL}}";
+    var iosBtn = document.getElementById("ios-download-btn");
+    var androidBtn = document.getElementById("android-download-btn");
+    var qrLink = document.getElementById("qr-download-link");
+    if (iosBtn) {
+      iosBtn.addEventListener("click", function(e) {
+        e.preventDefault();
+        alert("iOS 版本开发中，敬请期待。");
+      });
+    }
+    if (androidBtn) {
+      androidBtn.setAttribute("href", androidDownloadUrl);
+      androidBtn.setAttribute("target", "_blank");
+      androidBtn.setAttribute("rel", "noopener noreferrer");
+    }
+    if (qrLink) qrLink.setAttribute("href", androidDownloadUrl);
+    var qrContainer = document.getElementById("qrcode-container");
+    if (!qrContainer) return;
+    if (typeof QRCode === "undefined") {
+      qrContainer.innerHTML = '<a href="' + androidDownloadUrl + '" target="_blank" rel="noopener noreferrer" style="display:block;padding:16px;font-size:13px;font-weight:700;color:#ffd400;">二维码加载失败，点此下载</a>';
+      return;
+    }
+    var canvas = document.createElement("canvas");
+    qrContainer.appendChild(canvas);
+    QRCode.toCanvas(canvas, androidDownloadUrl, {
+      width: 128, margin: 1,
+      color: { dark: "#111111", light: "#f3ecd8" }
+    }, function(err) {
+      if (err) {
+        console.error(err);
+        qrContainer.innerHTML = '<a href="' + androidDownloadUrl + '" target="_blank" rel="noopener noreferrer">点此下载 APK</a>';
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

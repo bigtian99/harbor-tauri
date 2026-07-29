@@ -11,7 +11,11 @@ import type {
 import type { BranchImageResult } from "../branchImageResults";
 import { isTauriRuntime } from "../types";
 import { getRememberedBranchAdvancedSettings, rememberBranchRepoSettings } from "../branchSettings";
-import { shouldPushHarborAfterMerge } from "../mergeSyncPackage";
+import {
+  buildScriptAfterMerge,
+  shouldPushHarborAfterMerge,
+  springProfileAfterMerge,
+} from "../mergeSyncPackage";
 import { prependPathHistory } from "./branch/pathHistory";
 import { useBranchCommits } from "./branch/useBranchCommits";
 import { useBranchGitLoad } from "./branch/useBranchGitLoad";
@@ -209,10 +213,12 @@ export function useBranchPack(deps: UseBranchPackDeps) {
 
     const autoPush = shouldPushHarborAfterMerge(branch);
     const remembered = getRememberedBranchAdvancedSettings(config, path);
+    const nextSpringProfile = springProfileAfterMerge(branch);
+    // npm：rc-master → build:prod，其它目标 → build:test（覆盖记忆脚本）
+    const nextBuildScript = buildScriptAfterMerge(branch);
 
     let nextProjectType: BranchProjectType = branchProjectType;
     let nextFrontendDir = frontendDir;
-    let nextBuildScript = selectedBuildScript;
     let nextPackageWithBackend = packageWithBackend;
 
     if (config.remember_branch_settings) {
@@ -222,7 +228,6 @@ export function useBranchPack(deps: UseBranchPackDeps) {
           nextProjectType = config.last_project_type;
         }
         if (config.last_frontend_dir) nextFrontendDir = config.last_frontend_dir;
-        if (config.last_build_script) nextBuildScript = config.last_build_script;
         if (config.last_package_with_backend !== undefined) {
           nextPackageWithBackend = config.last_package_with_backend;
         }
@@ -232,7 +237,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setRepoPath(path);
     setBranchName(branch);
     setAutoPushImage(autoPush);
-    setSpringProfile(remembered.springProfile);
+    setSpringProfile(nextSpringProfile);
     setBranchExposePort(remembered.exposePort);
     setNginxLocations(remembered.nginxLocations ?? []);
     setBranchProjectType(nextProjectType);
@@ -268,7 +273,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
         selectedBuildScript: nextBuildScript,
         autoPushImage: autoPush,
         packageWithBackend: nextPackageWithBackend,
-        springProfile: remembered.springProfile,
+        springProfile: nextSpringProfile,
         branchExposePort: remembered.exposePort,
         nginxLocations: remembered.nginxLocations ?? [],
       },

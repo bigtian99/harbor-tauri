@@ -218,7 +218,7 @@ export function MergeFormSection({
             onChange={(e) => onPackageAfterMergeChange(e.target.checked)}
           />
           <span className="checkbox-toggle"></span>
-          <span title="目标分支名含 rc-master 时打包并推 Harbor，否则只打包">
+          <span title="目标分支名含 rc-master 时以 build:prod / Profile=prod 打包并推 Harbor，否则以 build:test / Profile=test 只打包">
             合并后同步打包
           </span>
         </label>

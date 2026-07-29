@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="template-category" content="动漫" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>{{NAME}} - 官方下载</title>
+  <meta name="description" content="{{NAME}} — 少年漫画开战页风格落地页" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+SC:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0a0a0a;
+      --paper: #f4f1ea;
+      --blood: #e60012;
+      --flash: #fff45a;
+      --panel: #111;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      background: var(--ink);
+      color: #fff;
+      border-bottom: 4px solid var(--blood);
+    }
+    .topbar-brand {
+      font-family: "Black Han Sans", Impact, sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.04em;
+    }
+    .topbar-chip {
+      font-size: 12px;
+      font-weight: 900;
+      background: var(--blood);
+      color: #fff;
+      padding: 4px 10px;
+      transform: skewX(-12deg);
+      letter-spacing: 0.08em;
+    }
+    .topbar-chip span { display: inline-block; transform: skewX(12deg); }
+
+    .hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 28px;
+      padding: 36px 28px 48px;
+      background:
+        linear-gradient(115deg, transparent 0 46%, rgba(230,0,18,0.08) 46% 54%, transparent 54%),
+        repeating-linear-gradient(
+          -18deg,
+          transparent,
+          transparent 10px,
+          rgba(0,0,0,0.045) 10px,
+          rgba(0,0,0,0.045) 11px
+        ),
+        var(--paper);
+      isolation: isolate;
+    }
+    .hero::before {
+      content: "第1話";
+      position: absolute;
+      top: 18px;
+      right: 4%;
+      z-index: 0;
+      font-family: "Black Han Sans", Impact, sans-serif;
+      font-size: clamp(72px, 14vw, 160px);
+      line-height: 0.85;
+      color: transparent;
+      -webkit-text-stroke: 3px rgba(230, 0, 18, 0.22);
+      transform: rotate(-8deg);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .panels {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      grid-template-rows: 1.1fr 0.9fr;
+      gap: 10px;
+      min-height: 420px;
+    }
+    .panel {
+      position: relative;
+      overflow: hidden;
+      border: 4px solid var(--ink);
+      background: var(--panel);
+      box-shadow: 6px 6px 0 rgba(0,0,0,0.25);
+    }
+    .panel img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: contrast(1.08) saturate(1.05);
+    }
+    .panel-a { grid-column: 1; grid-row: 1 / span 2; transform: skewY(-2deg); }
+    .panel-b { transform: rotate(1.5deg); }
+    .panel-c { transform: rotate(-1deg) translateY(4px); }
+    .panel-tag {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      background: var(--flash);
+      color: var(--ink);
+      font-weight: 900;
+      font-size: 12px;
+      padding: 3px 8px;
+      border: 2px solid var(--ink);
+      transform: skewX(-10deg);
+    }
+
+    .cta-col {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 12px 8px;
+    }
+    .burst {
+      position: absolute;
+      width: min(340px, 90%);
+      height: min(340px, 90%);
+      border-radius: 50%;
+      background:
+        repeating-conic-gradient(from 0deg, var(--flash) 0 6deg, transparent 6deg 12deg);
+      opacity: 0.55;
+      z-index: 0;
+      animation: spin-burst 18s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes spin-burst {
+      to { transform: rotate(360deg); }
+    }
+    .cta-inner { position: relative; z-index: 1; }
+    .logo {
+      width: 132px;
+      height: 132px;
+      border: 5px solid var(--ink);
+      border-radius: 28px;
+      overflow: hidden;
+      margin: 0 auto 14px;
+      background: #ddd;
+      box-shadow: 8px 8px 0 var(--blood);
+    }
+    .logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .app-name {
+      font-family: "Black Han Sans", Impact, sans-serif;
+      font-size: clamp(32px, 4vw, 48px);
+      letter-spacing: 0.02em;
+      text-shadow: 3px 3px 0 var(--blood);
+      margin-bottom: 8px;
+    }
+    .tagline {
+      font-size: 15px;
+      font-weight: 700;
+      max-width: 280px;
+      margin: 0 auto 18px;
+    }
+    .sfx {
+      display: inline-block;
+      font-family: "Black Han Sans", Impact, sans-serif;
+      font-size: 28px;
+      color: var(--blood);
+      -webkit-text-stroke: 1px var(--ink);
+      transform: skewX(-14deg) rotate(-4deg);
+      margin-bottom: 14px;
+    }
+    .btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .btns a { display: inline-block; transition: transform 0.15s ease; }
+    .btns a:hover { transform: scale(1.04) rotate(-1deg); }
+    .btns img { width: 150px; height: auto; display: block; }
+    .qr-section { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .qr-code {
+      background: #fff;
+      padding: 8px;
+      border: 3px solid var(--ink);
+      box-shadow: 4px 4px 0 var(--ink);
+    }
+    .qr-code canvas { display: block; width: 112px; height: 112px; }
+    .qr-tip { font-size: 12px; font-weight: 700; }
+    .qr-tip a { color: var(--blood); font-weight: 900; }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      padding: 28px;
+      background: var(--ink);
+      color: #fff;
+    }
+    .feat {
+      border: 3px solid #fff;
+      padding: 18px 16px;
+      background: #161616;
+      transform: skewY(-1.5deg);
+    }
+    .feat:nth-child(2) { transform: skewY(1.5deg); background: var(--blood); }
+    .feat-kicker {
+      font-family: "Black Han Sans", Impact, sans-serif;
+      font-size: 22px;
+      margin-bottom: 6px;
+    }
+    .feat p { font-size: 13px; opacity: 0.92; }
+
+    .gallery {
+      padding: 36px 28px 48px;
+      background: var(--paper);
+    }
+    .gallery h2 {
+      font-family: "Black Han Sans", Impact, sans-serif;
+      font-size: clamp(28px, 4vw, 40px);
+      margin-bottom: 8px;
+    }
+    .gallery .sub { font-weight: 700; margin-bottom: 20px; }
+    .marquee { overflow: hidden; width: 100%; }
+    .marquee-track {
+      display: flex;
+      width: max-content;
+      gap: 10px;
+      animation: marquee 42s linear infinite;
+    }
+    .marquee img {
+      width: 140px;
+      height: 140px;
+      object-fit: cover;
+      border: 3px solid var(--ink);
+      transform: rotate(-2deg);
+    }
+    .marquee img:nth-child(even) { transform: rotate(2deg); }
+    @keyframes marquee {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
+    }
+    .foot {
+      text-align: center;
+      padding: 18px;
+      background: var(--ink);
+      color: rgba(255,255,255,0.75);
+      font-size: 12px;
+      border-top: 4px solid var(--blood);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .burst, .marquee-track { animation: none; }
+    }
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; padding: 24px 16px 36px; }
+      .panels { min-height: 280px; }
+      .features { grid-template-columns: 1fr; }
+      .feat, .feat:nth-child(2) { transform: none; }
+      .hero::before { font-size: 88px; right: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">{{NAME}}</div>
+    <div class="topbar-chip"><span>週刊連載中</span></div>
+  </header>
+
+  <section class="hero">
+    <div class="panels" aria-hidden="true">
+      <div class="panel panel-a">
+        <img src="./image/hero-action.png" alt="" />
+        <span class="panel-tag">OPENING</span>
+      </div>
+      <div class="panel panel-b">
+        <img src="./image/slices/cover-01.png" alt="" />
+      </div>
+      <div class="panel panel-c">
+        <img src="./image/slices/cover-08.png" alt="" />
+      </div>
+    </div>
+
+    <div class="cta-col">
+      <div class="burst" aria-hidden="true"></div>
+      <div class="cta-inner">
+        <div class="logo">
+          <img src="{{LOGO}}" alt="{{NAME}}图标" onerror="this.onerror=null;this.src='./image/logo.png'" />
+        </div>
+        <div class="sfx">ドン！！</div>
+        <h1 class="app-name">{{NAME}}</h1>
+        <p class="tagline">最快最全的动漫内容，让你一次看过瘾</p>
+        <div class="btns">
+          <a id="ios-download-btn" href="javascript:void(0);" aria-label="iOS下载"><img src="./image/Group7.png" alt="苹果下载" /></a>
+          <a id="android-download-btn" href="javascript:void(0);" aria-label="安卓下载" target="_blank" rel="noopener noreferrer"><img src="./image/Group6.png" alt="安卓下载" /></a>
+        </div>
+        <div class="qr-section" id="qr-section">
+          <div class="qr-code" id="qrcode-container"></div>
+          <div class="qr-tip">
+            📱 扫描二维码 · 立即下载 Android 版<br />
+            <a id="qr-download-link" href="{{DOWNLOAD_URL}}" target="_blank" rel="noopener noreferrer">点此下载 APK</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features">
+    <article class="feat">
+      <div class="feat-kicker">海量更新</div>
+      <p>每日连载推进，追更不掉队</p>
+    </article>
+    <article class="feat">
+      <div class="feat-kicker">沉浸阅读</div>
+      <p>全屏高清，细节一帧不漏</p>
+    </article>
+    <article class="feat">
+      <div class="feat-kicker">题材爆炸</div>
+      <p>热血·恋爱·奇幻，总有你爱</p>
+    </article>
+  </section>
+
+  <section class="gallery">
+    <h2>本周封面墙</h2>
+    <p class="sub">多元题材 · 总有你爱</p>
+    <div class="marquee">
+      <div class="marquee-track">
+        <img src="./image/slices/cover-01.png" alt="推荐" /><img src="./image/slices/cover-02.png" alt="推荐" /><img src="./image/slices/cover-03.png" alt="推荐" /><img src="./image/slices/cover-04.jpg" alt="推荐" /><img src="./image/slices/cover-05.jpg" alt="推荐" /><img src="./image/slices/cover-06.png" alt="推荐" /><img src="./image/slices/cover-07.png" alt="推荐" /><img src="./image/slices/cover-08.png" alt="推荐" />
+        <img src="./image/slices/cover-01.png" alt="" aria-hidden="true" /><img src="./image/slices/cover-02.png" alt="" aria-hidden="true" /><img src="./image/slices/cover-03.png" alt="" aria-hidden="true" /><img src="./image/slices/cover-04.jpg" alt="" aria-hidden="true" /><img src="./image/slices/cover-05.jpg" alt="" aria-hidden="true" /><img src="./image/slices/cover-06.png" alt="" aria-hidden="true" /><img src="./image/slices/cover-07.png" alt="" aria-hidden="true" /><img src="./image/slices/cover-08.png" alt="" aria-hidden="true" />
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">{{NAME}} 官方下载页 · 少年开战页风格</footer>
+
+  <script src="./vendor/qrcode.min.js"></script>
+  <script>
+  (function() {
+    var androidDownloadUrl = "{{DOWNLOAD_URL}}";
+    var iosBtn = document.getElementById("ios-download-btn");
+    var androidBtn = document.getElementById("android-download-btn");
+    var qrLink = document.getElementById("qr-download-link");
+    if (iosBtn) {
+      iosBtn.addEventListener("click", function(e) {
+        e.preventDefault();
+        alert("iOS 版本开发中，敬请期待。");
+      });
+    }
+    if (androidBtn) {
+      androidBtn.setAttribute("href", androidDownloadUrl);
+      androidBtn.setAttribute("target", "_blank");
+      androidBtn.setAttribute("rel", "noopener noreferrer");
+    }
+    if (qrLink) {
+      qrLink.setAttribute("href", androidDownloadUrl);
+    }
+    var qrContainer = document.getElementById("qrcode-container");
+    if (!qrContainer) return;
+    if (typeof QRCode === "undefined") {
+      qrContainer.innerHTML = '<a href="' + androidDownloadUrl + '" target="_blank" rel="noopener noreferrer" style="display:block;padding:16px;font-size:13px;font-weight:700;color:#e60012;">二维码加载失败，点此下载</a>';
+      return;
+    }
+    var canvas = document.createElement("canvas");
+    qrContainer.appendChild(canvas);
+    QRCode.toCanvas(canvas, androidDownloadUrl, {
+      width: 128, margin: 1,
+      color: { dark: "#0a0a0a", light: "#ffffff" }
+    }, function(err) {
+      if (err) {
+        console.error(err);
+        qrContainer.innerHTML = '<a href="' + androidDownloadUrl + '" target="_blank" rel="noopener noreferrer">点此下载 APK</a>';
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
