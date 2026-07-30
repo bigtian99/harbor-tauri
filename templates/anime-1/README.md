@@ -8,6 +8,16 @@
 - **用途**: 动漫类应用落地页（墨点章扉 / 连载印）
 - **模板分类**: 动漫
 
+## 管理页分类（上传必读）
+
+管理模板里的中文分组**只认** `index.html` 里的 meta，**不读**本 README：
+
+```html
+<meta name="template-category" content="动漫" />
+```
+
+上传 zip 时请把该标签放在 `<head>` 内。缺失时会按目录名显示，进不了「动漫」分组。`anime` / `anime-1` / `anime-2` 都要写相同 `content`。
+
 ## 视觉特征
 - 深黑底 + 奶油字 + 警示黄点缀
 - 网纹（screentone）+ 朱印「連載中」

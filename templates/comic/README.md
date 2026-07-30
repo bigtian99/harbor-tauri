@@ -6,6 +6,16 @@
 - **用途**: 漫画类应用落地页
 - **模板分类**: 漫画
 
+## 管理页分类（上传必读）
+
+管理模板里的中文分组**只认** `index.html` 里的 meta，**不读**本 README：
+
+```html
+<meta name="template-category" content="漫画" />
+```
+
+上传 zip 时请把该标签放在 `<head>` 内。缺失时会按目录名显示（如 `comic`），进不了「漫画」分组。同系列变体（`comic-1`、`comic-2`…）也要写相同 `content`。
+
 ## 替换规则
 
 模板内使用占位符，生成时由 `render_template` 一次性替换（见 `src-tauri/src/landing.rs`）：

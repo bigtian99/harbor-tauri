@@ -6,6 +6,16 @@
 - **用途**: AI 聊天应用落地页
 - **模板分类**: AI聊天
 
+## 管理页分类（上传必读）
+
+管理模板里的中文分组**只认** `index.html` 里的 meta，**不读**本 README：
+
+```html
+<meta name="template-category" content="AI聊天" />
+```
+
+上传 zip 时请把该标签放在 `<head>` 内。缺失时会按目录名显示（如 `aiChat`），进不了「AI聊天」分组。同系列变体（`aiChat-1`、`aiChat-2`…）也要写相同 `content`。
+
 ## 替换规则
 
 模板内使用占位符，生成时由 `render_template` 一次性替换（见 `src-tauri/src/landing.rs`）：

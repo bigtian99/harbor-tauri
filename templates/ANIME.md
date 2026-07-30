@@ -16,7 +16,9 @@
 | `{{LOGO}}` | `sub_channel_logo` |
 | `{{DOWNLOAD_URL}}` | `sub_channel_link`（APK） |
 
-- 分类 meta：`动漫`
+- 分类 meta：必须在各目录 `index.html` 的 `<head>` 写入  
+  `<meta name="template-category" content="动漫" />`  
+  （管理页分组只认此 meta，不读 README；缺了会按目录名显示）
 - 二维码：本地 `vendor/qrcode.min.js`，按下载链生成；附「点此下载 APK」
 - 展示图：Pixabay 可商用二次元插画（见各目录 `ATTRIBUTION.md`）
 - 下载按钮图：`image/Group6.png`（安卓）/ `Group7.png`（iOS）
