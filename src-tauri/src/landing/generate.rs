@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use tauri::Emitter;
 
 use super::templates::{
-    find_matching_template_dirs, generation_template_roots, list_template_subdirs,
+    collect_all_template_dirs, find_matching_template_dirs, generation_template_roots,
     summarize_templates_dir,
 };
 
@@ -99,32 +99,33 @@ pub async fn generate_landing_pages(
             }),
         ).ok();
 
-        // 查找所有匹配的模板目录（可写优先；以 type_code 开头的目录）
-        let template_dirs = find_matching_template_dirs(&channel.type_code, &gen_roots);
-
+        // 按 type_code 匹配；无对应模板时回退全部（与马甲包一致，便于新产品类型先上线）
+        let mut template_dirs = find_matching_template_dirs(&channel.type_code, &gen_roots);
         if template_dirs.is_empty() {
-            let available: Vec<String> = gen_roots
-                .iter()
-                .flat_map(|r| list_template_subdirs(r))
-                .collect::<std::collections::BTreeSet<_>>()
-                .into_iter()
-                .collect();
+            template_dirs = collect_all_template_dirs(&gen_roots);
             crate::diag::diag_log(
                 "landing",
                 &format!(
-                    "生成失败 channel={} type_code={} roots=[{}] — 无匹配模板；可用: [{}]",
+                    "channel={} type_code={} 无匹配模板，回退全部模板 count={}",
+                    channel.sub_channel_name,
+                    channel.type_code,
+                    template_dirs.len()
+                ),
+            );
+        }
+
+        if template_dirs.is_empty() {
+            crate::diag::diag_log(
+                "landing",
+                &format!(
+                    "生成失败 channel={} type_code={} — 模板目录为空 roots=[{}]",
                     channel.sub_channel_name,
                     channel.type_code,
                     gen_roots
                         .iter()
                         .map(|r| r.display().to_string())
                         .collect::<Vec<_>>()
-                        .join(", "),
-                    if available.is_empty() {
-                        "无".to_string()
-                    } else {
-                        available.join(", ")
-                    }
+                        .join(", ")
                 ),
             );
             results.push(LandingPageResult {
@@ -133,7 +134,7 @@ pub async fn generate_landing_pages(
                 name: channel.sub_channel_name.clone(),
                 output_dir: channel_output_str,
                 status: "error".to_string(),
-                message: format!("没有找到 {} 类型的模板目录", channel.type_code),
+                message: "模板目录为空，请先上传或打包内置模板".to_string(),
                 template_dirs: Vec::new(),
                 current_template_index: 0,
             });

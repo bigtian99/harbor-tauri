@@ -9,5 +9,5 @@ pub use manage::{
 pub use resolve::{get_bundled_templates_dir, init_bundled_templates_dir};
 pub(crate) use resolve::{
     collect_all_template_dirs, find_matching_template_dirs, generation_template_roots,
-    list_template_subdirs, resolve_template_preview_path, summarize_templates_dir, templates_log,
+    resolve_template_preview_path, summarize_templates_dir, templates_log,
 };
