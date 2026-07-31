@@ -19,7 +19,8 @@
 | 远端布局 | `{unix时间戳}{随机英文小写词}/index.html`（原文件改名为 index.html） |
 | 公开 URL | `http://common.tiankongshuyu.cn/{目录}/` |
 | FTP | host `60.205.155.142:21`；账密与落地页一致（`admin` / 现有硬编码）；登录后 `/` 即站点根（chroot ≈ `/www/wwwroot/common.tiankongshuyu.cn`） |
-| 不做 | 上传历史持久化；不改落地页现有 FTP（`120.77.204.231` / `.fun`） |
+| 上传记录 | **本菜单内持久化展示**（防遗忘）；仅成功记录入库；不做远端删除 |
+| 不做 | 不改落地页现有 FTP（`120.77.204.231` / `.fun`） |
 
 ## 3. 方案
 
