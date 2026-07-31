@@ -2,7 +2,7 @@
 
 export type ArtifactType = "jar" | "frontend_dist";
 export type BranchProjectType = "maven" | "npm";
-export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement" | "packSpeed";
+export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement" | "packSpeed" | "privacy";
 
 export interface BranchRepoSettings {
   springProfile: string;

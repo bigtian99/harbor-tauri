@@ -12,6 +12,7 @@ import { PushImagePanel } from "./components/PushImagePanel";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { SettlementPanel } from "./components/SettlementPanel";
 import { PackSpeedPanel } from "./components/PackSpeedPanel";
+import { PrivacyPanel } from "./components/PrivacyPanel";
 import { UpdateModal } from "./components/UpdateModal";
 import { useLanding } from "./hooks/useLanding";
 import { useAppConfig, type DiagDateInfo } from "./hooks/useAppConfig";
@@ -490,6 +491,10 @@ function App() {
 
         {activeTab === "settlement" && (
           <SettlementPanel />
+        )}
+
+        {activeTab === "privacy" && (
+          <PrivacyPanel />
         )}
 
         {activeTab === "packSpeed" && (

@@ -1,0 +1,305 @@
+import { useCallback, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { notifications } from "@mantine/notifications";
+import {
+  Anchor,
+  Button,
+  Checkbox,
+  Group,
+  Paper,
+  Stack,
+  Table,
+  Text,
+  Title,
+  Badge,
+  ActionIcon,
+  Tooltip,
+} from "@mantine/core";
+import { Copy, FileUp, Loader2, Shield, Trash2 } from "lucide-react";
+import { isTauriRuntime } from "../types";
+
+export interface PrivacyUploadRecord {
+  id: string;
+  source_name: string;
+  remote_dir: string;
+  url: string;
+  uploaded_at: string;
+}
+
+export interface PrivacyUploadResult {
+  id: string;
+  source_name: string;
+  remote_dir: string;
+  url: string;
+  status: string;
+  message: string;
+  uploaded_at: string;
+}
+
+export function PrivacyPanel() {
+  const [history, setHistory] = useState<PrivacyUploadRecord[]>([]);
+  const [lastResults, setLastResults] = useState<PrivacyUploadResult[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const loadHistory = useCallback(async () => {
+    if (!isTauriRuntime()) return;
+    setIsLoadingHistory(true);
+    try {
+      const rows = await invoke<PrivacyUploadRecord[]>("list_privacy_uploads");
+      setHistory(rows);
+      setSelectedIds(new Set());
+    } catch (e) {
+      notifications.show({ title: "加载历史失败", message: String(e), color: "red" });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  const handleUpload = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      notifications.show({ message: "请在桌面端操作", color: "yellow" });
+      return;
+    }
+    const selected = await open({
+      multiple: true,
+      filters: [{ name: "HTML", extensions: ["html", "htm"] }],
+    });
+    if (!selected) return;
+    const paths = Array.isArray(selected) ? selected : [selected];
+    if (paths.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      const results = await invoke<PrivacyUploadResult[]>("upload_privacy_html", { paths });
+      setLastResults(results);
+      const ok = results.filter((r) => r.status === "success").length;
+      const fail = results.length - ok;
+      notifications.show({
+        message: `上传完成：成功 ${ok}，失败 ${fail}`,
+        color: fail > 0 ? "orange" : "teal",
+      });
+      await loadHistory();
+    } catch (e) {
+      notifications.show({ title: "上传失败", message: String(e), color: "red" });
+    } finally {
+      setIsUploading(false);
+    }
+  }, [loadHistory]);
+
+  const copyUrl = useCallback(async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      notifications.show({ message: "已复制链接", color: "teal", autoClose: 1500 });
+    } catch {
+      notifications.show({ message: "复制失败", color: "red" });
+    }
+  }, []);
+
+  const openPrivacyUrl = useCallback(async (url: string) => {
+    await copyUrl(url);
+    try {
+      await openUrl(url);
+    } catch (e) {
+      notifications.show({ title: "打开失败", message: String(e), color: "red" });
+    }
+  }, [copyUrl]);
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = history.length > 0 && selectedIds.size === history.length;
+
+  const toggleAll = () => {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(history.map((r) => r.id)));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`确认删除所选 ${selectedIds.size} 条本地记录？不会删除服务器文件。`)) return;
+    if (!isTauriRuntime()) return;
+    try {
+      await invoke("delete_privacy_uploads", { ids: Array.from(selectedIds) });
+      notifications.show({ message: "已删除所选记录", color: "teal" });
+      await loadHistory();
+    } catch (e) {
+      notifications.show({ title: "删除失败", message: String(e), color: "red" });
+    }
+  };
+
+  const handleClear = async () => {
+    if (history.length === 0) return;
+    if (!window.confirm("确认清空全部本地上传记录？不会删除服务器文件。")) return;
+    if (!isTauriRuntime()) return;
+    try {
+      await invoke("clear_privacy_uploads");
+      notifications.show({ message: "已清空本地记录", color: "teal" });
+      await loadHistory();
+    } catch (e) {
+      notifications.show({ title: "清空失败", message: String(e), color: "red" });
+    }
+  };
+
+  return (
+    <BoxPad>
+      <Stack gap="lg">
+        <Group gap="sm">
+          <Shield size={20} color="#5eead4" />
+          <Title order={3} c="gray.1">隐私协议</Title>
+        </Group>
+        <Text size="sm" c="dimmed">
+          上传 HTML 到 common.tiankongshuyu.cn，自动生成目录并返回访问地址。历史仅保存在本机。
+        </Text>
+
+        <Paper p="md" radius="md" style={{ background: "#111827", border: "1px solid rgba(94,234,212,0.12)" }}>
+          <Group>
+            <Button
+              leftSection={isUploading ? <Loader2 size={16} className="spin" /> : <FileUp size={16} />}
+              onClick={handleUpload}
+              loading={isUploading}
+              color="teal.7"
+            >
+              选择 HTML 上传
+            </Button>
+            <Text size="sm" c="dimmed">支持多选；每个文件独立目录（…/时间戳英文词/）</Text>
+          </Group>
+        </Paper>
+
+        {lastResults.length > 0 && (
+          <Paper p="md" radius="md" style={{ background: "#111827", border: "1px solid rgba(94,234,212,0.12)" }}>
+            <Text fw={600} mb="sm" c="gray.2">本次结果</Text>
+            <Table striped highlightOnHover withTableBorder={false}>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>文件</Table.Th>
+                  <Table.Th>状态</Table.Th>
+                  <Table.Th>访问地址</Table.Th>
+                  <Table.Th style={{ width: 64 }}></Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {lastResults.map((r, i) => (
+                  <Table.Tr key={`${r.source_name}-${i}`}>
+                    <Table.Td>{r.source_name}</Table.Td>
+                    <Table.Td>
+                      <Badge color={r.status === "success" ? "teal" : "red"} variant="light">
+                        {r.status === "success" ? "成功" : "失败"}
+                      </Badge>
+                      {r.status !== "success" && (
+                        <Text size="xs" c="red.4" mt={4}>{r.message}</Text>
+                      )}
+                    </Table.Td>
+                    <Table.Td>
+                      {r.url ? (
+                        <Anchor size="sm" c="teal.3" style={{ wordBreak: "break-all" }} onClick={() => openPrivacyUrl(r.url)}>
+                          {r.url}
+                        </Anchor>
+                      ) : (
+                        <Text size="sm">—</Text>
+                      )}
+                    </Table.Td>
+                    <Table.Td>
+                      {r.url ? (
+                        <Tooltip label="复制">
+                          <ActionIcon variant="subtle" color="teal" onClick={() => copyUrl(r.url)}>
+                            <Copy size={14} />
+                          </ActionIcon>
+                        </Tooltip>
+                      ) : null}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Paper>
+        )}
+
+        <Paper p="md" radius="md" style={{ background: "#111827", border: "1px solid rgba(94,234,212,0.12)" }}>
+          <Group justify="space-between" mb="sm">
+            <Group gap="xs">
+              <Text fw={600} c="gray.2">上传记录</Text>
+              {isLoadingHistory && <Loader2 size={14} className="spin" />}
+              <Badge variant="light" color="gray" size="sm">{history.length}</Badge>
+            </Group>
+            <Group gap="xs">
+              <Button
+                size="xs"
+                variant="light"
+                color="red"
+                leftSection={<Trash2 size={14} />}
+                disabled={selectedIds.size === 0}
+                onClick={handleDeleteSelected}
+              >
+                删除所选
+              </Button>
+              <Button size="xs" variant="subtle" color="gray" onClick={handleClear} disabled={history.length === 0}>
+                清空
+              </Button>
+            </Group>
+          </Group>
+
+          {history.length === 0 ? (
+            <Text c="dimmed" size="sm" ta="center" py="xl">暂无上传记录</Text>
+          ) : (
+            <Table striped highlightOnHover withTableBorder={false}>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th style={{ width: 40 }}>
+                    <Checkbox checked={allSelected} indeterminate={selectedIds.size > 0 && !allSelected} onChange={toggleAll} />
+                  </Table.Th>
+                  <Table.Th>时间</Table.Th>
+                  <Table.Th>文件名</Table.Th>
+                  <Table.Th>访问地址</Table.Th>
+                  <Table.Th style={{ width: 64 }}></Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {history.map((r) => (
+                  <Table.Tr key={r.id}>
+                    <Table.Td>
+                      <Checkbox checked={selectedIds.has(r.id)} onChange={() => toggleOne(r.id)} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" c="dimmed">{r.uploaded_at}</Text>
+                    </Table.Td>
+                    <Table.Td>{r.source_name}</Table.Td>
+                    <Table.Td>
+                      <Anchor size="sm" c="teal.3" style={{ wordBreak: "break-all" }} onClick={() => openPrivacyUrl(r.url)}>
+                        {r.url}
+                      </Anchor>
+                    </Table.Td>
+                    <Table.Td>
+                      <Tooltip label="复制">
+                        <ActionIcon variant="subtle" color="teal" onClick={() => copyUrl(r.url)}>
+                          <Copy size={14} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Paper>
+      </Stack>
+    </BoxPad>
+  );
+}
+
+function BoxPad({ children }: { children: React.ReactNode }) {
+  return <div style={{ padding: "32px 40px" }}>{children}</div>;
+}

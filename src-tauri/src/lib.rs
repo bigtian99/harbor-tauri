@@ -10,35 +10,43 @@ mod landing;
 mod models;
 mod ops;
 mod preview_server;
+mod privacy;
 mod settlement;
 mod updater;
 mod utils;
 
 use build::{
     build_and_push, cancel_build, check_dockerfile, detect_frontend_dir, detect_spring_profiles,
-    list_npm_scripts, open_directory, package_from_branch, push_local_image, list_local_images,
+    list_local_images, list_npm_scripts, open_directory, package_from_branch, push_local_image,
     remove_local_image,
 };
-use commit::{get_commit_authors, get_commit_diff, get_commit_list, get_last_commit, list_branch_diff_commits};
-use config_cmd::{load_config, save_config};
-use git::{list_git_branches, list_git_branches_from_url, clone_repo, list_remote_branches, check_remote_merge, merge_remote_branches, get_merge_conflict_diff, get_latest_tag};
-use history::{
-    clear_build_history, delete_artifact_path, delete_build_record,
-    get_build_history, save_build_record, update_build_record_image, update_build_record_push,
+use commit::{
+    get_commit_authors, get_commit_diff, get_commit_list, get_last_commit, list_branch_diff_commits,
 };
+use config_cmd::{load_config, save_config};
 use diag::{
-    export_diagnostic_log, get_templates_diagnostic_log_path,
-    list_diagnostic_log_dates, read_diagnostic_log,
+    export_diagnostic_log, get_templates_diagnostic_log_path, list_diagnostic_log_dates,
+    read_diagnostic_log,
+};
+use git::{
+    check_remote_merge, clone_repo, get_latest_tag, get_merge_conflict_diff, list_git_branches,
+    list_git_branches_from_url, list_remote_branches, merge_remote_branches,
+};
+use history::{
+    clear_build_history, delete_artifact_path, delete_build_record, get_build_history,
+    save_build_record, update_build_record_image, update_build_record_push,
 };
 
 use landing::{
-    fetch_sub_channels, fetch_vest_data, generate_landing_pages, generate_vest_landing_pages,
-    get_bundled_templates_dir, get_temp_dir,
-    preview_landing_page, upload_landing_to_ftp,
-    list_template_dirs, list_template_infos, upload_template_zip, delete_template_dir,
+    delete_template_dir, fetch_sub_channels, fetch_vest_data, generate_landing_pages,
+    generate_vest_landing_pages, get_bundled_templates_dir, get_temp_dir, list_template_dirs,
+    list_template_infos, preview_landing_page, upload_landing_to_ftp, upload_template_zip,
 };
-use preview_server::get_preview_server_info;
 use ops::{batch_pack_sub_channels, close_ops_login_window, open_ops_login_window};
+use preview_server::get_preview_server_info;
+use privacy::{
+    clear_privacy_uploads, delete_privacy_uploads, list_privacy_uploads, upload_privacy_html,
+};
 use settlement::generate_settlement_statements;
 use updater::{check_update, download_and_install, get_app_version};
 
@@ -66,7 +74,6 @@ pub fn run() {
             preview_server::start(app);
             Ok(())
         })
-
         .invoke_handler(tauri::generate_handler![
             is_ops_mode,
             load_config,
@@ -110,7 +117,6 @@ pub fn run() {
             list_diagnostic_log_dates,
             export_diagnostic_log,
             get_preview_server_info,
-
             list_template_dirs,
             list_template_infos,
             upload_template_zip,
@@ -123,6 +129,10 @@ pub fn run() {
             batch_pack_sub_channels,
             open_ops_login_window,
             close_ops_login_window,
+            upload_privacy_html,
+            list_privacy_uploads,
+            delete_privacy_uploads,
+            clear_privacy_uploads,
             generate_settlement_statements,
             db::get_jar_port,
             db::save_jar_port,

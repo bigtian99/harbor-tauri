@@ -16,17 +16,18 @@ mod generate;
 mod templates;
 mod vest;
 
-pub use generate::{fetch_sub_channels, generate_landing_pages};
+pub(crate) use ftp::run_ftp_upload_with;
 pub use ftp::upload_landing_to_ftp;
+pub use generate::{fetch_sub_channels, generate_landing_pages};
+pub(crate) use templates::resolve_template_preview_path;
+/// 兼容：`crate::landing::templates_log` ≡ `diag_log("templates", …)`
+#[allow(unused_imports)]
+pub(crate) use templates::templates_log;
 pub use templates::{
     delete_template_dir, get_bundled_templates_dir, init_bundled_templates_dir, list_template_dirs,
     list_template_infos, upload_template_zip,
 };
 pub use vest::{fetch_vest_data, generate_vest_landing_pages};
-pub(crate) use templates::resolve_template_preview_path;
-/// 兼容：`crate::landing::templates_log` ≡ `diag_log("templates", …)`
-#[allow(unused_imports)]
-pub(crate) use templates::templates_log;
 
 use crate::utils::silent_command;
 use std::path::PathBuf;
@@ -43,10 +44,15 @@ pub async fn get_temp_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn preview_landing_page(path: String, template_index: Option<usize>) -> Result<(), String> {
+pub async fn preview_landing_page(
+    path: String,
+    template_index: Option<usize>,
+) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     let template_idx = template_index.unwrap_or(0);
-    let mut html_path = path_buf.join(format!("template_{}", template_idx)).join("index.html");
+    let mut html_path = path_buf
+        .join(format!("template_{}", template_idx))
+        .join("index.html");
 
     // 如果指定的模板路径不存在，尝试查找 template_0
     if !html_path.exists() {
