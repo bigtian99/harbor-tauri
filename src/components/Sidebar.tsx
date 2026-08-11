@@ -69,7 +69,7 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
               {!sidebarCollapsed && <span>系统日志</span>}
             </button>
             <button
-              className="sidebar-item settings-item"
+              className={`sidebar-item ${activeTab === "config" ? "active" : ""}`}
               onClick={() => onTabChange("config")}
               data-label="设置"
               onMouseEnter={(e) => {

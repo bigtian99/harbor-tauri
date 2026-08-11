@@ -190,6 +190,10 @@ body::before {
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
+.sidebar-item.active svg {
+  color: #5eead4;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding: 12px 8px;
@@ -226,15 +230,6 @@ body::before {
 
 .sidebar.collapsed ~ .sidebar-toggle {
   left: 64px;
-}
-
-.settings-item {
-  color: #5eead4;
-}
-
-.settings-item:hover {
-  color: #5eead4;
-  background: rgba(100, 255, 218, 0.15);
 }
 
 .content {
