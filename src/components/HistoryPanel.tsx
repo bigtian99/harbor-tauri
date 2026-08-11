@@ -12,6 +12,7 @@ import { getProjectName, isTauriRuntime } from "../types";
 import { HoverTip } from "./HoverTip";
 import { avatarColor, avatarInitials } from "../avatarUrl";
 import { historyCanPushJar } from "../historyJarPush.ts";
+import { parseHistoryImageTags } from "../branchImageResults";
 
 async function confirmDanger(message: string, title: string): Promise<boolean> {
   if (isTauriRuntime()) {
@@ -306,23 +307,36 @@ export function HistoryPanel({
                           </span>
                         )}
                       </div>
-                      {record.image_tag && (
-                        <HoverTip tip={record.image_tag} className="history-record-image-wrap">
-                          <div className="history-record-image">
-                            <span className="history-record-image-text">{record.image_tag}</span>
-                            <button
-                              className="history-record-copy-btn"
-                              title="复制镜像地址"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onCopyImage(record.image_tag!);
-                              }}
-                            >
-                              <Copy size={12} />
-                            </button>
+                      {record.image_tag && (() => {
+                        const images = parseHistoryImageTags(record.image_tag);
+                        const labeled =
+                          record.package_with_backend && images.length > 1;
+                        return (
+                          <div className="history-record-images">
+                            {images.map((img, i) => (
+                              <HoverTip tip={img} key={`${img}-${i}`} className="history-record-image-wrap">
+                                <div className="history-record-image">
+                                  <span className="history-record-image-text">
+                                    {labeled
+                                      ? `${i === 0 ? "前端" : "后端"}: ${img}`
+                                      : img}
+                                  </span>
+                                  <button
+                                    className="history-record-copy-btn"
+                                    title={labeled ? (i === 0 ? "复制前端镜像" : "复制后端镜像") : "复制镜像地址"}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onCopyImage(img);
+                                    }}
+                                  >
+                                    <Copy size={12} />
+                                  </button>
+                                </div>
+                              </HoverTip>
+                            ))}
                           </div>
-                        </HoverTip>
-                      )}
+                        );
+                      })()}
                     </div>
                     <div className="history-record-actions">
                       {onPushJar && historyCanPushJar(record) && (

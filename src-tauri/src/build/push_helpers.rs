@@ -92,6 +92,8 @@ pub(crate) async fn docker_login_harbor(
 
 /// `docker push`，在阻塞线程中执行。
 pub(crate) async fn docker_push_image(full_image: String) -> Result<(), String> {
+    crate::diag::diag_log("docker", &format!("docker push 开始: {}", full_image));
+    let started = std::time::Instant::now();
     let full_image_push = full_image.clone();
     let push_result =
         tauri::async_runtime::spawn_blocking(move || docker_output(&["push", &full_image_push]))
@@ -99,10 +101,19 @@ pub(crate) async fn docker_push_image(full_image: String) -> Result<(), String> 
             .map_err(|e| format!("推送线程异常: {}", e))?;
 
     let push_output = push_result.map_err(|e| format!("执行docker push失败: {}", e))?;
+    let secs = started.elapsed().as_secs();
     if !push_output.status.success() {
         let stderr = String::from_utf8_lossy(&push_output.stderr);
+        crate::diag::diag_log(
+            "docker",
+            &format!("docker push 失败 ({secs}s): {} — {}", full_image, stderr.trim()),
+        );
         return Err(format!("docker push失败:\n{}", stderr));
     }
+    crate::diag::diag_log(
+        "docker",
+        &format!("docker push 完成 ({secs}s): {}", full_image),
+    );
     Ok(())
 }
 

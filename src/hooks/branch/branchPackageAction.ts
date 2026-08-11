@@ -13,7 +13,12 @@ import {
   resolveHarborRepository,
   getProjectName,
 } from "../../types";
-import { createBranchImageResult, getBranchPushSummary } from "../../branchImageResults";
+import {
+  createBranchImageResult,
+  formatBranchImagesForHistory,
+  getBranchPushSummary,
+  sortBranchImageResults,
+} from "../../branchImageResults";
 import { rememberBranchRepoSettings } from "../../branchSettings";
 import { prependPathHistory } from "./pathHistory";
 
@@ -359,12 +364,22 @@ export async function handlePackageFromBranch(
                   });
                   return lines.join("\n");
                 });
-                setProgressMessage(`✅ ${roleLabel(role)}镜像已推送`);
+                // 前端先完成时明确提示：后端 JAR 推送仍在进行，避免误以为整次结束
+                if (role === "frontend" && hasBackend) {
+                  setProgressMessage("⏳ 前端已完成，后端镜像仍在推送（JAR 较大，通常需几分钟）...");
+                  setLog((prev) =>
+                    prev
+                      ? `${prev}\n⏳ 前端已推送完成，等待后端 Harbor 推送...`
+                      : "⏳ 前端已推送完成，等待后端 Harbor 推送...",
+                  );
+                } else {
+                  setProgressMessage(`✅ ${roleLabel(role)}镜像已推送`);
+                }
                 showToast(`${roleLabel(role)}镜像推送成功`);
               };
 
               type PushOutcome =
-                | { role: "frontend" | "backend"; ok: true }
+                | { role: "frontend" | "backend"; ok: true; image?: string }
                 | { role: "frontend" | "backend"; ok: false; error: unknown };
 
               const pushOne = async (
@@ -381,17 +396,7 @@ export async function handlePackageFromBranch(
                   if (imgMatch) {
                     const image = imgMatch[1].trim();
                     applyImageResult(role, image);
-                    if (role === "frontend") {
-                      try {
-                        await invoke("update_build_record_image", {
-                          imageName: effectiveImageName,
-                          imageTag: image,
-                        });
-                        await loadBuildHistory();
-                      } catch {
-                        /* 忽略 */
-                      }
-                    }
+                    return { role, ok: true, image };
                   }
                   return { role, ok: true };
                 } catch (error) {
@@ -427,12 +432,39 @@ export async function handlePackageFromBranch(
               }
 
               const outcomes = await Promise.all(pushTasks);
-              // 串行汇总失败，避免并行回调改 pushLogs 丢行
+              // 串行汇总：失败日志 + 成功镜像（两端都推完后再写历史，避免只剩前端）
+              const successResults: BranchImageResult[] = [];
               for (const out of outcomes) {
                 if (!out.ok) {
                   pushLogs.push(`❌ ${roleLabel(out.role)}推送失败: ${out.error}`);
+                } else if (out.image) {
+                  successResults.push(createBranchImageResult(out.role, out.image));
                 }
               }
+              if (successResults.length > 0) {
+                const finalResults = sortBranchImageResults(successResults);
+                setBranchImageResults(finalResults);
+                setBranchFullImage(
+                  finalResults
+                    .map((r) => `${r.role === "frontend" ? "前端" : "后端"}: ${r.image}`)
+                    .join("\n"),
+                );
+                try {
+                  await invoke("update_build_record_image", {
+                    imageName: effectiveImageName,
+                    imageTag: formatBranchImagesForHistory(finalResults),
+                  });
+                  await loadBuildHistory();
+                } catch {
+                  /* 忽略 */
+                }
+              }
+              setProgress(100);
+              setProgressMessage(
+                successResults.length === (hasBackend ? 2 : 1)
+                  ? "✅ 镜像推送完成"
+                  : getBranchPushSummary(pushLogs, hasBackend),
+              );
               const summary = getBranchPushSummary(pushLogs, hasBackend);
               setLog(
                 pushLogs.length > 0

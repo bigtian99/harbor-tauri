@@ -1012,6 +1012,14 @@
   max-width: 100%;
 }
 
+.history-record-images {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .history-content-header-actions {
   display: flex;
   gap: 8px;

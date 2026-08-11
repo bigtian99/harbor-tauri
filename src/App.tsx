@@ -515,6 +515,11 @@ function App() {
             onTogglePassword={() => app.setShowPassword(!app.showPassword)}
             appVersion={app.appVersion || app.updateInfo?.current_version}
             onCheckUpdate={app.handleManualCheckUpdate}
+            onClearGitRecords={async () => {
+              const ok = await app.clearGitRecords(showToast);
+              if (ok) branch.resetGitMemoryUi();
+              return ok;
+            }}
           />
         )}
       </main>

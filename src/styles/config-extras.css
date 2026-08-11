@@ -252,3 +252,47 @@
   color: #ff9b9b;
 }
 
+.about-data-card {
+  padding-top: 16px;
+}
+
+.about-data-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: #e8eef8;
+}
+
+.about-data-desc {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8a93a8;
+}
+
+.about-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ff8a8a;
+  background: rgba(255, 107, 107, 0.08);
+  transition: transform 0.12s, opacity 0.15s, background 0.15s;
+}
+
+.about-danger-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 107, 107, 0.16);
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+.about-danger-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+

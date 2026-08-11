@@ -71,3 +71,64 @@ pub(crate) fn reset_cancel_flag() {
     CANCEL_FLAG.store(false, Ordering::SeqCst);
     *CURRENT_PID.lock().unwrap() = None;
 }
+
+/// 可取消构建的生命周期守卫：进入时清标志，结束（成功/失败/取消）时再清一次，
+/// 避免「构建已取消」滞留污染后续 git 选仓等非构建命令。
+pub(crate) struct CancelFlagGuard;
+
+impl Drop for CancelFlagGuard {
+    fn drop(&mut self) {
+        reset_cancel_flag();
+    }
+}
+
+pub(crate) fn begin_cancellable_operation() -> CancelFlagGuard {
+    reset_cancel_flag();
+    CancelFlagGuard
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{begin_cancellable_operation, reset_cancel_flag};
+    use crate::utils::{repo_root_for, run_command, CANCEL_FLAG};
+    use std::path::Path;
+    use std::sync::atomic::Ordering;
+    use std::sync::Mutex;
+
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn cancel_flag_lifecycle_for_merge_after_cancel() {
+        let _lock = TEST_LOCK.lock().unwrap();
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("src-tauri parent");
+
+        // 1) 构建命令仍尊重取消标志
+        CANCEL_FLAG.store(true, Ordering::SeqCst);
+        let err = run_command(Path::new("."), "true", &[]).expect_err("build cmds must honor cancel");
+        assert_eq!(err, "构建已取消");
+
+        // 2) 选仓校验不被滞留取消标志误伤（合并面板选本项目）
+        let root = repo_root_for(repo).expect("选仓校验不应被构建取消标志误伤");
+        assert!(root.is_dir(), "repo root should be a directory: {}", root.display());
+
+        // 3) 可取消操作结束时必须清标志，避免污染后续 git UI
+        CANCEL_FLAG.store(true, Ordering::SeqCst);
+        {
+            let _guard = begin_cancellable_operation();
+            assert!(
+                !CANCEL_FLAG.load(Ordering::SeqCst),
+                "begin should clear stale cancel flag"
+            );
+            CANCEL_FLAG.store(true, Ordering::SeqCst);
+            let err = run_command(Path::new("."), "true", &[]).expect_err("should see cancel");
+            assert_eq!(err, "构建已取消");
+        }
+        assert!(
+            !CANCEL_FLAG.load(Ordering::SeqCst),
+            "drop must clear cancel flag so merge/git UI can run again"
+        );
+        reset_cancel_flag();
+    }
+}

@@ -1,12 +1,12 @@
 use crate::models::{GitBranchOption, LocalMergeCheck, RemoteBranchListResult};
-use crate::utils::{create_temp_worktree_path, git_output, repo_root_for, silent_command};
+use crate::utils::{create_temp_worktree_path, git_output_no_cancel, repo_root_for, silent_command};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
 pub(crate) fn list_known_git_branches(repo_root: &Path) -> Result<Vec<GitBranchOption>, String> {
-    let output = git_output(
+    let output = git_output_no_cancel(
         repo_root,
         &[
             "for-each-ref",

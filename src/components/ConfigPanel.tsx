@@ -2,10 +2,11 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Settings, CheckCircle, AlertCircle, Eye, EyeOff, FolderOpen, Archive,
-  Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink
+  Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink, Trash2
 } from "lucide-react";
 import type { HarborConfig } from "../types";
 import { isTauriRuntime } from "../types";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 export type CheckUpdateResult = {
   status: "update" | "latest" | "error";
@@ -23,6 +24,8 @@ interface ConfigPanelProps {
   appVersion?: string;
   /** 手动检查更新 */
   onCheckUpdate?: () => Promise<CheckUpdateResult>;
+  /** 清空 Git 本地记录（路径历史与分支记忆） */
+  onClearGitRecords?: () => Promise<boolean>;
 }
 
 type ConfigTab = "connection" | "jar" | "frontend" | "output" | "about";
@@ -38,11 +41,45 @@ const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
 export function ConfigPanel({
   config, configSaved, showPassword,
   onConfigChange, onSaveConfig, onTogglePassword,
-  appVersion, onCheckUpdate,
+  appVersion, onCheckUpdate, onClearGitRecords,
 }: ConfigPanelProps) {
   const [activeTab, setActiveTab] = useState<ConfigTab>("connection");
   const [checking, setChecking] = useState(false);
   const [checkMsg, setCheckMsg] = useState<{ type: "ok" | "update" | "err"; text: string } | null>(null);
+  const [clearingGit, setClearingGit] = useState(false);
+  const [gitClearMsg, setGitClearMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [showClearGitConfirm, setShowClearGitConfirm] = useState(false);
+
+  const gitRecordCount =
+    (config.repo_path_history?.length ?? 0) + Object.keys(config.branch_repo_settings ?? {}).length;
+  const hasGitRecords = Boolean(
+    gitRecordCount > 0 ||
+    config.last_repo_path?.trim() ||
+    config.last_branch?.trim() ||
+    config.last_frontend_dir?.trim() ||
+    config.last_build_script?.trim() ||
+    config.last_spring_profile?.trim() ||
+    config.last_expose_port?.trim(),
+  );
+
+  const handleClearGitRecords = async () => {
+    if (!onClearGitRecords || clearingGit) return;
+    setClearingGit(true);
+    setGitClearMsg(null);
+    try {
+      const cleared = await onClearGitRecords();
+      if (cleared) {
+        setShowClearGitConfirm(false);
+        setGitClearMsg({ type: "ok", text: "已清空 Git 记录" });
+      } else {
+        setGitClearMsg({ type: "err", text: "清空失败，请稍后重试" });
+      }
+    } catch (e) {
+      setGitClearMsg({ type: "err", text: String(e) });
+    } finally {
+      setClearingGit(false);
+    }
+  };
 
   const handleCheckUpdate = async () => {
     if (!onCheckUpdate || checking) return;
@@ -308,6 +345,31 @@ export function ConfigPanel({
               )}
             </div>
 
+            <div className="about-card about-data-card">
+              <div className="about-data-title">Git 本地记录</div>
+              <p className="about-data-desc">
+                包含分支打包与快捷合并中的仓库路径历史，以及各仓库的高级设置记忆。
+                {gitRecordCount > 0 ? ` 当前共 ${gitRecordCount} 条路径/仓库记忆。` : hasGitRecords ? " 当前有分支选择记忆。" : " 当前暂无记录。"}
+              </p>
+              <div className="about-actions">
+                <button
+                  type="button"
+                  className="about-danger-btn"
+                  onClick={() => setShowClearGitConfirm(true)}
+                  disabled={!onClearGitRecords || !hasGitRecords}
+                >
+                  <Trash2 size={16} />
+                  清空 Git 记录
+                </button>
+              </div>
+              {gitClearMsg && (
+                <div className={`about-check-msg about-check-msg--${gitClearMsg.type === "ok" ? "ok" : "err"}`}>
+                  {gitClearMsg.type === "ok" ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+                  <span>{gitClearMsg.text}</span>
+                </div>
+              )}
+            </div>
+
             <div className="config-tip">
               <p><AlertCircle size={16} className="inline-icon" /> 配置说明：</p>
               <ul>
@@ -336,6 +398,25 @@ export function ConfigPanel({
           )}
         </button>
       )}
+
+      <ConfirmDialog
+        open={showClearGitConfirm}
+        title="清空 Git 记录"
+        message="此操作不可恢复，将清除以下本地记忆："
+        details={[
+          "分支打包 / 快捷合并的仓库路径历史",
+          "上次选择的仓库与分支",
+          "各仓库的高级设置（端口、nginx 等）",
+        ]}
+        confirmLabel="确认清空"
+        cancelLabel="取消"
+        variant="danger"
+        loading={clearingGit}
+        onConfirm={() => { void handleClearGitRecords(); }}
+        onCancel={() => {
+          if (!clearingGit) setShowClearGitConfirm(false);
+        }}
+      />
     </div>
   );
 }

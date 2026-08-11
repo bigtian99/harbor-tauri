@@ -4,7 +4,9 @@ use crate::build::push_helpers::{
     docker_login_harbor, docker_push_image, docker_rmi_best_effort, require_harbor_config,
     resolve_final_tag,
 };
-use crate::build::{docker_output, emit_progress, reset_cancel_flag, resolve_harbor_repository};
+use crate::build::{
+    begin_cancellable_operation, docker_output, emit_progress, resolve_harbor_repository,
+};
 use crate::config_cmd::load_config_sync;
 use crate::docker::{
     prepare_custom_docker_context, prepare_frontend_dist_context, prepare_jar_context,
@@ -43,7 +45,7 @@ pub async fn build_and_push(
     // 并行推送时区分角色，如 "前端" / "后端"；进度消息会带 [标签]
     progress_label: Option<String>,
 ) -> Result<String, String> {
-    reset_cancel_flag();
+    let _cancel_guard = begin_cancellable_operation();
     let label = progress_label
         .as_ref()
         .map(|s| s.trim().to_string())
@@ -206,9 +208,37 @@ pub async fn build_and_push(
         emit(&app, 58, "🔐 复用已有 Harbor 登录", "push");
     }
 
-    // 步骤4: docker push
-    emit(&app, 75, "📤 推送镜像到 Harbor...", "push");
-    docker_push_image(full_image.clone()).await?;
+    // 步骤4: docker push（大镜像可能数分钟无输出；心跳避免 UI 误以为卡住）
+    emit(
+        &app,
+        75,
+        "📤 推送镜像到 Harbor（JAR 等大镜像可能需几分钟）...",
+        "push",
+    );
+    let stop_hb = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stop_hb_flag = stop_hb.clone();
+    let app_hb = app.clone();
+    let label_hb = label.clone();
+    let hb = std::thread::spawn(move || {
+        let mut waited = 0u32;
+        while !stop_hb_flag.load(Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_secs(15));
+            if stop_hb_flag.load(Ordering::SeqCst) {
+                break;
+            }
+            waited += 15;
+            let msg = format!("📤 仍在推送 Harbor…已等待约 {waited} 秒");
+            let text = match &label_hb {
+                Some(l) => format!("[{l}] {msg}"),
+                None => msg,
+            };
+            emit_progress(&app_hb, 78, &text, "push");
+        }
+    });
+    let push_result = docker_push_image(full_image.clone()).await;
+    stop_hb.store(true, Ordering::SeqCst);
+    let _ = hb.join();
+    push_result?;
 
     // 步骤5: 推送成功后删除本地镜像，避免本机堆积历史 tag（失败不影响结果）
     emit(&app, 92, "🧹 清理本地镜像缓存...", "cleanup");
@@ -219,7 +249,14 @@ pub async fn build_and_push(
     )
     .await;
 
-    emit(&app, 100, "✅ 推送完成!", "done");
+    // 并行推送（带 progress_label）时不抢 100%，由前端在两端都结束后再置满
+    let done_pct = if label.is_some() { 90 } else { 100 };
+    let done_msg = if label.is_some() {
+        "✅ 本侧推送完成"
+    } else {
+        "✅ 推送完成!"
+    };
+    emit(&app, done_pct, done_msg, "done");
 
     Ok(format!("✅ 镜像推送成功!\n\n完整镜像: {}", full_image))
 }
@@ -232,7 +269,7 @@ pub async fn push_local_image(
     image_name: String,
     image_tag: String,
 ) -> Result<String, String> {
-    reset_cancel_flag();
+    let _cancel_guard = begin_cancellable_operation();
     let config = load_config_sync()?;
     require_harbor_config(&config)?;
 

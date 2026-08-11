@@ -23,7 +23,7 @@ use build::{
 use commit::{
     get_commit_authors, get_commit_diff, get_commit_list, get_last_commit, list_branch_diff_commits,
 };
-use config_cmd::{load_config, save_config};
+use config_cmd::{clear_git_records, load_config, save_config};
 use diag::{
     export_diagnostic_log, get_templates_diagnostic_log_path, list_diagnostic_log_dates,
     read_diagnostic_log,
@@ -78,6 +78,7 @@ pub fn run() {
             is_ops_mode,
             load_config,
             save_config,
+            clear_git_records,
             list_git_branches,
             list_git_branches_from_url,
             clone_repo,

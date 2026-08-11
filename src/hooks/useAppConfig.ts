@@ -172,6 +172,23 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     }
   }
 
+  async function clearGitRecords(showToast?: (message: string) => void): Promise<boolean> {
+    if (!isTauriRuntime()) {
+      showToast?.("请在桌面端操作");
+      return false;
+    }
+    try {
+      const cleared = withSessionConfigDefaults(await invoke<HarborConfig>("clear_git_records"));
+      setConfig(cleared);
+      showToast?.("已清空 Git 记录");
+      return true;
+    } catch (e) {
+      console.error("[Clear Git Records] 清空失败:", e);
+      showToast?.(`清空 Git 记录失败: ${e}`);
+      return false;
+    }
+  }
+
   async function clearBuildHistory(showToast?: (message: string) => void) {
     if (!isTauriRuntime()) return;
     try {
@@ -405,6 +422,7 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     loadBuildHistory,
     deleteBuildRecord,
     clearBuildHistory,
+    clearGitRecords,
     openArtifactPath,
     handleManualCheckUpdate,
     openDiagnosticLog,

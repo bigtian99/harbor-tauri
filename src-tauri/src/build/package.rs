@@ -3,7 +3,7 @@
 use crate::build::package_build::{run_project_build, BuildParams};
 use crate::build::package_finish::{finish_package, FinishPackageParams};
 use crate::build::package_worktree::{prepare_worktree, validate_project_in_worktree};
-use crate::build::{emit_progress, reset_cancel_flag};
+use crate::build::{begin_cancellable_operation, emit_progress};
 use crate::config_cmd::load_config_sync;
 use crate::models::{PackageFromBranchResult, PackageProjectType};
 
@@ -19,7 +19,7 @@ pub async fn package_from_branch(
     spring_profile: Option<String>,
     package_with_backend: Option<bool>,
 ) -> Result<PackageFromBranchResult, String> {
-    reset_cancel_flag();
+    let _cancel_guard = begin_cancellable_operation();
     let project_type = PackageProjectType::from_string(project_type)?;
     let branch = branch.trim().to_string();
     if branch.is_empty() {

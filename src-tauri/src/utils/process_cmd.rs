@@ -185,7 +185,25 @@ pub(crate) fn silent_docker_command() -> Command {
 }
 
 pub(crate) fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<String, String> {
-    if CANCEL_FLAG.load(Ordering::SeqCst) {
+    run_command_inner(current_dir, command, args, true)
+}
+
+/// 不受构建取消标志影响的命令执行（选仓、列分支等 UI 读操作）。
+pub(crate) fn run_command_no_cancel(
+    current_dir: &Path,
+    command: &str,
+    args: &[&str],
+) -> Result<String, String> {
+    run_command_inner(current_dir, command, args, false)
+}
+
+fn run_command_inner(
+    current_dir: &Path,
+    command: &str,
+    args: &[&str],
+    check_cancel: bool,
+) -> Result<String, String> {
+    if check_cancel && CANCEL_FLAG.load(Ordering::SeqCst) {
         return Err("构建已取消".to_string());
     }
 
@@ -244,7 +262,7 @@ pub(crate) fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> R
 
     *CURRENT_PID.lock().unwrap() = None;
 
-    if CANCEL_FLAG.load(Ordering::SeqCst) {
+    if check_cancel && CANCEL_FLAG.load(Ordering::SeqCst) {
         return Err("构建已取消".to_string());
     }
 
@@ -268,8 +286,13 @@ pub(crate) fn git_output(repo_path: &Path, args: &[&str]) -> Result<String, Stri
     run_command(repo_path, "git", args)
 }
 
+pub(crate) fn git_output_no_cancel(repo_path: &Path, args: &[&str]) -> Result<String, String> {
+    run_command_no_cancel(repo_path, "git", args)
+}
+
 pub(crate) fn repo_root_for(repo_path: &Path) -> Result<PathBuf, String> {
-    git_output(repo_path, &["rev-parse", "--show-toplevel"])
+    // 选仓/校验仓库是 UI 读操作，不能被上一次「构建已取消」标志误伤
+    git_output_no_cancel(repo_path, &["rev-parse", "--show-toplevel"])
         .map(|output| PathBuf::from(output.trim()))
         .map_err(|e| format!("不是有效的 Git 仓库: {}", e))
 }

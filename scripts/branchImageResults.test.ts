@@ -1,7 +1,10 @@
 import {
   createBranchImageResult,
+  formatBranchImagesForHistory,
   getBranchImageCopyLabel,
   getBranchPushSummary,
+  parseHistoryImageTags,
+  sortBranchImageResults,
   shouldShowBranchProgress,
   shouldShowBranchResults,
 } from "../src/branchImageResults.ts";
@@ -101,4 +104,31 @@ assertEqual(
   shouldShowBranchProgress(false, "✅ 分支打包并推送镜像完成", 100),
   false,
   "progress should hide after a completed 100 percent success",
+);
+
+const sorted = sortBranchImageResults([backend, frontend]);
+assertEqual(sorted[0].role, "frontend", "frontend image should sort before backend");
+assertEqual(sorted[1].role, "backend", "backend image should remain after frontend");
+
+assertEqual(
+  formatBranchImagesForHistory([backend, frontend]),
+  "dockerhub.kubekey.local/proj/app-fe:tag\ndockerhub.kubekey.local/proj/app-be:tag",
+  "history should keep both frontend and backend image addresses (frontend first)",
+);
+
+assertEqual(
+  formatBranchImagesForHistory([frontend]),
+  "dockerhub.kubekey.local/proj/app-fe:tag",
+  "history should keep a single frontend image as one line",
+);
+
+assertJsonEqual(
+  parseHistoryImageTags(
+    "dockerhub.kubekey.local/proj/app-fe:tag\ndockerhub.kubekey.local/proj/app-be:tag",
+  ),
+  [
+    "dockerhub.kubekey.local/proj/app-fe:tag",
+    "dockerhub.kubekey.local/proj/app-be:tag",
+  ],
+  "history image_tag with two lines should parse into two addresses",
 );

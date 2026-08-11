@@ -24,6 +24,30 @@ export function createBranchImageResult(role: BranchImageRole, image: string): B
   };
 }
 
+/** 前端在前、后端在后，便于结果区与历史展示顺序一致 */
+export function sortBranchImageResults(results: BranchImageResult[]): BranchImageResult[] {
+  return [...results].sort((a, b) => {
+    if (a.role === b.role) return 0;
+    return a.role === "frontend" ? -1 : 1;
+  });
+}
+
+/** 历史记录 image_tag：多镜像纯地址换行拼接（前端优先） */
+export function formatBranchImagesForHistory(results: BranchImageResult[]): string {
+  return sortBranchImageResults(results)
+    .map((r) => r.image.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** 解析历史 image_tag（兼容单行 / 多行） */
+export function parseHistoryImageTags(imageTag: string): string[] {
+  return imageTag
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 export function getBranchPushSummary(pushLogs: string[], hasBackend: boolean) {
   const frontendFailed = pushLogs.some((log) => log.startsWith("❌ 前端"));
   const backendFailed = pushLogs.some((log) => log.startsWith("❌ 后端"));

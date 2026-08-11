@@ -1,3 +1,4 @@
+use crate::diag::diag_log;
 use crate::models::{HarborConfig, LEGACY_CONFIG_DIR};
 use crate::utils::{config_path_for, get_config_path, normalize_config};
 use std::fs;
@@ -40,4 +41,38 @@ pub fn save_config(mut config: HarborConfig) -> Result<(), String> {
     let config = normalize_config(config);
     let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+/// 清空 Git 相关本地记忆：仓库路径历史、分支记忆与按仓库的高级设置。
+#[tauri::command]
+pub fn clear_git_records() -> Result<HarborConfig, String> {
+    let mut config = load_config_sync()?;
+    let repo_history_count = config.repo_path_history.len();
+    let branch_settings_count = config.branch_repo_settings.len();
+
+    config.last_repo_path.clear();
+    config.last_branch.clear();
+    config.last_frontend_dir.clear();
+    config.last_build_script.clear();
+    config.last_project_type = "maven".to_string();
+    config.last_auto_push_image = false;
+    config.last_package_with_backend = false;
+    config.last_spring_profile.clear();
+    config.last_expose_port.clear();
+    config.repo_path_history.clear();
+    config.branch_repo_settings.clear();
+
+    let path = get_config_path();
+    let config = normalize_config(config);
+    let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+
+    diag_log(
+        "config",
+        &format!(
+            "clear_git_records: repo_path_history={repo_history_count}, branch_repo_settings={branch_settings_count}"
+        ),
+    );
+
+    Ok(config)
 }

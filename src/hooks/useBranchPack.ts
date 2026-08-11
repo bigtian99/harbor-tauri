@@ -404,6 +404,22 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     }
   }
 
+  /** 清空 Git 记忆后重置分支面板本地状态。 */
+  function resetGitMemoryUi() {
+    setRepoPath("");
+    setBranchName("");
+    setBranchOptions([]);
+    setFrontendDir("");
+    setSelectedBuildScript("");
+    setBranchProjectType("maven");
+    setAutoPushImage(false);
+    setPackageWithBackend(false);
+    setSpringProfile("");
+    setSpringProfiles([]);
+    setBranchExposePort("");
+    setNginxLocations([]);
+  }
+
   /**
    * 配置加载后恢复「记忆分支设置」相关字段。
    * 由 App 在 loadConfig 成功后调用。
@@ -493,6 +509,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     handleBranchChange,
     handleRememberSettingsChange,
     applyRememberedConfig,
+    resetGitMemoryUi,
     restoreRememberedBranchAdvancedSettings,
   };
 }
