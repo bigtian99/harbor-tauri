@@ -19,6 +19,7 @@ import {
   getBranchPushSummary,
   sortBranchImageResults,
 } from "../../branchImageResults";
+import { sanitizeBranchForImageRef } from "../../branchRef";
 import { rememberBranchRepoSettings } from "../../branchSettings";
 import { prependPathHistory } from "./pathHistory";
 
@@ -219,7 +220,7 @@ export async function handlePackageFromBranch(
         ? getProjectName(repoPath).toLowerCase()
         : inferImageName(result.artifact_path, "jar");
     const effectiveImageName = imageName.trim() || baseName;
-    const branchSafeName = branchName.trim().replace(/[^a-zA-Z0-9._-]/g, "-");
+    const branchSafeName = sanitizeBranchForImageRef(branchName);
     const scriptSafeName = selectedBuildScript.replace(/[^a-zA-Z0-9._-]/g, "-");
     const frontendDistSuffix =
       branchProjectType === "npm" ? `-frontend-${branchSafeName}-${scriptSafeName}` : "";

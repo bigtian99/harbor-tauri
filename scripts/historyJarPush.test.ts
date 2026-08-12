@@ -52,6 +52,6 @@ const config = {
 const resolved = resolveHistoryJarPushConfig(baseRecord({ image_name: "demo" }), config);
 assert.ok(resolved);
 assert.equal(resolved!.imageName, "demo-8080");
-assert.match(resolved!.imageTag, /^origin-rc-master-v\./);
+assert.match(resolved!.imageTag, /^rc-master-v\./);
 
 console.log("historyJarPush.test.ts: ok");

@@ -245,6 +245,9 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setSelectedBuildScript(nextBuildScript);
     setPackageWithBackend(nextPackageWithBackend);
 
+    // 合并跳转只写了仓库/分支并开打，原先不拉提交；分支页提交区会空白
+    void loadGitBranches(path, branch);
+
     await runPackageFromBranch(
       {
         config,
@@ -257,7 +260,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
         setProgressMessage,
         showToast,
         loadBuildHistory,
-        imageName,
+        imageName: "",
         setImageName,
         imageTag,
         setArtifactPath,

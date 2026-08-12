@@ -1,5 +1,6 @@
 import type { BuildRecord, HarborConfig } from "./types.ts";
 import { getRememberedBranchAdvancedSettings } from "./branchSettings.ts";
+import { sanitizeBranchForImageRef } from "./branchRef.ts";
 
 function projectNameFromRepo(repoPath: string): string {
   return repoPath.split("/").filter(Boolean).pop() || repoPath;
@@ -52,7 +53,7 @@ export function resolveHistoryJarPushConfig(
     imageName = `${imageName}-${exposePort}`;
   }
 
-  const branchSafe = record.branch.trim().replace(/[^a-zA-Z0-9._-]/g, "-") || "local";
+  const branchSafe = sanitizeBranchForImageRef(record.branch);
   const now = new Date();
   const yy = String(now.getFullYear()).slice(-2);
   const mm = String(now.getMonth() + 1).padStart(2, "0");
