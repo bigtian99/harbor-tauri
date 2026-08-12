@@ -12,12 +12,13 @@ import {
   Stack,
   Table,
   Text,
+  TextInput,
   Title,
   Badge,
   ActionIcon,
   Tooltip,
 } from "@mantine/core";
-import { Copy, FileUp, Loader2, Shield, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, FileUp, Loader2, Shield, Trash2 } from "lucide-react";
 import { isTauriRuntime } from "../types";
 
 export interface PrivacyUploadRecord {
@@ -38,12 +39,22 @@ export interface PrivacyUploadResult {
   uploaded_at: string;
 }
 
+interface PrivacyTarget {
+  remote_dir: string;
+  preview_url: string;
+}
+
 export function PrivacyPanel() {
   const [history, setHistory] = useState<PrivacyUploadRecord[]>([]);
   const [lastResults, setLastResults] = useState<PrivacyUploadResult[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [targetUrl, setTargetUrl] = useState("");
+  const [parsed, setParsed] = useState<PrivacyTarget | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  const isOverwrite = targetUrl.trim().length > 0;
 
   const loadHistory = useCallback(async () => {
     if (!isTauriRuntime()) return;
@@ -63,22 +74,80 @@ export function PrivacyPanel() {
     loadHistory();
   }, [loadHistory]);
 
+  const refreshParse = useCallback(async () => {
+    const raw = targetUrl.trim();
+    if (!raw) {
+      setParsed(null);
+      setParseError(null);
+      return;
+    }
+    if (!isTauriRuntime()) return;
+    try {
+      const t = await invoke<PrivacyTarget>("parse_privacy_target_url", { url: raw });
+      setParsed(t);
+      setParseError(null);
+    } catch (e) {
+      setParsed(null);
+      setParseError(String(e));
+    }
+  }, [targetUrl]);
+
+  const handlePreview = useCallback(async () => {
+    if (!parsed?.preview_url) return;
+    try {
+      await openUrl(parsed.preview_url);
+    } catch (e) {
+      notifications.show({ title: "打开失败", message: String(e), color: "red" });
+    }
+  }, [parsed]);
+
   const handleUpload = useCallback(async () => {
     if (!isTauriRuntime()) {
       notifications.show({ message: "请在桌面端操作", color: "yellow" });
       return;
     }
+    const raw = targetUrl.trim();
+    if (raw) {
+      let target = parsed;
+      if (!target) {
+        try {
+          target = await invoke<PrivacyTarget>("parse_privacy_target_url", { url: raw });
+          setParsed(target);
+          setParseError(null);
+        } catch (e) {
+          const msg = String(e);
+          setParseError(msg);
+          notifications.show({ title: "目标地址无效", message: msg, color: "red" });
+          return;
+        }
+      }
+      if (
+        !window.confirm(
+          `确认覆盖远端目录？\n${target.remote_dir}\n此操作会替换该目录下的 index.html。`,
+        )
+      ) {
+        return;
+      }
+    }
+
     const selected = await open({
-      multiple: true,
+      multiple: !raw,
       filters: [{ name: "HTML", extensions: ["html", "htm"] }],
     });
     if (!selected) return;
     const paths = Array.isArray(selected) ? selected : [selected];
     if (paths.length === 0) return;
+    if (raw && paths.length !== 1) {
+      notifications.show({ message: "覆盖模式仅支持单个 HTML", color: "orange" });
+      return;
+    }
 
     setIsUploading(true);
     try {
-      const results = await invoke<PrivacyUploadResult[]>("upload_privacy_html", { paths });
+      const results = await invoke<PrivacyUploadResult[]>("upload_privacy_html", {
+        paths,
+        targetUrl: raw ? raw : null,
+      });
       setLastResults(results);
       const ok = results.filter((r) => r.status === "success").length;
       const fail = results.length - ok;
@@ -92,7 +161,7 @@ export function PrivacyPanel() {
     } finally {
       setIsUploading(false);
     }
-  }, [loadHistory]);
+  }, [loadHistory, targetUrl, parsed]);
 
   const copyUrl = useCallback(async (url: string) => {
     try {
@@ -162,21 +231,58 @@ export function PrivacyPanel() {
           <Title order={3} c="gray.1">隐私协议</Title>
         </Group>
         <Text size="sm" c="dimmed">
-          上传 HTML 到 common.tiankongshuyu.cn，自动生成目录并返回访问地址。历史仅保存在本机。
+          不填目标地址为新增；填写访问 URL 可解析目录、预览后覆盖该目录 index.html。历史仅保存在本机。
         </Text>
 
         <Paper p="md" radius="md" style={{ background: "#111827", border: "1px solid rgba(94,234,212,0.12)" }}>
-          <Group>
-            <Button
-              leftSection={isUploading ? <Loader2 size={16} className="spin" /> : <FileUp size={16} />}
-              onClick={handleUpload}
-              loading={isUploading}
-              color="teal.7"
-            >
-              选择 HTML 上传
-            </Button>
-            <Text size="sm" c="dimmed">支持多选；每个文件独立目录（…/时间戳英文词/）</Text>
-          </Group>
+          <Stack gap="md">
+            <TextInput
+              label="覆盖目标 URL（可空=新增）"
+              placeholder="http://common.tiankongshuyu.cn/1785467601raven/"
+              value={targetUrl}
+              onChange={(e) => setTargetUrl(e.currentTarget.value)}
+              onBlur={() => {
+                void refreshParse();
+              }}
+            />
+            <Group gap="sm" align="center">
+              <Badge color={isOverwrite ? "orange" : "teal"} variant="light">
+                {isOverwrite ? "覆盖" : "新增"}
+              </Badge>
+              {parsed && (
+                <Text size="sm" c="dimmed" style={{ wordBreak: "break-all" }}>
+                  目录：{parsed.remote_dir}
+                </Text>
+              )}
+              {parseError && (
+                <Text size="sm" c="red.4">
+                  {parseError}
+                </Text>
+              )}
+            </Group>
+            <Group>
+              <Button
+                leftSection={isUploading ? <Loader2 size={16} className="spin" /> : <FileUp size={16} />}
+                onClick={handleUpload}
+                loading={isUploading}
+                color={isOverwrite ? "orange.7" : "teal.7"}
+              >
+                {isOverwrite ? "覆盖上传" : "新增上传"}
+              </Button>
+              <Button
+                variant="light"
+                color="gray"
+                leftSection={<ExternalLink size={16} />}
+                disabled={!parsed}
+                onClick={handlePreview}
+              >
+                预览
+              </Button>
+              <Text size="sm" c="dimmed">
+                {isOverwrite ? "覆盖仅支持单个 HTML" : "新增支持多选；目录 common…/时间戳英文词/"}
+              </Text>
+            </Group>
+          </Stack>
         </Paper>
 
         {lastResults.length > 0 && (
