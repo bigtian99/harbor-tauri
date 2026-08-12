@@ -45,7 +45,8 @@ use landing::{
 use ops::{batch_pack_sub_channels, close_ops_login_window, open_ops_login_window};
 use preview_server::get_preview_server_info;
 use privacy::{
-    clear_privacy_uploads, delete_privacy_uploads, list_privacy_uploads, upload_privacy_html,
+    clear_privacy_uploads, delete_privacy_uploads, list_privacy_uploads, parse_privacy_target_url,
+    upload_privacy_html,
 };
 use settlement::generate_settlement_statements;
 use updater::{check_update, download_and_install, get_app_version};
@@ -131,6 +132,7 @@ pub fn run() {
             open_ops_login_window,
             close_ops_login_window,
             upload_privacy_html,
+            parse_privacy_target_url,
             list_privacy_uploads,
             delete_privacy_uploads,
             clear_privacy_uploads,

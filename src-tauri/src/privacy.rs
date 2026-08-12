@@ -106,7 +106,7 @@ fn pick_remote_dir() -> String {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let word = WORDS[(nanos as usize) % WORDS.len()];
-    format!("{}{}", unix_secs(), word)
+    format!("common.tiankongshuyu.cn/{}{}", unix_secs(), word)
 }
 
 fn load_history_unlocked() -> Vec<PrivacyUploadRecord> {
@@ -190,11 +190,57 @@ pub async fn clear_privacy_uploads() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn upload_privacy_html(paths: Vec<String>) -> Result<Vec<PrivacyUploadResult>, String> {
+pub async fn parse_privacy_target_url(url: String) -> Result<PrivacyTarget, String> {
+    let t = parse_privacy_target_url_inner(&url)?;
+    crate::diag::diag_log(
+        "ops",
+        &format!(
+            "parse_privacy_target_url remote_dir={} preview_url={}",
+            t.remote_dir, t.preview_url
+        ),
+    );
+    Ok(t)
+}
+
+#[tauri::command]
+pub async fn upload_privacy_html(
+    paths: Vec<String>,
+    target_url: Option<String>,
+) -> Result<Vec<PrivacyUploadResult>, String> {
     if paths.is_empty() {
         return Err("请先选择 HTML 文件".to_string());
     }
-    crate::diag::diag_log("ops", &format!("upload_privacy_html count={}", paths.len()));
+
+    let overwrite = target_url
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+
+    let overwrite_target = if overwrite {
+        Some(parse_privacy_target_url_inner(
+            target_url.as_ref().unwrap().trim(),
+        )?)
+    } else {
+        None
+    };
+
+    if let Some(t) = &overwrite_target {
+        if paths.len() != 1 {
+            return Err("覆盖模式仅支持单个 HTML 文件".into());
+        }
+        crate::diag::diag_log(
+            "ops",
+            &format!(
+                "upload_privacy_html mode=overwrite remote_dir={} count=1",
+                t.remote_dir
+            ),
+        );
+    } else {
+        crate::diag::diag_log(
+            "ops",
+            &format!("upload_privacy_html mode=create count={}", paths.len()),
+        );
+    }
 
     let mut results = Vec::new();
     for path_str in paths {
@@ -229,9 +275,25 @@ pub async fn upload_privacy_html(paths: Vec<String>) -> Result<Vec<PrivacyUpload
             continue;
         }
 
-        let remote_dir = pick_remote_dir();
+        let (remote_dir, public_url) = if let Some(t) = &overwrite_target {
+            (t.remote_dir.clone(), t.preview_url.clone())
+        } else {
+            let dir = pick_remote_dir();
+            let leaf = dir.rsplit('/').next().unwrap_or(dir.as_str());
+            let url = format!("{PRIVACY_PUBLIC_BASE}/{leaf}/");
+            (dir, url)
+        };
+
         let uploaded_at = now_stamp();
-        let tmp_root = std::env::temp_dir().join(format!("jarporter-privacy-{remote_dir}"));
+        let tmp_key = remote_dir.replace('/', "_");
+        let tmp_root = std::env::temp_dir().join(format!("jarporter-privacy-{tmp_key}"));
+        crate::diag::diag_log(
+            "ops",
+            &format!(
+                "privacy FTP host={} remote_dir={}",
+                PRIVACY_FTP_HOST, remote_dir
+            ),
+        );
         let upload_result = (|| -> Result<(String, String), String> {
             if tmp_root.exists() {
                 fs::remove_dir_all(&tmp_root).ok();
@@ -241,8 +303,7 @@ pub async fn upload_privacy_html(paths: Vec<String>) -> Result<Vec<PrivacyUpload
             fs::copy(&source, &dest).map_err(|e| format!("复制 HTML 失败: {e}"))?;
 
             run_ftp_upload_with(&tmp_root, &remote_dir, PRIVACY_FTP_HOST, None, "ops")?;
-            let url = format!("{PRIVACY_PUBLIC_BASE}/{remote_dir}/");
-            Ok((remote_dir.clone(), url))
+            Ok((remote_dir.clone(), public_url.clone()))
         })();
 
         let _ = fs::remove_dir_all(&tmp_root);
@@ -260,7 +321,15 @@ pub async fn upload_privacy_html(paths: Vec<String>) -> Result<Vec<PrivacyUpload
                 if let Err(e) = prepend_history(record) {
                     crate::diag::diag_log("ops", &format!("写入历史失败（上传已成功）: {e}"));
                 }
-                crate::diag::diag_log("ops", &format!("✅ 隐私协议上传成功: {url}"));
+                let mode = if overwrite_target.is_some() {
+                    "overwrite"
+                } else {
+                    "create"
+                };
+                crate::diag::diag_log(
+                    "ops",
+                    &format!("✅ 隐私协议上传成功 mode={mode} url={url}"),
+                );
                 results.push(PrivacyUploadResult {
                     id,
                     source_name,
@@ -294,7 +363,7 @@ pub async fn upload_privacy_html(paths: Vec<String>) -> Result<Vec<PrivacyUpload
 
 #[cfg(test)]
 mod tests {
-    use super::{is_html_path, parse_privacy_target_url_inner};
+    use super::{is_html_path, parse_privacy_target_url_inner, pick_remote_dir};
     use std::path::Path;
 
     #[test]
@@ -333,5 +402,15 @@ mod tests {
         assert!(parse_privacy_target_url_inner("").is_err());
         assert!(parse_privacy_target_url_inner("   ").is_err());
         assert!(parse_privacy_target_url_inner("not a url").is_err());
+    }
+
+    #[test]
+    fn pick_remote_dir_has_common_prefix() {
+        let d = pick_remote_dir();
+        assert!(
+            d.starts_with("common.tiankongshuyu.cn/"),
+            "got {d}"
+        );
+        assert!(!d.ends_with('/'));
     }
 }
