@@ -33,3 +33,4 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 rust_xlsxwriter = "0.79"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 semver = "1"
+url = "2"

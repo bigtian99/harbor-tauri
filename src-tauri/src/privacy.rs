@@ -42,6 +42,46 @@ pub struct PrivacyUploadResult {
     pub uploaded_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrivacyTarget {
+    pub remote_dir: String,
+    pub preview_url: String,
+}
+
+/// 访问地址 → FTP 目录：去掉协议后 `host[/path…]`（首尾 `/` 已剥除）。
+pub fn parse_privacy_target_url_inner(raw: &str) -> Result<PrivacyTarget, String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return Err("请输入访问地址".into());
+    }
+    let with_scheme = if s.contains("://") {
+        s.to_string()
+    } else {
+        format!("http://{s}")
+    };
+    let u = url::Url::parse(&with_scheme).map_err(|e| format!("无效地址: {e}"))?;
+    let host = u
+        .host_str()
+        .filter(|h| !h.is_empty())
+        .ok_or_else(|| "地址缺少域名".to_string())?
+        .to_string();
+    let path_trim = u.path().trim_matches('/');
+    let remote_dir = if path_trim.is_empty() {
+        host.clone()
+    } else {
+        format!("{host}/{path_trim}")
+    };
+    let preview_url = if path_trim.is_empty() {
+        format!("{}://{}/", u.scheme(), host)
+    } else {
+        format!("{}://{}/{}/", u.scheme(), host, path_trim)
+    };
+    Ok(PrivacyTarget {
+        remote_dir,
+        preview_url,
+    })
+}
+
 fn history_path() -> PathBuf {
     let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
     let app_dir = config_dir.join(APP_CONFIG_DIR);
@@ -254,7 +294,7 @@ pub async fn upload_privacy_html(paths: Vec<String>) -> Result<Vec<PrivacyUpload
 
 #[cfg(test)]
 mod tests {
-    use super::is_html_path;
+    use super::{is_html_path, parse_privacy_target_url_inner};
     use std::path::Path;
 
     #[test]
@@ -262,5 +302,36 @@ mod tests {
         assert!(is_html_path(Path::new("a.html")));
         assert!(is_html_path(Path::new("a.HTM")));
         assert!(!is_html_path(Path::new("a.txt")));
+    }
+
+    #[test]
+    fn parse_common_with_dir() {
+        let t = parse_privacy_target_url_inner("http://common.tiankongshuyu.cn/1785467601raven/")
+            .expect("ok");
+        assert_eq!(t.remote_dir, "common.tiankongshuyu.cn/1785467601raven");
+        assert_eq!(t.preview_url, "http://common.tiankongshuyu.cn/1785467601raven/");
+    }
+
+    #[test]
+    fn parse_subdomain_root() {
+        let t = parse_privacy_target_url_inner("https://ythtpictorial.tiankongshuyu.cn/")
+            .expect("ok");
+        assert_eq!(t.remote_dir, "ythtpictorial.tiankongshuyu.cn");
+        assert_eq!(t.preview_url, "https://ythtpictorial.tiankongshuyu.cn/");
+    }
+
+    #[test]
+    fn parse_subdomain_nested() {
+        let t = parse_privacy_target_url_inner("https://ythtpictorial.tiankongshuyu.cn/foo/bar/")
+            .expect("ok");
+        assert_eq!(t.remote_dir, "ythtpictorial.tiankongshuyu.cn/foo/bar");
+        assert_eq!(t.preview_url, "https://ythtpictorial.tiankongshuyu.cn/foo/bar/");
+    }
+
+    #[test]
+    fn parse_rejects_empty_and_garbage() {
+        assert!(parse_privacy_target_url_inner("").is_err());
+        assert!(parse_privacy_target_url_inner("   ").is_err());
+        assert!(parse_privacy_target_url_inner("not a url").is_err());
     }
 }

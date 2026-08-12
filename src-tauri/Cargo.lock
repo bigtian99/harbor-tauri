@@ -1970,6 +1970,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-shell",
  "tiny_http",
+ "url",
  "zip",
 ]
 
