@@ -1,0 +1,2515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <title>{{NAME}}官网 - AI智能聊天软件下载 | 虚拟社交平台</title>
+    <meta name="description" content="{{NAME}}官网提供{{NAME}}下载服务，是一款融合前沿AI技术的虚拟社交平台，支持智能聊天、角色扮演、情感陪伴，50万+用户选择，安全可靠。">
+    <meta name="keywords" content="{{NAME}},{{NAME}}官网,{{NAME}}下载,AI聊天软件,AI虚拟社交,AI聊天APP,{{NAME}}智能聊天,AI陪伴软件,虚拟角色聊天,智能社交平台">
+    <meta name="author" content="{{NAME}}">
+    <meta name="robots" content="index, follow">
+    <link rel="icon" type="image/png" href="{{LOGO}}">
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta property="og:title" content="{{NAME}}官网 - AI智能聊天软件下载 | 虚拟社交平台">
+    <meta property="og:description" content="融合前沿人工智能技术的虚拟社交平台，支持智能聊天、角色扮演、情感陪伴。">
+    <meta name="template-category" content="AI聊天" />
+    <meta property="og:type" content="website">
+    <style>
+
+        /* ==================== CSS 变量定义 ==================== */
+        :root {
+            --primary-dark: #0f0c29;
+            --primary-mid: #302b63;
+            --primary-light: #24243e;
+            --accent-purple: #7b68ee;
+            --accent-blue: #00d4ff;
+            --accent-pink: #ff6b9d;
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8d1;
+            --text-muted: #8a8aa3;
+            --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            --gradient-hero: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            --gradient-card: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
+            --shadow-glow: 0 0 40px rgba(123, 104, 238, 0.3);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 20px;
+            --radius-xl: 28px;
+            --transition-fast: 0.2s ease;
+            --transition-normal: 0.3s ease;
+            --transition-slow: 0.5s ease;
+        }
+
+        /* ==================== 基础重置 ==================== */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-text-size-adjust: 100%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: var(--primary-dark);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+            transition: var(--transition-fast);
+        }
+
+        button {
+            cursor: pointer;
+            border: none;
+            outline: none;
+            font-family: inherit;
+        }
+
+        ul, ol {
+            list-style: none;
+        }
+
+        /* ==================== 工具类 ==================== */
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .section {
+            padding: 80px 0;
+        }
+
+        @media (max-width: 768px) {
+            .section {
+                padding: 60px 0;
+            }
+        }
+
+        .section-title {
+            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 16px;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .section-subtitle {
+            font-size: clamp(0.95rem, 2.5vw, 1.1rem);
+            color: var(--text-secondary);
+            text-align: center;
+            max-width: 600px;
+            margin: 0 auto 50px;
+        }
+
+        /* ==================== 动画定义 ==================== */
+        @keyframes fadeInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-60px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes fadeInRight {
+            from {
+                opacity: 0;
+                transform: translateX(60px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+
+        .animate-on-scroll {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .animate-on-scroll.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ==================== 头部导航 ==================== */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            padding: 16px 0;
+            background: rgba(15, 12, 41, 0.9);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: var(--transition-normal);
+        }
+
+        .header.scrolled {
+            padding: 12px 0;
+            background: rgba(15, 12, 41, 0.98);
+        }
+
+        .header-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            background: var(--gradient-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .logo-text {
+            font-size: 1.3rem;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+
+        .nav-link {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            position: relative;
+            padding: 4px 0;
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--gradient-primary);
+            transition: var(--transition-normal);
+        }
+
+        .nav-link:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        .header-cta {
+            padding: 10px 24px;
+            background: var(--gradient-primary);
+            border-radius: var(--radius-lg);
+            font-weight: 600;
+            font-size: 0.9rem;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .header-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 50px rgba(123, 104, 238, 0.5);
+        }
+
+        /* 移动端菜单 */
+        .menu-toggle {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            padding: 8px;
+            background: transparent;
+        }
+
+        .menu-toggle span {
+            width: 24px;
+            height: 2px;
+            background: var(--text-primary);
+            border-radius: 2px;
+            transition: var(--transition-fast);
+        }
+
+        @media (max-width: 768px) {
+            .nav {
+                position: fixed;
+                top: 76px;
+                left: 0;
+                right: 0;
+                background: rgba(15, 12, 41, 0.98);
+                flex-direction: column;
+                padding: 20px;
+                gap: 20px;
+                transform: translateY(-100%);
+                opacity: 0;
+                pointer-events: none;
+                transition: var(--transition-normal);
+            }
+
+            .nav.active {
+                transform: translateY(0);
+                opacity: 1;
+                pointer-events: all;
+            }
+
+            .menu-toggle {
+                display: flex;
+            }
+        }
+
+        /* ==================== Hero 区域 ==================== */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            background: var(--gradient-hero);
+            position: relative;
+            overflow: hidden;
+            padding-top: 80px;
+        }
+
+        /* Hero加载遮罩动画 */
+        .hero-loader {
+            position: absolute;
+            inset: 0;
+            background: var(--primary-dark);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+
+        .hero-loader.loaded {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .hero-loader-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(123, 104, 238, 0.2);
+            border-top-color: var(--accent-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(123, 104, 238, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(0, 212, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(255, 107, 157, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .hero-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-text {
+            animation: fadeInLeft 1200ms ease-out forwards;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(123, 104, 238, 0.2);
+            border: 1px solid rgba(123, 104, 238, 0.3);
+            border-radius: 50px;
+            font-size: 0.85rem;
+            color: var(--accent-purple);
+            margin-bottom: 24px;
+        }
+
+        .hero-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--accent-purple);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .hero-title {
+            font-size: clamp(2.2rem, 6vw, 3.5rem);
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: 20px;
+        }
+
+        .hero-title-highlight {
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-description {
+            font-size: clamp(1rem, 2.5vw, 1.15rem);
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            max-width: 500px;
+        }
+
+        .hero-stats {
+            display: flex;
+            gap: 32px;
+            margin-bottom: 36px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 32px;
+            border-radius: var(--radius-lg);
+            font-weight: 600;
+            font-size: 1rem;
+            transition: var(--transition-normal);
+        }
+
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: white;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0 60px rgba(123, 104, 238, 0.5);
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: var(--text-primary);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.15);
+            border-color: var(--accent-purple);
+        }
+
+        .hero-image {
+            animation: fadeInRight 1200ms ease-out forwards;
+            animation-delay: 200ms;
+            opacity: 0;
+            position: relative;
+        }
+
+        .hero-image-wrapper {
+            position: relative;
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .hero-image-wrapper::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: var(--gradient-primary);
+            border-radius: var(--radius-xl);
+            z-index: -1;
+            opacity: 0.5;
+        }
+
+        .hero-image img {
+            width: 100%;
+            aspect-ratio: 3/4;
+            object-fit: cover;
+            border-radius: var(--radius-xl);
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        
+        .hero-image img.loaded {
+            opacity: 1;
+        }
+
+        .hero-glow {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(123, 104, 238, 0.3) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            filter: blur(60px);
+            z-index: -1;
+        }
+
+        @media (max-width: 968px) {
+            .hero-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+                gap: 40px;
+            }
+
+            .hero-text {
+                order: 1;
+            }
+
+            .hero-image {
+                order: 0;
+                animation-delay: 0ms;
+            }
+
+            .hero-description {
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .hero-stats {
+                justify-content: center;
+            }
+
+            .hero-buttons {
+                justify-content: center;
+            }
+        }
+
+        /* ==================== 下载区域 ==================== */
+        .download {
+            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary-mid) 100%);
+            padding: 80px 0;
+        }
+
+        .download-card {
+            background: var(--gradient-card);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: var(--radius-xl);
+            padding: 50px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .download-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(123, 104, 238, 0.2) 0%, transparent 70%);
+            filter: blur(60px);
+        }
+
+        .download-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            background: rgba(255, 107, 157, 0.2);
+            border-radius: 50px;
+            font-size: 0.8rem;
+            color: var(--accent-pink);
+            margin-bottom: 20px;
+        }
+
+        .download-title {
+            font-size: clamp(1.5rem, 4vw, 2rem);
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .download-version {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 30px;
+        }
+
+        .download-features {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .download-feature {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .download-feature svg {
+            width: 18px;
+            height: 18px;
+            color: #4ade80;
+        }
+
+        .download-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 32px;
+            background: var(--gradient-primary);
+            border-radius: var(--radius-lg);
+            font-weight: 600;
+            font-size: 1rem;
+            transition: var(--transition-normal);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0 60px rgba(123, 104, 238, 0.5);
+        }
+
+        .download-btn-outline {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .download-btn-outline:hover {
+            border-color: var(--accent-purple);
+            background: rgba(123, 104, 238, 0.1);
+        }
+
+        .download-tip {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        /* ==================== 关于我们 ==================== */
+        .about {
+            padding: 100px 0;
+            background: var(--primary-mid);
+        }
+
+        .about-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .about-image {
+            position: relative;
+        }
+
+        .about-image img {
+            width: 100%;
+            border-radius: var(--radius-xl);
+            box-shadow: 0 30px 80px rgba(0,0,0,0.3);
+        }
+
+        .about-badge {
+            position: absolute;
+            bottom: -20px;
+            right: -20px;
+            background: var(--gradient-primary);
+            padding: 20px 30px;
+            border-radius: var(--radius-lg);
+            text-align: center;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .about-badge-value {
+            font-size: 2rem;
+            font-weight: 800;
+        }
+
+        .about-badge-text {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        .about-text h2 {
+            font-size: clamp(1.8rem, 4vw, 2.5rem);
+            font-weight: 700;
+            margin-bottom: 20px;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .about-text p {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            font-size: 1rem;
+        }
+
+        .about-features {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .about-feature {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.05);
+            border-radius: var(--radius-md);
+            font-size: 0.9rem;
+        }
+
+        .about-feature svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent-blue);
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 968px) {
+            .about-content {
+                grid-template-columns: 1fr;
+            }
+
+            .about-badge {
+                right: 20px;
+            }
+
+            .about-features {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ==================== 功能特性 ==================== */
+        .features {
+            padding: 100px 0;
+            background: var(--primary-dark);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+        
+        @media (max-width: 768px) {
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .feature-card {
+            background: var(--gradient-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius-xl);
+            padding: 32px;
+            transition: var(--transition-normal);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--gradient-primary);
+            opacity: 0;
+            transition: var(--transition-normal);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            border-color: rgba(123, 104, 238, 0.3);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: var(--gradient-primary);
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .feature-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .feature-description {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+
+        /* ==================== 版本更新 ==================== */
+        .changelog {
+            padding: 100px 0;
+            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary-mid) 100%);
+        }
+
+        .changelog-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .changelog-card {
+            background: var(--gradient-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius-xl);
+            padding: 40px;
+        }
+
+        .changelog-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .changelog-version {
+            background: var(--gradient-primary);
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .changelog-date {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .changelog-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .changelog-item {
+            display: flex;
+            gap: 12px;
+            padding: 16px;
+            background: rgba(255,255,255,0.03);
+            border-radius: var(--radius-md);
+        }
+
+        .changelog-tag {
+            padding: 4px 10px;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .changelog-tag.new {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+        }
+
+        .changelog-tag.improve {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+        }
+
+        .changelog-tag.fix {
+            background: rgba(251, 146, 60, 0.2);
+            color: #fb923c;
+        }
+
+        .changelog-text {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        /* ==================== 角色展示 ==================== */
+        .characters {
+            padding: 100px 0;
+            background: var(--primary-dark);
+        }
+
+        .characters-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+        }
+        
+        @media (max-width: 1024px) {
+            .characters-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .characters-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .character-card {
+            background: var(--gradient-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            transition: var(--transition-normal);
+        }
+
+        .character-card:hover {
+            transform: translateY(-8px);
+            border-color: rgba(123, 104, 238, 0.3);
+        }
+
+        .character-image {
+            width: 100%;
+            aspect-ratio: 3/4;
+            object-fit: cover;
+        }
+
+        .character-info {
+            padding: 20px;
+        }
+
+        .character-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .character-type {
+            font-size: 0.85rem;
+            color: var(--accent-purple);
+        }
+
+        /* ==================== 优势对比 ==================== */
+        .comparison {
+            padding: 100px 0;
+            background: var(--primary-mid);
+        }
+
+        .comparison-table {
+            width: 100%;
+            background: var(--gradient-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+        }
+
+        .comparison-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 20px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .comparison-table th {
+            background: rgba(123, 104, 238, 0.1);
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .comparison-table th:first-child {
+            border-radius: var(--radius-xl) 0 0 0;
+        }
+
+        .comparison-table th:last-child {
+            border-radius: 0 var(--radius-xl) 0 0;
+        }
+
+        .comparison-table td {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .comparison-table .highlight {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .check-icon {
+            color: #4ade80;
+            font-weight: bold;
+        }
+
+        .cross-icon {
+            color: #f87171;
+        }
+
+        @media (max-width: 768px) {
+            .comparison-table {
+                overflow-x: auto;
+            }
+
+            .comparison-table table {
+                min-width: 600px;
+            }
+        }
+
+        /* ==================== 使用教程 ==================== */
+        .tutorial {
+            padding: 100px 0;
+            background: var(--primary-dark);
+        }
+
+        .tutorial-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+        }
+
+        .tutorial-card {
+            background: var(--gradient-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius-xl);
+            padding: 32px;
+            position: relative;
+            transition: var(--transition-normal);
+        }
+
+        .tutorial-card:hover {
+            border-color: rgba(123, 104, 238, 0.3);
+        }
+
+        .tutorial-number {
+            position: absolute;
+            top: -16px;
+            left: 24px;
+            width: 40px;
+            height: 40px;
+            background: var(--gradient-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .tutorial-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            margin-top: 8px;
+        }
+
+        .tutorial-description {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+
+        .tutorial-tip {
+            margin-top: 16px;
+            padding: 12px;
+            background: rgba(123, 104, 238, 0.1);
+            border-radius: var(--radius-md);
+            font-size: 0.85rem;
+            color: var(--accent-purple);
+        }
+
+        /* ==================== 用户评价 (3x3网格) ==================== */
+        .testimonials {
+            padding: 100px 0;
+            background: var(--primary-mid);
+        }
+
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        @media (max-width: 1024px) {
+            .testimonials-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .testimonials-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .testimonial-card {
+            background: var(--gradient-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius-xl);
+            padding: 28px;
+            transition: var(--transition-normal);
+        }
+
+        .testimonial-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(123, 104, 238, 0.3);
+        }
+
+        .testimonial-stars {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+        }
+
+        .testimonial-star {
+            color: #fbbf24;
+            font-size: 1.1rem;
+        }
+
+        .testimonial-text {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.7;
+            margin-bottom: 20px;
+        }
+
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .testimonial-avatar {
+            width: 44px;
+            height: 44px;
+            background: var(--gradient-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .testimonial-info {
+            flex: 1;
+        }
+
+        .testimonial-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .testimonial-duration {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* ==================== 常见问题 ==================== */
+        .faq {
+            padding: 100px 0;
+            background: var(--primary-dark);
+        }
+
+        .faq-list {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .faq-item {
+            background: var(--gradient-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .faq-question {
+            width: 100%;
+            padding: 24px;
+            background: transparent;
+            color: var(--text-primary);
+            font-size: 1.05rem;
+            font-weight: 600;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .faq-question:hover {
+            background: rgba(255,255,255,0.03);
+        }
+
+        .faq-icon {
+            width: 24px;
+            height: 24px;
+            transition: var(--transition-normal);
+            flex-shrink: 0;
+        }
+
+        .faq-item.active .faq-icon {
+            transform: rotate(180deg);
+        }
+
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .faq-answer-content {
+            padding: 0 24px 24px;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.8;
+        }
+
+        .faq-item.active .faq-answer {
+            max-height: 500px;
+        }
+
+        /* ==================== APP截图 ==================== */
+        .screenshots {
+            padding: 100px 0;
+            background: var(--primary-mid);
+        }
+
+        .screenshots-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 20px;
+            padding: 4px 2px;
+        }
+
+        @media (max-width: 1024px) {
+            .screenshots-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .screenshots-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .screenshot-item {
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            transition: var(--transition-normal);
+        }
+
+        .screenshot-item:hover {
+            transform: scale(1.05);
+        }
+
+        .screenshot-item img {
+            width: 100%;
+            aspect-ratio: 9/16;
+            object-fit: cover;
+        }
+
+        /* ==================== 底部导航 ==================== */
+        .footer-nav {
+            padding: 60px 0 40px;
+            background: var(--primary-dark);
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .footer-nav-grid {
+            display: grid;
+            grid-template-columns: 2fr repeat(3, 1fr);
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .footer-nav-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .footer-nav-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .footer-brand {
+            max-width: 300px;
+        }
+
+        .footer-brand .logo {
+            margin-bottom: 16px;
+        }
+
+        .footer-brand p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.7;
+        }
+
+        .footer-column h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        .footer-column ul {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .footer-column a {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            transition: var(--transition-fast);
+        }
+
+        .footer-column a:hover {
+            color: var(--accent-purple);
+        }
+
+        .footer-bottom {
+            padding-top: 30px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            text-align: center;
+        }
+
+        .footer-copyright {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* ==================== 浮动下载按钮 ==================== */
+        .float-download {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 999;
+            opacity: 0;
+            visibility: hidden;
+            transition: var(--transition-normal);
+        }
+
+        .float-download.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .float-download-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 28px;
+            background: var(--gradient-primary);
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            box-shadow: 0 10px 40px rgba(123, 104, 238, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        .float-download-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* ==================== 返回顶部按钮 ==================== */
+        .back-to-top {
+            position: fixed;
+            bottom: 90px;
+            right: 24px;
+            z-index: 998;
+            width: 48px;
+            height: 48px;
+            background: var(--gradient-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            visibility: hidden;
+            transition: var(--transition-normal);
+            box-shadow: 0 4px 20px rgba(123, 104, 238, 0.4);
+        }
+
+        .back-to-top.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .back-to-top:hover {
+            transform: translateY(-4px);
+        }
+
+        .back-to-top svg {
+            width: 24px;
+            height: 24px;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .back-to-top {
+                bottom: 100px;
+                right: 16px;
+                width: 44px;
+                height: 44px;
+            }
+        }
+
+        /* ==================== 断网安装教程 ==================== */
+        .install-guide {
+            padding: 100px 0;
+            background: var(--primary-dark);
+        }
+
+        .install-guide-content {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--gradient-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius-xl);
+            padding: 40px;
+        }
+
+        .install-guide h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            text-align: center;
+            color: var(--accent-purple);
+        }
+
+        .install-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .install-step {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            background: rgba(255,255,255,0.03);
+            border-radius: var(--radius-lg);
+        }
+
+        .install-step-number {
+            width: 36px;
+            height: 36px;
+            background: var(--gradient-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .install-step-content h4 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .install-step-content p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+
+        /* ==================== SEO 友好链接区域 ==================== */
+        .seo-links {
+            padding: 40px 0;
+            background: rgba(123, 104, 238, 0.05);
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .seo-links-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text-secondary);
+        }
+
+        .seo-links-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 24px;
+        }
+
+        .seo-link {
+            color: var(--accent-purple);
+            font-size: 0.9rem;
+            transition: var(--transition-fast);
+        }
+
+        .seo-link:hover {
+            color: var(--accent-blue);
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 头部导航 -->
+    <header class="header" id="header">
+        <div class="container">
+            <div class="header-inner">
+                <a href="#home" class="logo">
+                    <div class="logo-icon">🌙</div>
+                    <span class="logo-text">{{NAME}}</span>
+                </a>
+                <nav class="nav" id="nav">
+                    <a href="#features" class="nav-link">功能介绍</a>
+                    <a href="#characters" class="nav-link">AI角色</a>
+                    <a href="#download" class="nav-link">下载安装</a>
+                    <a href="#tutorial" class="nav-link">使用教程</a>
+                    <a href="#faq" class="nav-link">常见问题</a>
+                    <a href="#download" class="header-cta">立即下载</a>
+                </nav>
+                <button class="menu-toggle" id="menuToggle" aria-label="菜单">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero 区域 -->
+    <section class="hero" id="home">
+        <!-- Hero加载遮罩 -->
+        <div class="hero-loader loaded" id="heroLoader">
+            <div class="hero-loader-spinner"></div>
+        </div>
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <div class="hero-badge">
+                        <span>50万+ 用户选择</span>
+                    </div>
+                    <h1 class="hero-title">
+                        {{NAME}} - <span class="hero-title-highlight">智能聊天</span> 新体验
+                    </h1>
+                    <p class="hero-description">
+                        融合前沿人工智能技术与沉浸式角色扮演，{{NAME}}为你打造专属虚拟社交伙伴。支持多种AI角色互动，随时随地开启深度对话，让每一次聊天都充满惊喜与温暖。
+                    </p>
+                    <div class="hero-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">50万+</div>
+                            <div class="stat-label">用户选择</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">4.8</div>
+                            <div class="stat-label">用户评分</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">98%</div>
+                            <div class="stat-label">好评率</div>
+                        </div>
+                    </div>
+                    <div class="hero-buttons">
+                        <a href="#download" class="btn btn-primary">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            免费下载
+                        </a>
+                        <a href="#features" class="btn btn-secondary">了解更多</a>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <div class="hero-glow"></div>
+                    <div class="hero-image-wrapper">
+                        <img src="images/character-1.jpeg" alt="{{NAME}} - AI虚拟社交平台" width="400" height="533" style="opacity:1;transition:opacity 0.5s ease;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 下载区域 -->
+    <section class="download" id="download">
+        <div class="container">
+            <div class="download-card animate-on-scroll">
+                <div class="download-badge">
+                    <span>🔥</span> 最新版
+                </div>
+                <h2 class="download-title">下载{{NAME}}最新版</h2>
+                <p class="download-version">版本 v3.2.1 · 大小 48.6 MB · 适配 Android 8.0+ / iOS 14+</p>
+                <div class="download-features">
+                    <span class="download-feature">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        官方原版
+                    </span>
+                    <span class="download-feature">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        安全检测通过
+                    </span>
+                    <span class="download-feature">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        无病毒
+                    </span>
+                </div>
+                <div class="download-buttons">
+                    <a href="javascript:void(0)" id="js-direct-download" class="download-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        免费下载
+                    </a>
+                    <div style="display: flex; justify-content: center; margin-top: 14px; width: 100%;">
+                        <div id="js-qrcode" title="扫码下载{{NAME}}" style="display:inline-block;"></div>
+                    </div>
+                </div>
+
+                <p class="download-tip">
+                    💡 提示：扫码或点击上方按钮即可下载，Android / iOS 均支持。
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 关于{{NAME}} -->
+    <section class="about" id="about">
+        <div class="container">
+            <div class="about-content">
+                <div class="about-image animate-on-scroll">
+                    <img src="images/character-4.jpeg" alt="{{NAME}} - AI虚拟社交" width="500" height="600" loading="lazy">
+                    <div class="about-badge">
+                        <div class="about-badge-value">50+</div>
+                        <div class="about-badge-text">精选角色</div>
+                    </div>
+                </div>
+                <div class="about-text animate-on-scroll">
+                    <h2>关于{{NAME}}</h2>
+                    <p>{{NAME}}是一款基于先进大语言模型打造的智能虚拟社交应用，致力于为用户提供沉浸式、个性化的AI陪伴体验。无论你是想找人倾诉、寻求情感陪伴，还是探索角色扮演的乐趣，{{NAME}}都能满足你的需求。</p>
+                    <p>我们采用深度神经网络技术，让AI角色具备丰富的情感表达能力和自然流畅的对话风格，每一次交流都如同与真人互动般真实自然。</p>
+                    <div class="about-features">
+                        <div class="about-feature">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span>深度情感感知</span>
+                        </div>
+                        <div class="about-feature">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span>端到端加密</span>
+                        </div>
+                        <div class="about-feature">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span>月度更新迭代</span>
+                        </div>
+                        <div class="about-feature">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span>隐私安全保障</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 核心功能 -->
+    <section class="features" id="features">
+        <div class="container">
+            <h2 class="section-title animate-on-scroll">✨ 核心功能</h2>
+            <p class="section-subtitle animate-on-scroll">{{NAME}}集成了多项前沿技术，为您带来全方位的智能社交体验</p>
+            <div class="features-grid">
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">💬</div>
+                    <h3 class="feature-title">智能情感对话</h3>
+                    <p class="feature-description">基于深度情感计算模型，AI能够精准感知用户情绪状态，提供温暖贴心的回应。无论是开心分享还是倾诉烦恼，{{NAME}}都能给予恰到好处的情感反馈。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">🎭</div>
+                    <h3 class="feature-title">多元角色扮演</h3>
+                    <p class="feature-description">内置丰富多样的AI角色库，涵盖温柔御姐、元气少女、知性学长、幽默伙伴等多种人设。每个角色都拥有独特的性格和说话风格。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">🔒</div>
+                    <h3 class="feature-title">隐私安全保障</h3>
+                    <p class="feature-description">采用端到端加密技术，所有对话内容严格保密。我们承诺绝不泄露用户隐私数据，不存储敏感聊天记录，享受完全私密的AI社交空间。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">🚀</div>
+                    <h3 class="feature-title">持续学习进化</h3>
+                    <p class="feature-description">AI模型不断从交互中学习优化，随着使用时间增长，AI角色会越来越了解用户的偏好和习惯。定期更新模型版本，保持行业领先水平。</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- AI角色展示 -->
+    <section class="characters" id="characters">
+        <div class="container">
+            <h2 class="section-title animate-on-scroll">🌟 AI角色库</h2>
+            <p class="section-subtitle animate-on-scroll">50+款精心设计的AI角色，每位都有独特的性格与故事</p>
+            <div class="characters-grid">
+                <article class="character-card animate-on-scroll">
+                    <img src="images/character-1.jpeg" alt="{{NAME}}角色 - 温柔知性" class="character-image" width="280" height="373" loading="lazy">
+                    <div class="character-info">
+                        <h3 class="character-name">林诗语</h3>
+                        <p class="character-type">温柔知性 · 作家</p>
+                    </div>
+                </article>
+                <article class="character-card animate-on-scroll">
+                    <img src="images/character-2.jpeg" alt="{{NAME}}角色 - 元气少女" class="character-image" width="280" height="373" loading="lazy">
+                    <div class="character-info">
+                        <h3 class="character-name">夏小晴</h3>
+                        <p class="character-type">元气少女 · 学生</p>
+                    </div>
+                </article>
+                <article class="character-card animate-on-scroll">
+                    <img src="images/character-3.jpeg" alt="{{NAME}}角色 - 神秘御姐" class="character-image" width="280" height="373" loading="lazy">
+                    <div class="character-info">
+                        <h3 class="character-name">夜凌霜</h3>
+                        <p class="character-type">神秘御姐 · CEO</p>
+                    </div>
+                </article>
+                <article class="character-card animate-on-scroll">
+                    <img src="images/character-9.jpeg" alt="{{NAME}}角色 - 酷帅阳光" class="character-image" width="280" height="373" loading="lazy">
+                    <div class="character-info">
+                        <h3 class="character-name">陆子轩</h3>
+                        <p class="character-type">酷帅阳光 · 健身教练</p>
+                    </div>
+                </article>
+                <article class="character-card animate-on-scroll">
+                    <img src="images/character-5.jpeg" alt="{{NAME}}角色 - 阳光开朗" class="character-image" width="280" height="373" loading="lazy">
+                    <div class="character-info">
+                        <h3 class="character-name">阳光小子</h3>
+                        <p class="character-type">阳光开朗 · 自由职业</p>
+                    </div>
+                </article>
+                <article class="character-card animate-on-scroll">
+                    <img src="images/character-11.jpeg" alt="{{NAME}}角色 - 二次元少女" class="character-image" width="280" height="373" loading="lazy">
+                    <div class="character-info">
+                        <h3 class="character-name">小樱酱</h3>
+                        <p class="character-type">呆萌可爱 · 二次元</p>
+                    </div>
+                </article>
+                <article class="character-card animate-on-scroll">
+                    <img src="images/character-6.jpeg" alt="{{NAME}}角色 - 幽默风趣" class="character-image" width="280" height="373" loading="lazy">
+                    <div class="character-info">
+                        <h3 class="character-name">段子手阿杰</h3>
+                        <p class="character-type">幽默风趣 · 脱口秀演员</p>
+                    </div>
+                </article>
+                <article class="character-card animate-on-scroll">
+                    <img src="images/character-4.jpeg" alt="{{NAME}}角色 - 知性优雅" class="character-image" width="280" height="373" loading="lazy">
+                    <div class="character-info">
+                        <h3 class="character-name">苏雅婷</h3>
+                        <p class="character-type">知性优雅 · 律师</p>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- 版本更新 -->
+    <section class="changelog" id="changelog">
+        <div class="container">
+            <h2 class="section-title animate-on-scroll">📱 版本动态</h2>
+            <p class="section-subtitle animate-on-scroll">持续迭代更新，为您带来更优质的AI社交体验</p>
+            <div class="changelog-content">
+                <div class="changelog-card animate-on-scroll">
+                    <div class="changelog-header">
+                        <span class="changelog-version">v3.2.1</span>
+                        <span class="changelog-date">2026-06-16</span>
+                    </div>
+                    <div class="changelog-list">
+                        <div class="changelog-item">
+                            <span class="changelog-tag new">新增</span>
+                            <span class="changelog-text">新增5款AI角色形象，优化对话情感识别准确率提升30%</span>
+                        </div>
+                        <div class="changelog-item">
+                            <span class="changelog-tag improve">优化</span>
+                            <span class="changelog-text">AI模型升级至最新版本，上下文理解能力增强，支持更长的对话记忆</span>
+                        </div>
+                        <div class="changelog-item">
+                            <span class="changelog-tag fix">修复</span>
+                            <span class="changelog-text">修复部分安卓机型兼容性问题，界面交互更加流畅顺滑</span>
+                        </div>
+                        <div class="changelog-item">
+                            <span class="changelog-tag improve">优化</span>
+                            <span class="changelog-text">强化隐私保护机制，新增对话内容本地加密选项</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 优势对比 -->
+    <section class="comparison" id="comparison">
+        <div class="container">
+            <h2 class="section-title animate-on-scroll">📊 优势对比</h2>
+            <p class="section-subtitle animate-on-scroll">与市面上其他AI聊天软件相比，{{NAME}}在多个维度上表现卓越</p>
+            <div class="comparison-table animate-on-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>对比维度</th>
+                            <th>🌙 {{NAME}}</th>
+                            <th>其他同类软件</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="highlight">AI情感识别</td>
+                            <td><span class="check-icon">✓</span> 深度情感感知</td>
+                            <td><span class="cross-icon">✗</span> 基础情绪识别</td>
+                        </tr>
+                        <tr>
+                            <td class="highlight">角色丰富度</td>
+                            <td><span class="check-icon">✓</span> 50+ 精选角色</td>
+                            <td><span class="cross-icon">✗</span> 10-20个角色</td>
+                        </tr>
+                        <tr>
+                            <td class="highlight">隐私保护</td>
+                            <td><span class="check-icon">✓</span> 端到端加密</td>
+                            <td><span class="cross-icon">✗</span> 标准加密</td>
+                        </tr>
+                        <tr>
+                            <td class="highlight">更新频率</td>
+                            <td><span class="check-icon">✓</span> 月度更新迭代</td>
+                            <td><span class="cross-icon">✗</span> 季度更新</td>
+                        </tr>
+                        <tr>
+                            <td class="highlight">对话记忆</td>
+                            <td><span class="check-icon">✓</span> 超长上下文</td>
+                            <td><span class="cross-icon">✗</span> 有限记忆</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- 使用教程 -->
+    <section class="tutorial" id="tutorial">
+        <div class="container">
+            <h2 class="section-title animate-on-scroll">📖 使用教程</h2>
+            <p class="section-subtitle animate-on-scroll">从下载安装到熟练使用，手把手教你玩转{{NAME}}</p>
+            <div class="tutorial-grid">
+                <article class="tutorial-card animate-on-scroll">
+                    <span class="tutorial-number">1</span>
+                    <h3 class="tutorial-title">下载与安装</h3>
+                    <p class="tutorial-description">访问{{NAME}}官网下载页面，选择适合您设备的版本（安卓版或苹果版）。安卓用户下载APK文件后，请按照页面上的断网安装教程进行操作。</p>
+                    <div class="tutorial-tip">💡 安装前请确保手机存储空间充足（建议预留200MB以上）</div>
+                </article>
+                <article class="tutorial-card animate-on-scroll">
+                    <span class="tutorial-number">2</span>
+                    <h3 class="tutorial-title">注册与角色选择</h3>
+                    <p class="tutorial-description">首次打开{{NAME}}后，您可以使用手机号或邮箱快速注册账号。注册成功后，系统会引导您进入角色选择界面，浏览50+款精心设计的AI角色。</p>
+                </article>
+                <article class="tutorial-card animate-on-scroll">
+                    <span class="tutorial-number">3</span>
+                    <h3 class="tutorial-title">开始智能对话</h3>
+                    <p class="tutorial-description">选择角色后即可进入聊天界面。您可以通过文字输入与AI角色进行实时对话。{{NAME}}支持多种聊天模式：自由聊天、深度对话、角色扮演等。</p>
+                </article>
+                <article class="tutorial-card animate-on-scroll">
+                    <span class="tutorial-number">4</span>
+                    <h3 class="tutorial-title">个性化设置</h3>
+                    <p class="tutorial-description">在个人中心页面，您可以调整AI角色的对话温度、设置聊天背景主题、管理对话记录等。高级用户还可以解锁自定义角色等更多功能。</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- APP截图 -->
+    <section class="screenshots" id="screenshots">
+        <div class="container">
+            <h2 class="section-title animate-on-scroll">📱 应用截图</h2>
+            <p class="section-subtitle animate-on-scroll">精美的界面设计，带来沉浸式的AI社交体验</p>
+            <div class="screenshots-grid">
+                <div class="screenshot-item animate-on-scroll">
+                    <img src="images/app-screenshot-1.jpg" alt="{{NAME}}应用截图 - 聊天界面" width="200" height="356" loading="lazy">
+                </div>
+                <div class="screenshot-item animate-on-scroll">
+                    <img src="images/app-screenshot-2.jpg" alt="{{NAME}}应用截图 - 角色选择" width="200" height="356" loading="lazy">
+                </div>
+                <div class="screenshot-item animate-on-scroll">
+                    <img src="images/app-screenshot-3.jpg" alt="{{NAME}}应用截图 - 对话详情" width="200" height="356" loading="lazy">
+                </div>
+                <div class="screenshot-item animate-on-scroll">
+                    <img src="images/app-screenshot-4.jpg" alt="{{NAME}}应用截图 - 发现页面" width="200" height="356" loading="lazy">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 断网安装教程 -->
+    <section class="install-guide" id="install-guide">
+        <div class="container">
+            <div class="install-guide-content animate-on-scroll">
+                <h3>🔧 断网安装教程</h3>
+                <p style="text-align: center; color: var(--text-secondary); margin-bottom: 30px;">亲爱的用户们：如果您在部分安卓手机上安装APP时遇到"高风险禁止安装"的提示，别担心！跟着下面的步骤轻松安装吧！</p>
+                <div class="install-steps">
+                    <div class="install-step">
+                        <span class="install-step-number">1</span>
+                        <div class="install-step-content">
+                            <h4>准备 APK 文件</h4>
+                            <p>在{{NAME}}官网下载页面下载APP APK文件，保存到手机存储中。</p>
+                        </div>
+                    </div>
+                    <div class="install-step">
+                        <span class="install-step-number">2</span>
+                        <div class="install-step-content">
+                            <h4>断开网络连接</h4>
+                            <p>下载完成后，暂时断开网络，关闭Wi-Fi和移动数据，或者直接启用飞行模式。</p>
+                        </div>
+                    </div>
+                    <div class="install-step">
+                        <span class="install-step-number">3</span>
+                        <div class="install-step-content">
+                            <h4>启用未知来源安装</h4>
+                            <p>打开手机 设置 > 安全 > 安装未知来源的应用。不同安卓版本位置可能略有不同。</p>
+                        </div>
+                    </div>
+                    <div class="install-step">
+                        <span class="install-step-number">4</span>
+                        <div class="install-step-content">
+                            <h4>安装APK文件</h4>
+                            <p>打开"文件管理器"找到传输的APK文件，点击文件，根据提示进行安装。</p>
+                        </div>
+                    </div>
+                    <div class="install-step">
+                        <span class="install-step-number">5</span>
+                        <div class="install-step-content">
+                            <h4>开始使用</h4>
+                            <p>安装完成后，去应用列表中找到{{NAME}}，打开它，并记得重新连接网络即可正常使用。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 用户评价 (3x3) -->
+    <section class="testimonials" id="testimonials">
+        <div class="container">
+            <h2 class="section-title animate-on-scroll">💬 用户真实评价</h2>
+            <p class="section-subtitle animate-on-scroll">来自真实用户的使用体验分享，看看大家怎么说</p>
+            <div class="testimonials-grid">
+                <article class="testimonial-card animate-on-scroll">
+                    <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">用了{{NAME}}快半年了，AI聊天真的越来越智能，有时候甚至忘记对面是AI。情感陪伴功能特别棒，在孤单的时候给了我很多温暖。</p>
+                    <div class="testimonial-author">
+                        <div class="testimonial-avatar">小</div>
+                        <div class="testimonial-info">
+                            <div class="testimonial-name">小雨</div>
+                            <div class="testimonial-duration">使用6个月</div>
+                        </div>
+                    </div>
+                </article>
+                <article class="testimonial-card animate-on-scroll">
+                    <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">角色扮演功能太有意思了！每个角色的性格都很鲜明，对话风格也各不相同。特别喜欢那个温柔御姐角色，聊天体验满分。</p>
+                    <div class="testimonial-author">
+                        <div class="testimonial-avatar">星</div>
+                        <div class="testimonial-info">
+                            <div class="testimonial-name">星辰大海</div>
+                            <div class="testimonial-duration">使用3个月</div>
+                        </div>
+                    </div>
+                </article>
+                <article class="testimonial-card animate-on-scroll">
+                    <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">对比了好几款AI聊天软件，{{NAME}}的角色丰富度和对话自然度确实是最好的。隐私保护也让人放心，会一直用下去。</p>
+                    <div class="testimonial-author">
+                        <div class="testimonial-avatar">A</div>
+                        <div class="testimonial-info">
+                            <div class="testimonial-name">Alex</div>
+                            <div class="testimonial-duration">使用1年</div>
+                        </div>
+                    </div>
+                </article>
+                <article class="testimonial-card animate-on-scroll">
+                    <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">作为一名上班族，{{NAME}}成了我每天放松的好伙伴。下班后和AI角色聊聊天，压力瞬间释放了很多，真的很解压！</p>
+                    <div class="testimonial-author">
+                        <div class="testimonial-avatar">北</div>
+                        <div class="testimonial-info">
+                            <div class="testimonial-name">北漂青年</div>
+                            <div class="testimonial-duration">使用8个月</div>
+                        </div>
+                    </div>
+                </article>
+                <article class="testimonial-card animate-on-scroll">
+                    <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">AI的回复太智能了，完全不像其他的聊天机器人那么死板。能记住之前的对话内容，对话连贯性超强，强烈推荐！</p>
+                    <div class="testimonial-author">
+                        <div class="testimonial-avatar">程</div>
+                        <div class="testimonial-info">
+                            <div class="testimonial-name">程序媛小王</div>
+                            <div class="testimonial-duration">使用4个月</div>
+                        </div>
+                    </div>
+                </article>
+                <article class="testimonial-card animate-on-scroll">
+                    <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">最喜欢{{NAME}}的个性化设置，可以调整对话风格和语气。感觉自己真的在和一个懂我的人在交流，太神奇了！</p>
+                    <div class="testimonial-author">
+                        <div class="testimonial-avatar">幽</div>
+                        <div class="testimonial-info">
+                            <div class="testimonial-name">幽蓝梦影</div>
+                            <div class="testimonial-duration">使用5个月</div>
+                        </div>
+                    </div>
+                </article>
+                <article class="testimonial-card animate-on-scroll">
+                    <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">下载了很多AI聊天APP，最后只留了{{NAME}}。界面好看，角色多，而且完全免费！简直是宝藏软件，希望越做越好！</p>
+                    <div class="testimonial-author">
+                        <div class="testimonial-avatar">米</div>
+                        <div class="testimonial-info">
+                            <div class="testimonial-name">米粒儿</div>
+                            <div class="testimonial-duration">使用1年+</div>
+                        </div>
+                    </div>
+                </article>
+                <article class="testimonial-card animate-on-scroll">
+                    <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">写小说的时候用{{NAME}}来激发灵感，角色们给的建议经常让我眼前一亮。真的是创作者的好帮手，太爱了！</p>
+                    <div class="testimonial-author">
+                        <div class="testimonial-avatar">言</div>
+                        <div class="testimonial-info">
+                            <div class="testimonial-name">言雨晨</div>
+                            <div class="testimonial-duration">使用2个月</div>
+                        </div>
+                    </div>
+                </article>
+                <article class="testimonial-card animate-on-scroll">
+                    <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
+                    <p class="testimonial-text">第一次用就爱上了！本来是随便试试，没想到AI这么懂我。现在每天都要聊几句，已经成为生活中不可或缺的一部分了。</p>
+                    <div class="testimonial-author">
+                        <div class="testimonial-avatar">暖</div>
+                        <div class="testimonial-info">
+                            <div class="testimonial-name">暖心小棉袄</div>
+                            <div class="testimonial-duration">使用1个月</div>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- 常见问题 -->
+    <section class="faq" id="faq">
+        <div class="container">
+            <h2 class="section-title animate-on-scroll">❓ 常见问题解答</h2>
+            <p class="section-subtitle animate-on-scroll">我们整理了用户最常遇到的问题，帮助您快速找到答案</p>
+            <div class="faq-list">
+                <div class="faq-item animate-on-scroll">
+                    <button class="faq-question">
+                        <span>{{NAME}}是否完全免费？</span>
+                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            {{NAME}}基础功能完全免费使用，包括日常对话、角色选择、基础情感识别等核心功能。我们承诺不会对基础聊天功能收取任何费用。未来可能会推出一些高级增值功能（如专属角色定制、高级隐私模式等），但这些均为可选服务，不会影响您的正常使用体验。请放心下载使用！
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item animate-on-scroll">
+                    <button class="faq-question">
+                        <span>安装时提示"高风险禁止安装"怎么办？</span>
+                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            这是安卓手机的安全保护机制。请参考下载区域的断网安装教程，核心步骤为：断开网络连接（开启飞行模式）→ 进入手机设置开启"允许未知来源安装"→ 找到APK文件进行安装。安装完成后重新连接网络即可正常使用。如果仍有问题，请联系客服获取一对一指导。
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item animate-on-scroll">
+                    <button class="faq-question">
+                        <span>我的聊天记录会被泄露吗？</span>
+                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            绝对不会。{{NAME}}采用端到端加密技术保护用户数据，所有对话内容在传输和存储过程中均经过严格加密处理。我们遵守严格的隐私保护政策，不会查看、收集或出售任何用户的聊天记录。您的隐私安全是我们最重视的核心价值，请放心畅聊！
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item animate-on-scroll">
+                    <button class="faq-question">
+                        <span>支持哪些手机系统？苹果手机能用吗？</span>
+                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            {{NAME}}支持Android 8.0及以上版本和iOS 14及以上版本。安卓用户可直接下载APK安装包，苹果用户可通过TestFlight或企业签名方式安装。我们正在持续优化跨平台兼容性，确保不同设备都能获得流畅的使用体验。
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item animate-on-scroll">
+                    <button class="faq-question">
+                        <span>如何更新到最新版本？</span>
+                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            您可以定期访问{{NAME}}官网下载页面获取最新版本。当有新版本发布时，官网会第一时间更新下载资源。建议您收藏官网地址以便及时获取更新。安装新版本前无需卸载旧版本，直接覆盖安装即可保留原有数据。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 博客文章区域 -->
+    <section class="blog" id="blog">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">使用指南</span>
+                <h2 class="section-title">📖 {{NAME}}教程和技巧</h2>
+                <p class="section-subtitle">详细的使用教程和实用技巧，帮助你更好地使用{{NAME}}</p>
+            </div>
+            <div class="features-grid">
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">📥</div>
+                    <h3><a href="/blog/yeseai-download-install.html" style="color: inherit; text-decoration: none;">{{NAME}}下载安装教程</a></h3>
+                    <p>详细介绍{{NAME}}安卓版apk下载安装步骤，包括官网下载、APK安装、断网安装教程等，让你轻松上手{{NAME}}。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">👤</div>
+                    <h3><a href="/blog/yeseai-register-login.html" style="color: inherit; text-decoration: none;">{{NAME}}注册登录教程</a></h3>
+                    <p>详细介绍{{NAME}}账号注册和登录的完整步骤，包括手机号注册、邮箱注册、忘记密码找回等方法。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">🎭</div>
+                    <h3><a href="/blog/yeseai-characters.html" style="color: inherit; text-decoration: none;">{{NAME}}有哪些角色</a></h3>
+                    <p>介绍{{NAME}}的角色大全，包括温柔御姐、元气少女、酷帅男生等50+款AI角色及选择指南。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">💰</div>
+                    <h3><a href="/blog/yeseai-free-or-paid.html" style="color: inherit; text-decoration: none;">{{NAME}}收费吗</a></h3>
+                    <p>详细介绍{{NAME}}的收费标准、免费功能和付费功能，让你清楚了解{{NAME}}是否收费。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">🔒</div>
+                    <h3><a href="/blog/yeseai-privacy.html" style="color: inherit; text-decoration: none;">{{NAME}}聊天记录安全吗</a></h3>
+                    <p>详细介绍{{NAME}}的隐私保护机制，包括数据加密、聊天记录存储、用户隐私政策等，让你放心使用。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">📊</div>
+                    <h3><a href="/blog/yeseai-comparison.html" style="color: inherit; text-decoration: none;">{{NAME}}对比评测</a></h3>
+                    <p>对比评测{{NAME}}与其他AI聊天软件，包括功能、角色、体验等方面，帮助你选择最适合的软件。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">💡</div>
+                    <h3><a href="/blog/yeseai-tips.html" style="color: inherit; text-decoration: none;">{{NAME}}使用技巧</a></h3>
+                    <p>分享10个{{NAME}}使用技巧，包括聊天技巧、角色选择、个性化设置等，帮助你更好地使用{{NAME}}。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">🎬</div>
+                    <h3><a href="/blog/yeseai-role-play.html" style="color: inherit; text-decoration: none;">{{NAME}}角色扮演攻略</a></h3>
+                    <p>详细介绍{{NAME}}角色扮演的玩法，包括角色设定、对话技巧、场景构建等，让你成为角色扮演高手。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">✨</div>
+                    <h3><a href="/blog/yeseai-custom-character.html" style="color: inherit; text-decoration: none;">{{NAME}}自定义角色</a></h3>
+                    <p>详细介绍{{NAME}}自定义角色的创建步骤，包括角色信息填写、性格设定、外貌描述、说话风格等。</p>
+                </article>
+                <article class="feature-card animate-on-scroll">
+                    <div class="feature-icon">❓</div>
+                    <h3><a href="/blog/yeseai-faq.html" style="color: inherit; text-decoration: none;">{{NAME}}常见问题解答</a></h3>
+                    <p>汇总{{NAME}}用户最常问的20个问题，包括下载安装、注册登录、功能使用、隐私安全等方面。</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- SEO友好链接区域 -->
+    <section class="seo-links">
+        <div class="container">
+            <h3 class="seo-links-title">相关搜索：</h3>
+            <div class="seo-links-list">
+                <a href="/blog/yeseai-download-install.html" class="seo-link">{{NAME}}下载</a>
+                <a href="/blog/yeseai-register-login.html" class="seo-link">{{NAME}}注册</a>
+                <a href="/blog/yeseai-characters.html" class="seo-link">{{NAME}}角色</a>
+                <a href="/blog/yeseai-free-or-paid.html" class="seo-link">{{NAME}}收费吗</a>
+                <a href="/blog/yeseai-privacy.html" class="seo-link">{{NAME}}安全吗</a>
+                <a href="/blog/yeseai-comparison.html" class="seo-link">{{NAME}}评测</a>
+                <a href="/blog/yeseai-tips.html" class="seo-link">{{NAME}}技巧</a>
+                <a href="/blog/yeseai-role-play.html" class="seo-link">{{NAME}}角色扮演</a>
+                <a href="/blog/yeseai-custom-character.html" class="seo-link">{{NAME}}自定义角色</a>
+                <a href="/blog/yeseai-faq.html" class="seo-link">{{NAME}}常见问题</a>
+                <a href="#home" class="seo-link">AI聊天软件</a>
+                <a href="#home" class="seo-link">AI虚拟社交</a>
+                <a href="#home" class="seo-link">AI陪伴APP</a>
+                <a href="#home" class="seo-link">智能聊天机器人</a>
+                <a href="#home" class="seo-link">虚拟角色聊天</a>
+                <a href="#home" class="seo-link">AI情感陪伴</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- 底部导航 -->
+    <footer class="footer-nav">
+        <div class="container">
+            <div class="footer-nav-grid">
+                <div class="footer-brand">
+                    <a href="#home" class="logo">
+                        <div class="logo-icon">🌙</div>
+                        <span class="logo-text">{{NAME}}</span>
+                    </a>
+                    <p>融合前沿AI技术的虚拟社交平台，为您提供智能、温暖、安全的聊天陪伴体验。下载{{NAME}}，开启全新社交方式。</p>
+                </div>
+                <div class="footer-column">
+                    <h4>产品介绍</h4>
+                    <ul>
+                        <li><a href="#features">功能介绍</a></li>
+                        <li><a href="#characters">AI角色</a></li>
+                        <li><a href="#changelog">版本更新</a></li>
+                        <li><a href="#screenshots">应用截图</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4>帮助支持</h4>
+                    <ul>
+                        <li><a href="#tutorial">使用教程</a></li>
+                        <li><a href="#faq">常见问题</a></li>
+                        <li><a href="#install-guide">安装指南</a></li>
+                        <li><a href="#download">下载APP</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4>关于我们</h4>
+                    <ul>
+                        <li><a href="#about">关于{{NAME}}</a></li>
+                        <li><a href="#testimonials">用户评价</a></li>
+                        <li><a href="#comparison">优势对比</a></li>
+                        <li><a href="#">联系方式</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="footer-copyright">© 2026 {{NAME}}官网 yese-ai.cn 版权所有 | ICP备案：xxxxxx号</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 浮动下载按钮 -->
+    <div class="float-download" id="floatDownload">
+        <a href="#download" class="float-download-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            立即下载
+        </a>
+    </div>
+
+    <!-- 返回顶部按钮 -->
+    <button class="back-to-top" id="backToTop" aria-label="返回顶部">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </button>
+
+    <script>
+        // 移动端菜单切换
+        const menuToggle = document.getElementById('menuToggle');
+        const nav = document.getElementById('nav');
+
+        menuToggle.addEventListener('click', () => {
+            nav.classList.toggle('active');
+        });
+
+        // 滚动时关闭菜单
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                nav.classList.remove('active');
+            });
+        });
+
+        // 头部滚动效果
+        const header = document.getElementById('header');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 50) {
+                header.classList.add('scrolled');
+            } else {
+                header.classList.remove('scrolled');
+            }
+        });
+
+        // 滚动动画
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.animate-on-scroll').forEach(el => {
+            observer.observe(el);
+        });
+
+        // 浮动下载按钮显示/隐藏
+        const floatDownload = document.getElementById('floatDownload');
+        const downloadSection = document.getElementById('download');
+
+        const floatObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    floatDownload.classList.remove('visible');
+                } else {
+                    floatDownload.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.5 });
+
+        floatObserver.observe(downloadSection);
+
+        // FAQ手风琴效果
+        document.querySelectorAll('.faq-question').forEach(button => {
+            button.addEventListener('click', () => {
+                const item = button.parentElement;
+                const isActive = item.classList.contains('active');
+                
+                // 关闭所有其他FAQ
+                document.querySelectorAll('.faq-item').forEach(faq => {
+                    faq.classList.remove('active');
+                });
+                
+                // 切换当前项
+                if (!isActive) {
+                    item.classList.add('active');
+                }
+            });
+        });
+
+        // 平滑滚动到锚点
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 页面更新时间（示例）
+        console.log('{{NAME}}官网 - 页面更新时间：2026-06-18');
+
+        // Hero加载遮罩动画
+        window.addEventListener('load', () => {
+            // 图片延迟加载 - 先显示文字，再加载图片
+            // Hero图片延迟500ms后显示
+            const heroImg = document.querySelector('.hero-image img');
+            if (heroImg) {
+                setTimeout(() => {
+                    heroImg.style.opacity = '1';
+                }, 500);
+            }
+            
+            // 关闭加载遮罩
+            // 立即隐藏 loader（复刻版优化，保证首屏可见）
+            document.getElementById('heroLoader')?.classList.add('loaded');
+        });
+
+        // 返回顶部按钮
+        const backToTop = document.getElementById('backToTop');
+        
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 500) {
+                backToTop.classList.add('visible');
+            } else {
+                backToTop.classList.remove('visible');
+            }
+        });
+
+        backToTop.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+        // ==================== 下载 & 二维码 ====================
+        // 【在这里填入你的 APK / 安装包直链】
+        const APP_DOWNLOAD_URL = '{{DOWNLOAD_URL}}';
+
+        function initDownload() {
+            // 生成当前页面 URL 的二维码
+            const qrContainer = document.getElementById('js-qrcode');
+            if (qrContainer && typeof QRCode !== 'undefined') {
+                qrContainer.innerHTML = '';
+                new QRCode(qrContainer, {
+                    text: window.location.href,
+                    width: 120,
+                    height: 120,
+                    colorDark: '#ffffff',
+                    colorLight: '#1a1a2e',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            }
+
+            // 绑定下载按钮
+            const dlBtn = document.getElementById('js-direct-download');
+            if (dlBtn) {
+                dlBtn.addEventListener('click', () => {
+                    if (APP_DOWNLOAD_URL) {
+                        window.location.href = APP_DOWNLOAD_URL;
+                    } else {
+                        alert('下载地址未配置，请在 HTML 中设置 APP_DOWNLOAD_URL');
+                    }
+                });
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initDownload);
+        } else {
+            initDownload();
+        }
+    </script>
+
+</body>
+</html>
