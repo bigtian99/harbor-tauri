@@ -325,6 +325,63 @@ pub async fn preview_privacy_ftp(
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrivacyFtpDownload {
+    pub remote_dir: String,
+    pub local_path: String,
+}
+
+/// 从 FTP 下载远端目录的 index.html 到用户指定本地路径。
+#[tauri::command]
+pub async fn download_privacy_ftp(
+    target_url: String,
+    local_path: String,
+) -> Result<PrivacyFtpDownload, String> {
+    let target = parse_privacy_target_url_inner(&target_url)?;
+    let dest = PathBuf::from(&local_path);
+    if dest
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return Err("请指定本地保存文件路径".into());
+    }
+
+    let ftp_path = ftp_cwd_path(&target.remote_dir)?;
+    crate::diag::diag_log(
+        "ops",
+        &format!(
+            "download_privacy_ftp logical={} ftp_cwd={} local={}",
+            target.remote_dir,
+            if ftp_path.is_empty() { "." } else { &ftp_path },
+            dest.display()
+        ),
+    );
+
+    run_ftp_download_file_with(
+        &ftp_path,
+        "index.html",
+        &dest,
+        PRIVACY_FTP_HOST,
+        None,
+        "ops",
+    )?;
+
+    if !dest.is_file() {
+        return Err("下载完成但本地文件不存在".into());
+    }
+
+    crate::diag::diag_log(
+        "ops",
+        &format!("download_privacy_ftp ok path={}", dest.display()),
+    );
+    Ok(PrivacyFtpDownload {
+        remote_dir: target.remote_dir,
+        local_path: dest.to_string_lossy().to_string(),
+    })
+}
+
 fn urlencoding_segment(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {

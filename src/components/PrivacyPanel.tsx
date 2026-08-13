@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { notifications } from "@mantine/notifications";
 import {
@@ -18,7 +18,7 @@ import {
   ActionIcon,
   Tooltip,
 } from "@mantine/core";
-import { Copy, ExternalLink, FileUp, Loader2, Shield, Trash2 } from "lucide-react";
+import { Copy, Download, ExternalLink, FileUp, Loader2, Shield, Trash2 } from "lucide-react";
 import { isTauriRuntime } from "../types";
 
 export interface PrivacyUploadRecord {
@@ -55,6 +55,7 @@ export function PrivacyPanel() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [ftpPreviewUrl, setFtpPreviewUrl] = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const isOverwrite = targetUrl.trim().length > 0;
 
@@ -131,6 +132,54 @@ export function PrivacyPanel() {
       notifications.show({ title: "FTP 预览失败", message: String(e), color: "red" });
     } finally {
       setIsPreviewing(false);
+    }
+  }, [targetUrl, parsed]);
+
+  const handleDownload = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      notifications.show({ message: "请在桌面端操作", color: "yellow" });
+      return;
+    }
+    const raw = targetUrl.trim();
+    if (!raw) {
+      notifications.show({ message: "请先填写覆盖目标 URL", color: "orange" });
+      return;
+    }
+
+    let remoteLeaf = "index";
+    try {
+      const t = parsed ?? (await invoke<PrivacyTarget>("parse_privacy_target_url", { url: raw }));
+      setParsed(t);
+      setParseError(null);
+      remoteLeaf = t.remote_dir.split("/").filter(Boolean).pop() || "index";
+    } catch (e) {
+      const msg = String(e);
+      setParseError(msg);
+      notifications.show({ title: "目标地址无效", message: msg, color: "red" });
+      return;
+    }
+
+    const dest = await save({
+      defaultPath: `${remoteLeaf}.html`,
+      filters: [{ name: "HTML", extensions: ["html", "htm"] }],
+    });
+    if (!dest) return;
+
+    setIsDownloading(true);
+    try {
+      const result = await invoke<{ local_path: string; remote_dir: string }>(
+        "download_privacy_ftp",
+        { targetUrl: raw, localPath: dest },
+      );
+      notifications.show({
+        title: "下载完成",
+        message: result.local_path,
+        color: "teal",
+      });
+    } catch (e) {
+      notifications.show({ title: "FTP 下载失败", message: String(e), color: "red" });
+    } finally {
+      setIsDownloading(false);
     }
   }, [targetUrl, parsed]);
 
@@ -311,15 +360,27 @@ export function PrivacyPanel() {
                 leftSection={
                   isPreviewing ? <Loader2 size={16} className="spin" /> : <ExternalLink size={16} />
                 }
-                disabled={!isOverwrite || isPreviewing}
+                disabled={!isOverwrite || isPreviewing || isDownloading}
                 loading={isPreviewing}
                 onClick={handlePreview}
               >
                 预览 FTP
               </Button>
+              <Button
+                variant="light"
+                color="teal"
+                leftSection={
+                  isDownloading ? <Loader2 size={16} className="spin" /> : <Download size={16} />
+                }
+                disabled={!isOverwrite || isDownloading || isPreviewing}
+                loading={isDownloading}
+                onClick={handleDownload}
+              >
+                下载
+              </Button>
               <Text size="sm" c="dimmed">
                 {isOverwrite
-                  ? "预览从 FTP 拉取 index.html；覆盖仅支持单个 HTML"
+                  ? "预览/下载均从 FTP 拉取 index.html；覆盖仅支持单个 HTML"
                   : "新增支持多选；目录 common…/时间戳英文词/"}
               </Text>
             </Group>
