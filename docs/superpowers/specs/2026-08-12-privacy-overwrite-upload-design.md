@@ -23,7 +23,7 @@
 | 空路径子域名 | `https://ythtpictorial.tiankongshuyu.cn/` → `ythtpictorial.tiankongshuyu.cn` |
 | 带路径 | `http://common.tiankongshuyu.cn/1785467601raven/` → `common.tiankongshuyu.cn/1785467601raven` |
 | 新增目录 | `common.tiankongshuyu.cn/{unix秒}{随机英文小写词}`（相对现网「仅时间戳词」升级为带主机前缀，与覆盖规则一致） |
-| 预览 | 解析成功后可打开目标 URL（默认系统浏览器） |
+| 预览 | 从 FTP 拉取该目录 `index.html`，经本地 `preview_server`（127.0.0.1）iframe 展示；**不是**打开公网链接 |
 | 覆盖确认 | 覆盖上传前二次确认 |
 | 多文件 | 覆盖模式仅允许 **1** 个 HTML；新增仍可多选 |
 | UI | Mantine，仍在 `PrivacyPanel`，不新菜单 |

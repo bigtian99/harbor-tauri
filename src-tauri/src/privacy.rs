@@ -1,7 +1,8 @@
 //! 隐私协议 HTML 上传（运营）：FTP 到 common.tiankongshuyu.cn，本地持久化历史。
 
-use crate::landing::run_ftp_upload_with;
+use crate::landing::{landing_temp_root, run_ftp_download_file_with, run_ftp_upload_with};
 use crate::models::APP_CONFIG_DIR;
+use crate::preview_server::PreviewServerState;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -200,6 +201,107 @@ pub async fn parse_privacy_target_url(url: String) -> Result<PrivacyTarget, Stri
         ),
     );
     Ok(t)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrivacyFtpPreview {
+    pub remote_dir: String,
+    /// 相对预览根目录的路径，如 `privacy-ftp-preview/.../index.html`
+    pub relative_path: String,
+    /// 本地预览 HTTP 地址（127.0.0.1），不是公网链接
+    pub preview_url: String,
+}
+
+fn privacy_ftp_preview_local_dir(remote_dir: &str) -> Result<PathBuf, String> {
+    if remote_dir.contains("..") || remote_dir.trim().is_empty() {
+        return Err("非法远端目录".into());
+    }
+    // 预览根复用 landing_temp_root，走现有 preview_server
+    let safe = remote_dir
+        .split('/')
+        .filter(|p| !p.is_empty() && *p != "." && *p != "..")
+        .collect::<Vec<_>>()
+        .join("/");
+    if safe.is_empty() {
+        return Err("非法远端目录".into());
+    }
+    Ok(landing_temp_root()
+        .join("privacy-ftp-preview")
+        .join(safe))
+}
+
+/// 从 FTP 拉取远端目录 index.html，写入本地预览根，返回 127.0.0.1 预览地址。
+#[tauri::command]
+pub async fn preview_privacy_ftp(
+    target_url: String,
+    state: tauri::State<'_, PreviewServerState>,
+) -> Result<PrivacyFtpPreview, String> {
+    let target = parse_privacy_target_url_inner(&target_url)?;
+    let local_dir = privacy_ftp_preview_local_dir(&target.remote_dir)?;
+    if local_dir.exists() {
+        fs::remove_dir_all(&local_dir).ok();
+    }
+    fs::create_dir_all(&local_dir).map_err(|e| format!("创建预览目录失败: {e}"))?;
+    let local_index = local_dir.join("index.html");
+
+    crate::diag::diag_log(
+        "ops",
+        &format!(
+            "preview_privacy_ftp remote_dir={} local={}",
+            target.remote_dir,
+            local_index.display()
+        ),
+    );
+
+    run_ftp_download_file_with(
+        &target.remote_dir,
+        "index.html",
+        &local_index,
+        PRIVACY_FTP_HOST,
+        None,
+        "ops",
+    )?;
+
+    if !local_index.is_file() {
+        return Err("FTP 上下载成功但本地未找到 index.html".into());
+    }
+
+    let relative_path = format!(
+        "privacy-ftp-preview/{}/index.html",
+        target.remote_dir.trim_matches('/')
+    );
+    let preview_url = format!(
+        "{}/{}",
+        state.info.base_url.trim_end_matches('/'),
+        relative_path
+            .split('/')
+            .map(|s| {
+                // 路径段编码，保留 /
+                urlencoding_segment(s)
+            })
+            .collect::<Vec<_>>()
+            .join("/")
+    );
+
+    crate::diag::diag_log("ops", &format!("preview_privacy_ftp ok url={preview_url}"));
+    Ok(PrivacyFtpPreview {
+        remote_dir: target.remote_dir,
+        relative_path,
+        preview_url,
+    })
+}
+
+fn urlencoding_segment(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 #[tauri::command]

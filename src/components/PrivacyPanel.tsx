@@ -53,6 +53,8 @@ export function PrivacyPanel() {
   const [targetUrl, setTargetUrl] = useState("");
   const [parsed, setParsed] = useState<PrivacyTarget | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [ftpPreviewUrl, setFtpPreviewUrl] = useState<string | null>(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   const isOverwrite = targetUrl.trim().length > 0;
 
@@ -93,13 +95,44 @@ export function PrivacyPanel() {
   }, [targetUrl]);
 
   const handlePreview = useCallback(async () => {
-    if (!parsed?.preview_url) return;
-    try {
-      await openUrl(parsed.preview_url);
-    } catch (e) {
-      notifications.show({ title: "打开失败", message: String(e), color: "red" });
+    if (!isTauriRuntime()) {
+      notifications.show({ message: "请在桌面端操作", color: "yellow" });
+      return;
     }
-  }, [parsed]);
+    const raw = targetUrl.trim();
+    if (!raw) {
+      notifications.show({ message: "请先填写覆盖目标 URL", color: "orange" });
+      return;
+    }
+    setIsPreviewing(true);
+    try {
+      // 从 FTP 拉取远端 index.html，经本地预览服务展示（不是打开公网链接）
+      const result = await invoke<{ preview_url: string; remote_dir: string }>(
+        "preview_privacy_ftp",
+        { targetUrl: raw },
+      );
+      setFtpPreviewUrl(result.preview_url);
+      if (!parsed) {
+        try {
+          const t = await invoke<PrivacyTarget>("parse_privacy_target_url", { url: raw });
+          setParsed(t);
+          setParseError(null);
+        } catch {
+          /* 预览已成功，解析展示失败可忽略 */
+        }
+      }
+      notifications.show({
+        message: `已从 FTP 加载预览：${result.remote_dir}`,
+        color: "teal",
+        autoClose: 2000,
+      });
+    } catch (e) {
+      setFtpPreviewUrl(null);
+      notifications.show({ title: "FTP 预览失败", message: String(e), color: "red" });
+    } finally {
+      setIsPreviewing(false);
+    }
+  }, [targetUrl, parsed]);
 
   const handleUpload = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -240,7 +273,10 @@ export function PrivacyPanel() {
               label="覆盖目标 URL（可空=新增）"
               placeholder="http://common.tiankongshuyu.cn/1785467601raven/"
               value={targetUrl}
-              onChange={(e) => setTargetUrl(e.currentTarget.value)}
+              onChange={(e) => {
+                setTargetUrl(e.currentTarget.value);
+                setFtpPreviewUrl(null);
+              }}
               onBlur={() => {
                 void refreshParse();
               }}
@@ -272,16 +308,39 @@ export function PrivacyPanel() {
               <Button
                 variant="light"
                 color="gray"
-                leftSection={<ExternalLink size={16} />}
-                disabled={!parsed}
+                leftSection={
+                  isPreviewing ? <Loader2 size={16} className="spin" /> : <ExternalLink size={16} />
+                }
+                disabled={!isOverwrite || isPreviewing}
+                loading={isPreviewing}
                 onClick={handlePreview}
               >
-                预览
+                预览 FTP
               </Button>
               <Text size="sm" c="dimmed">
-                {isOverwrite ? "覆盖仅支持单个 HTML" : "新增支持多选；目录 common…/时间戳英文词/"}
+                {isOverwrite
+                  ? "预览从 FTP 拉取 index.html；覆盖仅支持单个 HTML"
+                  : "新增支持多选；目录 common…/时间戳英文词/"}
               </Text>
             </Group>
+            {ftpPreviewUrl && (
+              <Stack gap="xs">
+                <Text size="sm" c="dimmed">
+                  FTP 本地预览（非公网链接）
+                </Text>
+                <iframe
+                  title="privacy-ftp-preview"
+                  src={ftpPreviewUrl}
+                  style={{
+                    width: "100%",
+                    height: 420,
+                    border: "1px solid rgba(94,234,212,0.2)",
+                    borderRadius: 8,
+                    background: "#fff",
+                  }}
+                />
+              </Stack>
+            )}
           </Stack>
         </Paper>
 

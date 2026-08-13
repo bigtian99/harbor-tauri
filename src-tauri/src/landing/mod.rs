@@ -16,7 +16,7 @@ mod generate;
 mod templates;
 mod vest;
 
-pub(crate) use ftp::run_ftp_upload_with;
+pub(crate) use ftp::{run_ftp_download_file_with, run_ftp_upload_with};
 pub use ftp::upload_landing_to_ftp;
 pub use generate::{fetch_sub_channels, generate_landing_pages};
 pub(crate) use templates::resolve_template_preview_path;

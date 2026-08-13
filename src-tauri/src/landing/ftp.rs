@@ -159,6 +159,43 @@ impl FtpClient {
             Err(format!("FTP 上传文件失败 {}: {}", name, message.trim()))
         }
     }
+
+    /// 进入已有远端目录（不创建）。
+    fn cwd_path(&mut self, path: &str) -> Result<(), String> {
+        for part in path.split('/') {
+            if part.trim().is_empty() {
+                continue;
+            }
+            self.cwd(part)?;
+        }
+        Ok(())
+    }
+
+    fn download_file(&mut self, name: &str, dest: &Path) -> Result<(), String> {
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("创建本地下载目录失败 {}: {}", parent.display(), e))?;
+        }
+        let mut data = self.open_passive_data()?;
+        self.command_expect(
+            &format!("RETR {}", name),
+            &format!("RETR {}", name),
+            &[125, 150],
+        )?;
+
+        let mut file = fs::File::create(dest)
+            .map_err(|e| format!("创建本地文件失败 {}: {}", dest.display(), e))?;
+        std::io::copy(&mut data, &mut file)
+            .map_err(|e| format!("下载文件失败 {}: {}", name, e))?;
+        drop(data);
+
+        let (code, message) = self.read_response()?;
+        if code == 226 || code == 250 {
+            Ok(())
+        } else {
+            Err(format!("FTP 下载文件失败 {}: {}", name, message.trim()))
+        }
+    }
 }
 
 fn set_ftp_timeouts(stream: &TcpStream) -> Result<(), String> {
@@ -243,6 +280,60 @@ pub(crate) fn run_ftp_upload(local_dir: &Path, remote_dir: &str) -> Result<(), S
         Some(FTP_BASE_DIR),
         "landing",
     )
+}
+
+/// 从 FTP 下载远端目录下的单个文件到本地路径（隐私协议预览等复用）
+pub(crate) fn run_ftp_download_file_with(
+    remote_dir: &str,
+    remote_file: &str,
+    local_path: &Path,
+    host: &str,
+    base_dir: Option<&str>,
+    log_module: &str,
+) -> Result<(), String> {
+    let max_retries = 3;
+    let mut last_error = String::new();
+
+    for attempt in 1..=max_retries {
+        match (|| -> Result<(), String> {
+            let mut client = FtpClient::connect(host)?;
+            if let Some(base) = base_dir {
+                if !base.trim().is_empty() {
+                    client.cwd(base).ok();
+                }
+            }
+            client.cwd_path(remote_dir)?;
+            crate::diag::diag_log(
+                log_module,
+                &format!(
+                    "FTP 下载 {}/{} -> {}",
+                    remote_dir,
+                    remote_file,
+                    local_path.display()
+                ),
+            );
+            client.download_file(remote_file, local_path)?;
+            client.command_expect("QUIT", "QUIT", &[221]).ok();
+            Ok(())
+        })() {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                crate::diag::diag_log(
+                    log_module,
+                    &format!("⚠️ FTP 下载失败 (第{}次): {}", attempt, e),
+                );
+                last_error = e;
+                if attempt < max_retries {
+                    std::thread::sleep(Duration::from_secs(2));
+                }
+            }
+        }
+    }
+
+    Err(format!(
+        "下载失败（已重试{}次）: {}",
+        max_retries, last_error
+    ))
 }
 
 /// 可指定 host / 可选站点基目录的 FTP 上传（隐私协议等复用）
