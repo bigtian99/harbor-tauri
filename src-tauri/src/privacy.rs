@@ -11,6 +11,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const PRIVACY_FTP_HOST: &str = "60.205.155.142";
 const PRIVACY_PUBLIC_BASE: &str = "http://common.tiankongshuyu.cn";
+/// 隐私 FTP 登录后的站点根主机名。逻辑 `remote_dir` 含此前缀，实际 CWD 需剥掉。
+const PRIVACY_FTP_SITE_HOST: &str = "common.tiankongshuyu.cn";
 const HISTORY_FILE: &str = "privacy_uploads.json";
 const HISTORY_MAX: usize = 200;
 
@@ -107,7 +109,30 @@ fn pick_remote_dir() -> String {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let word = WORDS[(nanos as usize) % WORDS.len()];
-    format!("common.tiankongshuyu.cn/{}{}", unix_secs(), word)
+    format!("{PRIVACY_FTP_SITE_HOST}/{}{}", unix_secs(), word)
+}
+
+/// 将逻辑目录（host/path）转为 FTP 相对路径。
+/// 实测登录根已在 common 站点内，不能再 CWD `common.tiankongshuyu.cn`。
+fn ftp_cwd_path(remote_dir: &str) -> Result<String, String> {
+    let dir = remote_dir.trim().trim_matches('/');
+    if dir.is_empty() || dir.contains("..") {
+        return Err("非法远端目录".into());
+    }
+    if dir == PRIVACY_FTP_SITE_HOST {
+        return Ok(String::new());
+    }
+    let prefix = format!("{PRIVACY_FTP_SITE_HOST}/");
+    if let Some(rest) = dir.strip_prefix(&prefix) {
+        let rest = rest.trim_matches('/');
+        if rest.is_empty() || rest.contains("..") {
+            return Err("非法远端目录".into());
+        }
+        return Ok(rest.to_string());
+    }
+    Err(format!(
+        "当前隐私 FTP 登录根为 {PRIVACY_FTP_SITE_HOST}，无法访问其它站点目录：{dir}"
+    ))
 }
 
 fn load_history_unlocked() -> Vec<PrivacyUploadRecord> {
@@ -253,8 +278,17 @@ pub async fn preview_privacy_ftp(
         ),
     );
 
+    let ftp_path = ftp_cwd_path(&target.remote_dir)?;
+    crate::diag::diag_log(
+        "ops",
+        &format!(
+            "preview_privacy_ftp ftp_cwd={} (logical={})",
+            if ftp_path.is_empty() { "." } else { &ftp_path },
+            target.remote_dir
+        ),
+    );
     run_ftp_download_file_with(
-        &target.remote_dir,
+        &ftp_path,
         "index.html",
         &local_index,
         PRIVACY_FTP_HOST,
@@ -389,11 +423,28 @@ pub async fn upload_privacy_html(
         let uploaded_at = now_stamp();
         let tmp_key = remote_dir.replace('/', "_");
         let tmp_root = std::env::temp_dir().join(format!("jarporter-privacy-{tmp_key}"));
+        let ftp_path = match ftp_cwd_path(&remote_dir) {
+            Ok(p) => p,
+            Err(e) => {
+                results.push(PrivacyUploadResult {
+                    id: String::new(),
+                    source_name,
+                    remote_dir: String::new(),
+                    url: String::new(),
+                    status: "error".to_string(),
+                    message: e,
+                    uploaded_at,
+                });
+                continue;
+            }
+        };
         crate::diag::diag_log(
             "ops",
             &format!(
-                "privacy FTP host={} remote_dir={}",
-                PRIVACY_FTP_HOST, remote_dir
+                "privacy FTP host={} logical_dir={} ftp_cwd={}",
+                PRIVACY_FTP_HOST,
+                remote_dir,
+                if ftp_path.is_empty() { "." } else { &ftp_path }
             ),
         );
         let upload_result = (|| -> Result<(String, String), String> {
@@ -404,7 +455,7 @@ pub async fn upload_privacy_html(
             let dest = tmp_root.join("index.html");
             fs::copy(&source, &dest).map_err(|e| format!("复制 HTML 失败: {e}"))?;
 
-            run_ftp_upload_with(&tmp_root, &remote_dir, PRIVACY_FTP_HOST, None, "ops")?;
+            run_ftp_upload_with(&tmp_root, &ftp_path, PRIVACY_FTP_HOST, None, "ops")?;
             Ok((remote_dir.clone(), public_url.clone()))
         })();
 
@@ -465,7 +516,7 @@ pub async fn upload_privacy_html(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_html_path, parse_privacy_target_url_inner, pick_remote_dir};
+    use super::{ftp_cwd_path, is_html_path, parse_privacy_target_url_inner, pick_remote_dir};
     use std::path::Path;
 
     #[test]
@@ -514,5 +565,16 @@ mod tests {
             "got {d}"
         );
         assert!(!d.ends_with('/'));
+    }
+
+    #[test]
+    fn ftp_cwd_strips_common_host_prefix() {
+        assert_eq!(
+            ftp_cwd_path("common.tiankongshuyu.cn/1785467601raven").unwrap(),
+            "1785467601raven"
+        );
+        assert_eq!(ftp_cwd_path("common.tiankongshuyu.cn").unwrap(), "");
+        assert!(ftp_cwd_path("ythtpictorial.tiankongshuyu.cn").is_err());
+        assert!(ftp_cwd_path("ythtpictorial.tiankongshuyu.cn/foo").is_err());
     }
 }
