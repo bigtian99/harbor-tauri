@@ -172,9 +172,21 @@ export function PrivacyPanel() {
         { targetUrl: raw, localPath: dest },
       );
       notifications.show({
-        title: "下载完成",
+        id: "privacy-ftp-download-done",
+        title: "下载完成（点击打开所在目录）",
         message: result.local_path,
         color: "teal",
+        autoClose: 8000,
+        onClick: () => {
+          void invoke("open_directory", { path: result.local_path }).catch((e) => {
+            notifications.show({
+              title: "打开目录失败",
+              message: String(e),
+              color: "red",
+            });
+          });
+        },
+        style: { cursor: "pointer" },
       });
     } catch (e) {
       notifications.show({ title: "FTP 下载失败", message: String(e), color: "red" });
