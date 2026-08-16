@@ -129,6 +129,11 @@ export function HistoryPanel({
             placeholder="搜索项目..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            style={{ textTransform: "none" }}
           />
           {search && (
             <button

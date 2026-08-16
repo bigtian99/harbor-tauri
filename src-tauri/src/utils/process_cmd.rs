@@ -132,6 +132,78 @@ pub(crate) fn find_maven_path() -> Option<String> {
     None
 }
 
+fn java_bin_exists(java_home: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        java_home.join("bin").join("java.exe").is_file()
+    }
+    #[cfg(not(windows))]
+    {
+        java_home.join("bin").join("java").is_file()
+    }
+}
+
+/// Maven 打包用 JDK：优先环境变量 JAVA_HOME；否则在 macOS 上优先选 21 / 17。
+/// 避免 Homebrew mvn 默认挂到过新的 OpenJDK（如 26）导致 Lombok `TypeTag :: UNKNOWN`。
+pub(crate) fn resolve_maven_java_home() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("JAVA_HOME") {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            let path = PathBuf::from(trimmed);
+            if java_bin_exists(&path) {
+                return Some(path);
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        for ver in ["21", "17"] {
+            let output = silent_command("/usr/libexec/java_home")
+                .args(["-v", ver])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output();
+            if let Ok(output) = output {
+                if output.status.success() {
+                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !path.is_empty() {
+                        let home = PathBuf::from(&path);
+                        if java_bin_exists(&home) {
+                            return Some(home);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn apply_maven_java_home(command: &mut Command) {
+    let Some(java_home) = resolve_maven_java_home() else {
+        return;
+    };
+    crate::diag::diag_log(
+        "build",
+        &format!("mvn using JAVA_HOME={}", java_home.display()),
+    );
+    command.env("JAVA_HOME", &java_home);
+    let java_bin = java_home.join("bin");
+    if let Some(bin) = java_bin.to_str() {
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        let new_path = match std::env::var_os("PATH") {
+            Some(old) => {
+                let old_s = old.to_string_lossy();
+                format!("{bin}{sep}{old_s}")
+            }
+            None => bin.to_string(),
+        };
+        command.env("PATH", new_path);
+    }
+}
+
 /// 查找 Docker 可执行文件路径
 pub(crate) fn find_docker_path() -> Option<String> {
     // 1. 直接从 PATH 查找（终端启动时有效）
@@ -215,12 +287,16 @@ fn run_command_inner(
     };
 
     // 使用 spawn 替代 output，以便追踪 PID 支持取消
-    let child = match silent_command(&actual_command)
-        .args(args)
+    let mut cmd = silent_command(&actual_command);
+    cmd.args(args)
         .current_dir(current_dir)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+        .stderr(Stdio::piped());
+    if command == "mvn" {
+        apply_maven_java_home(&mut cmd);
+    }
+
+    let child = match cmd.spawn()
     {
         Ok(c) => {
             *CURRENT_PID.lock().unwrap() = Some(c.id());
@@ -230,20 +306,32 @@ fn run_command_inner(
             let full_cmd = format!("{} {}", actual_command, args.join(" "));
 
             #[cfg(windows)]
-            let fallback = silent_command("cmd")
-                .args(["/C", &full_cmd])
-                .current_dir(current_dir)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn();
+            let fallback = {
+                let mut fallback_cmd = silent_command("cmd");
+                fallback_cmd
+                    .args(["/C", &full_cmd])
+                    .current_dir(current_dir)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                if command == "mvn" {
+                    apply_maven_java_home(&mut fallback_cmd);
+                }
+                fallback_cmd.spawn()
+            };
 
             #[cfg(not(windows))]
-            let fallback = silent_command("sh")
-                .args(["-l", "-c", &full_cmd])
-                .current_dir(current_dir)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn();
+            let fallback = {
+                let mut fallback_cmd = silent_command("sh");
+                fallback_cmd
+                    .args(["-l", "-c", &full_cmd])
+                    .current_dir(current_dir)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                if command == "mvn" {
+                    apply_maven_java_home(&mut fallback_cmd);
+                }
+                fallback_cmd.spawn()
+            };
 
             match fallback {
                 Ok(c) => {
@@ -273,12 +361,19 @@ fn run_command_inner(
     } else if details.is_empty() {
         Err(format!("命令执行失败: {} {}", command, args.join(" ")))
     } else {
-        Err(format!(
+        let mut msg = format!(
             "命令执行失败: {} {}\n{}",
             command,
             args.join(" "),
             details
-        ))
+        );
+        if command == "mvn" && details.contains("TypeTag :: UNKNOWN") {
+            msg.push_str(
+                "\n\n提示: Lombok 与当前 JDK 不兼容（常见于 Homebrew 默认 OpenJDK 22+）。\
+请安装 JDK 21，或设置 JAVA_HOME 指向 JDK 21/17 后重试。",
+            );
+        }
+        Err(msg)
     }
 }
 

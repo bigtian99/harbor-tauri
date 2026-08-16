@@ -3,7 +3,8 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::Emitter;
 
 const FTP_HOST: &str = "120.77.204.231";
@@ -33,6 +34,7 @@ impl FtpClient {
             .ok_or_else(|| format!("无法解析 FTP 主机: {}", host))?;
         let stream = TcpStream::connect_timeout(&sock_addr, Duration::from_secs(10))
             .map_err(|e| format!("连接 FTP 服务器失败 {}:21: {}", host, e))?;
+        let _ = stream.set_nodelay(true);
         set_ftp_timeouts(&stream)?;
         let writer = stream
             .try_clone()
@@ -159,7 +161,20 @@ impl FtpClient {
         &mut self,
         name: &str,
         path: &Path,
+        on_progress: Option<&mut F>,
+    ) -> Result<(), String>
+    where
+        F: FnMut(u64, u64),
+    {
+        self.upload_file_with_progress_cancel(name, path, on_progress, None)
+    }
+
+    fn upload_file_with_progress_cancel<F>(
+        &mut self,
+        name: &str,
+        path: &Path,
         mut on_progress: Option<&mut F>,
+        cancel: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<(), String>
     where
         F: FnMut(u64, u64),
@@ -167,6 +182,7 @@ impl FtpClient {
         let total = fs::metadata(path)
             .map(|m| m.len())
             .unwrap_or(0);
+        // 不再在开头 cb(0)：重试时会把 UI 已传大小打回 0，造成「一时多一时少」
         let mut data = self.open_passive_data()?;
         self.command_expect(
             &format!("STOR {}", name),
@@ -179,10 +195,23 @@ impl FtpClient {
         // 1MB 块：减少系统调用与 syscall 往返，显著加快大 JAR 上传
         let mut buf = vec![0u8; 1024 * 1024];
         let mut sent: u64 = 0;
-        let mut last_reported: u64 = 0;
-        // 进度回调降至约每 2MB，避免 UI emit 拖慢传输
-        const PROGRESS_EVERY: u64 = 2 * 1024 * 1024;
+        // 按真实已传字节回调；用时间节流（约 5 次/秒），避免固定 %/MB 台阶感，也不拖慢传输
+        let mut last_report_at = Instant::now()
+            .checked_sub(Duration::from_secs(1))
+            .unwrap_or_else(Instant::now);
+        const PROGRESS_MIN_INTERVAL: Duration = Duration::from_millis(200);
+        // 首块写出后立刻报一次，避免长时间停在旧文案
+        let mut reported_once = false;
         loop {
+            if cancel
+                .map(|c| c.load(std::sync::atomic::Ordering::SeqCst))
+                .unwrap_or(false)
+            {
+                data.shutdown(std::net::Shutdown::Both).ok();
+                drop(data);
+                let _ = self.command("ABOR");
+                return Err("已取消".to_string());
+            }
             let n = std::io::Read::read(&mut file, &mut buf)
                 .map_err(|e| format!("读取待上传文件失败 {}: {}", name, e))?;
             if n == 0 {
@@ -192,9 +221,13 @@ impl FtpClient {
                 .map_err(|e| format!("上传文件失败 {}: {}", name, e))?;
             sent += n as u64;
             if let Some(cb) = on_progress.as_mut() {
-                if sent == total || sent.saturating_sub(last_reported) >= PROGRESS_EVERY {
+                let due = sent == total
+                    || !reported_once
+                    || last_report_at.elapsed() >= PROGRESS_MIN_INTERVAL;
+                if due {
                     cb(sent, total);
-                    last_reported = sent;
+                    last_report_at = Instant::now();
+                    reported_once = true;
                 }
             }
         }
@@ -216,8 +249,19 @@ impl FtpClient {
 
     /// 进入已有远端目录（不创建）。
     fn cwd_path(&mut self, path: &str) -> Result<(), String> {
-        for part in path.split('/') {
-            if part.trim().is_empty() {
+        let p = path
+            .trim()
+            .trim_start_matches('/')
+            .trim_end_matches('/');
+        if p.is_empty() {
+            return Ok(());
+        }
+        // 优先一次 CWD 完整路径，少一轮往返可明显缩短「拖入后卡住」
+        if self.cwd(&format!("/{p}")).is_ok() || self.cwd(p).is_ok() {
+            return Ok(());
+        }
+        for part in p.split('/') {
+            if part.is_empty() {
                 continue;
             }
             self.cwd(part)?;
@@ -250,6 +294,116 @@ impl FtpClient {
             Err(format!("FTP 下载文件失败 {}: {}", name, message.trim()))
         }
     }
+
+    fn quit(mut self) {
+        let _ = self.command("QUIT");
+    }
+
+    fn alive_noop(&mut self) -> bool {
+        matches!(self.command("NOOP"), Ok((code, _)) if code == 200 || code == 250)
+    }
+}
+
+/// 宝塔 FTP 预连接：打开 Java 页时先握手，拖入 JAR 时复用，避免松手后再等连接。
+struct BtFtpPooled {
+    client: FtpClient,
+    host: String,
+    user: String,
+    pass: String,
+    last_ok: Instant,
+}
+
+static BT_FTP_POOL: Mutex<Option<BtFtpPooled>> = Mutex::new(None);
+/// 空闲过久视为失效（多数面板 5 分钟断连）
+const BT_FTP_MAX_IDLE: Duration = Duration::from_secs(240);
+
+fn bt_ftp_creds_match(p: &BtFtpPooled, host: &str, user: &str, pass: &str) -> bool {
+    p.host == host && p.user == user && p.pass == pass
+}
+
+fn bt_ftp_take_alive(host: &str, user: &str, pass: &str) -> Option<FtpClient> {
+    let mut guard = BT_FTP_POOL.lock().ok()?;
+    let pooled = guard.take()?;
+    if !bt_ftp_creds_match(&pooled, host, user, pass) {
+        pooled.client.quit();
+        return None;
+    }
+    if pooled.last_ok.elapsed() > BT_FTP_MAX_IDLE {
+        pooled.client.quit();
+        return None;
+    }
+    let mut client = pooled.client;
+    if !client.alive_noop() {
+        client.quit();
+        return None;
+    }
+    let _ = client.command_expect("CWD /", "CWD /", &[250]);
+    Some(client)
+}
+
+fn bt_ftp_put_back(mut client: FtpClient, host: &str, user: &str, pass: &str) {
+    let _ = client.command_expect("CWD /", "CWD /", &[250]);
+    if !client.alive_noop() {
+        client.quit();
+        return;
+    }
+    let Ok(mut guard) = BT_FTP_POOL.lock() else {
+        client.quit();
+        return;
+    };
+    if let Some(old) = guard.replace(BtFtpPooled {
+        client,
+        host: host.to_string(),
+        user: user.to_string(),
+        pass: pass.to_string(),
+        last_ok: Instant::now(),
+    }) {
+        old.client.quit();
+    }
+}
+
+/// 预连接宝塔 FTP（可重复调用；已存活则 NOOP 续期）。
+pub(crate) fn warmup_bt_ftp_session(
+    host: &str,
+    user: &str,
+    pass: &str,
+    log_module: &str,
+) -> Result<(), String> {
+    let host = host.trim();
+    let user = user.trim();
+    let pass = pass.trim();
+    if host.is_empty() || user.is_empty() {
+        return Err("FTP 主机或用户名为空".to_string());
+    }
+    if let Some(client) = bt_ftp_take_alive(host, user, pass) {
+        bt_ftp_put_back(client, host, user, pass);
+        crate::diag::diag_log(log_module, "bt ftp warmup: 复用已有连接");
+        return Ok(());
+    }
+    crate::diag::diag_log(log_module, &format!("bt ftp warmup: 连接 {host}…"));
+    let client = FtpClient::connect_with(host, user, pass)?;
+    bt_ftp_put_back(client, host, user, pass);
+    crate::diag::diag_log(log_module, "bt ftp warmup: 预连接成功");
+    Ok(())
+}
+
+fn acquire_bt_ftp_client(
+    host: &str,
+    user: &str,
+    pass: &str,
+    on_status: &mut Option<&mut dyn FnMut(&str)>,
+) -> Result<(FtpClient, bool), String> {
+    if let Some(client) = bt_ftp_take_alive(host, user, pass) {
+        if let Some(status) = on_status.as_mut() {
+            status("复用已预连接的 FTP…");
+        }
+        return Ok((client, true));
+    }
+    if let Some(status) = on_status.as_mut() {
+        status("正在连接 FTP…");
+    }
+    let client = FtpClient::connect_with(host, user, pass)?;
+    Ok((client, false))
 }
 
 fn set_ftp_timeouts(stream: &TcpStream) -> Result<(), String> {
@@ -317,6 +471,46 @@ fn upload_dir_native(
     local_dir: &Path,
     log_module: &str,
 ) -> Result<(), String> {
+    upload_dir_native_with_progress::<fn(u64, u64)>(client, local_dir, log_module, 0, &mut 0, &mut None)
+}
+
+fn collect_dir_total_bytes(local_dir: &Path) -> Result<u64, String> {
+    let mut total = 0u64;
+    let mut stack = vec![local_dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let entries = fs::read_dir(&dir)
+            .map_err(|e| format!("读取上传目录失败 {}: {}", dir.display(), e))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("读取上传目录失败 {}: {}", dir.display(), e))?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.is_empty() || name.starts_with('.') {
+                continue;
+            }
+            let path = entry.path();
+            let metadata = entry
+                .metadata()
+                .map_err(|e| format!("读取文件信息失败 {}: {}", path.display(), e))?;
+            if metadata.is_dir() {
+                stack.push(path);
+            } else if metadata.is_file() {
+                total = total.saturating_add(metadata.len());
+            }
+        }
+    }
+    Ok(total)
+}
+
+fn upload_dir_native_with_progress<F>(
+    client: &mut FtpClient,
+    local_dir: &Path,
+    log_module: &str,
+    total_bytes: u64,
+    sent: &mut u64,
+    on_progress: &mut Option<&mut F>,
+) -> Result<(), String>
+where
+    F: FnMut(u64, u64),
+{
     let mut entries = fs::read_dir(local_dir)
         .map_err(|e| format!("读取上传目录失败 {}: {}", local_dir.display(), e))?
         .collect::<Result<Vec<_>, _>>()
@@ -334,14 +528,27 @@ fn upload_dir_native(
             .map_err(|e| format!("读取文件信息失败 {}: {}", path.display(), e))?;
         if metadata.is_dir() {
             client.ensure_dir(&name)?;
-            upload_dir_native(client, &path, log_module)?;
+            upload_dir_native_with_progress(client, &path, log_module, total_bytes, sent, on_progress)?;
             client.cwd("..")?;
         } else if metadata.is_file() {
             crate::diag::diag_log(
                 log_module,
                 &format!("📤 FTP 上传文件: {} ({} bytes)", name, metadata.len()),
             );
-            client.upload_file(&name, &path)?;
+            let base = *sent;
+            let total = if total_bytes > 0 { total_bytes } else { metadata.len() };
+            if let Some(cb) = on_progress.as_mut() {
+                let mut file_cb = |file_sent: u64, _file_total: u64| {
+                    cb(base.saturating_add(file_sent), total);
+                };
+                client.upload_file_with_progress(&name, &path, Some(&mut file_cb))?;
+            } else {
+                client.upload_file(&name, &path)?;
+            }
+            *sent = sent.saturating_add(metadata.len());
+            if let Some(cb) = on_progress.as_mut() {
+                cb(*sent, total);
+            }
         }
     }
     Ok(())
@@ -467,6 +674,35 @@ pub(crate) fn run_ftp_upload_file_with_progress<F>(
 where
     F: FnMut(u64, u64),
 {
+    run_ftp_upload_file_with_progress_cancel(
+        local_file,
+        remote_full_path,
+        host,
+        user,
+        pass,
+        log_module,
+        on_progress.as_mut(),
+        &mut None,
+        None,
+    )
+}
+
+/// 可取消的单文件 FTP 上传（cancel=true 时尽快中断并返回「已取消」）。
+/// `on_status` 用于连接/进目录等尚未传字节时的即时文案。
+pub(crate) fn run_ftp_upload_file_with_progress_cancel<F>(
+    local_file: &Path,
+    remote_full_path: &str,
+    host: &str,
+    user: &str,
+    pass: &str,
+    log_module: &str,
+    mut on_progress: Option<&mut F>,
+    on_status: &mut Option<&mut dyn FnMut(&str)>,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<(), String>
+where
+    F: FnMut(u64, u64),
+{
     if !local_file.is_file() {
         return Err(format!("本地文件不存在: {}", local_file.display()));
     }
@@ -497,14 +733,22 @@ where
     let max_retries = 3;
     let mut last_error = String::new();
     for attempt in 1..=max_retries {
-        let result = run_ftp_upload_file_once(
+        if cancel
+            .map(|c| c.load(std::sync::atomic::Ordering::SeqCst))
+            .unwrap_or(false)
+        {
+            return Err("已取消".to_string());
+        }
+        let result = run_ftp_upload_file_once_cancel(
             local_file,
             &parent,
             &file_name,
             host,
             user,
             pass,
-            on_progress.as_mut(),
+            on_progress.as_deref_mut(),
+            on_status,
+            cancel,
         );
         match result {
             Ok(()) => {
@@ -513,6 +757,10 @@ where
                     &format!("FTP 单文件上传成功 → {} (ftp {})", remote, ftp_rel),
                 );
                 return Ok(());
+            }
+            Err(e) if e == "已取消" => {
+                crate::diag::diag_log(log_module, "FTP 单文件上传已取消");
+                return Err(e);
             }
             Err(e) => {
                 crate::diag::diag_log(
@@ -532,7 +780,7 @@ where
     ))
 }
 
-fn run_ftp_upload_file_once<F>(
+fn run_ftp_upload_file_once_cancel<F>(
     local_file: &Path,
     remote_parent: &str,
     remote_name: &str,
@@ -540,22 +788,174 @@ fn run_ftp_upload_file_once<F>(
     user: &str,
     pass: &str,
     on_progress: Option<&mut F>,
+    on_status: &mut Option<&mut dyn FnMut(&str)>,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<(), String>
+where
+    F: FnMut(u64, u64),
+{
+    let (mut client, _reused) = acquire_bt_ftp_client(host, user, pass, on_status)?;
+    let parent = remote_parent.trim().trim_start_matches('/');
+    if !parent.is_empty() {
+        if let Some(status) = on_status.as_mut() {
+            status("正在进入远程目录…");
+        }
+        let _ = client.command_expect("CWD /", "CWD /", &[250]);
+        if let Err(e) = client.cwd_path(parent) {
+            client.quit();
+            return Err(e);
+        }
+    }
+    if let Some(status) = on_status.as_mut() {
+        status("开始传输…");
+    }
+    let result = match on_progress {
+        Some(cb) => {
+            client.upload_file_with_progress_cancel(remote_name, local_file, Some(cb), cancel)
+        }
+        None => {
+            let mut noop = |_s: u64, _t: u64| {};
+            client.upload_file_with_progress_cancel(
+                remote_name,
+                local_file,
+                Some(&mut noop),
+                cancel,
+            )
+        }
+    };
+    match result {
+        Ok(()) => {
+            // 传完放回连接池，下次拖入可跳过握手
+            bt_ftp_put_back(client, host, user, pass);
+            Ok(())
+        }
+        Err(e) => {
+            client.quit();
+            Err(e)
+        }
+    }
+}
+
+/// 上传本地目录**内容**到 FTP 远程目录（自定义账号；面板路径自动剥 `/www/wwwroot`）。
+/// 无进度回调的目录上传（隐私协议等场景）
+#[allow(dead_code)]
+pub(crate) fn run_ftp_upload_dir_auth(
+    local_dir: &Path,
+    remote_dir: &str,
+    host: &str,
+    user: &str,
+    pass: &str,
+    log_module: &str,
+) -> Result<(), String> {
+    run_ftp_upload_dir_auth_with_progress::<fn(u64, u64)>(
+        local_dir,
+        remote_dir,
+        host,
+        user,
+        pass,
+        log_module,
+        None,
+    )
+}
+
+/// 目录 FTP 上传；`on_progress(sent, total)` 按累计字节回调（与单文件 JAR 上传一致）。
+pub(crate) fn run_ftp_upload_dir_auth_with_progress<F>(
+    local_dir: &Path,
+    remote_dir: &str,
+    host: &str,
+    user: &str,
+    pass: &str,
+    log_module: &str,
+    mut on_progress: Option<F>,
+) -> Result<(), String>
+where
+    F: FnMut(u64, u64),
+{
+    if !local_dir.is_dir() {
+        return Err(format!("本地目录不存在: {}", local_dir.display()));
+    }
+    let ftp_rel = ftp_relative_path_from_panel(remote_dir);
+    if ftp_rel.is_empty() {
+        return Err("远程目录为空".to_string());
+    }
+    let total_bytes = collect_dir_total_bytes(local_dir).unwrap_or(0);
+    crate::diag::diag_log(
+        log_module,
+        &format!(
+            "FTP 目录上传 panel={} → rel={} local={} total_bytes={}",
+            remote_dir,
+            ftp_rel,
+            local_dir.display(),
+            total_bytes
+        ),
+    );
+
+    let max_retries = 3;
+    let mut last_error = String::new();
+    for attempt in 1..=max_retries {
+        let mut sent = 0u64;
+        let mut progress_ref = on_progress.as_mut();
+        match run_ftp_upload_dir_auth_once_progress(
+            local_dir,
+            &ftp_rel,
+            host,
+            user,
+            pass,
+            log_module,
+            total_bytes,
+            &mut sent,
+            &mut progress_ref,
+        ) {
+            Ok(()) => {
+                crate::diag::diag_log(
+                    log_module,
+                    &format!("FTP 目录上传成功 → {}", ftp_rel),
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                crate::diag::diag_log(
+                    log_module,
+                    &format!("⚠️ FTP 目录上传失败 (第{}次): {}", attempt, e),
+                );
+                last_error = e;
+                if attempt < max_retries {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
+        }
+    }
+    Err(format!(
+        "FTP 目录上传失败（已重试{}次）: {}",
+        max_retries, last_error
+    ))
+}
+
+fn run_ftp_upload_dir_auth_once_progress<F>(
+    local_dir: &Path,
+    ftp_rel: &str,
+    host: &str,
+    user: &str,
+    pass: &str,
+    log_module: &str,
+    total_bytes: u64,
+    sent: &mut u64,
+    on_progress: &mut Option<&mut F>,
 ) -> Result<(), String>
 where
     F: FnMut(u64, u64),
 {
     let mut client = FtpClient::connect_with(host, user, pass)?;
-    let parent = remote_parent.trim().trim_start_matches('/');
-    if !parent.is_empty() {
-        // chroot 后 `/` 即站点根（通常已是 /www/wwwroot），再进入相对目录
-        let _ = client.command_expect("CWD /", "CWD /", &[250]);
-        client.cwd_path(parent)?;
-    }
-    if let Some(cb) = on_progress {
-        client.upload_file_with_progress(remote_name, local_file, Some(cb))?;
-    } else {
-        client.upload_file(remote_name, local_file)?;
-    }
+    let _ = client.command_expect("CWD /", "CWD /", &[250]);
+    client.ensure_dir(ftp_rel)?;
+    upload_dir_native_with_progress(
+        &mut client,
+        local_dir,
+        log_module,
+        total_bytes,
+        sent,
+        on_progress,
+    )?;
     let _ = client.command("QUIT");
     Ok(())
 }

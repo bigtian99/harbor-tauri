@@ -33,6 +33,10 @@ pub(crate) fn normalize_config(mut config: HarborConfig) -> HarborConfig {
         config.frontend_nginx_template = DEFAULT_FRONTEND_NGINX_TEMPLATE.to_string();
     }
     config.ops_authorization = None;
+    // 旧配置缺字段时补上同名 JAR 消歧默认项（不覆盖用户已写的键）
+    for (jar, id) in crate::models::HarborConfig::default().bt_jar_project_ids {
+        config.bt_jar_project_ids.entry(jar).or_insert(id);
+    }
     config
 }
 

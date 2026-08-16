@@ -37,7 +37,7 @@ const theme = createTheme({
       "#075f45",
     ],
   },
-  primaryShade: { light: 5, dark: 5 },
+  primaryShade: { light: 6, dark: 7 },
   components: {
     Table: {
       defaultProps: {
@@ -64,6 +64,33 @@ const theme = createTheme({
     Tooltip: {
       defaultProps: {
         openDelay: 400,
+      },
+    },
+    // 选中态走 CSS 变量；不要给 control 写内联 background（会盖掉 data-active）
+    Pagination: {
+      defaultProps: {
+        color: "teal",
+        radius: "sm",
+        size: "sm",
+        autoContrast: true,
+      },
+      vars: () => ({
+        root: {
+          "--pagination-active-bg": "#64ffda",
+          "--pagination-active-color": "#0a0e27",
+        },
+      }),
+    },
+    Select: {
+      defaultProps: {
+        radius: "sm",
+      },
+      styles: {
+        input: {
+          border: "1px solid rgba(100, 255, 218, 0.18)",
+          background: "rgba(15, 22, 41, 0.9)",
+          color: "#e0e0e0",
+        },
       },
     },
   },

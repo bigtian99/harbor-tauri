@@ -1,6 +1,6 @@
 import {
   Container, Upload, Rocket, Settings, GitBranch, History, Globe, GitMerge,
-  ChevronLeft, ChevronRight, FileText, Zap, ScrollText, Shield
+  ChevronLeft, ChevronRight, FileText, Zap, ScrollText, Shield, Coffee, Code2
 } from "lucide-react";
 import type { TabType } from "../types";
 import { isOpsTab } from "../opsNavigation";
@@ -21,6 +21,8 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
     { tab: "branch", icon: <GitBranch size={18} />, label: "分支打包" },
     { tab: "merge", icon: <GitMerge size={18} />, label: "分支合并" },
     { tab: "history", icon: <History size={18} />, label: "历史记录" },
+    { tab: "btJava", icon: <Coffee size={18} />, label: "Java 项目" },
+    { tab: "btPhp", icon: <Code2 size={18} />, label: "PHP 项目" },
     { tab: "landing", icon: <Globe size={18} />, label: "生成落地页" },
     { tab: "privacy", icon: <Shield size={18} />, label: "隐私协议" },
     { tab: "settlement", icon: <FileText size={18} />, label: "结算单" },

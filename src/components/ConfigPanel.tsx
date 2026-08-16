@@ -18,7 +18,7 @@ interface ConfigPanelProps {
   config: HarborConfig;
   configSaved: boolean;
   showPassword: boolean;
-  onConfigChange: (field: keyof HarborConfig, value: string | boolean) => void;
+  onConfigChange: (field: keyof HarborConfig, value: string | boolean | Record<string, string>) => void;
   onSaveConfig: () => void;
   onTogglePassword: () => void;
   /** 当前应用版本（Cargo） */
@@ -229,9 +229,9 @@ export function ConfigPanel({
         {activeTab === "bt" && (
           <>
             <div className="form-group">
-              <label>宝塔自动部署（Profile=test）</label>
+              <label>宝塔自动部署（test）</label>
               <p className="template-hint">
-                Maven 打包且 Spring Profile 为 test 时，FTP 覆盖面板 JAR 并重启 Java 项目
+                Maven Profile=test：FTP 覆盖 JAR 并重启；npm build:test：上传 dist 内容到下方目录
               </p>
               <label className="checkbox-label" style={{ marginTop: 8 }}>
                 <input
@@ -242,6 +242,16 @@ export function ConfigPanel({
                 <span className="checkbox-toggle"></span>
                 <span>启用 test 打包后自动部署</span>
               </label>
+            </div>
+            <div className="form-group">
+              <label>前端 dist 上传目录</label>
+              <input
+                type="text"
+                value={config.bt_frontend_remote_dir ?? ""}
+                onChange={(e) => onConfigChange("bt_frontend_remote_dir", e.target.value)}
+                placeholder="/www/wwwroot/pcm.shengyeshudong.cn"
+              />
+              <p className="template-hint">上传 dist 内文件（不套一层 dist 目录）；默认 pcm.shengyeshudong.cn</p>
             </div>
             <div className="form-group">
               <label>面板地址</label>
@@ -308,6 +318,35 @@ export function ConfigPanel({
                 onChange={(e) => onConfigChange("bt_ftp_pass", e.target.value)}
                 placeholder="FTP 密码"
               />
+            </div>
+            <div className="form-group">
+              <label>JAR → 项目 ID 映射</label>
+              <textarea
+                value={Object.entries(config.bt_jar_project_ids ?? {})
+                  .map(([jar, id]) => `${jar}=${id}`)
+                  .join("\n")}
+                onChange={(e) => {
+                  const map: Record<string, string> = {};
+                  for (const line of e.target.value.split("\n")) {
+                    const trimmed = line.trim();
+                    if (!trimmed || trimmed.startsWith("#")) continue;
+                    const eq = trimmed.indexOf("=");
+                    if (eq <= 0) continue;
+                    const jar = trimmed.slice(0, eq).trim();
+                    const id = trimmed.slice(eq + 1).trim();
+                    if (jar && id) map[jar] = id;
+                  }
+                  onConfigChange("bt_jar_project_ids", map);
+                }}
+                spellCheck={false}
+                rows={4}
+                placeholder={"tksy-backend-1.0.0.jar=19"}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+              <p className="template-hint">
+                每行 <code>jar文件名=项目id</code>。同名 JAR 多项目时按此强制部署（如 tksy-backend → 19）
+              </p>
             </div>
           </>
         )}

@@ -56,6 +56,10 @@ export function createDefaultHarborConfig(): HarborConfig {
     bt_ftp_user: "admin",
     bt_ftp_pass: "pcm520..",
     bt_auto_deploy_test: true,
+    bt_frontend_remote_dir: "/www/wwwroot/pcm.shengyeshudong.cn",
+    bt_jar_project_ids: {
+      "tksy-backend-1.0.0.jar": "19",
+    },
   };
 }
 
@@ -129,7 +133,10 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     }
   }
 
-  function handleConfigChange(field: keyof HarborConfig, value: string | boolean) {
+  function handleConfigChange(
+    field: keyof HarborConfig,
+    value: string | boolean | Record<string, string>,
+  ) {
     setConfig((prev) => ({ ...prev, [field]: value }));
   }
 

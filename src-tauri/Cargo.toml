@@ -35,3 +35,4 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 semver = "1"
 url = "2"
 md-5 = "0.10"
+tauri-plugin-notification = { version = "2", features = ["windows7-compat"] }

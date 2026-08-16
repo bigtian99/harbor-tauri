@@ -16,9 +16,10 @@ mod updater;
 mod utils;
 
 use build::{
-    build_and_push, cancel_build, check_dockerfile, detect_frontend_dir, detect_spring_profiles,
-    list_local_images, list_npm_scripts, open_directory, package_from_branch, push_local_image,
-    remove_local_image,
+    build_and_push, cancel_build, cancel_bt_java_deploy, check_dockerfile, detect_frontend_dir,
+    detect_spring_profiles, list_bt_java_projects, list_bt_php_sites, list_local_images,
+    list_npm_scripts, open_directory, package_from_branch, push_local_image, remove_local_image,
+    restart_bt_java_project, upload_and_restart_bt_java_project, upload_bt_java_jar, warmup_bt_ftp,
 };
 use commit::{
     get_commit_authors, get_commit_diff, get_commit_list, get_last_commit, list_branch_diff_commits,
@@ -26,7 +27,7 @@ use commit::{
 use config_cmd::{clear_git_records, load_config, save_config};
 use diag::{
     export_diagnostic_log, get_templates_diagnostic_log_path, list_diagnostic_log_dates,
-    read_diagnostic_log,
+    read_diagnostic_log, write_diagnostic_log,
 };
 use git::{
     check_remote_merge, clone_repo, get_latest_tag, get_merge_conflict_diff, list_git_branches,
@@ -64,6 +65,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             diag::init(app.handle());
             landing::init_bundled_templates_dir(app.handle());
@@ -94,6 +96,13 @@ pub fn run() {
             check_dockerfile,
             cancel_build,
             package_from_branch,
+            list_bt_java_projects,
+            list_bt_php_sites,
+            restart_bt_java_project,
+            upload_bt_java_jar,
+            upload_and_restart_bt_java_project,
+            cancel_bt_java_deploy,
+            warmup_bt_ftp,
             build_and_push,
             push_local_image,
             list_local_images,
@@ -118,6 +127,7 @@ pub fn run() {
             read_diagnostic_log,
             list_diagnostic_log_dates,
             export_diagnostic_log,
+            write_diagnostic_log,
             get_preview_server_info,
             list_template_dirs,
             list_template_infos,

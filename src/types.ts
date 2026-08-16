@@ -2,7 +2,7 @@
 
 export type ArtifactType = "jar" | "frontend_dist";
 export type BranchProjectType = "maven" | "npm";
-export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement" | "packSpeed" | "privacy";
+export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement" | "packSpeed" | "privacy" | "btJava" | "btPhp";
 
 export interface BranchRepoSettings {
   springProfile: string;
@@ -62,6 +62,10 @@ export interface HarborConfig {
   bt_ftp_user?: string;
   bt_ftp_pass?: string;
   bt_auto_deploy_test?: boolean;
+  /** 前端 test 打包 dist 上传目录 */
+  bt_frontend_remote_dir?: string;
+  /** JAR 文件名 → 宝塔项目 id（同名 JAR 消歧） */
+  bt_jar_project_ids?: Record<string, string>;
 }
 
 export interface PackageFromBranchResult {

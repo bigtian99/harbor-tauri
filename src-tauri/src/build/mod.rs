@@ -9,6 +9,10 @@ mod package_worktree;
 mod push;
 mod push_helpers;
 
+pub use bt_deploy::{
+    cancel_bt_java_deploy, list_bt_java_projects, list_bt_php_sites, restart_bt_java_project,
+    upload_and_restart_bt_java_project, upload_bt_java_jar, warmup_bt_ftp,
+};
 pub use detect::{
     cancel_build, check_dockerfile, detect_frontend_dir, detect_spring_profiles, list_npm_scripts,
     open_directory,

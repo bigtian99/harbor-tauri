@@ -204,6 +204,28 @@ pub fn diag_log(module: &str, message: impl AsRef<str>) {
     }
 }
 
+/// 前端写入系统诊断日志（模块名白名单，避免随意造 tag）。
+#[tauri::command]
+pub async fn write_diagnostic_log(module: String, message: String) -> Result<(), String> {
+    const ALLOWED: &[&str] = &[
+        "templates", "landing", "preview", "updater", "build", "git", "docker", "ops",
+        "settlement", "history", "config", "db", "utils", "app",
+    ];
+    let module = module.trim().to_ascii_lowercase();
+    if !ALLOWED.contains(&module.as_str()) {
+        return Err(format!("非法诊断模块名: {module}"));
+    }
+    let message = message.trim();
+    if message.is_empty() {
+        return Ok(());
+    }
+    if message.len() > 4000 {
+        return Err("诊断日志单条过长".to_string());
+    }
+    diag_log(&module, message);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn get_templates_diagnostic_log_path() -> Result<String, String> {
     today_log_path()

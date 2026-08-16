@@ -177,6 +177,8 @@ pub(crate) fn finish_package(params: FinishPackageParams<'_>) -> PackageFromBran
         &ctx.repo_name,
         &final_artifact_path,
         &backend_final_path,
+        project_type,
+        &build_script,
     );
 
     let mut log = log;

@@ -235,6 +235,12 @@ pub struct HarborConfig {
     pub bt_ftp_pass: String,
     #[serde(default = "default_true")]
     pub bt_auto_deploy_test: bool,
+    /// 前端 test 打包 dist 内容上传目录（面板路径或相对 FTP 根）
+    #[serde(default = "default_bt_frontend_remote_dir")]
+    pub bt_frontend_remote_dir: String,
+    /// JAR basename → 宝塔 Java 项目 id（同名 JAR 多项目时强制消歧）
+    #[serde(default = "default_bt_jar_project_ids")]
+    pub bt_jar_project_ids: HashMap<String, String>,
 }
 
 impl Default for HarborConfig {
@@ -285,6 +291,8 @@ impl Default for HarborConfig {
             bt_ftp_user: default_bt_ftp_user(),
             bt_ftp_pass: default_bt_ftp_pass(),
             bt_auto_deploy_test: true,
+            bt_frontend_remote_dir: default_bt_frontend_remote_dir(),
+            bt_jar_project_ids: default_bt_jar_project_ids(),
         }
     }
 }
@@ -307,6 +315,17 @@ fn default_bt_ftp_user() -> String {
 
 fn default_bt_ftp_pass() -> String {
     "pcm520..".to_string()
+}
+
+fn default_bt_frontend_remote_dir() -> String {
+    "/www/wwwroot/pcm.shengyeshudong.cn".to_string()
+}
+
+fn default_bt_jar_project_ids() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    // tksy-admin / 中台：同名 JAR 有多条时固定打到 id=19（pcm2）
+    m.insert("tksy-backend-1.0.0.jar".to_string(), "19".to_string());
+    m
 }
 
 // ========== 落地页生成相关数据结构 ==========

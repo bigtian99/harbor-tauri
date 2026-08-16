@@ -21,6 +21,7 @@ import {
 } from "../../branchImageResults";
 import { sanitizeBranchForImageRef } from "../../branchRef";
 import { rememberBranchRepoSettings } from "../../branchSettings";
+import { showSystemAlert } from "../../systemAlert";
 import { prependPathHistory } from "./pathHistory";
 
 export interface BranchPackageActionState {
@@ -235,9 +236,7 @@ export async function handlePackageFromBranch(
           ? `${effectiveImageName}${portSuffix}${profileSuffix}`
           : effectiveImageName;
     setImageName(effectiveImageName);
-    if (result.bt_deploy_summary?.trim()) {
-      showToast(result.bt_deploy_summary.trim().split("\n")[0], 5000);
-    }
+    const btSummary = result.bt_deploy_summary?.trim() ?? "";
     await saveBranchSettings({
       config,
       setConfig,
@@ -255,6 +254,20 @@ export async function handlePackageFromBranch(
     });
     await loadBuildHistory();
     setActiveTab("branch");
+
+    // 有自动推送时：推完再弹系统框，避免中途阻塞 Harbor
+    if (!autoPushImage) {
+      setLog(`✅ 分支打包完成\n\n${result.log}`);
+      setProgress(100);
+      setProgressMessage("✅ 分支打包完成");
+      await showSystemAlert(
+        "打包完成",
+        `分支「${branchName.trim()}」打包成功。`,
+      );
+      if (btSummary) {
+        await showSystemAlert("上传完成", btSummary);
+      }
+    }
 
     if (autoPushImage) {
       if (!config.harbor_url || !config.username || !config.password || !config.project) {
@@ -482,6 +495,13 @@ export async function handlePackageFromBranch(
             }
           }
         }
+      }
+      await showSystemAlert(
+        "打包完成",
+        `分支「${branchName.trim()}」打包成功。`,
+      );
+      if (btSummary) {
+        await showSystemAlert("上传完成", btSummary);
       }
     }
   } catch (e) {

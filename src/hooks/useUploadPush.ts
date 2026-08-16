@@ -305,7 +305,14 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     if (!isTauriRuntime()) return;
     const appWindow = getCurrentWindow();
     const unlistenDrag = appWindow.onDragDropEvent((event) => {
-      if (event.payload.type === "over") {
+      // 仅上传/分支页消费窗口拖放，避免与 Java 项目页等冲突
+      if (activeTab !== "upload" && activeTab !== "branch") {
+        if (event.payload.type === "drop" || event.payload.type === "leave") {
+          setIsDragOver(false);
+        }
+        return;
+      }
+      if (event.payload.type === "over" || event.payload.type === "enter") {
         setIsDragOver(true);
       } else if (event.payload.type === "drop") {
         setIsDragOver(false);

@@ -13,6 +13,8 @@ import { ConfigPanel } from "./components/ConfigPanel";
 import { SettlementPanel } from "./components/SettlementPanel";
 import { PackSpeedPanel } from "./components/PackSpeedPanel";
 import { PrivacyPanel } from "./components/PrivacyPanel";
+import { BtJavaProjectsPanel } from "./components/BtJavaProjectsPanel";
+import { BtPhpSitesPanel } from "./components/BtPhpSitesPanel";
 import { UpdateModal } from "./components/UpdateModal";
 import { useLanding } from "./hooks/useLanding";
 import { useAppConfig, type DiagDateInfo } from "./hooks/useAppConfig";
@@ -453,6 +455,9 @@ function App() {
           />
         )}
 
+        {activeTab === "btJava" && <BtJavaProjectsPanel />}
+        {activeTab === "btPhp" && <BtPhpSitesPanel />}
+
         {activeTab === "merge" && (
           <MergePanel
             config={app.config}
@@ -545,6 +550,11 @@ function App() {
                   onChange={(e) => app.setLogSearch(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => e.stopPropagation()}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  autoComplete="off"
+                  spellCheck={false}
+                  style={{ textTransform: "none" }}
                 />
                 {app.logSearch && (
                   <button className="log-viewer-search-clear" onClick={() => app.setLogSearch("")}>
