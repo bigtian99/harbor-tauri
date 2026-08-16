@@ -1,6 +1,8 @@
 //! 分支打包：产物复制、Dockerfile 探测、worktree 清理、构建历史。
 
+use crate::build::bt_deploy::maybe_deploy_test_jars;
 use crate::build::emit_progress;
+use crate::config_cmd::load_config_sync;
 use crate::git::cleanup_worktree;
 use crate::history::save_build_record_direct;
 use crate::models::{BuildRecord, PackageFromBranchResult, PackageProjectType};
@@ -100,12 +102,13 @@ pub(crate) fn detect_dockerfile_and_maybe_cleanup(
         );
     } else {
         // 没有自定义 Dockerfile，正常清理 worktree
-        emit_progress(app, 95, "🧹 清理 worktree 源码...", "cleanup");
+        emit_progress(app, 88, "🧹 清理 worktree 源码...", "cleanup");
         cleanup_worktree(&ctx.repo_root, &ctx.worktree_path);
         crate::diag::diag_log(
             "build",
             &format!("Worktree 已清理: {}", ctx.worktree_path.display()),
         );
+        emit_progress(app, 89, "✅ worktree 已清理", "cleanup");
     }
 
     (dockerfile_path, dockerfile_context)
@@ -165,6 +168,27 @@ pub(crate) fn finish_package(params: FinishPackageParams<'_>) -> PackageFromBran
         copy_package_artifacts(&artifact_path, &backend_artifact_path, &artifact_dir);
 
     let (dockerfile_path, dockerfile_context) = detect_dockerfile_and_maybe_cleanup(app, ctx);
+
+    let config = load_config_sync().unwrap_or_default();
+    let bt_deploy_summary = maybe_deploy_test_jars(
+        app,
+        &config,
+        &spring_profile,
+        &ctx.repo_name,
+        &final_artifact_path,
+        &backend_final_path,
+    );
+
+    let mut log = log;
+    if let Some(ref summary) = bt_deploy_summary {
+        if !summary.trim().is_empty() {
+            if !log.is_empty() {
+                log.push_str("\n\n");
+            }
+            log.push_str("—— 宝塔部署 ——\n");
+            log.push_str(summary);
+        }
+    }
 
     emit_progress(app, 100, "✅ 打包完成！产物已输出", "done");
 
@@ -234,5 +258,6 @@ pub(crate) fn finish_package(params: FinishPackageParams<'_>) -> PackageFromBran
         log,
         dockerfile_path,
         dockerfile_context,
+        bt_deploy_summary,
     }
 }

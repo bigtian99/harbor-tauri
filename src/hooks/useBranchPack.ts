@@ -12,6 +12,7 @@ import type { BranchImageResult } from "../branchImageResults";
 import { isTauriRuntime } from "../types";
 import { getRememberedBranchAdvancedSettings, rememberBranchRepoSettings } from "../branchSettings";
 import {
+  autoPushHarborForSpringProfile,
   buildScriptAfterMerge,
   shouldPushHarborAfterMerge,
   springProfileAfterMerge,
@@ -152,6 +153,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setBranchOptions,
     setSpringProfiles,
     setSpringProfile,
+    setAutoPushImage,
     setLastCommit,
     setCommitList,
     setCommitListTotal,
@@ -168,6 +170,15 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   });
 
   const { loadGitBranches, loadSpringProfiles, loadNpmScripts, checkBranchDockerfile } = gitLoad;
+
+  /** Profile=test 默认关 Harbor；prod 默认开；其它 profile 不改勾选 */
+  function handleSpringProfileChange(profile: string) {
+    setSpringProfile(profile);
+    const next = autoPushHarborForSpringProfile(profile);
+    if (next !== null) {
+      setAutoPushImage(next);
+    }
+  }
 
   async function handlePackageFromBranch() {
     await runPackageFromBranch({
@@ -480,7 +491,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     branchImageResults,
     backendArtifactPath,
     springProfile,
-    setSpringProfile,
+    setSpringProfile: handleSpringProfileChange,
     springProfiles,
     lastCommit,
     commitList,

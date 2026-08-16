@@ -343,7 +343,9 @@ export function BranchPanel({
                 ? branchProjectType === "npm" && !packageWithBackend
                   ? "打包成功后将构建前端 nginx 镜像并推送"
                   : "打包成功后将自动构建并推送镜像"
-                : "勾选后打包成功会自动推送镜像"}
+                : springProfile.trim().toLowerCase() === "test"
+                  ? "Profile=test 时默认不推 Harbor（可手动开启）"
+                  : "勾选后打包成功会自动推送镜像"}
             </p>
           </div>
         )}

@@ -1,5 +1,6 @@
 //! 构建 / 推送 / 检测相关 Tauri 命令（OPT-013 拆分）。
 
+mod bt_deploy;
 mod detect;
 mod package;
 mod package_build;

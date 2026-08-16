@@ -89,6 +89,9 @@ pub(crate) struct PackageFromBranchResult {
     pub(crate) log: String,
     pub(crate) dockerfile_path: Option<String>,
     pub(crate) dockerfile_context: Option<String>,
+    /// test 打包后宝塔部署摘要；未触发则为 None
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) bt_deploy_summary: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -217,6 +220,21 @@ pub struct HarborConfig {
     pub custom_docker_extras_dir: String,
     // 历史打包记录
     pub build_history: Vec<BuildRecord>,
+    // 宝塔 test 部署（仅 Java JAR）
+    #[serde(default = "default_bt_panel_url")]
+    pub bt_panel_url: String,
+    #[serde(default)]
+    pub bt_panel_secret: String,
+    #[serde(default = "default_true")]
+    pub bt_panel_insecure: bool,
+    #[serde(default = "default_bt_ftp_host")]
+    pub bt_ftp_host: String,
+    #[serde(default = "default_bt_ftp_user")]
+    pub bt_ftp_user: String,
+    #[serde(default = "default_bt_ftp_pass")]
+    pub bt_ftp_pass: String,
+    #[serde(default = "default_true")]
+    pub bt_auto_deploy_test: bool,
 }
 
 impl Default for HarborConfig {
@@ -260,8 +278,35 @@ impl Default for HarborConfig {
             custom_docker_extras_dir: String::new(),
             // 历史打包记录默认为空
             build_history: Vec::new(),
+            bt_panel_url: default_bt_panel_url(),
+            bt_panel_secret: String::new(),
+            bt_panel_insecure: true,
+            bt_ftp_host: default_bt_ftp_host(),
+            bt_ftp_user: default_bt_ftp_user(),
+            bt_ftp_pass: default_bt_ftp_pass(),
+            bt_auto_deploy_test: true,
         }
     }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_bt_panel_url() -> String {
+    "https://47.107.51.228:10163".to_string()
+}
+
+fn default_bt_ftp_host() -> String {
+    "47.107.51.228".to_string()
+}
+
+fn default_bt_ftp_user() -> String {
+    "admin".to_string()
+}
+
+fn default_bt_ftp_pass() -> String {
+    "pcm520..".to_string()
 }
 
 // ========== 落地页生成相关数据结构 ==========

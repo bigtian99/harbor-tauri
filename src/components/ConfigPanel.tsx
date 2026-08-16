@@ -2,7 +2,8 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Settings, CheckCircle, AlertCircle, Eye, EyeOff, FolderOpen, Archive,
-  Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink, Trash2
+  Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink, Trash2,
+  CloudUpload,
 } from "lucide-react";
 import type { HarborConfig } from "../types";
 import { isTauriRuntime } from "../types";
@@ -17,7 +18,7 @@ interface ConfigPanelProps {
   config: HarborConfig;
   configSaved: boolean;
   showPassword: boolean;
-  onConfigChange: (field: keyof HarborConfig, value: string) => void;
+  onConfigChange: (field: keyof HarborConfig, value: string | boolean) => void;
   onSaveConfig: () => void;
   onTogglePassword: () => void;
   /** 当前应用版本（Cargo） */
@@ -28,12 +29,13 @@ interface ConfigPanelProps {
   onClearGitRecords?: () => Promise<boolean>;
 }
 
-type ConfigTab = "connection" | "jar" | "frontend" | "output" | "about";
+type ConfigTab = "connection" | "jar" | "frontend" | "bt" | "output" | "about";
 
 const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { key: "connection", label: "Harbor 连接", icon: <Server size={14} /> },
   { key: "jar", label: "JAR 打包", icon: <Package size={14} /> },
   { key: "frontend", label: "前端打包", icon: <Globe size={14} /> },
+  { key: "bt", label: "宝塔部署", icon: <CloudUpload size={14} /> },
   { key: "output", label: "输出设置", icon: <FolderOutput size={14} /> },
   { key: "about", label: "关于", icon: <Info size={14} /> },
 ];
@@ -220,6 +222,92 @@ export function ConfigPanel({
                 </button>
               </div>
               <p className="template-hint">填 tools/ 的绝对路径，jarporter 通过 <code>--build-context tools=</code> 注入。Dockerfile 里用 <code>COPY --from=tools ./ /opt/tools/</code> 获取。</p>
+            </div>
+          </>
+        )}
+
+        {activeTab === "bt" && (
+          <>
+            <div className="form-group">
+              <label>宝塔自动部署（Profile=test）</label>
+              <p className="template-hint">
+                Maven 打包且 Spring Profile 为 test 时，FTP 覆盖面板 JAR 并重启 Java 项目
+              </p>
+              <label className="checkbox-label" style={{ marginTop: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={config.bt_auto_deploy_test !== false}
+                  onChange={(e) => onConfigChange("bt_auto_deploy_test", e.target.checked)}
+                />
+                <span className="checkbox-toggle"></span>
+                <span>启用 test 打包后自动部署</span>
+              </label>
+            </div>
+            <div className="form-group">
+              <label>面板地址</label>
+              <input
+                type="text"
+                value={config.bt_panel_url ?? ""}
+                onChange={(e) => onConfigChange("bt_panel_url", e.target.value)}
+                placeholder="https://47.107.51.228:10163"
+              />
+            </div>
+            <div className="form-group">
+              <label>面板 API 密钥</label>
+              <div className="password-input-wrapper">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={config.bt_panel_secret ?? ""}
+                  onChange={(e) => onConfigChange("bt_panel_secret", e.target.value)}
+                  placeholder="面板设置 → API 接口密钥"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={onTogglePassword}
+                  title={showPassword ? "隐藏" : "显示"}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={config.bt_panel_insecure !== false}
+                  onChange={(e) => onConfigChange("bt_panel_insecure", e.target.checked)}
+                />
+                <span className="checkbox-toggle"></span>
+                <span>跳过面板 TLS 证书校验（自签证书）</span>
+              </label>
+            </div>
+            <div className="form-group">
+              <label>FTP 主机</label>
+              <input
+                type="text"
+                value={config.bt_ftp_host ?? ""}
+                onChange={(e) => onConfigChange("bt_ftp_host", e.target.value)}
+                placeholder="47.107.51.228"
+              />
+            </div>
+            <div className="form-group">
+              <label>FTP 用户</label>
+              <input
+                type="text"
+                value={config.bt_ftp_user ?? ""}
+                onChange={(e) => onConfigChange("bt_ftp_user", e.target.value)}
+                placeholder="admin"
+              />
+            </div>
+            <div className="form-group">
+              <label>FTP 密码</label>
+              <input
+                type={showPassword ? "text" : "password"}
+                value={config.bt_ftp_pass ?? ""}
+                onChange={(e) => onConfigChange("bt_ftp_pass", e.target.value)}
+                placeholder="FTP 密码"
+              />
             </div>
           </>
         )}

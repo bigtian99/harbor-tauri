@@ -49,6 +49,13 @@ export function createDefaultHarborConfig(): HarborConfig {
     artifact_output_dir: "",
     custom_docker_extras_dir: "",
     build_history: [],
+    bt_panel_url: "https://47.107.51.228:10163",
+    bt_panel_secret: "",
+    bt_panel_insecure: true,
+    bt_ftp_host: "47.107.51.228",
+    bt_ftp_user: "admin",
+    bt_ftp_pass: "pcm520..",
+    bt_auto_deploy_test: true,
   };
 }
 
@@ -122,7 +129,7 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     }
   }
 
-  function handleConfigChange(field: keyof HarborConfig, value: string) {
+  function handleConfigChange(field: keyof HarborConfig, value: string | boolean) {
     setConfig((prev) => ({ ...prev, [field]: value }));
   }
 

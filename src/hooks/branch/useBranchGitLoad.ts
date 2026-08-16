@@ -16,6 +16,7 @@ interface UseBranchGitLoadDeps {
   setBranchOptions: Dispatch<SetStateAction<GitBranchOption[]>>;
   setSpringProfiles: Dispatch<SetStateAction<string[]>>;
   setSpringProfile: Dispatch<SetStateAction<string>>;
+  setAutoPushImage: Dispatch<SetStateAction<boolean>>;
   setLastCommit: Dispatch<SetStateAction<LastCommitInfo | null>>;
   setCommitList: Dispatch<SetStateAction<CommitInfo[]>>;
   setCommitListTotal: Dispatch<SetStateAction<number>>;
@@ -56,6 +57,7 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
     setBranchOptions,
     setSpringProfiles,
     setSpringProfile,
+    setAutoPushImage,
     setLastCommit,
     setCommitList,
     setCommitListTotal,
@@ -90,8 +92,14 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
       });
       if (isStaleBranchLoad(branchLoadRequestId)) return;
       setSpringProfiles(profiles);
-      if (profiles.includes("test")) {
-        setSpringProfile((prev) => prev || "test");
+      let appliedDefaultTest = false;
+      setSpringProfile((prev) => {
+        if (prev || !profiles.includes("test")) return prev;
+        appliedDefaultTest = true;
+        return "test";
+      });
+      if (appliedDefaultTest) {
+        setAutoPushImage(false);
       }
     } catch (e) {
       if (isStaleBranchLoad(branchLoadRequestId)) return;

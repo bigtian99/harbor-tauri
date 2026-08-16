@@ -54,6 +54,14 @@ export interface HarborConfig {
   // 快捷合并配置
   quick_merge_source?: string;
   quick_merge_target?: string;
+  // 宝塔 test 部署（仅 Java JAR）
+  bt_panel_url?: string;
+  bt_panel_secret?: string;
+  bt_panel_insecure?: boolean;
+  bt_ftp_host?: string;
+  bt_ftp_user?: string;
+  bt_ftp_pass?: string;
+  bt_auto_deploy_test?: boolean;
 }
 
 export interface PackageFromBranchResult {
@@ -64,6 +72,7 @@ export interface PackageFromBranchResult {
   log: string;
   dockerfile_path?: string;
   dockerfile_context?: string;
+  bt_deploy_summary?: string | null;
 }
 
 export interface GitBranchOption {

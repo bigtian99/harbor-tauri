@@ -21,8 +21,18 @@ struct FtpClient {
 
 impl FtpClient {
     fn connect(host: &str) -> Result<Self, String> {
-        let stream =
-            TcpStream::connect((host, 21)).map_err(|e| format!("连接 FTP 服务器失败: {}", e))?;
+        Self::connect_with(host, FTP_USER, FTP_PASS)
+    }
+
+    fn connect_with(host: &str, user: &str, pass: &str) -> Result<Self, String> {
+        use std::net::ToSocketAddrs;
+        let sock_addr = (host, 21u16)
+            .to_socket_addrs()
+            .map_err(|e| format!("解析 FTP 主机失败 {}: {}", host, e))?
+            .next()
+            .ok_or_else(|| format!("无法解析 FTP 主机: {}", host))?;
+        let stream = TcpStream::connect_timeout(&sock_addr, Duration::from_secs(10))
+            .map_err(|e| format!("连接 FTP 服务器失败 {}:21: {}", host, e))?;
         set_ftp_timeouts(&stream)?;
         let writer = stream
             .try_clone()
@@ -38,11 +48,11 @@ impl FtpClient {
             return Err(format!("FTP 服务器拒绝连接: {}", message.trim()));
         }
 
-        let (code, message) = client.command(&format!("USER {}", FTP_USER))?;
+        let (code, message) = client.command(&format!("USER {}", user))?;
         match code {
             230 => {}
             331 => {
-                client.command_expect("PASS ******", &format!("PASS {}", FTP_PASS), &[230])?;
+                client.command_expect("PASS ******", &format!("PASS {}", pass), &[230])?;
             }
             _ => return Err(format!("FTP 登录失败: {}", message.trim())),
         }
@@ -132,13 +142,31 @@ impl FtpClient {
     fn open_passive_data(&mut self) -> Result<TcpStream, String> {
         let message = self.command_expect("PASV", "PASV", &[227])?;
         let (host, port) = parse_pasv_response(&message, &self.control_host)?;
-        let data = TcpStream::connect((host.as_str(), port))
-            .map_err(|e| format!("连接 FTP 数据通道失败 {}:{}: {}", host, port, e))?;
-        set_ftp_timeouts(&data)?;
+        let data = TcpStream::connect_timeout(
+            &resolve_socket_addr(&host, port)?,
+            Duration::from_secs(10),
+        )
+        .map_err(|e| format!("连接 FTP 数据通道失败 {}:{}: {}", host, port, e))?;
+        tune_ftp_data_socket(&data)?;
         Ok(data)
     }
 
     fn upload_file(&mut self, name: &str, path: &Path) -> Result<(), String> {
+        self.upload_file_with_progress::<fn(u64, u64)>(name, path, None)
+    }
+
+    fn upload_file_with_progress<F>(
+        &mut self,
+        name: &str,
+        path: &Path,
+        mut on_progress: Option<&mut F>,
+    ) -> Result<(), String>
+    where
+        F: FnMut(u64, u64),
+    {
+        let total = fs::metadata(path)
+            .map(|m| m.len())
+            .unwrap_or(0);
         let mut data = self.open_passive_data()?;
         self.command_expect(
             &format!("STOR {}", name),
@@ -148,12 +176,38 @@ impl FtpClient {
 
         let mut file = fs::File::open(path)
             .map_err(|e| format!("读取待上传文件失败 {}: {}", path.display(), e))?;
-        std::io::copy(&mut file, &mut data).map_err(|e| format!("上传文件失败 {}: {}", name, e))?;
+        // 1MB 块：减少系统调用与 syscall 往返，显著加快大 JAR 上传
+        let mut buf = vec![0u8; 1024 * 1024];
+        let mut sent: u64 = 0;
+        let mut last_reported: u64 = 0;
+        // 进度回调降至约每 2MB，避免 UI emit 拖慢传输
+        const PROGRESS_EVERY: u64 = 2 * 1024 * 1024;
+        loop {
+            let n = std::io::Read::read(&mut file, &mut buf)
+                .map_err(|e| format!("读取待上传文件失败 {}: {}", name, e))?;
+            if n == 0 {
+                break;
+            }
+            std::io::Write::write_all(&mut data, &buf[..n])
+                .map_err(|e| format!("上传文件失败 {}: {}", name, e))?;
+            sent += n as u64;
+            if let Some(cb) = on_progress.as_mut() {
+                if sent == total || sent.saturating_sub(last_reported) >= PROGRESS_EVERY {
+                    cb(sent, total);
+                    last_reported = sent;
+                }
+            }
+        }
         data.shutdown(std::net::Shutdown::Write).ok();
         drop(data);
 
         let (code, message) = self.read_response()?;
         if code == 226 || code == 250 {
+            if let Some(cb) = on_progress.as_mut() {
+                if total > 0 {
+                    cb(total, total);
+                }
+            }
             Ok(())
         } else {
             Err(format!("FTP 上传文件失败 {}: {}", name, message.trim()))
@@ -204,6 +258,28 @@ fn set_ftp_timeouts(stream: &TcpStream) -> Result<(), String> {
         .set_read_timeout(timeout)
         .and_then(|_| stream.set_write_timeout(timeout))
         .map_err(|e| format!("设置 FTP 超时失败: {}", e))
+}
+
+/// 数据通道：更长超时 + TCP_NODELAY，适合大 JAR 连续写入
+fn tune_ftp_data_socket(stream: &TcpStream) -> Result<(), String> {
+    let timeout = Some(Duration::from_secs(180));
+    stream
+        .set_read_timeout(timeout)
+        .and_then(|_| stream.set_write_timeout(timeout))
+        .map_err(|e| format!("设置 FTP 数据通道超时失败: {}", e))?;
+    stream
+        .set_nodelay(true)
+        .map_err(|e| format!("设置 FTP TCP_NODELAY 失败: {}", e))?;
+    Ok(())
+}
+
+fn resolve_socket_addr(host: &str, port: u16) -> Result<std::net::SocketAddr, String> {
+    use std::net::ToSocketAddrs;
+    (host, port)
+        .to_socket_addrs()
+        .map_err(|e| format!("解析地址失败 {}:{}: {}", host, port, e))?
+        .next()
+        .ok_or_else(|| format!("无法解析地址: {}:{}", host, port))
 }
 
 fn parse_pasv_response(message: &str, control_host: &str) -> Result<(String, u16), String> {
@@ -334,6 +410,154 @@ pub(crate) fn run_ftp_download_file_with(
         "下载失败（已重试{}次）: {}",
         max_retries, last_error
     ))
+}
+
+/// 面板 JAR 绝对路径 → FTP 相对路径。
+/// 宝塔 FTP 账号通常 chroot 到 `/www/wwwroot`，不能再 CWD `www`。
+pub(crate) fn ftp_relative_path_from_panel(panel_path: &str) -> String {
+    let normalized = panel_path.trim().replace('\\', "/");
+    let mut path = normalized.as_str();
+    while path.starts_with('/') {
+        path = &path[1..];
+    }
+    const PREFIXES: &[&str] = &[
+        "www/wwwroot/",
+        "www/wwwroot",
+        "wwwroot/",
+        "wwwroot",
+    ];
+    for prefix in PREFIXES {
+        if let Some(rest) = path.strip_prefix(prefix) {
+            return rest.trim_start_matches('/').to_string();
+        }
+    }
+    path.to_string()
+}
+
+/// 单文件上传到远程路径（面板绝对路径会自动剥 `/www/wwwroot`）。
+/// `on_progress(sent, total)` 可选，用于 UI 进度。
+pub(crate) fn run_ftp_upload_file_with(
+    local_file: &Path,
+    remote_full_path: &str,
+    host: &str,
+    user: &str,
+    pass: &str,
+    log_module: &str,
+) -> Result<(), String> {
+    run_ftp_upload_file_with_progress(
+        local_file,
+        remote_full_path,
+        host,
+        user,
+        pass,
+        log_module,
+        None::<fn(u64, u64)>,
+    )
+}
+
+pub(crate) fn run_ftp_upload_file_with_progress<F>(
+    local_file: &Path,
+    remote_full_path: &str,
+    host: &str,
+    user: &str,
+    pass: &str,
+    log_module: &str,
+    mut on_progress: Option<F>,
+) -> Result<(), String>
+where
+    F: FnMut(u64, u64),
+{
+    if !local_file.is_file() {
+        return Err(format!("本地文件不存在: {}", local_file.display()));
+    }
+    let remote = remote_full_path.trim();
+    if remote.is_empty() {
+        return Err("远程路径为空".to_string());
+    }
+    let ftp_rel = ftp_relative_path_from_panel(remote);
+    let remote_path = Path::new(&ftp_rel);
+    let file_name = remote_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("无法解析远程文件名: {} (ftp={})", remote, ftp_rel))?
+        .to_string();
+    let parent = remote_path
+        .parent()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_default();
+
+    crate::diag::diag_log(
+        log_module,
+        &format!(
+            "FTP 路径映射 panel={} → rel={} parent={} file={}",
+            remote, ftp_rel, parent, file_name
+        ),
+    );
+
+    let max_retries = 3;
+    let mut last_error = String::new();
+    for attempt in 1..=max_retries {
+        let result = run_ftp_upload_file_once(
+            local_file,
+            &parent,
+            &file_name,
+            host,
+            user,
+            pass,
+            on_progress.as_mut(),
+        );
+        match result {
+            Ok(()) => {
+                crate::diag::diag_log(
+                    log_module,
+                    &format!("FTP 单文件上传成功 → {} (ftp {})", remote, ftp_rel),
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                crate::diag::diag_log(
+                    log_module,
+                    &format!("⚠️ FTP 单文件上传失败 (第{}次): {}", attempt, e),
+                );
+                last_error = e;
+                if attempt < max_retries {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
+        }
+    }
+    Err(format!(
+        "FTP 单文件上传失败（已重试{}次）: {}",
+        max_retries, last_error
+    ))
+}
+
+fn run_ftp_upload_file_once<F>(
+    local_file: &Path,
+    remote_parent: &str,
+    remote_name: &str,
+    host: &str,
+    user: &str,
+    pass: &str,
+    on_progress: Option<&mut F>,
+) -> Result<(), String>
+where
+    F: FnMut(u64, u64),
+{
+    let mut client = FtpClient::connect_with(host, user, pass)?;
+    let parent = remote_parent.trim().trim_start_matches('/');
+    if !parent.is_empty() {
+        // chroot 后 `/` 即站点根（通常已是 /www/wwwroot），再进入相对目录
+        let _ = client.command_expect("CWD /", "CWD /", &[250]);
+        client.cwd_path(parent)?;
+    }
+    if let Some(cb) = on_progress {
+        client.upload_file_with_progress(remote_name, local_file, Some(cb))?;
+    } else {
+        client.upload_file(remote_name, local_file)?;
+    }
+    let _ = client.command("QUIT");
+    Ok(())
 }
 
 /// 可指定 host / 可选站点基目录的 FTP 上传（隐私协议等复用）
@@ -514,7 +738,7 @@ pub async fn upload_landing_to_ftp(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_pasv_response;
+    use super::{ftp_relative_path_from_panel, parse_pasv_response};
 
     #[test]
     fn parse_pasv_response_extracts_host_and_port() {
@@ -549,5 +773,21 @@ mod tests {
         let err = parse_pasv_response("227 Entering Passive Mode (1,2,3,4,0,0).", super::FTP_HOST)
             .unwrap_err();
         assert!(err.contains("端口无效"), "{err}");
+    }
+
+    #[test]
+    fn strips_www_wwwroot_prefix_for_chrooted_ftp() {
+        assert_eq!(
+            ftp_relative_path_from_panel("/www/wwwroot/anime/anime-1.0.0-SNAPSHOT.jar"),
+            "anime/anime-1.0.0-SNAPSHOT.jar"
+        );
+        assert_eq!(
+            ftp_relative_path_from_panel("/www/wwwroot/pcm2/tksy-backend-1.0.0.jar"),
+            "pcm2/tksy-backend-1.0.0.jar"
+        );
+        assert_eq!(
+            ftp_relative_path_from_panel("anime/foo.jar"),
+            "anime/foo.jar"
+        );
     }
 }

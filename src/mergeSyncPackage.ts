@@ -12,6 +12,19 @@ export function springProfileAfterMerge(targetBranch: string): string {
 }
 
 /**
+ * 按 Spring Profile 决定是否默认推 Harbor：
+ * - test → 关闭
+ * - prod / production → 开启
+ * - 其它 → 不强制（返回 null，保留当前勾选）
+ */
+export function autoPushHarborForSpringProfile(profile: string): boolean | null {
+  const p = profile.trim().toLowerCase();
+  if (p === "test") return false;
+  if (p === "prod" || p === "production") return true;
+  return null;
+}
+
+/**
  * 合并后同步打包的 npm 构建脚本：
  * 合到含 rc-master 的目标分支时强制 build:prod；否则强制 build:test。
  */

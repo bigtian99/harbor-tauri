@@ -79,19 +79,31 @@ pub async fn package_from_branch(
 
     let (artifact_path, build_script_used, logs, backend_artifact_path) = build_result?;
 
-    Ok(finish_package(FinishPackageParams {
-        app: &app,
-        ctx: &ctx,
-        branch: &branch,
-        project_type,
-        artifact_path,
-        build_script: build_script_used,
-        logs,
-        backend_artifact_path,
-        frontend_dir,
-        package_manager,
-        spring_profile,
-        package_with_backend: package_with_backend.unwrap_or(false),
-        start_time,
-    }))
+    // 收尾含 worktree 清理 / FTP / 面板 HTTP，必须在 blocking 线程，避免卡住 async 运行时导致进度不刷新
+    let app_finish = app.clone();
+    let branch_finish = branch.clone();
+    let frontend_dir_finish = frontend_dir.clone();
+    let package_manager_finish = package_manager.clone();
+    let spring_profile_finish = spring_profile.clone();
+    let package_with_backend_finish = package_with_backend.unwrap_or(false);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        finish_package(FinishPackageParams {
+            app: &app_finish,
+            ctx: &ctx,
+            branch: &branch_finish,
+            project_type,
+            artifact_path,
+            build_script: build_script_used,
+            logs,
+            backend_artifact_path,
+            frontend_dir: frontend_dir_finish,
+            package_manager: package_manager_finish,
+            spring_profile: spring_profile_finish,
+            package_with_backend: package_with_backend_finish,
+            start_time,
+        })
+    })
+    .await
+    .map_err(|e| format!("打包收尾线程异常: {}", e))
 }

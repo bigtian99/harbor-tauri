@@ -119,8 +119,21 @@ export function useBuildProgress(deps: UseBuildProgressDeps = {}) {
         if (event.payload.stage != null && event.payload.stage !== "") {
           setProgressStage(event.payload.stage);
         }
-        // 累积构建/推送过程日志，让"展开构建日志"能看到打包镜像、推送镜像等过程
-        setLog((prev) => (prev ? `${prev}\n${event.payload.message}` : event.payload.message));
+        // 累积构建/推送过程日志；FTP 百分比进度只替换上一行，避免刷屏
+        setLog((prev) => {
+          const msg = event.payload.message;
+          const isFtpPct = /^📤 FTP 上传 .+ \d+% \(/.test(msg);
+          if (!prev) return msg;
+          if (isFtpPct) {
+            const lines = prev.split("\n");
+            const last = lines[lines.length - 1] ?? "";
+            if (/^📤 FTP 上传 .+ \d+% \(/.test(last) || last.startsWith("📤 FTP 上传 ")) {
+              lines[lines.length - 1] = msg;
+              return lines.join("\n");
+            }
+          }
+          return `${prev}\n${msg}`;
+        });
       },
     );
     return () => {

@@ -235,6 +235,9 @@ export async function handlePackageFromBranch(
           ? `${effectiveImageName}${portSuffix}${profileSuffix}`
           : effectiveImageName;
     setImageName(effectiveImageName);
+    if (result.bt_deploy_summary?.trim()) {
+      showToast(result.bt_deploy_summary.trim().split("\n")[0], 5000);
+    }
     await saveBranchSettings({
       config,
       setConfig,

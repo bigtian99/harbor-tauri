@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  autoPushHarborForSpringProfile,
   buildScriptAfterMerge,
   mergeSyncPackageConfirmHint,
   shouldPushHarborAfterMerge,
@@ -24,6 +25,13 @@ assert.equal(buildScriptAfterMerge("origin/rc-master"), "build:prod");
 assert.equal(buildScriptAfterMerge("feature/rc-master-hotfix"), "build:prod");
 assert.equal(buildScriptAfterMerge("origin/master"), "build:test");
 assert.equal(buildScriptAfterMerge("origin/develop"), "build:test");
+
+assert.equal(autoPushHarborForSpringProfile("test"), false);
+assert.equal(autoPushHarborForSpringProfile("TEST"), false);
+assert.equal(autoPushHarborForSpringProfile("prod"), true);
+assert.equal(autoPushHarborForSpringProfile("production"), true);
+assert.equal(autoPushHarborForSpringProfile("dev"), null);
+assert.equal(autoPushHarborForSpringProfile(""), null);
 
 // 合并后同步打包进入分支页时，必须补拉分支列表/提交记录，否则提交区不显示
 const branchPackSource = readFileSync("src/hooks/useBranchPack.ts", "utf8");
