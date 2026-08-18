@@ -1,6 +1,6 @@
 [package]
 name = "jarporter"
-version = "0.2.69"
+version = "0.2.71"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
