@@ -5,6 +5,7 @@ import { Notifications } from "@mantine/notifications";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
 import App from "./App";
+import { ConfirmDialogProvider } from "./hooks/useConfirmDialog";
 
 const theme = createTheme({
   primaryColor: "teal",
@@ -100,7 +101,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="dark">
       <Notifications position="top-right" />
-      <App />
+      <ConfirmDialogProvider>
+        <App />
+      </ConfirmDialogProvider>
     </MantineProvider>
   </React.StrictMode>,
 );

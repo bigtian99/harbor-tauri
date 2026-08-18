@@ -16,10 +16,11 @@ mod updater;
 mod utils;
 
 use build::{
-    build_and_push, cancel_build, cancel_bt_java_deploy, check_dockerfile, detect_frontend_dir,
-    detect_spring_profiles, list_bt_java_projects, list_bt_php_sites, list_local_images,
-    list_npm_scripts, open_directory, package_from_branch, push_local_image, remove_local_image,
-    restart_bt_java_project, upload_and_restart_bt_java_project, upload_bt_java_jar, warmup_bt_ftp,
+    build_and_push, cancel_build, cancel_bt_java_deploy, cancel_bt_php_deploy, check_dockerfile,
+    detect_frontend_dir, detect_spring_profiles, list_bt_java_projects, list_bt_php_sites,
+    list_local_images, list_npm_scripts, open_directory, package_from_branch, push_local_image,
+    remove_local_image, restart_bt_java_project, upload_and_restart_bt_java_project,
+    upload_bt_java_jar, upload_bt_php_site, warmup_bt_ftp,
 };
 use commit::{
     get_commit_authors, get_commit_diff, get_commit_list, get_last_commit, list_branch_diff_commits,
@@ -100,8 +101,10 @@ pub fn run() {
             list_bt_php_sites,
             restart_bt_java_project,
             upload_bt_java_jar,
+            upload_bt_php_site,
             upload_and_restart_bt_java_project,
             cancel_bt_java_deploy,
+            cancel_bt_php_deploy,
             warmup_bt_ftp,
             build_and_push,
             push_local_image,

@@ -6,20 +6,13 @@ import {
   XCircle, Eye, EyeOff,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { ask } from "@tauri-apps/plugin-dialog";
 import type { BuildRecord } from "../types";
-import { getProjectName, isTauriRuntime } from "../types";
+import { getProjectName } from "../types";
 import { HoverTip } from "./HoverTip";
 import { avatarColor, avatarInitials } from "../avatarUrl";
 import { historyCanPushJar } from "../historyJarPush.ts";
 import { parseHistoryImageTags } from "../branchImageResults";
-
-async function confirmDanger(message: string, title: string): Promise<boolean> {
-  if (isTauriRuntime()) {
-    return ask(message, { title, kind: "warning" });
-  }
-  return window.confirm(message);
-}
+import { useConfirmDialog } from "../hooks/useConfirmDialog";
 
 interface HistoryPanelProps {
   buildHistory: BuildRecord[];
@@ -53,6 +46,7 @@ export function HistoryPanel({
   onLoadHistory, onClearHistory, onDeleteRecord, onOpenArtifact, onCopyImage, onPushJar,
   onCancelBuild, setShowBuildLog, renderLog,
 }: HistoryPanelProps) {
+  const { confirm } = useConfirmDialog();
   const [search, setSearch] = useState(historySearch);
   const [expandedId, setExpandedId] = useState<string | null>(expandedRecordId);
   // collapsedProjects 保留用于接口兼容性
@@ -240,10 +234,12 @@ export function HistoryPanel({
                     className="history-action-btn danger"
                     onClick={() => {
                       void (async () => {
-                        const ok = await confirmDanger(
-                          "确定要清空所有打包历史吗？\n\n删除后将同时清理产物文件，且不可恢复。",
-                          "清空历史",
-                        );
+                        const ok = await confirm({
+                          title: "清空历史",
+                          message: "确定要清空所有打包历史吗？删除后将同时清理产物文件，且不可恢复。",
+                          variant: "danger",
+                          confirmLabel: "清空",
+                        });
                         if (ok) onClearHistory();
                       })();
                     }}
@@ -389,10 +385,13 @@ export function HistoryPanel({
                         onClick={(e) => {
                           e.stopPropagation();
                           void (async () => {
-                            const ok = await confirmDanger(
-                              `确定要删除这条打包记录吗？\n\n分支：${record.branch}\n产物将一并清理，删除后不可恢复。`,
-                              "删除记录",
-                            );
+                            const ok = await confirm({
+                              title: "删除记录",
+                              message: "确定要删除这条打包记录吗？产物将一并清理，删除后不可恢复。",
+                              details: [`分支：${record.branch}`],
+                              variant: "danger",
+                              confirmLabel: "删除",
+                            });
                             if (ok) onDeleteRecord(record);
                           })();
                         }}

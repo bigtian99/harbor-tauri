@@ -1,7 +1,9 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open, ask } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
+import { useConfirmDialog } from "./useConfirmDialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { showSystemAlert } from "../systemAlert";
 import type { ArtifactType, HarborConfig, TabType } from "../types";
 import {
   isTauriRuntime,
@@ -52,6 +54,8 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     activeTab,
     onDropRepoPath,
   } = deps;
+
+  const { confirm } = useConfirmDialog();
 
   // 上传推送
   const [artifactType, setArtifactType] = useState<ArtifactType>("jar");
@@ -170,6 +174,8 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       }
       const logResult = result.replace(/完整镜像:.*(\n|$)/g, "").replace(/\n{3,}/g, "\n\n").trim();
       setLog((prev) => (prev ? `${prev}\n\n${logResult}` : logResult));
+      const notifyImage = imgMatch ? imgMatch[1].trim() : uploadImageName;
+      await showSystemAlert("构建推送完成", `镜像 ${notifyImage} 已成功推送到 Harbor`);
       setArtifactPath("");
       setImageTag("latest");
       const jarName = artifactType === "jar" ? inferImageName(artifactPath, "jar") : null;
@@ -211,15 +217,13 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       return;
     }
 
-    // 二次确认：误点不可恢复
-    const confirmed = isTauriRuntime()
-      ? await ask(`确认删除本地镜像？\n\n${ref}\n\n将执行 docker rmi，删除后不可恢复。`, {
-          title: "删除镜像",
-          kind: "warning",
-        })
-      : window.confirm(
-          `确认删除本地镜像？\n\n${ref}\n\n将执行 docker rmi，删除后不可恢复。`,
-        );
+    const confirmed = await confirm({
+      title: "删除镜像",
+      message: "确认删除本地镜像？将执行 docker rmi，删除后不可恢复。",
+      details: [ref],
+      variant: "danger",
+      confirmLabel: "删除",
+    });
     if (!confirmed) {
       return;
     }

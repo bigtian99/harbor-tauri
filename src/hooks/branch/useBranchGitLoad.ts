@@ -7,10 +7,12 @@ import type {
   CommitInfo,
 } from "../../types";
 import { isTauriRuntime, isGitUrl } from "../../types";
+import { preferNpmBuildScript } from "../../mergeSyncPackage";
 import type { BranchLoadingKey } from "./useBranchCommits";
 
 interface UseBranchGitLoadDeps {
   branchProjectType: BranchProjectType;
+  branchName: string;
   frontendDir: string;
   setBranchName: (value: string) => void;
   setBranchOptions: Dispatch<SetStateAction<GitBranchOption[]>>;
@@ -52,6 +54,7 @@ interface UseBranchGitLoadDeps {
 export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
   const {
     branchProjectType,
+    branchName,
     frontendDir,
     setBranchName,
     setBranchOptions,
@@ -116,6 +119,7 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
     repoPathArg: string,
     frontendDirArg: string,
     branchLoadRequestId?: number,
+    branchForScript?: string,
   ) {
     if (!repoPathArg.trim() || !isTauriRuntime()) {
       if (!isStaleBranchLoad(branchLoadRequestId)) {
@@ -132,8 +136,10 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
       });
       if (isStaleBranchLoad(branchLoadRequestId)) return;
       setNpmScripts(scripts);
-      const preferred = ["build", "build:prod", "build:production", "compile", "dist"];
-      const autoSelected = preferred.find((s) => scripts.includes(s)) || scripts[0] || "";
+      const autoSelected = preferNpmBuildScript(
+        branchForScript || branchName,
+        scripts,
+      );
       setSelectedBuildScript(autoSelected);
     } catch {
       if (isStaleBranchLoad(branchLoadRequestId)) return;
@@ -198,14 +204,14 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
           if (isStaleBranchLoad(requestId)) return;
           if (detectedDir) {
             setFrontendDir(detectedDir);
-            loadNpmScripts(nextRepoPath, detectedDir, requestId);
+            loadNpmScripts(nextRepoPath, detectedDir, requestId, targetBranch);
           } else {
             setFrontendDir("");
-            loadNpmScripts(nextRepoPath, "", requestId);
+            loadNpmScripts(nextRepoPath, "", requestId, targetBranch);
           }
         } catch {
           if (!isStaleBranchLoad(requestId)) {
-            loadNpmScripts(nextRepoPath, frontendDir, requestId);
+            loadNpmScripts(nextRepoPath, frontendDir, requestId, targetBranch);
           }
         }
       }

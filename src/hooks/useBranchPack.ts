@@ -14,6 +14,7 @@ import { getRememberedBranchAdvancedSettings, rememberBranchRepoSettings } from 
 import {
   autoPushHarborForSpringProfile,
   buildScriptAfterMerge,
+  preferNpmBuildScript,
   shouldPushHarborAfterMerge,
   springProfileAfterMerge,
 } from "../mergeSyncPackage";
@@ -148,6 +149,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
 
   const gitLoad = useBranchGitLoad({
     branchProjectType,
+    branchName,
     frontendDir,
     setBranchName,
     setBranchOptions,
@@ -336,13 +338,13 @@ export function useBranchPack(deps: UseBranchPackDeps) {
           const detectedDir = await invoke<string | null>("detect_frontend_dir", { repoPath });
           if (detectedDir) {
             setFrontendDir(detectedDir);
-            loadNpmScripts(repoPath, detectedDir);
+            loadNpmScripts(repoPath, detectedDir, undefined, branchName);
           } else {
             setFrontendDir("");
-            loadNpmScripts(repoPath, "");
+            loadNpmScripts(repoPath, "", undefined, branchName);
           }
         } catch {
-          loadNpmScripts(repoPath, frontendDir);
+          loadNpmScripts(repoPath, frontendDir, undefined, branchName);
         }
       })();
     }
@@ -374,6 +376,11 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   async function handleBranchChange(value: string) {
     setBranchName(value);
     setSpringProfile("");
+    if (npmScripts.length > 0) {
+      setSelectedBuildScript(preferNpmBuildScript(value, npmScripts, selectedBuildScript));
+    } else {
+      setSelectedBuildScript(buildScriptAfterMerge(value));
+    }
     if (value.trim() && repoPath) {
       await loadSpringProfiles(repoPath, value);
       loadLastCommit(repoPath, value);

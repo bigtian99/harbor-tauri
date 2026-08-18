@@ -32,6 +32,22 @@ export function buildScriptAfterMerge(targetBranch: string): string {
   return shouldPushHarborAfterMerge(targetBranch) ? "build:prod" : "build:test";
 }
 
+/**
+ * 按目标分支挑选 npm 构建脚本：rc-master → build:prod，其它 → build:test。
+ * 首选脚本不存在时才回退当前值或通用 build。
+ */
+export function preferNpmBuildScript(
+  branch: string,
+  scripts: string[],
+  current = "",
+): string {
+  const preferred = buildScriptAfterMerge(branch);
+  if (scripts.includes(preferred)) return preferred;
+  if (current && scripts.includes(current)) return current;
+  const generic = ["build", "compile", "dist"];
+  return generic.find((s) => scripts.includes(s)) || scripts[0] || current || preferred;
+}
+
 /** 合并确认框追加提示 */
 export function mergeSyncPackageConfirmHint(targetBranch: string): string {
   return shouldPushHarborAfterMerge(targetBranch)

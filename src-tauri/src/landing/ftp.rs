@@ -3,6 +3,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, TcpStream};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::Emitter;
@@ -471,7 +472,15 @@ fn upload_dir_native(
     local_dir: &Path,
     log_module: &str,
 ) -> Result<(), String> {
-    upload_dir_native_with_progress::<fn(u64, u64)>(client, local_dir, log_module, 0, &mut 0, &mut None)
+    upload_dir_native_with_progress::<fn(u64, u64)>(
+        client,
+        local_dir,
+        log_module,
+        0,
+        &mut 0,
+        &mut None,
+        None,
+    )
 }
 
 fn collect_dir_total_bytes(local_dir: &Path) -> Result<u64, String> {
@@ -500,6 +509,12 @@ fn collect_dir_total_bytes(local_dir: &Path) -> Result<u64, String> {
     Ok(total)
 }
 
+fn ftp_cancelled(cancel: Option<&AtomicBool>) -> bool {
+    cancel
+        .map(|c| c.load(Ordering::SeqCst))
+        .unwrap_or(false)
+}
+
 fn upload_dir_native_with_progress<F>(
     client: &mut FtpClient,
     local_dir: &Path,
@@ -507,6 +522,7 @@ fn upload_dir_native_with_progress<F>(
     total_bytes: u64,
     sent: &mut u64,
     on_progress: &mut Option<&mut F>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<(), String>
 where
     F: FnMut(u64, u64),
@@ -518,6 +534,9 @@ where
     entries.sort_by_key(|entry| entry.file_name());
 
     for entry in entries {
+        if ftp_cancelled(cancel) {
+            return Err("已取消".to_string());
+        }
         let name = entry.file_name().to_string_lossy().to_string();
         if name.is_empty() || name.starts_with('.') {
             continue;
@@ -528,7 +547,15 @@ where
             .map_err(|e| format!("读取文件信息失败 {}: {}", path.display(), e))?;
         if metadata.is_dir() {
             client.ensure_dir(&name)?;
-            upload_dir_native_with_progress(client, &path, log_module, total_bytes, sent, on_progress)?;
+            upload_dir_native_with_progress(
+                client,
+                &path,
+                log_module,
+                total_bytes,
+                sent,
+                on_progress,
+                cancel,
+            )?;
             client.cwd("..")?;
         } else if metadata.is_file() {
             crate::diag::diag_log(
@@ -866,7 +893,33 @@ pub(crate) fn run_ftp_upload_dir_auth_with_progress<F>(
     user: &str,
     pass: &str,
     log_module: &str,
+    on_progress: Option<F>,
+) -> Result<(), String>
+where
+    F: FnMut(u64, u64),
+{
+    run_ftp_upload_dir_auth_with_progress_cancel(
+        local_dir,
+        remote_dir,
+        host,
+        user,
+        pass,
+        log_module,
+        on_progress,
+        None,
+    )
+}
+
+/// 可取消的目录 FTP 上传。
+pub(crate) fn run_ftp_upload_dir_auth_with_progress_cancel<F>(
+    local_dir: &Path,
+    remote_dir: &str,
+    host: &str,
+    user: &str,
+    pass: &str,
+    log_module: &str,
     mut on_progress: Option<F>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<(), String>
 where
     F: FnMut(u64, u64),
@@ -893,6 +946,9 @@ where
     let max_retries = 3;
     let mut last_error = String::new();
     for attempt in 1..=max_retries {
+        if ftp_cancelled(cancel) {
+            return Err("已取消".to_string());
+        }
         let mut sent = 0u64;
         let mut progress_ref = on_progress.as_mut();
         match run_ftp_upload_dir_auth_once_progress(
@@ -905,6 +961,7 @@ where
             total_bytes,
             &mut sent,
             &mut progress_ref,
+            cancel,
         ) {
             Ok(()) => {
                 crate::diag::diag_log(
@@ -914,6 +971,9 @@ where
                 return Ok(());
             }
             Err(e) => {
+                if e == "已取消" {
+                    return Err(e);
+                }
                 crate::diag::diag_log(
                     log_module,
                     &format!("⚠️ FTP 目录上传失败 (第{}次): {}", attempt, e),
@@ -941,6 +1001,7 @@ fn run_ftp_upload_dir_auth_once_progress<F>(
     total_bytes: u64,
     sent: &mut u64,
     on_progress: &mut Option<&mut F>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<(), String>
 where
     F: FnMut(u64, u64),
@@ -955,6 +1016,7 @@ where
         total_bytes,
         sent,
         on_progress,
+        cancel,
     )?;
     let _ = client.command("QUIT");
     Ok(())

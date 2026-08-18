@@ -3,11 +3,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   Settings, CheckCircle, AlertCircle, Eye, EyeOff, FolderOpen, Archive,
   Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink, Trash2,
-  CloudUpload,
+  CloudUpload, Bell,
 } from "lucide-react";
+import { showSystemAlert } from "../systemAlert";
 import type { HarborConfig } from "../types";
 import { isTauriRuntime } from "../types";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { useConfirmDialog } from "../hooks/useConfirmDialog";
 
 export type CheckUpdateResult = {
   status: "update" | "latest" | "error";
@@ -45,12 +46,12 @@ export function ConfigPanel({
   onConfigChange, onSaveConfig, onTogglePassword,
   appVersion, onCheckUpdate, onClearGitRecords,
 }: ConfigPanelProps) {
+  const { confirm } = useConfirmDialog();
   const [activeTab, setActiveTab] = useState<ConfigTab>("connection");
   const [checking, setChecking] = useState(false);
   const [checkMsg, setCheckMsg] = useState<{ type: "ok" | "update" | "err"; text: string } | null>(null);
   const [clearingGit, setClearingGit] = useState(false);
   const [gitClearMsg, setGitClearMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [showClearGitConfirm, setShowClearGitConfirm] = useState(false);
 
   const gitRecordCount =
     (config.repo_path_history?.length ?? 0) + Object.keys(config.branch_repo_settings ?? {}).length;
@@ -71,7 +72,6 @@ export function ConfigPanel({
     try {
       const cleared = await onClearGitRecords();
       if (cleared) {
-        setShowClearGitConfirm(false);
         setGitClearMsg({ type: "ok", text: "已清空 Git 记录" });
       } else {
         setGitClearMsg({ type: "err", text: "清空失败，请稍后重试" });
@@ -80,6 +80,24 @@ export function ConfigPanel({
       setGitClearMsg({ type: "err", text: String(e) });
     } finally {
       setClearingGit(false);
+    }
+  };
+
+  const handleClearGitClick = async () => {
+    if (!onClearGitRecords || !hasGitRecords || clearingGit) return;
+    const ok = await confirm({
+      title: "清空 Git 记录",
+      message: "此操作不可恢复，将清除以下本地记忆：",
+      details: [
+        "分支打包 / 快捷合并的仓库路径历史",
+        "上次选择的仓库与分支",
+        "各仓库的高级设置（端口、nginx 等）",
+      ],
+      confirmLabel: "确认清空",
+      variant: "danger",
+    });
+    if (ok) {
+      await handleClearGitRecords();
     }
   };
 
@@ -231,7 +249,7 @@ export function ConfigPanel({
             <div className="form-group">
               <label>宝塔自动部署（test）</label>
               <p className="template-hint">
-                Maven Profile=test：FTP 覆盖 JAR 并重启；npm build:test：上传 dist 内容到下方目录
+                Maven Profile=test：FTP 覆盖 JAR 并重启；npm 在 Profile=test 或 build:test 时上传 dist 到下方目录
               </p>
               <label className="checkbox-label" style={{ marginTop: 8 }}>
                 <input
@@ -482,8 +500,8 @@ export function ConfigPanel({
                 <button
                   type="button"
                   className="about-danger-btn"
-                  onClick={() => setShowClearGitConfirm(true)}
-                  disabled={!onClearGitRecords || !hasGitRecords}
+                  onClick={() => void handleClearGitClick()}
+                  disabled={!onClearGitRecords || !hasGitRecords || clearingGit}
                 >
                   <Trash2 size={16} />
                   清空 Git 记录
@@ -495,6 +513,24 @@ export function ConfigPanel({
                   <span>{gitClearMsg.text}</span>
                 </div>
               )}
+            </div>
+
+            <div className="about-card about-data-card">
+              <div className="about-data-title">系统通知测试</div>
+              <p className="about-data-desc">
+                点击发送一条测试通知，验证 macOS 通知中心是否正常工作。若无弹出，请前往
+                「系统设置 → 通知 → JarPorter」开启允许通知。
+              </p>
+              <div className="about-actions">
+                <button
+                  type="button"
+                  className="about-check-btn"
+                  onClick={() => void showSystemAlert("测试通知", "JarPorter 系统通知正常 ✅")}
+                >
+                  <Bell size={16} />
+                  发送测试通知
+                </button>
+              </div>
             </div>
 
             <div className="config-tip">
@@ -525,25 +561,6 @@ export function ConfigPanel({
           )}
         </button>
       )}
-
-      <ConfirmDialog
-        open={showClearGitConfirm}
-        title="清空 Git 记录"
-        message="此操作不可恢复，将清除以下本地记忆："
-        details={[
-          "分支打包 / 快捷合并的仓库路径历史",
-          "上次选择的仓库与分支",
-          "各仓库的高级设置（端口、nginx 等）",
-        ]}
-        confirmLabel="确认清空"
-        cancelLabel="取消"
-        variant="danger"
-        loading={clearingGit}
-        onConfirm={() => { void handleClearGitRecords(); }}
-        onCancel={() => {
-          if (!clearingGit) setShowClearGitConfirm(false);
-        }}
-      />
     </div>
   );
 }

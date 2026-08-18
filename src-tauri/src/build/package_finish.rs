@@ -21,7 +21,13 @@ pub(crate) fn copy_package_artifacts(
 ) -> (String, Option<String>) {
     let final_artifact_path = match copy_artifact_to_output_internal(artifact_path, artifact_dir) {
         Ok(copied_path) => {
-            crate::diag::diag_log("build", &format!("✅ 产物已输出到: {}", copied_path));
+            let size_hint = std::fs::metadata(&copied_path)
+                .map(|m| format!("{:.1} MB", m.len() as f64 / (1024.0 * 1024.0)))
+                .unwrap_or_else(|_| "?".into());
+            crate::diag::diag_log(
+                "build",
+                &format!("✅ 产物已输出到: {} ({})", copied_path, size_hint),
+            );
             copied_path
         }
         Err(e) => {
@@ -34,7 +40,13 @@ pub(crate) fn copy_package_artifacts(
         let backend_src_path = PathBuf::from(backend_src);
         match copy_artifact_to_output_internal(&backend_src_path, artifact_dir) {
             Ok(copied) => {
-                crate::diag::diag_log("build", &format!("✅ 后端产物已输出到: {}", copied));
+                let size_hint = std::fs::metadata(&copied)
+                    .map(|m| format!("{:.1} MB", m.len() as f64 / (1024.0 * 1024.0)))
+                    .unwrap_or_else(|_| "?".into());
+                crate::diag::diag_log(
+                    "build",
+                    &format!("✅ 后端产物已输出到: {} ({})", copied, size_hint),
+                );
                 Some(copied)
             }
             Err(e) => {

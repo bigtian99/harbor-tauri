@@ -20,6 +20,7 @@ import {
 } from "@mantine/core";
 import { Copy, Download, ExternalLink, FileUp, Loader2, Shield, Trash2 } from "lucide-react";
 import { isTauriRuntime } from "../types";
+import { useConfirmDialog } from "../hooks/useConfirmDialog";
 
 export interface PrivacyUploadRecord {
   id: string;
@@ -45,6 +46,7 @@ interface PrivacyTarget {
 }
 
 export function PrivacyPanel() {
+  const { confirm } = useConfirmDialog();
   const [history, setHistory] = useState<PrivacyUploadRecord[]>([]);
   const [lastResults, setLastResults] = useState<PrivacyUploadResult[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -215,13 +217,14 @@ export function PrivacyPanel() {
           return;
         }
       }
-      if (
-        !window.confirm(
-          `确认覆盖远端目录？\n${target.remote_dir}\n此操作会替换该目录下的 index.html。`,
-        )
-      ) {
-        return;
-      }
+      const ok = await confirm({
+        title: "覆盖远端目录",
+        message: "确认覆盖远端目录？此操作会替换该目录下的 index.html。",
+        details: [target.remote_dir],
+        variant: "danger",
+        confirmLabel: "覆盖",
+      });
+      if (!ok) return;
     }
 
     const selected = await open({
@@ -293,7 +296,13 @@ export function PrivacyPanel() {
 
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
-    if (!window.confirm(`确认删除所选 ${selectedIds.size} 条本地记录？不会删除服务器文件。`)) return;
+    const ok = await confirm({
+      title: "删除记录",
+      message: `确认删除所选 ${selectedIds.size} 条本地记录？不会删除服务器文件。`,
+      variant: "danger",
+      confirmLabel: "删除",
+    });
+    if (!ok) return;
     if (!isTauriRuntime()) return;
     try {
       await invoke("delete_privacy_uploads", { ids: Array.from(selectedIds) });
@@ -306,7 +315,13 @@ export function PrivacyPanel() {
 
   const handleClear = async () => {
     if (history.length === 0) return;
-    if (!window.confirm("确认清空全部本地上传记录？不会删除服务器文件。")) return;
+    const ok = await confirm({
+      title: "清空记录",
+      message: "确认清空全部本地上传记录？不会删除服务器文件。",
+      variant: "danger",
+      confirmLabel: "清空",
+    });
+    if (!ok) return;
     if (!isTauriRuntime()) return;
     try {
       await invoke("clear_privacy_uploads");

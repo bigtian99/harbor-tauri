@@ -8,6 +8,7 @@ import type {
   CommitDiffResult, MergeConflictDetail, HarborConfig,
 } from "../../types";
 import { isTauriRuntime } from "../../types";
+import { useConfirmDialog } from "../../hooks/useConfirmDialog";
 import type { MergeOverlayPhase } from "./types";
 import { isAutoMergeMessage, parseChangedLines, parseConflictBlocks, summarizeMergeError } from "./utils";
 import { mergeSyncPackageConfirmHint } from "../../mergeSyncPackage";
@@ -17,6 +18,7 @@ export function useMergePanel(
   onOpenDirectory: (path: string) => void,
   onPackageAfterMerge?: (args: { repoPath: string; targetBranch: string }) => void,
 ) {
+  const { confirm } = useConfirmDialog();
   const [repoPath, setRepoPath] = useState("");
   // 解析后的本地仓库路径（URL 输入时为缓存克隆目录），后续 check/merge 都用它
   const [resolvedRepoPath, setResolvedRepoPath] = useState("");
@@ -335,15 +337,19 @@ export function useMergePanel(
     const packageInfo = packageAfterMerge
       ? `\n${mergeSyncPackageConfirmHint(targetBranch)}`
       : "";
-    if (!window.confirm(
-      `确认把 ${sourceBranch} 合并进 ${targetBranch}？\n` +
-      `将在隔离 worktree 中执行 git merge --no-ff ${sourceBranch}，不会切换当前工作区分支` +
-      `${pushAfterMerge ? `\n合并后推送到远程 origin/${targetRemoteName}` : "\n合并结果仅更新本地分支引用，不推送远程"}` +
-      tagInfo +
-      packageInfo
-    )) {
-      return;
-    }
+    const details = [
+      `将在隔离 worktree 中执行 git merge --no-ff ${sourceBranch}，不会切换当前工作区分支`,
+      pushAfterMerge ? `合并后推送到远程 origin/${targetRemoteName}` : "合并结果仅更新本地分支引用，不推送远程",
+    ];
+    if (tagInfo) details.push(tagInfo.trim());
+    if (packageInfo) details.push(packageInfo.trim());
+    const ok = await confirm({
+      title: "确认合并",
+      message: `确认把 ${sourceBranch} 合并进 ${targetBranch}？`,
+      details,
+      confirmLabel: "合并",
+    });
+    if (!ok) return;
     setIsMerging(true);
     setMergeOverlayPhase("running");
     setMergeProgress(0);

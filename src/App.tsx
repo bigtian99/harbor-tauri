@@ -397,7 +397,9 @@ function App() {
             onBranchChange={branch.handleBranchChange}
             onFrontendDirChange={(dir) => {
               branch.setFrontendDir(dir);
-              if (branch.repoPath) branch.loadNpmScripts(branch.repoPath, dir);
+              if (branch.repoPath) {
+                branch.loadNpmScripts(branch.repoPath, dir, undefined, branch.branchName);
+              }
             }}
             onSelectedBuildScriptChange={branch.setSelectedBuildScript}
             onPackageWithBackendChange={branch.setPackageWithBackend}

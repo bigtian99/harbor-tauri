@@ -5,6 +5,7 @@ import { notifications } from "@mantine/notifications";
 import { Stack, Box } from "@mantine/core";
 import type { TemplateInfo } from "../types";
 import { isTauriRuntime } from "../types";
+import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import type { LandingPanelProps, PreviewOverlayState } from "./landing/types";
 import { LandingChannelForm } from "./landing/LandingChannelForm";
 import { LandingFtpSection } from "./landing/LandingFtpSection";
@@ -34,6 +35,7 @@ export function LandingPanel({
 
   // 预览浮层状态
   const [previewOverlay, setPreviewOverlay] = useState<PreviewOverlayState | null>(null);
+  const { confirm } = useConfirmDialog();
 
   // 按中文分类分组
   const templateGroups = (() => {
@@ -86,7 +88,13 @@ export function LandingPanel({
   }, [loadTemplateInfos]);
 
   const handleDeleteTemplate = useCallback(async (dirName: string) => {
-    if (!window.confirm(`确认删除模板 "${dirName}"？此操作不可撤销。`)) return;
+    const ok = await confirm({
+      title: "删除模板",
+      message: `确认删除模板 "${dirName}"？此操作不可撤销。`,
+      variant: "danger",
+      confirmLabel: "删除",
+    });
+    if (!ok) return;
     if (!isTauriRuntime()) return;
     try {
       await invoke("delete_template_dir", { dirName });
@@ -95,7 +103,7 @@ export function LandingPanel({
     } catch (e) {
       notifications.show({ title: "删除失败", message: String(e), color: "red", autoClose: 5000 });
     }
-  }, [loadTemplateInfos]);
+  }, [loadTemplateInfos, confirm]);
 
   const switchTemplate = useCallback((id: string, direction: "prev" | "next") => {
     const result = landingGenerated[id];

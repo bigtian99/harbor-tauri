@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>长颈鹿开飞机</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #4da6ff 0%, #a8dcff 50%, #fff3b0 100%);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      overflow: hidden;
+    }
+    .page-header {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      z-index: 5;
+      pointer-events: none;
+    }
+    h1 {
+      color: #1a3d6e;
+      font-size: clamp(1.15rem, 3vw, 1.65rem);
+      font-weight: 700;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.8);
+    }
+    p.sub {
+      margin-top: 4px;
+      color: #3a5a7a;
+      font-size: 0.82rem;
+    }
+    .pause-btn {
+      pointer-events: auto;
+      margin-top: 10px;
+      border: none;
+      background: #fff;
+      color: #1a3d6e;
+      border-radius: 999px;
+      padding: 7px 18px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+    main { width: min(980px, 98vw); }
+    svg { width: 100%; height: auto; display: block; }
+
+    .cloud { animation: drift linear infinite; }
+    .cloud-a { animation-duration: 32s; }
+    .cloud-b { animation-duration: 24s; animation-delay: -10s; }
+    .cloud-c { animation-duration: 40s; animation-delay: -18s; }
+    @keyframes drift {
+      from { transform: translateX(-180px); }
+      to   { transform: translateX(1160px); }
+    }
+
+    .scene {
+      transform-origin: 490px 310px;
+      animation: fly 6s ease-in-out infinite;
+    }
+    @keyframes fly {
+      0%, 100% { transform: translate(0, 0) rotate(-2deg); }
+      33%      { transform: translate(20px, -22px) rotate(2.5deg); }
+      66%      { transform: translate(-14px, -14px) rotate(1deg); }
+    }
+
+    .prop-disc {
+      transform-origin: 712px 302px;
+      animation: spin 0.1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .neck {
+      transform-origin: 548px 292px;
+      animation: neck 4s ease-in-out infinite;
+    }
+    @keyframes neck {
+      0%, 100% { transform: rotate(-1deg); }
+      50%      { transform: rotate(2deg); }
+    }
+    .head {
+      transform-origin: 562px 148px;
+      animation: head 4s ease-in-out infinite;
+    }
+    @keyframes head {
+      0%, 100% { transform: rotate(0deg); }
+      50%      { transform: rotate(4deg); }
+    }
+    .scarf {
+      transform-origin: 530px 258px;
+      animation: scarf 1.6s ease-in-out infinite;
+    }
+    @keyframes scarf {
+      0%, 100% { transform: rotate(0deg); }
+      50%      { transform: rotate(12deg) translateX(5px); }
+    }
+
+    body.paused * { animation-play-state: paused !important; }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; }
+      .pause-btn { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <h1>长颈鹿开飞机</h1>
+    <p class="sub">座舱太小，只能把脖子伸外面</p>
+    <button type="button" class="pause-btn" id="pauseBtn" aria-pressed="false">暂停动画</button>
+  </header>
+
+  <main>
+    <svg viewBox="0 0 980 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
+      <title id="t">长颈鹿开飞机</title>
+      <desc id="d">卡通侧视图：黄色长颈鹿坐在红色螺旋桨小飞机驾驶舱里，长脖子从舱顶伸出，在蓝天中飞行。</desc>
+
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#4da6ff"/>
+          <stop offset="100%" stop-color="#cceeff"/>
+        </linearGradient>
+        <linearGradient id="fuse" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#ff6b6b"/>
+          <stop offset="100%" stop-color="#d62828"/>
+        </linearGradient>
+        <linearGradient id="giraffe" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffe066"/>
+          <stop offset="100%" stop-color="#f4b942"/>
+        </linearGradient>
+        <filter id="sh" x="-25%" y="-25%" width="150%" height="150%">
+          <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#123" flood-opacity="0.2"/>
+        </filter>
+      </defs>
+
+      <rect width="980" height="560" fill="url(#sky)"/>
+
+      <!-- 太阳 -->
+      <g aria-hidden="true">
+        <circle cx="860" cy="70" r="44" fill="#ffd60a"/>
+        <g stroke="#ffd60a" stroke-width="4" stroke-linecap="round" opacity="0.6">
+          <line x1="860" y1="10" x2="860" y2="28"/>
+          <line x1="860" y1="112" x2="860" y2="130"/>
+          <line x1="800" y1="70" x2="818" y2="70"/>
+          <line x1="902" y1="70" x2="920" y2="70"/>
+        </g>
+      </g>
+
+      <!-- 云 -->
+      <g aria-hidden="true">
+        <g class="cloud cloud-a" transform="translate(80 0)">
+          <ellipse cx="0" cy="120" rx="65" ry="30" fill="#fff" opacity="0.7"/>
+          <ellipse cx="55" cy="112" rx="45" ry="24" fill="#fff" opacity="0.7"/>
+        </g>
+        <g class="cloud cloud-b" transform="translate(350 0)">
+          <ellipse cx="0" cy="180" rx="75" ry="34" fill="#fff" opacity="0.55"/>
+          <ellipse cx="60" cy="172" rx="50" ry="28" fill="#fff" opacity="0.55"/>
+        </g>
+        <g class="cloud cloud-c" transform="translate(620 0)">
+          <ellipse cx="0" cy="90" rx="55" ry="26" fill="#fff" opacity="0.65"/>
+          <ellipse cx="42" cy="84" rx="36" ry="20" fill="#fff" opacity="0.65"/>
+        </g>
+      </g>
+
+      <!-- 地面 -->
+      <g aria-hidden="true">
+        <path d="M0 430 Q250 390 500 410 T980 395 V560 H0Z" fill="#7bc67e"/>
+        <path d="M0 460 Q300 430 600 445 T980 450 V560 H0Z" fill="#5a9e5e"/>
+      </g>
+
+      <!-- ══════ 飞机 + 长颈鹿 ══════ -->
+      <g class="scene" filter="url(#sh)">
+
+        <!-- ① 主翼（先画，在机身后面） -->
+        <path d="M420 318
+                 L620 318
+                 Q640 318 645 328
+                 L645 338
+                 Q640 348 620 348
+                 L420 348
+                 Q400 348 395 338
+                 L395 328 Q400 318 420 318Z"
+              fill="#ffc300" stroke="#e09f00" stroke-width="2"/>
+        <!-- 翼下阴影 -->
+        <path d="M420 348 L620 348 Q635 348 638 338 L638 348Z" fill="#e09f00" opacity="0.35"/>
+
+        <!-- ② 机身（侧视流线型，不是药丸） -->
+        <path d="M320 305
+                 Q320 268 380 258
+                 L580 252
+                 Q660 250 710 268
+                 Q740 278 742 302
+                 Q740 328 710 338
+                 Q660 352 580 350
+                 L380 342
+                 Q320 332 320 305Z"
+              fill="url(#fuse)" stroke="#9d0208" stroke-width="2"/>
+
+        <!-- 机身高光 -->
+        <path d="M380 262 L650 258 Q700 268 710 290 Q680 272 600 268 L400 272 Q350 278 340 295Z"
+              fill="#fff" opacity="0.12"/>
+
+        <!-- ③ 水平尾翼 -->
+        <path d="M300 300 L380 296 L380 312 L300 318Z" fill="#ff8787" stroke="#9d0208" stroke-width="1.5"/>
+        <!-- ④ 垂直尾翼 -->
+        <path d="M318 258 L318 220 L340 220 L350 258Z" fill="#e63946" stroke="#9d0208" stroke-width="1.5"/>
+        <path d="M322 255 L322 228 L336 228 L344 255Z" fill="#ff6b6b"/>
+
+        <!-- ⑤ 发动机整流罩 + 螺旋桨 -->
+        <ellipse cx="730" cy="302" rx="28" ry="26" fill="#ff8c69" stroke="#c44" stroke-width="1.5"/>
+        <circle cx="730" cy="302" r="8" fill="#333"/>
+        <!-- 旋转桨盘（模糊感） -->
+        <g class="prop-disc" aria-hidden="true">
+          <ellipse cx="730" cy="302" rx="4" ry="38" fill="#555" opacity="0.55"/>
+          <ellipse cx="730" cy="302" rx="38" ry="4" fill="#555" opacity="0.55"/>
+        </g>
+
+        <!-- ⑥ 驾驶舱框（能看见里面坐着长颈鹿） -->
+        <path d="M500 252
+                 Q540 238 580 242
+                 L580 278
+                 Q540 284 500 278Z"
+              fill="#87ceeb" opacity="0.55" stroke="#457b9d" stroke-width="2.5"/>
+        <!-- 舱框金属边 -->
+        <path d="M498 252 Q540 236 582 242" fill="none" stroke="#457b9d" stroke-width="3.5" stroke-linecap="round"/>
+
+        <!-- ⑦ 长颈鹿：身体在舱内 + 长脖子伸出 -->
+        <g id="giraffe">
+          <!-- 身体（坐在座舱里，能看见） -->
+          <ellipse cx="545" cy="298" rx="38" ry="28" fill="url(#giraffe)" stroke="#c9953f" stroke-width="2"/>
+          <ellipse cx="545" cy="292" rx="28" ry="12" fill="#f4b942" opacity="0.5"/>
+
+          <!-- 脖子：粗、弯、有斑点 -->
+          <g class="neck">
+            <path d="M530 278
+                     C520 250 518 210 530 175
+                     C538 155 550 142 562 138
+                     L572 145
+                     C558 152 548 168 544 188
+                     C538 215 540 245 552 272
+                     Z"
+                  fill="url(#giraffe)" stroke="#c9953f" stroke-width="2.5"/>
+            <ellipse cx="536" cy="220" rx="8" ry="5.5" fill="#c9953f" opacity="0.55" transform="rotate(-12 536 220)"/>
+            <ellipse cx="542" cy="190" rx="7" ry="5" fill="#c9953f" opacity="0.55" transform="rotate(-8 542 190)"/>
+            <ellipse cx="550" cy="165" rx="6" ry="4.5" fill="#c9953f" opacity="0.55"/>
+          </g>
+
+          <!-- 头 -->
+          <g class="head">
+            <!-- 脸 -->
+            <ellipse cx="578" cy="125" rx="34" ry="26" fill="url(#giraffe)" stroke="#c9953f" stroke-width="2.5"/>
+            <!-- 吻部（长颈鹿特有的长嘴） -->
+            <path d="M600 118 Q625 120 630 132 Q625 142 605 140 Q598 138 596 128 Z"
+                  fill="#f0c14d" stroke="#c9953f" stroke-width="2"/>
+            <!-- 角 -->
+            <rect x="558" y="88" width="6" height="18" rx="3" fill="#8d6b2f"/>
+            <rect x="572" y="86" width="6" height="20" rx="3" fill="#8d6b2f"/>
+            <circle cx="561" cy="87" r="4.5" fill="#8d6b2f"/>
+            <circle cx="575" cy="85" r="4.5" fill="#8d6b2f"/>
+            <!-- 耳朵 -->
+            <ellipse cx="552" cy="112" rx="12" ry="8" fill="#e8b85a" stroke="#c9953f" stroke-width="1.5" transform="rotate(-25 552 112)"/>
+            <ellipse cx="592" cy="110" rx="12" ry="8" fill="#e8b85a" stroke="#c9953f" stroke-width="1.5" transform="rotate(25 592 110)"/>
+            <!-- 飞行镜（一眼看出是飞行员） -->
+            <ellipse cx="568" cy="122" rx="14" ry="10" fill="none" stroke="#333" stroke-width="2.5"/>
+            <ellipse cx="592" cy="120" rx="14" ry="10" fill="none" stroke="#333" stroke-width="2.5"/>
+            <line x1="582" y1="121" x2="578" y2="122" stroke="#333" stroke-width="2"/>
+            <rect x="556" y="114" width="48" height="4" rx="2" fill="#333"/>
+            <!-- 眼睛（在眼镜后面） -->
+            <circle cx="568" cy="122" r="3.5" fill="#2b2d42"/>
+            <circle cx="592" cy="120" r="3.5" fill="#2b2d42"/>
+            <!-- 鼻孔 -->
+            <circle cx="618" cy="130" r="2.5" fill="#c9953f"/>
+            <circle cx="624" cy="132" r="2.5" fill="#c9953f"/>
+            <!-- 笑 -->
+            <path d="M608 138 Q618 144 628 138" fill="none" stroke="#2b2d42" stroke-width="2" stroke-linecap="round"/>
+          </g>
+
+          <!-- 围巾 -->
+          <g class="scarf">
+            <path d="M522 268 C508 262 494 260 484 266 C478 270 478 278 486 282 C498 288 514 284 524 274 Z" fill="#e63946"/>
+            <path d="M484 282 C472 286 460 282 454 272 C450 264 458 258 468 260 C478 264 484 272 484 282Z" fill="#c1121f"/>
+          </g>
+
+          <!-- 两只粗蹄子握操纵杆 -->
+          <ellipse cx="522" cy="288" rx="12" ry="10" fill="#f0c14d" stroke="#c9953f" stroke-width="1.5"/>
+          <ellipse cx="558" cy="290" rx="12" ry="10" fill="#f0c14d" stroke="#c9953f" stroke-width="1.5"/>
+          <line x1="522" y1="288" x2="540" y2="268" stroke="#444" stroke-width="5" stroke-linecap="round"/>
+          <line x1="558" y1="290" x2="540" y2="268" stroke="#444" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="540" cy="266" r="6" fill="#555" stroke="#333" stroke-width="1"/>
+        </g>
+
+        <!-- ⑧ 机腹阴影线 -->
+        <path d="M340 325 Q520 340 720 325" fill="none" stroke="#9d0208" stroke-width="1.5" opacity="0.3"/>
+      </g>
+    </svg>
+  </main>
+
+  <script>
+    document.getElementById('pauseBtn').addEventListener('click', function () {
+      const paused = document.body.classList.toggle('paused');
+      this.setAttribute('aria-pressed', String(paused));
+      this.textContent = paused ? '继续动画' : '暂停动画';
+    });
+  </script>
+</body>
+</html>

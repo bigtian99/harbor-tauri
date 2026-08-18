@@ -45,6 +45,37 @@ pub(crate) fn cleanup_worktree(repo_path: &Path, worktree_path: &Path) {
     fs::remove_dir_all(worktree_path).ok();
 }
 
+/// 读 JAR 的 META-INF/MANIFEST.MF，判断是否为 Spring Boot 可执行包（fat jar）。
+fn is_spring_boot_executable_jar(path: &Path) -> bool {
+    let Ok(file) = fs::File::open(path) else {
+        return false;
+    };
+    let Ok(mut archive) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    let Ok(mut manifest) = archive.by_name("META-INF/MANIFEST.MF") else {
+        return false;
+    };
+    let mut content = String::new();
+    if std::io::Read::read_to_string(&mut manifest, &mut content).is_err() {
+        return false;
+    }
+    content.lines().any(|line| {
+        let line = line.trim();
+        line.starts_with("Spring-Boot-Version:")
+            || line.starts_with("Start-Class:")
+            || line.starts_with("Main-Class: org.springframework.boot.loader")
+    })
+}
+
+fn jar_size_bytes(path: &Path) -> u64 {
+    fs::metadata(path).map(|m| m.len()).unwrap_or(0)
+}
+
+fn format_jar_mb(bytes: u64) -> String {
+    format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+}
+
 pub(crate) fn find_maven_artifact(worktree_path: &Path) -> Result<PathBuf, String> {
     let target_dir = worktree_path.join("target");
     if !target_dir.is_dir() {
@@ -68,6 +99,8 @@ pub(crate) fn find_maven_artifact(worktree_path: &Path) -> Result<PathBuf, Strin
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or_default();
+        // spring-boot repackage 后瘦包是 *.jar.original（扩展名 original，本循环已排除）；
+        // 另排除 sources/javadoc，以及历史 original-*.jar 命名。
         if filename.ends_with("-sources.jar")
             || filename.ends_with("-javadoc.jar")
             || filename.starts_with("original-")
@@ -78,21 +111,79 @@ pub(crate) fn find_maven_artifact(worktree_path: &Path) -> Result<PathBuf, Strin
         candidates.push(path);
     }
 
-    match candidates.len() {
-        0 => Err(format!(
+    if candidates.is_empty() {
+        return Err(format!(
             "Maven 打包完成但未找到可用 JAR: {}",
             target_dir.display()
-        )),
-        1 => Ok(candidates.remove(0)),
-        _ => {
-            let list = candidates
-                .iter()
-                .map(|path| format!("- {}", path.display()))
-                .collect::<Vec<_>>()
-                .join("\n");
-            Err(format!("Maven 打包产生多个 JAR，请手动处理:\n{}", list))
-        }
+        ));
     }
+
+    // 优先可执行 Boot fat jar；同优先级取体积最大，避免误拿瘦包 / 子模块小 jar。
+    candidates.sort_by(|a, b| {
+        let boot_a = is_spring_boot_executable_jar(a);
+        let boot_b = is_spring_boot_executable_jar(b);
+        boot_b
+            .cmp(&boot_a)
+            .then_with(|| jar_size_bytes(b).cmp(&jar_size_bytes(a)))
+            .then_with(|| a.cmp(b))
+    });
+
+    let selected = candidates.remove(0);
+    let selected_size = jar_size_bytes(&selected);
+    let selected_boot = is_spring_boot_executable_jar(&selected);
+    let name = selected
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("?");
+
+    if candidates.is_empty() {
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "Maven 产物选定: {} ({}, spring-boot-exec={})",
+                name,
+                format_jar_mb(selected_size),
+                selected_boot
+            ),
+        );
+    } else {
+        let others = candidates
+            .iter()
+            .map(|p| {
+                let n = p.file_name().and_then(|x| x.to_str()).unwrap_or("?");
+                format!(
+                    "{} ({}, boot={})",
+                    n,
+                    format_jar_mb(jar_size_bytes(p)),
+                    is_spring_boot_executable_jar(p)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "Maven 产物选定: {} ({}, spring-boot-exec={}); 另有候选: {}",
+                name,
+                format_jar_mb(selected_size),
+                selected_boot,
+                others
+            ),
+        );
+    }
+
+    if !selected_boot {
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "⚠ 选定 JAR 不像 Spring Boot 可执行包（无 Spring-Boot-Version/Start-Class）: {} ({}) — 部署后易出现 NoClassDefFoundError",
+                name,
+                format_jar_mb(selected_size)
+            ),
+        );
+    }
+
+    Ok(selected)
 }
 
 pub(crate) fn find_npm_artifact(worktree_path: &Path) -> Result<PathBuf, String> {

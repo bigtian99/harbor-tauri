@@ -1,18 +1,23 @@
 //! test 打包后：FTP 覆盖宝塔 Java 项目 JAR 并 restart_project。
 
 use crate::landing::run_ftp_upload_dir_auth_with_progress;
+use crate::landing::run_ftp_upload_dir_auth_with_progress_cancel;
 use crate::landing::run_ftp_upload_file_with_progress;
 use crate::landing::run_ftp_upload_file_with_progress_cancel;
 use crate::models::{HarborConfig, PackageProjectType};
 use md5::{Digest, Md5};
 use serde::Serialize;
 use serde_json::Value;
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::io;
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
 
 /// Java 项目页上传/部署取消标志（与构建 CANCEL_FLAG 独立）
 static BT_JAVA_CANCEL: AtomicBool = AtomicBool::new(false);
+/// PHP 站点页上传取消标志
+static BT_PHP_CANCEL: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BtJavaProject {
@@ -161,6 +166,19 @@ fn is_test_npm_script(build_script: &str) -> bool {
         return false;
     }
     s.contains("test") && !s.contains("prod")
+}
+
+/// npm 前端是否走宝塔 test 部署。
+/// Profile=test 与 build:test 任一成立即可：前后端同打时脚本常被记忆成 build:prod。
+fn should_deploy_frontend(
+    project_type: PackageProjectType,
+    build_script: &str,
+    dist_exists: bool,
+    spring_profile: &Option<String>,
+) -> bool {
+    matches!(project_type, PackageProjectType::Npm)
+        && dist_exists
+        && (is_test_npm_script(build_script) || is_test_profile(spring_profile))
 }
 
 fn is_jar_path(path: &str) -> bool {
@@ -513,7 +531,7 @@ fn deploy_one_jar(
 
 /// 打包成功后可选部署；任何错误只汇总文案，不向上抛。
 /// - Maven / 后端 JAR：Profile=test → FTP 覆盖 + 重启
-/// - npm dist：构建脚本为 test（如 build:test）→ FTP 上传 dist 内容到配置目录
+/// - npm dist：build:test，或 Profile=test（前后端同打时常记着 build:prod）→ FTP 上传 dist
 /// - 前后端同时打包时：前端 dist 与 JAR 部署并行执行
 pub(crate) fn maybe_deploy_test_jars(
     app: &AppHandle,
@@ -530,9 +548,22 @@ pub(crate) fn maybe_deploy_test_jars(
         return None;
     }
 
-    let deploy_frontend = matches!(project_type, PackageProjectType::Npm)
-        && is_test_npm_script(build_script)
-        && is_dist_dir(artifact_path);
+    let deploy_frontend = should_deploy_frontend(
+        project_type,
+        build_script,
+        is_dist_dir(artifact_path),
+        spring_profile,
+    );
+    crate::diag::diag_log(
+        "build",
+        &format!(
+            "bt deploy decide frontend={} script={} profile={:?} dist={}",
+            deploy_frontend,
+            build_script,
+            spring_profile,
+            artifact_path
+        ),
+    );
 
     let mut jars: Vec<String> = Vec::new();
     if is_test_profile(spring_profile) {
@@ -1063,6 +1094,12 @@ pub async fn list_bt_php_sites() -> Result<Vec<BtPhpSiteInfo>, String> {
         )?;
         let list = parse_php_site_infos(&json);
         crate::diag::diag_log("build", &format!("list_bt_php_sites ok count={}", list.len()));
+        let host = config.bt_ftp_host.clone();
+        let user = config.bt_ftp_user.clone();
+        let pass = config.bt_ftp_pass.clone();
+        std::thread::spawn(move || {
+            let _ = crate::landing::warmup_bt_ftp_session(&host, &user, &pass, "build");
+        });
         Ok(list)
     })
     .await
@@ -1326,6 +1363,390 @@ fn emit_bt_java_progress(
     );
 }
 
+fn emit_bt_php_progress(
+    app: &AppHandle,
+    site_id: &str,
+    site_name: &str,
+    percent: f64,
+    message: &str,
+    stage: &str,
+) {
+    use tauri::Emitter;
+    let percent = percent.clamp(0.0, 100.0);
+    let should_diag = if stage == "upload" {
+        let whole = percent.floor() as u32;
+        percent == 0.0 || percent >= 100.0 || (whole % 10 == 0 && (percent - whole as f64).abs() < 0.15)
+    } else {
+        true
+    };
+    if should_diag {
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "bt_php_progress name={} stage={} {:.1}% {}",
+                site_name, stage, percent, message
+            ),
+        );
+    }
+    let _ = app.emit(
+        "bt-php-deploy-progress",
+        serde_json::json!({
+            "site_id": site_id,
+            "site_name": site_name,
+            "percent": percent,
+            "message": message,
+            "stage": stage,
+        }),
+    );
+}
+
+fn php_site_remote_file(site_path: &str, file_name: &str) -> Result<String, String> {
+    let base = site_path.trim().trim_end_matches('/');
+    if base.is_empty() {
+        return Err("该站点缺少路径，无法上传".to_string());
+    }
+    let name = file_name.trim();
+    if name.is_empty() {
+        return Err("文件名为空".to_string());
+    }
+    Ok(format!("{}/{}", base, name))
+}
+
+fn zip_entry_is_safe(name: &str) -> bool {
+    let path = Path::new(name);
+    if path.is_absolute() {
+        return false;
+    }
+    !path.components().any(|c| matches!(c, Component::ParentDir))
+}
+
+/// zip 若只有一个顶层目录、根下没有文件，则上传该目录内容（常见 dist.zip）。
+fn flatten_extracted_root(root: &Path) -> PathBuf {
+    let Ok(entries) = fs::read_dir(root) else {
+        return root.to_path_buf();
+    };
+    let mut dirs = Vec::new();
+    let mut has_file = false;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.is_empty() || name.starts_with('.') || name == "__MACOSX" {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            dirs.push(path);
+        } else if path.is_file() {
+            has_file = true;
+        }
+    }
+    if !has_file && dirs.len() == 1 {
+        dirs.remove(0)
+    } else {
+        root.to_path_buf()
+    }
+}
+
+fn extract_zip_to_dir(zip_path: &Path, dest: &Path) -> Result<(), String> {
+    fs::create_dir_all(dest).map_err(|e| format!("创建解压目录失败: {}", e))?;
+    let file = fs::File::open(zip_path).map_err(|e| format!("无法打开 zip: {}", e))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("无法解析 zip: {}", e))?;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("读取 zip entry {} 失败: {}", i, e))?;
+        let name = entry.name().replace('\\', "/");
+        if name.is_empty()
+            || name.starts_with("__MACOSX")
+            || name.split('/').any(|p| p.starts_with('.'))
+            || !zip_entry_is_safe(&name)
+        {
+            continue;
+        }
+        let out_path = dest.join(Path::new(&name));
+        if entry.is_dir() || name.ends_with('/') {
+            fs::create_dir_all(&out_path).ok();
+            continue;
+        }
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent).ok();
+        }
+        let mut out = fs::File::create(&out_path)
+            .map_err(|e| format!("创建文件 {} 失败: {}", out_path.display(), e))?;
+        io::copy(&mut entry, &mut out)
+            .map_err(|e| format!("解压文件 {} 失败: {}", out_path.display(), e))?;
+    }
+    Ok(())
+}
+
+struct PhpExtractTemp(PathBuf);
+
+impl Drop for PhpExtractTemp {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn classify_php_upload_paths(paths: &[String]) -> Result<PhpUploadKind, String> {
+    let mut dirs = Vec::new();
+    let mut zips = Vec::new();
+    let mut files = Vec::new();
+    for raw in paths {
+        let p = PathBuf::from(raw.trim());
+        if p.as_os_str().is_empty() {
+            continue;
+        }
+        let name = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        if name.ends_with(".jar") {
+            continue;
+        }
+        if p.is_dir() {
+            dirs.push(p);
+        } else if p.is_file() && name.ends_with(".zip") {
+            zips.push(p);
+        } else if p.is_file() {
+            files.push(p);
+        }
+    }
+    if let Some(dir) = dirs.into_iter().next() {
+        return Ok(PhpUploadKind::Dir(dir));
+    }
+    if let Some(zip) = zips.into_iter().next() {
+        return Ok(PhpUploadKind::Zip(zip));
+    }
+    if !files.is_empty() {
+        return Ok(PhpUploadKind::Files(files));
+    }
+    Err("请拖入目录、.zip 或站点文件（JAR 请到 Java 项目页）".to_string())
+}
+
+enum PhpUploadKind {
+    Dir(PathBuf),
+    Zip(PathBuf),
+    Files(Vec<PathBuf>),
+}
+
+#[tauri::command]
+pub async fn cancel_bt_php_deploy() -> Result<(), String> {
+    BT_PHP_CANCEL.store(true, Ordering::SeqCst);
+    crate::diag::diag_log("build", "cancel_bt_php_deploy");
+    Ok(())
+}
+
+/// 拖拽到 PHP 站点行：FTP 覆盖站点目录（不解压到面板、不重启 PHP）。
+#[tauri::command]
+pub async fn upload_bt_php_site(
+    app: AppHandle,
+    local_paths: Vec<String>,
+    site_name: String,
+    site_id: String,
+    site_path: String,
+) -> Result<String, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+        BT_PHP_CANCEL.store(false, Ordering::SeqCst);
+        let config = crate::config_cmd::load_config_sync().unwrap_or_default();
+        require_bt_config(&config)?;
+        let remote_dir = site_path.trim().trim_end_matches('/').to_string();
+        if remote_dir.is_empty() {
+            return Err("该站点缺少路径，无法上传".to_string());
+        }
+
+        let kind = classify_php_upload_paths(&local_paths)?;
+        let label = match &kind {
+            PhpUploadKind::Dir(p) => format!("目录 {}", p.display()),
+            PhpUploadKind::Zip(p) => p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("archive.zip")
+                .to_string(),
+            PhpUploadKind::Files(files) if files.len() == 1 => files[0]
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("file")
+                .to_string(),
+            PhpUploadKind::Files(files) => format!("{} 个文件", files.len()),
+        };
+
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "upload_bt_php_site name={} id={} local={} remote={}",
+                site_name, site_id, label, remote_dir
+            ),
+        );
+        emit_bt_php_progress(
+            &app,
+            &site_id,
+            &site_name,
+            0.0,
+            &format!("开始上传 {} → {}", label, remote_dir),
+            "upload",
+        );
+
+        let app_cb = app.clone();
+        let sid = site_id.clone();
+        let sname = site_name.clone();
+        let fname = label.clone();
+        let mut last_sent: u64 = 0;
+        let mut on_progress = move |sent: u64, total: u64| {
+            if total == 0 {
+                return;
+            }
+            if sent < last_sent {
+                return;
+            }
+            last_sent = sent;
+            let ratio = (sent as f64 / total as f64).clamp(0.0, 1.0);
+            let pct = (ratio * 100.0 * 10.0).floor() / 10.0;
+            let msg = format!(
+                "FTP 上传 {} ({:.1}/{:.1} MB)",
+                fname,
+                sent as f64 / (1024.0 * 1024.0),
+                total as f64 / (1024.0 * 1024.0),
+            );
+            emit_bt_php_progress(&app_cb, &sid, &sname, pct, &msg, "upload");
+        };
+
+        let app_st = app.clone();
+        let sid_st = site_id.clone();
+        let sname_st = site_name.clone();
+        let mut on_status = move |msg: &str| {
+            emit_bt_php_progress(&app_st, &sid_st, &sname_st, 0.0, msg, "upload");
+        };
+        let mut on_status_opt: Option<&mut dyn FnMut(&str)> = Some(&mut on_status);
+
+        let upload_err = match kind {
+            PhpUploadKind::Dir(dir) => run_ftp_upload_dir_auth_with_progress_cancel(
+                &dir,
+                &remote_dir,
+                &config.bt_ftp_host,
+                &config.bt_ftp_user,
+                &config.bt_ftp_pass,
+                "build",
+                Some(&mut on_progress),
+                Some(&BT_PHP_CANCEL),
+            )
+            .err(),
+            PhpUploadKind::Zip(zip) => {
+                let tmp = std::env::temp_dir().join(format!(
+                    "jarporter-php-upload-{}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis())
+                        .unwrap_or(0)
+                ));
+                let _guard = PhpExtractTemp(tmp.clone());
+                if let Err(e) = extract_zip_to_dir(&zip, &tmp) {
+                    Some(e)
+                } else {
+                    let root = flatten_extracted_root(&tmp);
+                    run_ftp_upload_dir_auth_with_progress_cancel(
+                        &root,
+                        &remote_dir,
+                        &config.bt_ftp_host,
+                        &config.bt_ftp_user,
+                        &config.bt_ftp_pass,
+                        "build",
+                        Some(&mut on_progress),
+                        Some(&BT_PHP_CANCEL),
+                    )
+                    .err()
+                }
+            }
+            PhpUploadKind::Files(files) => {
+                let mut err = None;
+                for file in &files {
+                    if BT_PHP_CANCEL.load(Ordering::SeqCst) {
+                        err = Some("已取消".to_string());
+                        break;
+                    }
+                    let name = file
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("file")
+                        .to_string();
+                    let remote = match php_site_remote_file(&remote_dir, &name) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            err = Some(e);
+                            break;
+                        }
+                    };
+                    if let Err(e) = run_ftp_upload_file_with_progress_cancel(
+                        file,
+                        &remote,
+                        &config.bt_ftp_host,
+                        &config.bt_ftp_user,
+                        &config.bt_ftp_pass,
+                        "build",
+                        Some(&mut on_progress),
+                        &mut on_status_opt,
+                        Some(&BT_PHP_CANCEL),
+                    ) {
+                        err = Some(e);
+                        break;
+                    }
+                }
+                err
+            }
+        };
+
+        if let Some(e) = upload_err {
+            let stage = if e == "已取消" { "cancelled" } else { "error" };
+            emit_bt_php_progress(
+                &app,
+                &site_id,
+                &site_name,
+                0.0,
+                &if e == "已取消" {
+                    "已取消上传".to_string()
+                } else {
+                    format!("上传失败: {}", e)
+                },
+                stage,
+            );
+            return Err(e);
+        }
+
+        if BT_PHP_CANCEL.load(Ordering::SeqCst) {
+            emit_bt_php_progress(
+                &app,
+                &site_id,
+                &site_name,
+                0.0,
+                "已取消上传",
+                "cancelled",
+            );
+            return Err("已取消".to_string());
+        }
+
+        emit_bt_php_progress(
+            &app,
+            &site_id,
+            &site_name,
+            100.0,
+            "上传完成",
+            "upload_done",
+        );
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "upload_bt_php_site ok name={} local={} remote={}",
+                site_name, label, remote_dir
+            ),
+        );
+        Ok(format!("已上传：{} → {}", label, remote_dir))
+    })
+    .await
+    .map_err(|e| format!("上传线程异常: {}", e))?;
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1422,10 +1843,47 @@ mod tests {
     #[test]
     fn npm_test_script_detection() {
         assert!(is_test_npm_script("build:test"));
+        assert!(is_test_npm_script("npm run build:test"));
         assert!(is_test_npm_script("test"));
         assert!(!is_test_npm_script("build:prod"));
+        assert!(!is_test_npm_script("npm run build:prod"));
         assert!(!is_test_npm_script("build"));
         assert!(!is_test_npm_script(""));
+    }
+
+    #[test]
+    fn frontend_deploys_when_profile_test_even_if_prod_script() {
+        // 复现：origin/test + Profile=test，但记忆脚本仍是 npm run build:prod
+        assert!(should_deploy_frontend(
+            PackageProjectType::Npm,
+            "npm run build:prod",
+            true,
+            &Some("test".into()),
+        ));
+        assert!(should_deploy_frontend(
+            PackageProjectType::Npm,
+            "npm run build:test",
+            true,
+            &None,
+        ));
+        assert!(!should_deploy_frontend(
+            PackageProjectType::Npm,
+            "npm run build:prod",
+            true,
+            &Some("prod".into()),
+        ));
+        assert!(!should_deploy_frontend(
+            PackageProjectType::Npm,
+            "npm run build:prod",
+            false,
+            &Some("test".into()),
+        ));
+        assert!(!should_deploy_frontend(
+            PackageProjectType::Maven,
+            "npm run build:test",
+            true,
+            &Some("test".into()),
+        ));
     }
 
     #[test]
@@ -1500,5 +1958,37 @@ mod tests {
         assert_eq!(p[0].name, "a.com");
         assert_eq!(p[0].php_version, "74");
         assert_eq!(p[0].updated_at, "2025-08-01 12:00:00");
+    }
+
+    #[test]
+    fn php_remote_file_joins_site_path() {
+        assert_eq!(
+            php_site_remote_file("/www/wwwroot/a.com/", "index.php").unwrap(),
+            "/www/wwwroot/a.com/index.php"
+        );
+        assert!(php_site_remote_file("  ", "index.php").is_err());
+    }
+
+    #[test]
+    fn zip_entry_rejects_path_traversal() {
+        assert!(zip_entry_is_safe("dist/index.html"));
+        assert!(!zip_entry_is_safe("../evil.php"));
+        assert!(!zip_entry_is_safe("/etc/passwd"));
+    }
+
+    #[test]
+    fn flatten_single_top_level_dir() {
+        let root = std::env::temp_dir().join(format!(
+            "jarporter-php-flatten-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        fs::create_dir_all(root.join("dist")).unwrap();
+        fs::write(root.join("dist").join("index.html"), b"ok").unwrap();
+        let flat = flatten_extracted_root(&root);
+        assert_eq!(flat.file_name().unwrap(), "dist");
+        let _ = fs::remove_dir_all(&root);
     }
 }

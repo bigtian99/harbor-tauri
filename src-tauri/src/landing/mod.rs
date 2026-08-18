@@ -18,8 +18,8 @@ mod vest;
 
 pub(crate) use ftp::{
     run_ftp_download_file_with, run_ftp_upload_dir_auth_with_progress,
-    run_ftp_upload_file_with_progress, run_ftp_upload_file_with_progress_cancel, run_ftp_upload_with,
-    warmup_bt_ftp_session,
+    run_ftp_upload_dir_auth_with_progress_cancel, run_ftp_upload_file_with_progress,
+    run_ftp_upload_file_with_progress_cancel, run_ftp_upload_with, warmup_bt_ftp_session,
 };
 pub use ftp::upload_landing_to_ftp;
 pub use generate::{fetch_sub_channels, generate_landing_pages};

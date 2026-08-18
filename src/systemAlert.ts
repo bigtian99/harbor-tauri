@@ -3,28 +3,21 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
+import { message } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "./types";
+
+function diagLog(msg: string) {
+  invoke("write_diagnostic_log", { module: "app", message: msg }).catch(() => {});
+}
 
 /**
  * 系统通知栏（macOS Notification Center / Windows 操作中心 Toast）。
- * 非应用内 Mantine toast，也非点 OK 的模态弹框。
- * Windows：正式安装包显示应用名；dev 下可能显示为 PowerShell（Tauri 限制）。
+ *
+ * 打包安装后走 macOS 通知中心 / Windows Toast。
+ * dev 模式下 macOS 无法注册通知（系统找不到 App），
+ * 自动降级为 Tauri dialog message 弹窗。
  */
-async function ensureNotificationPermission(): Promise<boolean> {
-  try {
-    let granted = await isPermissionGranted();
-    if (!granted) {
-      const permission = await requestPermission();
-      granted = permission === "granted";
-    }
-    return granted;
-  } catch (e) {
-    console.error("notification permission check failed:", e);
-    // Windows 部分环境 isPermissionGranted 会抛错，仍尝试发送
-    return true;
-  }
-}
-
 export async function showSystemAlert(
   title: string,
   body: string,
@@ -33,7 +26,10 @@ export async function showSystemAlert(
   const safeTitle = title.trim() || "JarPorter";
   const safeBody = body.trim() || "任务已完成";
 
+  diagLog(`showSystemAlert called: title="${safeTitle}" body="${safeBody}" isTauri=${isTauriRuntime()}`);
+
   if (!isTauriRuntime()) {
+    diagLog("showSystemAlert: not tauri runtime, using browser Notification");
     if ("Notification" in window) {
       if (Notification.permission === "default") {
         await Notification.requestPermission();
@@ -45,14 +41,50 @@ export async function showSystemAlert(
     return;
   }
 
-  try {
-    if (!(await ensureNotificationPermission())) {
-      console.error("showSystemAlert: notification permission denied");
-      return;
+  const isDev = import.meta.env.DEV;
+  diagLog(`showSystemAlert: isDev=${isDev}`);
+
+  // dev 模式下 macOS sendNotification 虽然不报错，但系统会静默丢弃通知，
+  // 因为进程不是正式 .app bundle。直接走 dialog 弹窗保证可见。
+  if (isDev) {
+    diagLog("showSystemAlert: dev mode, using dialog message");
+    try {
+      await message(safeBody, { title: safeTitle, kind: "info" });
+      diagLog("showSystemAlert: dialog message shown");
+    } catch (e) {
+      diagLog(`showSystemAlert: dialog failed: ${e}`);
     }
-    // macOS 右上角横幅 + Windows Toast，同一 API
-    sendNotification({ title: safeTitle, body: safeBody });
+    return;
+  }
+
+  // 生产模式：走系统通知中心
+  try {
+    let granted = false;
+    try {
+      granted = await isPermissionGranted();
+      diagLog(`showSystemAlert: isPermissionGranted=${granted}`);
+      if (!granted) {
+        const perm = await requestPermission();
+        granted = perm === "granted";
+        diagLog(`showSystemAlert: requestPermission result="${perm}" granted=${granted}`);
+      }
+    } catch (e) {
+      granted = false;
+      diagLog(`showSystemAlert: permission check threw error: ${e}`);
+    }
+
+    if (granted) {
+      diagLog("showSystemAlert: calling sendNotification...");
+      await sendNotification({ title: safeTitle, body: safeBody });
+      diagLog("showSystemAlert: sendNotification ok");
+    } else {
+      diagLog("showSystemAlert: not granted, fallback to dialog");
+      await message(safeBody, { title: safeTitle, kind: "info" });
+    }
   } catch (e) {
-    console.error("showSystemAlert failed:", e);
+    diagLog(`showSystemAlert: error: ${e}, fallback to dialog`);
+    try {
+      await message(safeBody, { title: safeTitle, kind: "info" });
+    } catch { /* ignore */ }
   }
 }

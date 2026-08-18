@@ -14,9 +14,9 @@
       {
         "title": "ShipForge",
         "width": 1100,
-        "height": 720,
+        "height": 800,
         "minWidth": 960,
-        "minHeight": 560,
+        "minHeight": 620,
         "resizable": true
       }
     ],

@@ -4,6 +4,7 @@ import {
   autoPushHarborForSpringProfile,
   buildScriptAfterMerge,
   mergeSyncPackageConfirmHint,
+  preferNpmBuildScript,
   shouldPushHarborAfterMerge,
   springProfileAfterMerge,
 } from "../src/mergeSyncPackage.ts";
@@ -25,6 +26,20 @@ assert.equal(buildScriptAfterMerge("origin/rc-master"), "build:prod");
 assert.equal(buildScriptAfterMerge("feature/rc-master-hotfix"), "build:prod");
 assert.equal(buildScriptAfterMerge("origin/master"), "build:test");
 assert.equal(buildScriptAfterMerge("origin/develop"), "build:test");
+assert.equal(buildScriptAfterMerge("origin/test"), "build:test");
+
+assert.equal(
+  preferNpmBuildScript("origin/test", ["build", "build:prod", "build:test"], "build:prod"),
+  "build:test",
+);
+assert.equal(
+  preferNpmBuildScript("origin/rc-master", ["build", "build:prod", "build:test"], "build:test"),
+  "build:prod",
+);
+assert.equal(
+  preferNpmBuildScript("origin/test", ["build", "build:prod"], "build:prod"),
+  "build:prod",
+);
 
 assert.equal(autoPushHarborForSpringProfile("test"), false);
 assert.equal(autoPushHarborForSpringProfile("TEST"), false);
@@ -40,9 +55,16 @@ const packageFromMergeFn =
     /async function packageFromMergeTarget\([\s\S]*?\n  \}\n\n  async function handleSelectRepo/,
   )?.[0] ?? "";
 assert.match(
-  packageFromMergeFn,
-  /loadGitBranches\(\s*path,\s*branch\s*\)/,
-  "packageFromMergeTarget should loadGitBranches(path, branch) so commit UI is populated",
+  branchPackSource,
+  /preferNpmBuildScript\(value, npmScripts/,
+  "handleBranchChange should prefer build:test on non-rc-master branches",
+);
+
+const gitLoadSource = readFileSync("src/hooks/branch/useBranchGitLoad.ts", "utf8");
+assert.match(
+  gitLoadSource,
+  /preferNpmBuildScript\(/,
+  "loadNpmScripts should prefer branch-based build:test / build:prod",
 );
 
 console.log("mergeSyncPackage.test.ts: ok");
