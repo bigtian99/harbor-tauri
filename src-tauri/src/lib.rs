@@ -45,7 +45,9 @@ use landing::{
     list_template_infos, preview_landing_page, upload_landing_to_ftp, upload_template_zip,
 };
 use ops::{batch_pack_sub_channels, close_ops_login_window, open_ops_login_window};
-use preview_server::get_preview_server_info;
+use preview_server::{
+    ensure_preview_server_started, get_preview_server_info, stop_preview_server,
+};
 use privacy::{
     clear_privacy_uploads, delete_privacy_uploads, download_privacy_ftp, list_privacy_uploads,
     parse_privacy_target_url, preview_privacy_ftp, upload_privacy_html,
@@ -74,8 +76,8 @@ pub fn run() {
             if let Err(e) = db::init_db() {
                 diag::diag_log("db", &format!("初始化数据库失败: {e}"));
             }
-            // 启动本地静态预览服务器（仅 127.0.0.1），用于落地页预览
-            preview_server::start(app);
+            // 初始化本地静态预览服务器托管状态；真正服务按需启动
+            preview_server::init(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -131,6 +133,8 @@ pub fn run() {
             list_diagnostic_log_dates,
             export_diagnostic_log,
             write_diagnostic_log,
+            ensure_preview_server_started,
+            stop_preview_server,
             get_preview_server_info,
             list_template_dirs,
             list_template_infos,

@@ -27,6 +27,7 @@ import type { HarborConfig, TabType, BuildRecord } from "./types";
 import { isTauriRuntime, resolveHarborRepository } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import { resolveHistoryJarPushConfig } from "./historyJarPush.ts";
+import { shouldKeepPreviewServer } from "./utils/previewLifecycle";
 
 /** 系统日志日期 card 选择器（替代原生 select） */
 function LogDayPicker({
@@ -130,6 +131,7 @@ function LogDayPicker({
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>("upload");
+  const previewStopTimerRef = useRef<number | null>(null);
 
   const { toast, showToast } = useToast();
   const build = useBuildProgress({ showToast });
@@ -192,6 +194,36 @@ function App() {
       app.loadBuildHistory();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+
+    if (previewStopTimerRef.current !== null) {
+      window.clearTimeout(previewStopTimerRef.current);
+      previewStopTimerRef.current = null;
+    }
+
+    if (shouldKeepPreviewServer(activeTab)) {
+      invoke("ensure_preview_server_started").catch(() => {
+        /* 预览相关页面会自行提示具体错误 */
+      });
+      return;
+    }
+
+    previewStopTimerRef.current = window.setTimeout(() => {
+      invoke<boolean>("stop_preview_server").catch(() => {
+        /* 静默回收失败不影响主流程 */
+      });
+      previewStopTimerRef.current = null;
+    }, 15000);
+
+    return () => {
+      if (previewStopTimerRef.current !== null) {
+        window.clearTimeout(previewStopTimerRef.current);
+        previewStopTimerRef.current = null;
+      }
+    };
   }, [activeTab]);
 
   const openArtifactPath = useCallback(

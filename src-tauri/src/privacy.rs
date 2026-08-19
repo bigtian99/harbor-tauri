@@ -2,7 +2,7 @@
 
 use crate::landing::{landing_temp_root, run_ftp_download_file_with, run_ftp_upload_with};
 use crate::models::APP_CONFIG_DIR;
-use crate::preview_server::PreviewServerState;
+use crate::preview_server::ensure_preview_server_started;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -259,7 +259,7 @@ fn privacy_ftp_preview_local_dir(remote_dir: &str) -> Result<PathBuf, String> {
 #[tauri::command]
 pub async fn preview_privacy_ftp(
     target_url: String,
-    state: tauri::State<'_, PreviewServerState>,
+    preview_state: tauri::State<'_, crate::preview_server::PreviewServerState>,
 ) -> Result<PrivacyFtpPreview, String> {
     let target = parse_privacy_target_url_inner(&target_url)?;
     let local_dir = privacy_ftp_preview_local_dir(&target.remote_dir)?;
@@ -304,9 +304,10 @@ pub async fn preview_privacy_ftp(
         "privacy-ftp-preview/{}/index.html",
         target.remote_dir.trim_matches('/')
     );
+    let preview_info = ensure_preview_server_started(preview_state)?;
     let preview_url = format!(
         "{}/{}",
-        state.info.base_url.trim_end_matches('/'),
+        preview_info.base_url.trim_end_matches('/'),
         relative_path
             .split('/')
             .map(|s| {

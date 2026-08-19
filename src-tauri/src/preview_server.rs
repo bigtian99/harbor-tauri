@@ -14,6 +14,11 @@
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
+use std::time::Duration;
 use tauri::Manager;
 use tiny_http::{Header, Response, Server};
 
@@ -28,9 +33,15 @@ pub struct PreviewServerInfo {
     pub base_url: String,
 }
 
+struct PreviewServerRuntime {
+    info: PreviewServerInfo,
+    stop_flag: Arc<AtomicBool>,
+}
+
 /// Tauri 托管状态
+#[derive(Default)]
 pub struct PreviewServerState {
-    pub info: PreviewServerInfo,
+    runtime: Mutex<Option<PreviewServerRuntime>>,
 }
 
 /// 落地页输出根目录——复用 landing 模块的单一真相源，避免两处硬编码漂移。
@@ -38,19 +49,75 @@ fn preview_root() -> PathBuf {
     crate::landing::landing_temp_root()
 }
 
-/// 在应用启动时启动预览服务器，并把状态托管到 app 上。
-pub fn start(app: &tauri::App) {
+/// 应用启动时仅初始化托管状态；真正服务按需启动。
+pub fn init(app: &tauri::App) {
+    let root = preview_root();
+    let _ = fs::create_dir_all(&root);
+    app.manage(PreviewServerState::default());
+    crate::diag::diag_log(
+        "preview",
+        &format!("预览服务器待命中（按需启动，root={})", root.display()),
+    );
+}
+
+#[tauri::command]
+pub fn ensure_preview_server_started(
+    state: tauri::State<'_, PreviewServerState>,
+) -> Result<PreviewServerInfo, String> {
+    let mut guard = state
+        .runtime
+        .lock()
+        .map_err(|_| "预览服务器状态锁异常".to_string())?;
+    if let Some(runtime) = guard.as_ref() {
+        crate::diag::diag_log(
+            "preview",
+            &format!("ensure_preview_server_started reuse {}", runtime.info.base_url),
+        );
+        return Ok(runtime.info.clone());
+    }
+
+    let runtime = start_runtime()?;
+    let info = runtime.info.clone();
+    *guard = Some(runtime);
+    Ok(info)
+}
+
+#[tauri::command]
+pub fn stop_preview_server(state: tauri::State<'_, PreviewServerState>) -> Result<bool, String> {
+    let runtime = {
+        let mut guard = state
+            .runtime
+            .lock()
+            .map_err(|_| "预览服务器状态锁异常".to_string())?;
+        guard.take()
+    };
+
+    let Some(runtime) = runtime else {
+        crate::diag::diag_log("preview", "stop_preview_server noop (not running)");
+        return Ok(false);
+    };
+
+    stop_runtime(runtime);
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn get_preview_server_info(
+    state: tauri::State<'_, PreviewServerState>,
+) -> Result<Option<PreviewServerInfo>, String> {
+    let guard = state
+        .runtime
+        .lock()
+        .map_err(|_| "预览服务器状态锁异常".to_string())?;
+    Ok(guard.as_ref().map(|runtime| runtime.info.clone()))
+}
+
+fn start_runtime() -> Result<PreviewServerRuntime, String> {
     let root = preview_root();
     let _ = fs::create_dir_all(&root);
 
-    // 绑定 127.0.0.1:0 让系统分配空闲端口
-    let server = match Server::http("127.0.0.1:0") {
-        Ok(s) => s,
-        Err(e) => {
-            crate::diag::diag_log("preview", &format!("⚠️ 预览服务器启动失败: {}", e));
-            return;
-        }
-    };
+    let server = Server::http("127.0.0.1:0")
+        .map_err(|e| format!("预览服务器启动失败: {e}"))?;
 
     let port = server
         .server_addr()
@@ -58,29 +125,53 @@ pub fn start(app: &tauri::App) {
         .map(|addr| addr.port())
         .unwrap_or(0);
 
-    crate::diag::diag_log("preview", &format!("🔌 预览服务器已启动: http://127.0.0.1:{} (root={})",
-        port,
-        root.display()));
-
     let info = PreviewServerInfo {
         port,
         root: root.to_string_lossy().to_string(),
         base_url: format!("http://127.0.0.1:{}", port),
     };
+    let stop_flag = Arc::new(AtomicBool::new(false));
 
-    app.manage(PreviewServerState { info });
+    crate::diag::diag_log(
+        "preview",
+        &format!("🔌 预览服务器已启动: {} (root={})", info.base_url, root.display()),
+    );
 
-    // 后台线程处理请求
+    let thread_root = root.clone();
+    let thread_stop = Arc::clone(&stop_flag);
+    let thread_base = info.base_url.clone();
     std::thread::spawn(move || {
         for request in server.incoming_requests() {
-            handle_request(request, &root);
+            if thread_stop.load(Ordering::SeqCst) {
+                let _ = request.respond(Response::empty(503));
+                break;
+            }
+            handle_request(request, &thread_root);
         }
+        crate::diag::diag_log("preview", &format!("🛑 预览服务器已停止: {thread_base}"));
     });
+
+    Ok(PreviewServerRuntime { info, stop_flag })
 }
 
-#[tauri::command]
-pub fn get_preview_server_info(state: tauri::State<PreviewServerState>) -> PreviewServerInfo {
-    state.info.clone()
+fn stop_runtime(runtime: PreviewServerRuntime) {
+    runtime.stop_flag.store(true, Ordering::SeqCst);
+    crate::diag::diag_log(
+        "preview",
+        &format!("stop_preview_server signal {}", runtime.info.base_url),
+    );
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build();
+    if let Ok(client) = client {
+        let _ = client
+            .get(format!(
+                "{}/__jarporter_preview_shutdown__",
+                runtime.info.base_url
+            ))
+            .send();
+    }
 }
 
 fn handle_request(request: tiny_http::Request, root: &Path) {

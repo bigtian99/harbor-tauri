@@ -243,13 +243,11 @@ export function useLanding(deps: UseLandingDeps) {
           setLandingOutputDir(dir);
         }).catch(() => {});
       }
-      if (!previewBaseUrl) {
-        invoke<{ base_url: string }>("get_preview_server_info").then((info) => {
-          setPreviewBaseUrl(info.base_url);
-        }).catch(() => {});
-      }
+      invoke<{ base_url: string }>("ensure_preview_server_started").then((info) => {
+        setPreviewBaseUrl((current) => current === info.base_url ? current : info.base_url);
+      }).catch(() => {});
     }
-  }, [activeTab, landingOutputDir, landingTemplateBase, previewBaseUrl]);
+  }, [activeTab, landingOutputDir, landingTemplateBase]);
 
   // 输入 IDs 后防抖自动预览
   useEffect(() => {
