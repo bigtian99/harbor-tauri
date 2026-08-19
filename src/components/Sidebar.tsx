@@ -133,7 +133,12 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
             >
               <button
                 type="button"
-                className={`sidebar-item sidebar-group-header ${isBtActive ? "active" : ""}`}
+                className={[
+                  "sidebar-item",
+                  "sidebar-group-header",
+                  sidebarCollapsed && isBtActive ? "active" : "",
+                  !sidebarCollapsed && btExpanded ? "sidebar-group-header--open" : "",
+                ].filter(Boolean).join(" ")}
                 onClick={handleBtHeaderClick}
                 data-label="宝塔"
                 onMouseEnter={setTooltipTop}
