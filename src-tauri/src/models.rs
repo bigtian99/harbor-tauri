@@ -241,6 +241,32 @@ pub struct HarborConfig {
     /// JAR basename → 宝塔 Java 项目 id（同名 JAR 多项目时强制消歧）
     #[serde(default = "default_bt_jar_project_ids")]
     pub bt_jar_project_ids: HashMap<String, String>,
+    /// 旧版单环境字段，加载时迁入 ks_environments
+    #[serde(default = "default_ks_console")]
+    pub ks_console: String,
+    #[serde(default)]
+    pub ks_username: String,
+    #[serde(default)]
+    pub ks_password: String,
+    #[serde(default)]
+    pub ks_environments: Vec<KsEnvironment>,
+    #[serde(default)]
+    pub ks_last_env_id: String,
+}
+
+/// KubeSphere 控制台环境（dev / test / prod 等）
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct KsEnvironment {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub console: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
 }
 
 impl Default for HarborConfig {
@@ -293,6 +319,11 @@ impl Default for HarborConfig {
             bt_auto_deploy_test: true,
             bt_frontend_remote_dir: default_bt_frontend_remote_dir(),
             bt_jar_project_ids: default_bt_jar_project_ids(),
+            ks_console: default_ks_console(),
+            ks_username: String::new(),
+            ks_password: String::new(),
+            ks_environments: Vec::new(),
+            ks_last_env_id: String::new(),
         }
     }
 }
@@ -319,6 +350,10 @@ fn default_bt_ftp_pass() -> String {
 
 fn default_bt_frontend_remote_dir() -> String {
     "/www/wwwroot/pcm.shengyeshudong.cn".to_string()
+}
+
+fn default_ks_console() -> String {
+    "http://192.168.31.254:30880".to_string()
 }
 
 fn default_bt_jar_project_ids() -> HashMap<String, String> {

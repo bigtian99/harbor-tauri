@@ -367,3 +367,13 @@ body::before {
   flex-direction: column;
 }
 
+/* KubeSphere 发布：铺满主区域，减少左右留白 */
+.content:has(.ks-publish-panel) {
+  padding: 12px;
+}
+
+.ks-publish-panel {
+  width: 100%;
+  padding-bottom: 48px;
+}
+

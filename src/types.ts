@@ -2,7 +2,7 @@
 
 export type ArtifactType = "jar" | "frontend_dist";
 export type BranchProjectType = "maven" | "npm";
-export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement" | "packSpeed" | "privacy" | "btJava" | "btPhp";
+export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement" | "packSpeed" | "privacy" | "btJava" | "btPhp" | "ksPublish";
 
 export interface BranchRepoSettings {
   springProfile: string;
@@ -66,6 +66,25 @@ export interface HarborConfig {
   bt_frontend_remote_dir?: string;
   /** JAR 文件名 → 宝塔项目 id（同名 JAR 消歧） */
   bt_jar_project_ids?: Record<string, string>;
+  /** @deprecated 已迁移到 ks_environments，读配置时兼容旧字段 */
+  ks_console?: string;
+  /** @deprecated 已迁移到 ks_environments */
+  ks_username?: string;
+  /** @deprecated 已迁移到 ks_environments */
+  ks_password?: string;
+  /** KubeSphere 多环境连接（dev / test / prod …） */
+  ks_environments?: KsEnvironment[];
+  /** 发布页上次选中的环境 id */
+  ks_last_env_id?: string;
+}
+
+export interface KsEnvironment {
+  id: string;
+  /** 环境名，如 dev / test / prod */
+  name: string;
+  console: string;
+  username: string;
+  password: string;
 }
 
 export interface PackageFromBranchResult {

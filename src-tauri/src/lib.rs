@@ -7,6 +7,7 @@ mod docker;
 mod git;
 mod history;
 mod landing;
+mod kubesphere;
 mod models;
 mod ops;
 mod preview_server;
@@ -39,6 +40,10 @@ use history::{
     save_build_record, update_build_record_image, update_build_record_push,
 };
 
+use kubesphere::{
+    ks_list_deployment_revisions, ks_list_deployments, ks_list_namespaces, ks_login, ks_logout,
+    ks_update_image,
+};
 use landing::{
     delete_template_dir, fetch_sub_channels, fetch_vest_data, generate_landing_pages,
     generate_vest_landing_pages, get_bundled_templates_dir, get_temp_dir, list_template_dirs,
@@ -82,6 +87,12 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             is_ops_mode,
+            ks_login,
+            ks_list_namespaces,
+            ks_list_deployments,
+            ks_list_deployment_revisions,
+            ks_update_image,
+            ks_logout,
             load_config,
             save_config,
             clear_git_records,

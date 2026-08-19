@@ -60,6 +60,8 @@ export function createDefaultHarborConfig(): HarborConfig {
     bt_jar_project_ids: {
       "tksy-backend-1.0.0.jar": "19",
     },
+    ks_environments: [],
+    ks_last_env_id: "",
   };
 }
 
@@ -135,7 +137,7 @@ export function useAppConfig(deps: UseAppConfigDeps) {
 
   function handleConfigChange(
     field: keyof HarborConfig,
-    value: string | boolean | Record<string, string>,
+    value: HarborConfig[keyof HarborConfig],
   ) {
     setConfig((prev) => ({ ...prev, [field]: value }));
   }

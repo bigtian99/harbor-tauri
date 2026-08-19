@@ -34,6 +34,12 @@
   animation: modal-content-in 0.2s ease;
 }
 
+.modal-content.modal-content--sm {
+  width: min(480px, 92%);
+  height: auto;
+  max-height: 85vh;
+}
+
 @keyframes modal-content-in {
   from {
     opacity: 0;

@@ -141,6 +141,7 @@ pnpm release
 | `git` | 分支列表、worktree、commit 查询 |
 | `docker` | 本地镜像、tag、push、清理 |
 | `ops` | 运营/打包加速等 ops 相关命令 |
+| `kubesphere` | KubeSphere 登录、命名空间/部署列表、镜像发布 |
 | `settlement` | 结算模块 |
 | `history` | 构建历史读写 |
 | `config` | 配置 load/save |

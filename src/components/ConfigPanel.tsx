@@ -3,12 +3,14 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   Settings, CheckCircle, AlertCircle, Eye, EyeOff, FolderOpen, Archive,
   Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink, Trash2,
-  CloudUpload, Bell,
+  CloudUpload, Bell, Plus, Pencil, X,
 } from "lucide-react";
 import { showSystemAlert } from "../systemAlert";
-import type { HarborConfig } from "../types";
+import type { HarborConfig, KsEnvironment } from "../types";
 import { isTauriRuntime } from "../types";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
+import { createKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
+import "./Modal.css";
 
 export type CheckUpdateResult = {
   status: "update" | "latest" | "error";
@@ -19,7 +21,7 @@ interface ConfigPanelProps {
   config: HarborConfig;
   configSaved: boolean;
   showPassword: boolean;
-  onConfigChange: (field: keyof HarborConfig, value: string | boolean | Record<string, string>) => void;
+  onConfigChange: (field: keyof HarborConfig, value: HarborConfig[keyof HarborConfig]) => void;
   onSaveConfig: () => void;
   onTogglePassword: () => void;
   /** 当前应用版本（Cargo） */
@@ -30,7 +32,7 @@ interface ConfigPanelProps {
   onClearGitRecords?: () => Promise<boolean>;
 }
 
-type ConfigTab = "connection" | "jar" | "frontend" | "bt" | "output" | "about";
+type ConfigTab = "connection" | "jar" | "frontend" | "bt" | "output" | "ks" | "about";
 
 const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { key: "connection", label: "Harbor 连接", icon: <Server size={14} /> },
@@ -38,6 +40,7 @@ const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { key: "frontend", label: "前端打包", icon: <Globe size={14} /> },
   { key: "bt", label: "宝塔部署", icon: <CloudUpload size={14} /> },
   { key: "output", label: "输出设置", icon: <FolderOutput size={14} /> },
+  { key: "ks", label: "KubeSphere", icon: <CloudUpload size={14} /> },
   { key: "about", label: "关于", icon: <Info size={14} /> },
 ];
 
@@ -52,6 +55,8 @@ export function ConfigPanel({
   const [checkMsg, setCheckMsg] = useState<{ type: "ok" | "update" | "err"; text: string } | null>(null);
   const [clearingGit, setClearingGit] = useState(false);
   const [gitClearMsg, setGitClearMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [envEditor, setEnvEditor] = useState<{ mode: "add" | "edit"; draft: KsEnvironment } | null>(null);
+  const [envEditorPassword, setEnvEditorPassword] = useState(false);
 
   const gitRecordCount =
     (config.repo_path_history?.length ?? 0) + Object.keys(config.branch_repo_settings ?? {}).length;
@@ -116,6 +121,57 @@ export function ConfigPanel({
       setChecking(false);
     }
   };
+
+  const ksEnvs = resolveKsEnvironments(config);
+
+  const setKsEnvs = (next: KsEnvironment[]) => {
+    onConfigChange("ks_environments", next);
+  };
+
+  const openAddKsEnv = () => {
+    setEnvEditorPassword(false);
+    setEnvEditor({ mode: "add", draft: createKsEnvironment(ksEnvs) });
+  };
+
+  const openEditKsEnv = (env: KsEnvironment) => {
+    setEnvEditorPassword(false);
+    setEnvEditor({ mode: "edit", draft: { ...env } });
+  };
+
+  const closeKsEnvEditor = () => {
+    setEnvEditor(null);
+    setEnvEditorPassword(false);
+  };
+
+  const saveKsEnvEditor = () => {
+    if (!envEditor) return;
+    const draft = {
+      ...envEditor.draft,
+      name: envEditor.draft.name.trim() || envEditor.draft.name,
+      console: envEditor.draft.console.trim(),
+      username: envEditor.draft.username.trim(),
+    };
+    if (!draft.name.trim() || !draft.console.trim() || !draft.username.trim() || !draft.password) {
+      return;
+    }
+    if (envEditor.mode === "add") {
+      setKsEnvs([...ksEnvs, draft]);
+    } else {
+      setKsEnvs(ksEnvs.map((env) => (env.id === draft.id ? draft : env)));
+    }
+    closeKsEnvEditor();
+  };
+
+  const removeKsEnv = async (env: KsEnvironment) => {
+    const ok = await confirm({
+      title: "删除环境",
+      message: `确定删除「${env.name || env.id}」？发布页将无法再选择该环境。`,
+      confirmLabel: "删除",
+      variant: "danger",
+    });
+    if (ok) setKsEnvs(ksEnvs.filter((item) => item.id !== env.id));
+  };
+
   return (
     <div className="config-panel">
       <div className="config-subtabs" role="tablist">
@@ -184,6 +240,46 @@ export function ConfigPanel({
               />
               <p className="template-hint">推送时自动拼在镜像名前，最终地址为 harbor地址/项目名/镜像名:标签</p>
             </div>
+          </>
+        )}
+
+        {activeTab === "ks" && (
+          <>
+            <div className="ks-env-toolbar">
+              <p className="template-hint" style={{ margin: 0 }}>
+                配置多个 KubeSphere 环境，发布页按环境切换连接
+              </p>
+              <button type="button" className="config-add-env-btn" onClick={openAddKsEnv}>
+                <Plus size={14} />
+                添加环境
+              </button>
+            </div>
+            {ksEnvs.length === 0 && (
+              <p className="template-hint">还没有环境，点击「添加环境」开始配置</p>
+            )}
+            {ksEnvs.length > 0 && (
+              <div className="ks-env-list">
+                {ksEnvs.map((env) => (
+                  <div key={env.id} className="ks-env-row">
+                    <div className="ks-env-row-main">
+                      <span className="ks-env-name">{env.name || env.id}</span>
+                      <span className="ks-env-console">{env.console || "未填地址"}</span>
+                      <span className="ks-env-user">
+                        {env.username || "未填用户"} · {env.password ? "已设密码" : "未设密码"}
+                      </span>
+                    </div>
+                    <div className="ks-env-row-actions">
+                      <button type="button" title="编辑" onClick={() => openEditKsEnv(env)}>
+                        <Pencil size={14} />
+                      </button>
+                      <button type="button" className="danger" title="删除" onClick={() => void removeKsEnv(env)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
@@ -560,6 +656,97 @@ export function ConfigPanel({
             </>
           )}
         </button>
+      )}
+
+      {envEditor && (
+        <div className="modal-overlay" onClick={closeKsEnvEditor}>
+          <div className="modal-content modal-content--sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">{envEditor.mode === "add" ? "添加环境" : "编辑环境"}</h3>
+              <button type="button" className="modal-close" onClick={closeKsEnvEditor}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>环境名</label>
+                <input
+                  type="text"
+                  value={envEditor.draft.name}
+                  onChange={(e) => setEnvEditor({
+                    ...envEditor,
+                    draft: { ...envEditor.draft, name: e.target.value },
+                  })}
+                  placeholder="dev / test / prod"
+                />
+              </div>
+              <div className="form-group">
+                <label>控制台地址</label>
+                <input
+                  type="text"
+                  value={envEditor.draft.console}
+                  onChange={(e) => setEnvEditor({
+                    ...envEditor,
+                    draft: { ...envEditor.draft, console: e.target.value },
+                  })}
+                  placeholder="例如: http://192.168.31.254:30880"
+                />
+              </div>
+              <div className="form-group">
+                <label>用户名</label>
+                <input
+                  type="text"
+                  value={envEditor.draft.username}
+                  onChange={(e) => setEnvEditor({
+                    ...envEditor,
+                    draft: { ...envEditor.draft, username: e.target.value },
+                  })}
+                  placeholder="KubeSphere 登录用户名"
+                />
+              </div>
+              <div className="form-group">
+                <label>密码</label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={envEditorPassword ? "text" : "password"}
+                    value={envEditor.draft.password}
+                    onChange={(e) => setEnvEditor({
+                      ...envEditor,
+                      draft: { ...envEditor.draft, password: e.target.value },
+                    })}
+                    placeholder="KubeSphere 登录密码"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setEnvEditorPassword((v) => !v)}
+                    title={envEditorPassword ? "隐藏密码" : "显示密码"}
+                  >
+                    {envEditorPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="ks-env-modal-footer">
+              <button type="button" className="ks-env-modal-cancel" onClick={closeKsEnvEditor}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="ks-env-modal-ok"
+                disabled={
+                  !envEditor.draft.name.trim()
+                  || !envEditor.draft.console.trim()
+                  || !envEditor.draft.username.trim()
+                  || !envEditor.draft.password
+                }
+                onClick={saveKsEnvEditor}
+              >
+                {envEditor.mode === "add" ? "添加" : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

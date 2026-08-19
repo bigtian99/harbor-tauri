@@ -41,6 +41,7 @@ export function Sidebar({ activeTab, sidebarCollapsed, opsMode, onTabChange, onT
     { tab: "privacy", icon: <Shield size={18} />, label: "隐私协议" },
     { tab: "settlement", icon: <FileText size={18} />, label: "结算单" },
     { tab: "packSpeed", icon: <Zap size={18} />, label: "打包加速" },
+    { tab: "ksPublish", icon: <Container size={18} />, label: "KubeSphere 发布" },
   ];
 
   const filterOps = (items: typeof navBeforeBt) =>

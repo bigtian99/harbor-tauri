@@ -13,6 +13,7 @@ import { ConfigPanel } from "./components/ConfigPanel";
 import { SettlementPanel } from "./components/SettlementPanel";
 import { PackSpeedPanel } from "./components/PackSpeedPanel";
 import { PrivacyPanel } from "./components/PrivacyPanel";
+import { KsPublishPanel } from "./components/KsPublishPanel";
 import { BtJavaProjectsPanel } from "./components/BtJavaProjectsPanel";
 import { BtPhpSitesPanel } from "./components/BtPhpSitesPanel";
 import { UpdateModal } from "./components/UpdateModal";
@@ -544,6 +545,12 @@ function App() {
           />
         )}
 
+        {activeTab === "ksPublish" && (
+          <KsPublishPanel
+            config={app.config}
+            onLastEnvChange={(id) => app.setConfig((prev) => ({ ...prev, ks_last_env_id: id }))}
+          />
+        )}
         {activeTab === "config" && (
           <ConfigPanel
             config={app.config}

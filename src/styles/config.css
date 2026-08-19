@@ -55,3 +55,136 @@
   margin: 0;
 }
 
+.ks-env-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-add-env-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid rgba(100, 255, 218, 0.28);
+  border-radius: 6px;
+  background: rgba(100, 255, 218, 0.08);
+  color: #5eead4;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.config-add-env-btn:hover {
+  background: rgba(100, 255, 218, 0.16);
+}
+
+.ks-env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ks-env-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(100, 255, 218, 0.12);
+  border-radius: 8px;
+  background: rgba(15, 22, 41, 0.35);
+}
+
+.ks-env-row-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ks-env-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.ks-env-console,
+.ks-env-user {
+  font-size: 12px;
+  color: #8892b0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-env-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ks-env-row-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(100, 255, 218, 0.18);
+  border-radius: 6px;
+  background: transparent;
+  color: #8892b0;
+  cursor: pointer;
+}
+
+.ks-env-row-actions button:hover {
+  color: #ccd6f6;
+  background: rgba(100, 255, 218, 0.1);
+}
+
+.ks-env-row-actions button.danger:hover {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.modal-content--sm .modal-body .form-group + .form-group {
+  margin-top: 12px;
+}
+
+.ks-env-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ks-env-modal-cancel,
+.ks-env-modal-ok {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ks-env-modal-cancel {
+  border: 1px solid rgba(136, 146, 176, 0.35);
+  background: transparent;
+  color: #8892b0;
+}
+
+.ks-env-modal-ok {
+  border: 1px solid rgba(100, 255, 218, 0.35);
+  background: rgba(100, 255, 218, 0.15);
+  color: #5eead4;
+}
+
+.ks-env-modal-ok:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
