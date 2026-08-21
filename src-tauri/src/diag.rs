@@ -209,7 +209,7 @@ pub fn diag_log(module: &str, message: impl AsRef<str>) {
 pub async fn write_diagnostic_log(module: String, message: String) -> Result<(), String> {
     const ALLOWED: &[&str] = &[
         "templates", "landing", "preview", "updater", "build", "git", "docker", "ops",
-        "settlement", "history", "config", "db", "utils", "app",
+        "kubesphere", "settlement", "history", "config", "db", "utils", "app",
     ];
     let module = module.trim().to_ascii_lowercase();
     if !ALLOWED.contains(&module.as_str()) {
