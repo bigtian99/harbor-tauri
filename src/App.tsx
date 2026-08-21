@@ -29,6 +29,7 @@ import { isTauriRuntime, resolveHarborRepository } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import { resolveHistoryJarPushConfig } from "./historyJarPush.ts";
 import { shouldKeepPreviewServer } from "./utils/previewLifecycle";
+import { readStoredActiveTab, writeStoredActiveTab } from "./utils/activeTabStorage";
 
 /** 系统日志日期 card 选择器（替代原生 select） */
 function LogDayPicker({
@@ -131,8 +132,13 @@ function LogDayPicker({
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabType>("upload");
+  const [activeTab, setActiveTab] = useState<TabType>(() => readStoredActiveTab("upload"));
   const previewStopTimerRef = useRef<number | null>(null);
+
+  // 记住当前菜单：右键 reload / 刷新后回到离开前的页签
+  useEffect(() => {
+    writeStoredActiveTab(activeTab);
+  }, [activeTab]);
 
   const { toast, showToast } = useToast();
   const build = useBuildProgress({ showToast });
@@ -548,6 +554,7 @@ function App() {
         {activeTab === "ksPublish" && (
           <KsPublishPanel
             config={app.config}
+            configReady={app.configLoaded}
             onLastEnvChange={(id) => app.setConfig((prev) => ({ ...prev, ks_last_env_id: id }))}
           />
         )}

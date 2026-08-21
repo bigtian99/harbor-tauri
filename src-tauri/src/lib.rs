@@ -20,7 +20,8 @@ use build::{
     build_and_push, cancel_build, cancel_bt_java_deploy, cancel_bt_php_deploy, check_dockerfile,
     detect_frontend_dir, detect_spring_profiles, list_bt_java_projects, list_bt_php_sites,
     list_local_images, list_npm_scripts, open_directory, package_from_branch, push_local_image,
-    remove_local_image, restart_bt_java_project, upload_and_restart_bt_java_project,
+    remove_local_image, restart_bt_java_project, stop_bt_java_project, stop_bt_php_site,
+    upload_and_restart_bt_java_project,
     upload_bt_java_jar, upload_bt_php_site, warmup_bt_ftp,
 };
 use commit::{
@@ -41,8 +42,10 @@ use history::{
 };
 
 use kubesphere::{
-    ks_list_deployment_revisions, ks_list_deployments, ks_list_namespaces, ks_login, ks_logout,
-    ks_update_image,
+    ks_create_deployment, ks_list_deployment_revisions, ks_list_deployments, ks_list_namespaces,
+    ks_create_configmap, ks_create_configmap_yaml, ks_get_configmap, ks_list_configmaps,
+    ks_connect, ks_get_deployment_edit, ks_login, ks_logout, ks_preview_configmap,
+    ks_preview_deployment, ks_update_deployment, ks_update_image,
 };
 use landing::{
     delete_template_dir, fetch_sub_channels, fetch_vest_data, generate_landing_pages,
@@ -87,11 +90,21 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             is_ops_mode,
+            ks_connect,
             ks_login,
             ks_list_namespaces,
             ks_list_deployments,
             ks_list_deployment_revisions,
             ks_update_image,
+            ks_get_deployment_edit,
+            ks_update_deployment,
+            ks_create_deployment,
+            ks_preview_deployment,
+            ks_list_configmaps,
+            ks_get_configmap,
+            ks_create_configmap,
+            ks_create_configmap_yaml,
+            ks_preview_configmap,
             ks_logout,
             load_config,
             save_config,
@@ -113,9 +126,11 @@ pub fn run() {
             list_bt_java_projects,
             list_bt_php_sites,
             restart_bt_java_project,
+            stop_bt_java_project,
             upload_bt_java_jar,
             upload_bt_php_site,
             upload_and_restart_bt_java_project,
+            stop_bt_php_site,
             cancel_bt_java_deploy,
             cancel_bt_php_deploy,
             warmup_bt_ftp,

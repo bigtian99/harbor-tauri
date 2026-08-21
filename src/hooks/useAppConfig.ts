@@ -84,6 +84,8 @@ export function useAppConfig(deps: UseAppConfigDeps) {
   onConfigLoadedRef.current = onConfigLoaded;
 
   const [config, setConfig] = useState<HarborConfig>(createDefaultHarborConfig);
+  /** load_config 完成（成功或失败）后为 true；KS 等面板需等此标志再自动连接，避免 reload 抢跑空配置 */
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
   const [opsMode, setOpsMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -108,7 +110,10 @@ export function useAppConfig(deps: UseAppConfigDeps) {
   );
 
   async function loadConfig() {
-    if (!isTauriRuntime()) return;
+    if (!isTauriRuntime()) {
+      setConfigLoaded(true);
+      return;
+    }
     try {
       const savedConfig = withSessionConfigDefaults(await invoke<HarborConfig>("load_config"));
       setConfig(savedConfig);
@@ -116,6 +121,8 @@ export function useAppConfig(deps: UseAppConfigDeps) {
       await onConfigLoadedRef.current?.(savedConfig);
     } catch (e) {
       console.error("加载配置失败:", e);
+    } finally {
+      setConfigLoaded(true);
     }
   }
 
@@ -408,6 +415,7 @@ export function useAppConfig(deps: UseAppConfigDeps) {
   return {
     config,
     setConfig,
+    configLoaded,
     configSaved,
     opsMode,
     sidebarCollapsed,

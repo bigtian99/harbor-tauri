@@ -377,3 +377,114 @@ body::before {
   padding-bottom: 48px;
 }
 
+/* 两列表单：统一宽度 + 预留 description 行高，避免右列输入框错位 */
+.ks-form-2col {
+  align-items: start;
+}
+
+.ks-form-2col > * {
+  min-width: 0;
+  width: 100%;
+}
+
+.ks-form-2col .mantine-TextInput-root,
+.ks-form-2col .mantine-NumberInput-root,
+.ks-form-2col .mantine-Select-root,
+.ks-form-2col .mantine-Autocomplete-root,
+.ks-form-2col .mantine-MultiSelect-root,
+.ks-form-2col .mantine-Textarea-root {
+  width: 100%;
+}
+
+.ks-form-2col .mantine-InputWrapper-description,
+.ks-form-2col .mantine-Input-description {
+  min-height: calc(var(--mantine-font-size-xs) * var(--mantine-line-height-xs) + 2px);
+}
+
+.ks-publish-panel .mantine-SimpleGrid-root .mantine-Select-root,
+.ks-publish-panel .mantine-SimpleGrid-root .mantine-TextInput-root,
+.ks-publish-panel .mantine-SimpleGrid-root .mantine-NumberInput-root,
+.ks-publish-panel .mantine-SimpleGrid-root .mantine-Autocomplete-root {
+  width: 100%;
+}
+
+.ks-publish-panel .mantine-TextInput-root {
+  width: 100%;
+}
+
+/* 历史版本表：固定可视高度 + 内部滚动（避免长镜像换行把行撑爆后滚不动） */
+.ks-revisions-scroll {
+  width: 100%;
+  max-height: min(360px, 42vh);
+  overflow: auto;
+  border: 1px solid var(--mantine-color-dark-4, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+}
+
+/* 部署列表 / ConfigMap：按视口拉高，少滚动多一屏 */
+.ks-deploys-scroll,
+.ks-cms-scroll {
+  width: 100%;
+}
+
+/* 列表底部分页：左侧条数，右侧翻页靠右对齐 */
+.ks-list-pager {
+  display: flex;
+  width: 100%;
+  margin-top: 12px;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.ks-list-pager .mantine-Select-root {
+  width: 100px !important;
+  flex: 0 0 auto;
+}
+
+.ks-revisions-scroll .ks-rev-image {
+  display: block;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ks-revisions-scroll table {
+  width: 100%;
+}
+
+/* 部署表选中行 / 当前 revision 高亮（避免组件内每次 render 注入 <style>） */
+.ks-row-sel td {
+  background: #cfe6f7 !important;
+  color: #0b3a5c !important;
+}
+.ks-row-sel td:first-child {
+  box-shadow: inset 3px 0 0 #329dce;
+}
+.ks-rev-current td {
+  background: rgba(50, 157, 206, 0.16) !important;
+  border-top: 1px solid rgba(50, 157, 206, 0.35);
+  border-bottom: 1px solid rgba(50, 157, 206, 0.35);
+}
+.ks-rev-current td:first-child {
+  box-shadow: inset 4px 0 0 #329dce;
+}
+.ks-rev-current-tag {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(50, 157, 206, 0.22);
+  color: #7ec8ea;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(50, 157, 206, 0.45);
+  box-sizing: border-box;
+}
+

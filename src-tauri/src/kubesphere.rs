@@ -2,25 +2,186 @@
 //!
 //! 集成「修改 Deployment 镜像并发布」能力：
 //!   1. 登录（复刻控制台前端自定义加密，Cookie 会话）
-//!   2. 命名空间 / 部署列表（含实时状态，按新/旧 ReplicaSet 分组）
-//!   3. strategic-merge-patch 改镜像触发滚动发布
+//!   2. 会话落盘 + refreshToken 自动续期（按环境缓存，避免每次重登）
+//!   3. 命名空间 / 部署列表（含实时状态，按新/旧 ReplicaSet 分组）
+//!   4. strategic-merge-patch 改镜像触发滚动发布
 
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
 use reqwest::header::{HeaderMap, SET_COOKIE};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
-use std::time::Duration;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const ENCRYPT_KEY: &str = "kubesphere";
+/// expire 剩余不足此时长则主动 refresh（秒）
+const REFRESH_AHEAD_SECS: i64 = 300;
+/// 连接/探测：建连超时（避免网关挂起时 UI 长时间假死）
+const CONNECT_TIMEOUT_SECS: u64 = 5;
+/// 普通 API：整请求超时（列表已改为命名空间级批量，单次请求应很快返回）
+const REQUEST_TIMEOUT_SECS: u64 = 15;
+/// 命名空间级列表 limit（避免 continue 分页；超限时打诊断日志）
+const LIST_LIMIT_DEPLOY: u32 = 200;
+const LIST_LIMIT_RS: u32 = 500;
+const LIST_LIMIT_POD: u32 = 500;
+const LIST_LIMIT_CM: u32 = 200;
+
+/// 网关/上游不可用：不应丢弃本地会话，也不应强制密码重登
+fn is_infra_http(status: u16) -> bool {
+    matches!(status, 500 | 502 | 503 | 504)
+}
+
+fn console_unreachable_msg(kind: &str, detail: &str) -> String {
+    format!(
+        "控制台暂时不可用（{kind}）。本地会话已保留，请稍后重试，不会强制重新登录。\n{detail}"
+    )
+}
 
 /// 当前登录会话（进程内缓存）
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 
+#[derive(Clone)]
 struct Session {
+    env_id: String,
     console: String,
+    username: String,
     cookie: String, // "token=..; refreshToken=..; expire=.."
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct SessionStore {
+    /// key = env_id
+    sessions: HashMap<String, PersistedSession>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct PersistedSession {
+    env_id: String,
+    console: String,
+    username: String,
+    cookie: String,
+    updated_at: i64,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct KsConnectResult {
+    /// cached | refreshed | login
+    pub mode: String,
+    pub message: String,
+}
+
+fn now_unix() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn session_store_path() -> PathBuf {
+    let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    config_dir.join(crate::models::APP_CONFIG_DIR).join("ks-sessions.json")
+}
+
+fn load_session_store() -> SessionStore {
+    let path = session_store_path();
+    match fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str(&text).unwrap_or_default(),
+        Err(_) => SessionStore::default(),
+    }
+}
+
+fn save_session_store(store: &SessionStore) -> Result<(), String> {
+    let path = session_store_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建会话目录失败: {e}"))?;
+    }
+    let text = serde_json::to_string_pretty(store).map_err(|e| format!("序列化会话失败: {e}"))?;
+    fs::write(&path, text).map_err(|e| format!("写入会话缓存失败: {e}"))
+}
+
+fn cookie_map(cookie: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for part in cookie.split(';') {
+        let part = part.trim();
+        if let Some(eq) = part.find('=') {
+            map.insert(part[..eq].trim().to_string(), part[eq + 1..].trim().to_string());
+        }
+    }
+    map
+}
+
+fn cookie_get(cookie: &str, key: &str) -> Option<String> {
+    cookie_map(cookie).get(key).cloned()
+}
+
+fn build_cookie(token: &str, refresh: Option<&str>, expire: Option<&str>) -> String {
+    let mut parts = vec![format!("token={token}")];
+    if let Some(r) = refresh.filter(|s| !s.is_empty()) {
+        parts.push(format!("refreshToken={r}"));
+    }
+    if let Some(e) = expire.filter(|s| !s.is_empty()) {
+        parts.push(format!("expire={e}"));
+    }
+    parts.join("; ")
+}
+
+/// expire Cookie 多为 unix 秒；解析失败视为需要续期
+fn cookie_expire_unix(cookie: &str) -> Option<i64> {
+    let exp = cookie_get(cookie, "expire")?;
+    if let Ok(v) = exp.parse::<i64>() {
+        // 兼容毫秒时间戳
+        return Some(if v > 10_000_000_000 { v / 1000 } else { v });
+    }
+    None
+}
+
+fn needs_refresh(cookie: &str) -> bool {
+    match cookie_expire_unix(cookie) {
+        Some(exp) => exp - now_unix() <= REFRESH_AHEAD_SECS,
+        None => true,
+    }
+}
+
+fn persist_session(sess: &Session) {
+    let mut store = load_session_store();
+    store.sessions.insert(
+        sess.env_id.clone(),
+        PersistedSession {
+            env_id: sess.env_id.clone(),
+            console: sess.console.clone(),
+            username: sess.username.clone(),
+            cookie: sess.cookie.clone(),
+            updated_at: now_unix(),
+        },
+    );
+    if let Err(e) = save_session_store(&store) {
+        crate::diag::diag_log("kubesphere", &format!("persist_session warn: {e}"));
+    }
+}
+
+fn clear_persisted(env_id: Option<&str>) {
+    let mut store = load_session_store();
+    if let Some(id) = env_id {
+        store.sessions.remove(id);
+    } else {
+        store.sessions.clear();
+    }
+    let _ = save_session_store(&store);
+}
+
+fn set_memory_session(sess: Session) -> Result<(), String> {
+    let mut guard = SESSION.lock().map_err(|_| "会话锁不可用".to_string())?;
+    *guard = Some(sess);
+    Ok(())
+}
+
+fn clone_memory_session() -> Result<Session, String> {
+    let guard = SESSION.lock().map_err(|_| "会话锁不可用".to_string())?;
+    guard.as_ref().cloned().ok_or_else(|| "请先连接 KubeSphere（登录）".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -62,20 +223,36 @@ fn parse_set_cookies(headers: &HeaderMap) -> HashMap<String, String> {
     map
 }
 
-fn http_client() -> Result<reqwest::blocking::Client, String> {
-    reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("HTTP 客户端创建失败: {e}"))
+fn http_client() -> Result<&'static reqwest::blocking::Client, String> {
+    static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+    Ok(CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            // 禁用跟随：过期 Cookie 常 302/401→/login，跟随后变成 200 HTML，会被误判为会话有效
+            .redirect(reqwest::redirect::Policy::none())
+            .pool_max_idle_per_host(8)
+            .build()
+            .expect("HTTP 客户端创建失败")
+    }))
 }
 
-fn login(console: &str, username: &str, password: &str) -> Result<Session, String> {
+fn login_http_client() -> Result<&'static reqwest::blocking::Client, String> {
     // 禁用重定向：login 可能返回 302，Set-Cookie 在首个响应上，跟随重定向会丢失
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|e| format!("HTTP 客户端创建失败: {e}"))?;
+    static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+    Ok(CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .redirect(reqwest::redirect::Policy::none())
+            .pool_max_idle_per_host(2)
+            .build()
+            .expect("HTTP 客户端创建失败")
+    }))
+}
+
+fn login(console: &str, username: &str, password: &str) -> Result<(String, String), String> {
+    let client = login_http_client()?;
     let base = console.trim_end_matches('/');
     let body = serde_json::json!({ "username": username, "encrypt": ks_encrypt(ENCRYPT_KEY, password) });
     let resp = client
@@ -83,12 +260,20 @@ fn login(console: &str, username: &str, password: &str) -> Result<Session, Strin
         .header("Accept", "application/json")
         .json(&body)
         .send()
-        .map_err(|e| format!("登录请求失败: {e}"))?;
+        .map_err(|e| {
+            console_unreachable_msg("登录网络错误", &format!("登录请求失败: {e}"))
+        })?;
     let status = resp.status().as_u16();
     let cookies = parse_set_cookies(resp.headers());
     if !cookies.contains_key("token") {
         let body_snippet = resp.text().unwrap_or_default();
         let snippet: String = body_snippet.chars().take(200).collect();
+        if is_infra_http(status) {
+            return Err(console_unreachable_msg(
+                &format!("登录 HTTP {status}"),
+                &format!("响应: {snippet}"),
+            ));
+        }
         return Err(format!(
             "登录失败：未获得 token Cookie（HTTP {status}）\n响应: {snippet}"
         ));
@@ -98,21 +283,264 @@ fn login(console: &str, username: &str, password: &str) -> Result<Session, Strin
         .filter_map(|k| cookies.get(*k).map(|v| format!("{k}={v}")))
         .collect::<Vec<_>>()
         .join("; ");
-    Ok(Session { console: base.to_string(), cookie })
+    Ok((base.to_string(), cookie))
 }
 
-/// 同源 API 调用（Cookie 认证）
-fn ks_api(method: &str, path: &str, body: Option<serde_json::Value>) -> Result<(u16, serde_json::Value), String> {
-    let guard = SESSION.lock().map_err(|_| "会话锁不可用".to_string())?;
-    let sess = guard.as_ref().ok_or("请先连接 KubeSphere（登录）")?;
+/// 用 refreshToken 换新 access token，更新 Cookie
+fn refresh_session(sess: &Session) -> Result<Session, String> {
+    let refresh = cookie_get(&sess.cookie, "refreshToken")
+        .ok_or_else(|| "会话无 refreshToken，无法续期".to_string())?;
+    let client = login_http_client()?;
+    let url = format!("{}/oauth/token", sess.console.trim_end_matches('/'));
+    let form = [
+        ("grant_type", "refresh_token"),
+        ("client_id", "kubesphere"),
+        ("client_secret", "kubesphere"),
+        ("refresh_token", refresh.as_str()),
+    ];
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("Cookie", &sess.cookie)
+        .form(&form)
+        .send()
+        .map_err(|e| {
+            console_unreachable_msg("续期网络错误", &format!("续期请求失败: {e}"))
+        })?;
+    let status = resp.status().as_u16();
+    let set_cookies = parse_set_cookies(resp.headers());
+    let text = resp.text().unwrap_or_default();
+
+    if is_infra_http(status) {
+        let snippet: String = text.chars().take(120).collect();
+        return Err(console_unreachable_msg(
+            &format!("续期 HTTP {status}"),
+            &format!("响应: {snippet}"),
+        ));
+    }
+
+    // 优先吃 Set-Cookie（部分版本）
+    if set_cookies.contains_key("token") {
+        let cookie = ["token", "refreshToken", "expire"]
+            .iter()
+            .filter_map(|k| {
+                set_cookies
+                    .get(*k)
+                    .cloned()
+                    .or_else(|| cookie_get(&sess.cookie, k))
+                    .map(|v| format!("{k}={v}"))
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Ok(Session {
+            env_id: sess.env_id.clone(),
+            console: sess.console.clone(),
+            username: sess.username.clone(),
+            cookie,
+        });
+    }
+
+    // 常见：JSON access_token / refresh_token / expires_in
+    let json: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+    let access = json
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            let snippet: String = text.chars().take(180).collect();
+            format!("续期失败 HTTP {status}：未拿到 access_token\n响应: {snippet}")
+        })?;
+    let new_refresh = json
+        .get("refresh_token")
+        .and_then(|v| v.as_str())
+        .unwrap_or(refresh.as_str());
+    let expires_in = json.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(7200);
+    let expire = (now_unix() + expires_in.max(60)).to_string();
+    Ok(Session {
+        env_id: sess.env_id.clone(),
+        console: sess.console.clone(),
+        username: sess.username.clone(),
+        cookie: build_cookie(access, Some(new_refresh), Some(&expire)),
+    })
+}
+
+fn probe_session(sess: &Session) -> Result<u16, String> {
+    // 走与业务相同的客户端（不跟随重定向），并校验 body 真是 NamespaceList
+    let (status, json) = ks_api_raw_with(sess, "GET", "/api/v1/namespaces?limit=1", None, None)?;
+    if status == 200 {
+        let Some(items) = json.pointer("/items").and_then(|v| v.as_array()) else {
+            crate::diag::diag_log(
+                "kubesphere",
+                "ks_connect probe 200 但无 items（多为登录页 HTML）→ 视为未授权",
+            );
+            return Ok(401);
+        };
+        // 正常集群至少有 default/kube-system；空列表几乎总是鉴权失败被吞掉
+        if items.is_empty() {
+            crate::diag::diag_log(
+                "kubesphere",
+                "ks_connect probe NamespaceList 为空 → 视为未授权",
+            );
+            return Ok(401);
+        }
+    }
+    // 302/303/307 等同未授权（网关把过期会话踢去登录页）
+    if matches!(status, 301 | 302 | 303 | 307 | 308) {
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!("ks_connect probe HTTP {status} redirect → 视为未授权"),
+        );
+        return Ok(401);
+    }
+    Ok(status)
+}
+
+fn try_use_cached_or_refresh(env_id: &str, console: &str, username: &str) -> Result<Option<String>, String> {
+    let store = load_session_store();
+    let Some(saved) = store.sessions.get(env_id) else {
+        return Ok(None);
+    };
+    let base = console.trim_end_matches('/');
+    if saved.console.trim_end_matches('/') != base || saved.username != username {
+        crate::diag::diag_log(
+            "kubesphere",
+            "ks_connect cache miss: console/username 与缓存不一致，忽略",
+        );
+        return Ok(None);
+    }
+    let sess = Session {
+        env_id: env_id.to_string(),
+        console: base.to_string(),
+        username: username.to_string(),
+        cookie: saved.cookie.clone(),
+    };
+
+    if needs_refresh(&sess.cookie) {
+        crate::diag::diag_log("kubesphere", "ks_connect cache near expiry → refresh");
+        match refresh_session(&sess) {
+            Ok(new_sess) => {
+                persist_session(&new_sess);
+                set_memory_session(new_sess)?;
+                return Ok(Some("refreshed".into()));
+            }
+            Err(e) => {
+                // 网关挂了：保留会话，禁止落到密码登录
+                if e.contains("控制台暂时不可用") {
+                    return Err(e);
+                }
+                // refreshToken 失效常见表现：302 / 未拿到 access_token
+                // 继续用旧 Cookie probe；若也失效则走下方 401 分支强制重登
+                crate::diag::diag_log("kubesphere", &format!("ks_connect refresh fail: {e}"));
+            }
+        }
+    }
+
+    match probe_session(&sess) {
+        Ok(200) => {
+            set_memory_session(sess.clone())?;
+            Ok(Some("cached".into()))
+        }
+        Ok(401) | Ok(403) => {
+            crate::diag::diag_log("kubesphere", "ks_connect probe unauthorized → refresh");
+            match refresh_session(&sess) {
+                Ok(new_sess) => {
+                    let status = probe_session(&new_sess)?;
+                    if status == 200 {
+                        persist_session(&new_sess);
+                        set_memory_session(new_sess)?;
+                        return Ok(Some("refreshed".into()));
+                    }
+                    if is_infra_http(status) {
+                        return Err(console_unreachable_msg(
+                            &format!("续期后探测 HTTP {status}"),
+                            "会话已保留",
+                        ));
+                    }
+                    Err(format!("续期后探测仍失败 HTTP {status}"))
+                }
+                Err(e) => {
+                    if e.contains("控制台暂时不可用") {
+                        return Err(e);
+                    }
+                    clear_persisted(Some(env_id));
+                    crate::diag::diag_log("kubesphere", &format!("ks_connect refresh after 401 fail: {e}"));
+                    Ok(None)
+                }
+            }
+        }
+        Ok(status) if is_infra_http(status) => {
+            crate::diag::diag_log(
+                "kubesphere",
+                &format!("ks_connect probe HTTP {status}，保留会话、不强制重登"),
+            );
+            Err(console_unreachable_msg(
+                &format!("探测 HTTP {status}"),
+                "会话已保留",
+            ))
+        }
+        Ok(status) => {
+            crate::diag::diag_log("kubesphere", &format!("ks_connect probe HTTP {status}，放弃缓存"));
+            Ok(None)
+        }
+        Err(e) => {
+            crate::diag::diag_log("kubesphere", &format!("ks_connect probe err: {e}"));
+            Err(console_unreachable_msg("探测网络错误", &e))
+        }
+    }
+}
+
+/// 同源 API 调用（Cookie 认证），原始 body（可传 YAML/JSON 文本）
+fn ks_api_raw(
+    method: &str,
+    path: &str,
+    body: Option<String>,
+    content_type: Option<&str>,
+) -> Result<(u16, serde_json::Value), String> {
+    let mut sess = clone_memory_session()?;
+    let result = ks_api_raw_with(&sess, method, path, body.clone(), content_type)?;
+    // 401 时尝试 refresh 一次再重试
+    if result.0 == 401 {
+        crate::diag::diag_log("kubesphere", &format!("ks_api 401 {method} {path} → try refresh"));
+        match refresh_session(&sess) {
+            Ok(new_sess) => {
+                persist_session(&new_sess);
+                set_memory_session(new_sess.clone())?;
+                sess = new_sess;
+                return ks_api_raw_with(&sess, method, path, body, content_type);
+            }
+            Err(e) => {
+                crate::diag::diag_log("kubesphere", &format!("ks_api refresh fail: {e}"));
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn ks_api_raw_with(
+    sess: &Session,
+    method: &str,
+    path: &str,
+    body: Option<String>,
+    content_type: Option<&str>,
+) -> Result<(u16, serde_json::Value), String> {
     let client = http_client()?;
     let url = format!("{}{}", sess.console, path);
     let mut req = match method {
         "GET" => client.get(&url),
+        "POST" => {
+            let mut r = client.post(&url);
+            if let Some(b) = &body {
+                r = r
+                    .header("Content-Type", content_type.unwrap_or("application/json"))
+                    .body(b.clone());
+            }
+            r
+        }
         "PATCH" => {
             let mut r = client.patch(&url);
-            if let Some(b) = body {
-                r = r.header("Content-Type", "application/strategic-merge-patch+json").body(b.to_string());
+            if let Some(b) = &body {
+                r = r
+                    .header("Content-Type", content_type.unwrap_or("application/strategic-merge-patch+json"))
+                    .body(b.clone());
             }
             r
         }
@@ -124,12 +552,34 @@ fn ks_api(method: &str, path: &str, body: Option<serde_json::Value>) -> Result<(
     let resp = req.send().map_err(|e| format!("请求失败: {e}"))?;
     let status = resp.status().as_u16();
     let text = resp.text().unwrap_or_default();
-    let json = if text.trim().is_empty() {
-        serde_json::Value::Null
-    } else {
-        serde_json::from_str(&text).unwrap_or(serde_json::Value::Null)
-    };
-    Ok((status, json))
+    // 302→登录页 或 HTML：不要当成成功 JSON（否则命名空间会解析成 0 条）
+    if matches!(status, 301 | 302 | 303 | 307 | 308) {
+        return Ok((401, serde_json::Value::Null));
+    }
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Ok((status, serde_json::Value::Null));
+    }
+    match serde_json::from_str(trimmed) {
+        Ok(json) => Ok((status, json)),
+        Err(_) => {
+            if status == 200 {
+                let snippet: String = trimmed.chars().take(80).collect();
+                crate::diag::diag_log(
+                    "kubesphere",
+                    &format!("ks_api non-json body status=200 path={path} snippet={snippet}"),
+                );
+                // 伪 200（登录 HTML 等）按未授权处理，触发上层续期/重登
+                return Ok((401, serde_json::Value::Null));
+            }
+            Ok((status, serde_json::Value::Null))
+        }
+    }
+}
+
+/// JSON body 版（沿用旧调用方）
+fn ks_api(method: &str, path: &str, body: Option<serde_json::Value>) -> Result<(u16, serde_json::Value), String> {
+    ks_api_raw(method, path, body.map(|b| b.to_string()), None)
 }
 
 // ---------------------------------------------------------------------------
@@ -172,8 +622,12 @@ pub struct PodsGroup {
 #[serde(rename_all = "camelCase")]
 pub struct DeployInfo {
     pub name: String,
+    /// KubeSphere 显示名（kubesphere.io/alias-name）
+    pub alias: String,
     pub image: String,
     pub containers: Vec<String>,
+    /// 容器端口（containerPort，去重排序）
+    pub ports: Vec<u16>,
     pub status: DeployStatus,
     pub pods: PodsGroup,
     pub revision: String,
@@ -287,18 +741,32 @@ fn deploy_status(prog_reason: Option<&str>, desired: u32, new_pods: &[PodInfo], 
 
 fn parse_pod(po: &serde_json::Value) -> PodInfo {
     let (state, reason, restarts, ready, total) = pod_summary(po.pointer("/status/containerStatuses"));
-    let meta = po.get("metadata").cloned().unwrap_or_default();
-    let status = po.get("status").cloned().unwrap_or_default();
     PodInfo {
-        name: meta.pointer("/name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        phase: status.pointer("/phase").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        name: po
+            .pointer("/metadata/name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        phase: po
+            .pointer("/status/phase")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         state,
         reason,
         restarts,
         ready,
         total,
-        start_time: status.pointer("/startTime").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        node: po.pointer("/spec/nodeName").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        start_time: po
+            .pointer("/status/startTime")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        node: po
+            .pointer("/spec/nodeName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
     }
 }
 
@@ -306,64 +774,282 @@ fn parse_pod(po: &serde_json::Value) -> PodInfo {
 // Tauri commands
 // ---------------------------------------------------------------------------
 
-/// 登录 KubeSphere 控制台（成功后缓存会话，供后续命令使用）
+/// 连接 KubeSphere：优先复用落盘会话 → refreshToken 续期 → 密码登录
 #[tauri::command]
-pub fn ks_login(console: String, username: String, password: String) -> Result<(), String> {
+pub fn ks_connect(
+    env_id: String,
+    console: String,
+    username: String,
+    password: String,
+) -> Result<KsConnectResult, String> {
+    let env_id = env_id.trim().to_string();
+    let username = username.trim().to_string();
     crate::diag::diag_log(
         "kubesphere",
-        &format!("ks_login console={console} user={username}"),
+        &format!("ks_connect env={env_id} console={console} user={username}"),
     );
-    match login(&console, &username, &password) {
-        Ok(sess) => {
-            let mut guard = SESSION.lock().map_err(|_| "会话锁不可用".to_string())?;
-            *guard = Some(sess);
-            crate::diag::diag_log("kubesphere", "ks_login ok");
-            Ok(())
+    if env_id.is_empty() {
+        return Err("环境 ID 为空".into());
+    }
+    if console.trim().is_empty() || username.is_empty() || password.is_empty() {
+        return Err("请填写控制台地址 / 账号 / 密码".into());
+    }
+
+    match try_use_cached_or_refresh(&env_id, &console, &username) {
+        Ok(Some(mode)) => {
+            let message = match mode.as_str() {
+                "refreshed" => "已自动续期会话".to_string(),
+                _ => "已复用本地会话".to_string(),
+            };
+            crate::diag::diag_log("kubesphere", &format!("ks_connect ok mode={mode}"));
+            return Ok(KsConnectResult { mode, message });
         }
+        Ok(None) => {}
         Err(e) => {
-            crate::diag::diag_log("kubesphere", &format!("ks_login failed: {e}"));
-            Err(e)
+            crate::diag::diag_log("kubesphere", &format!("ks_connect cache path err: {e}"));
+            // 仅网关/网络不可用时短路；其它缓存失败仍允许密码登录
+            if e.contains("控制台暂时不可用") {
+                return Err(e);
+            }
         }
     }
+
+    let (base, cookie) = login(&console, &username, &password).map_err(|e| {
+        crate::diag::diag_log("kubesphere", &format!("ks_connect login failed: {e}"));
+        e
+    })?;
+    let sess = Session {
+        env_id: env_id.clone(),
+        console: base,
+        username,
+        cookie,
+    };
+    persist_session(&sess);
+    set_memory_session(sess)?;
+    crate::diag::diag_log("kubesphere", "ks_connect ok mode=login");
+    Ok(KsConnectResult {
+        mode: "login".into(),
+        message: "已登录并缓存会话".into(),
+    })
+}
+
+/// 兼容旧调用：等价于无 env_id 的密码登录（仍会落盘到 `_default`）
+#[tauri::command]
+pub fn ks_login(console: String, username: String, password: String) -> Result<(), String> {
+    ks_connect("_default".into(), console, username, password).map(|_| ())
 }
 
 /// 列出集群全部命名空间
 #[tauri::command]
 pub fn ks_list_namespaces() -> Result<Vec<String>, String> {
+    let t0 = Instant::now();
+    crate::diag::diag_log("kubesphere", "ks_list_namespaces start");
     let (status, json) = ks_api("GET", "/api/v1/namespaces?limit=100", None)?;
     if status != 200 {
         return Err(format!("读取命名空间失败 HTTP {status}"));
     }
-    let mut names: Vec<String> = json
-        .pointer("/items")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|it| it.pointer("/metadata/name").and_then(|v| v.as_str()).map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
+    let Some(arr) = json.pointer("/items").and_then(|v| v.as_array()) else {
+        crate::diag::diag_log(
+            "kubesphere",
+            "ks_list_namespaces 响应无 items（会话可能已失效）",
+        );
+        return Err("读取命名空间失败：响应异常，会话可能已失效，请重新连接".into());
+    };
+    let mut names: Vec<String> = arr
+        .iter()
+        .filter_map(|it| it.pointer("/metadata/name").and_then(|v| v.as_str()).map(String::from))
+        .collect();
     names.sort();
+    if names.is_empty() {
+        crate::diag::diag_log("kubesphere", "ks_list_namespaces 返回空列表");
+    }
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!(
+            "ks_list_namespaces ok count={} elapsed_ms={}",
+            names.len(),
+            t0.elapsed().as_millis()
+        ),
+    );
     Ok(names)
 }
 
+/// 并行拉取命名空间级列表（共享同一会话 Cookie，避免 3 次串行 RTT）
+fn ks_fetch_ns_lists(
+    ns: &str,
+) -> Result<(serde_json::Value, serde_json::Value, serde_json::Value), String> {
+    let sess = clone_memory_session()?;
+    let dep_path = format!("/apis/apps/v1/namespaces/{ns}/deployments?limit={LIST_LIMIT_DEPLOY}");
+    let rs_path = format!("/apis/apps/v1/namespaces/{ns}/replicasets?limit={LIST_LIMIT_RS}");
+    let pod_path = format!("/api/v1/namespaces/{ns}/pods?limit={LIST_LIMIT_POD}");
+
+    let (dep_res, rs_res, pod_res) = std::thread::scope(|scope| {
+        let s1 = sess.clone();
+        let s2 = sess.clone();
+        let s3 = sess.clone();
+        let dep_h = scope.spawn(move || ks_api_raw_with(&s1, "GET", &dep_path, None, None));
+        let rs_h = scope.spawn(move || ks_api_raw_with(&s2, "GET", &rs_path, None, None));
+        let pod_h = scope.spawn(move || ks_api_raw_with(&s3, "GET", &pod_path, None, None));
+        (
+            dep_h.join().unwrap_or_else(|_| Err("deployments 拉取线程失败".into())),
+            rs_h.join().unwrap_or_else(|_| Err("replicasets 拉取线程失败".into())),
+            pod_h.join().unwrap_or_else(|_| Err("pods 拉取线程失败".into())),
+        )
+    });
+
+    let (mut dep_status, mut dep_json) = dep_res?;
+    let (mut rs_status, mut rs_json) = rs_res?;
+    let (mut pod_status, mut pod_json) = pod_res?;
+
+    // 任一 401：续期一次后串行重试（避免三线程同时 refresh 抢锁）
+    if dep_status == 401 || rs_status == 401 || pod_status == 401 {
+        crate::diag::diag_log(
+            "kubesphere",
+            "ks_list_deployments parallel 401 → refresh once then retry",
+        );
+        let mut sess = clone_memory_session()?;
+        match refresh_session(&sess) {
+            Ok(new_sess) => {
+                persist_session(&new_sess);
+                set_memory_session(new_sess.clone())?;
+                sess = new_sess;
+            }
+            Err(e) => {
+                crate::diag::diag_log("kubesphere", &format!("ks_list_deployments refresh fail: {e}"));
+                return Err(e);
+            }
+        }
+        let dep_path = format!("/apis/apps/v1/namespaces/{ns}/deployments?limit={LIST_LIMIT_DEPLOY}");
+        let rs_path = format!("/apis/apps/v1/namespaces/{ns}/replicasets?limit={LIST_LIMIT_RS}");
+        let pod_path = format!("/api/v1/namespaces/{ns}/pods?limit={LIST_LIMIT_POD}");
+        (dep_status, dep_json) = ks_api_raw_with(&sess, "GET", &dep_path, None, None)?;
+        (rs_status, rs_json) = ks_api_raw_with(&sess, "GET", &rs_path, None, None)?;
+        (pod_status, pod_json) = ks_api_raw_with(&sess, "GET", &pod_path, None, None)?;
+    }
+
+    if dep_status != 200 {
+        return Err(format!("读取部署列表失败 HTTP {dep_status}"));
+    }
+    if rs_status != 200 {
+        return Err(format!("读取 ReplicaSet 列表失败 HTTP {rs_status}"));
+    }
+    if pod_status != 200 {
+        return Err(format!("读取 Pod 列表失败 HTTP {pod_status}"));
+    }
+    Ok((dep_json, rs_json, pod_json))
+}
+
 /// 列出命名空间下全部 Deployment（含实时状态 + 新/旧 Pod 明细）
+///
+/// 性能：命名空间级 3 次并行拉取（deployments / replicasets / pods），内存按 ownerReference 关联。
+/// 旧实现按部署各打 2 次 API（1+2N），部署一多就会把 UI 拖死。
 #[tauri::command]
 pub fn ks_list_deployments(namespace: String) -> Result<Vec<DeployInfo>, String> {
     let ns = urlencoding(&namespace);
-    let (status, json) = ks_api("GET", &format!("/apis/apps/v1/namespaces/{ns}/deployments?limit=100"), None)?;
-    if status != 200 {
-        return Err(format!("读取部署列表失败 HTTP {status}"));
+    let t0 = Instant::now();
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_list_deployments start ns={namespace}"),
+    );
+
+    let (json, rs_json, pod_json) = ks_fetch_ns_lists(&ns)?;
+    let items = json
+        .pointer("/items")
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
+    warn_if_list_truncated("deployments", &json, items.len(), LIST_LIMIT_DEPLOY);
+
+    let rs_items = rs_json
+        .pointer("/items")
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
+    warn_if_list_truncated("replicasets", &rs_json, rs_items.len(), LIST_LIMIT_RS);
+
+    let pod_items = pod_json
+        .pointer("/items")
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
+    warn_if_list_truncated("pods", &pod_json, pod_items.len(), LIST_LIMIT_POD);
+
+    // rs_name → revision；deploy_name → [(rs_name, revision)]
+    let mut rs_rev: HashMap<String, String> = HashMap::new();
+    let mut rs_by_deploy: HashMap<String, Vec<String>> = HashMap::new();
+    for rs in rs_items {
+        let Some(rs_name) = rs
+            .pointer("/metadata/name")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+        else {
+            continue;
+        };
+        let Some(dep_name) = owner_name(rs, "Deployment") else {
+            continue;
+        };
+        let rev = rs
+            .pointer("/metadata/annotations/deployment.kubernetes.io~1revision")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if !rev.is_empty() {
+            rs_rev.insert(rs_name.clone(), rev);
+        }
+        rs_by_deploy.entry(dep_name).or_default().push(rs_name);
     }
-    let items = json.pointer("/items").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+
+    // rs_name → pods
+    let mut pods_by_rs: HashMap<String, Vec<PodInfo>> = HashMap::new();
+    for po in pod_items {
+        let Some(rs_name) = owner_name(po, "ReplicaSet") else {
+            continue;
+        };
+        pods_by_rs.entry(rs_name).or_default().push(parse_pod(po));
+    }
+
     let mut out: Vec<DeployInfo> = Vec::with_capacity(items.len());
     for it in items {
-        let name = it.pointer("/metadata/name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let name = it
+            .pointer("/metadata/name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let alias = it
+            .pointer("/metadata/annotations/kubesphere.io~1alias-name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let containers: Vec<String> = it
             .pointer("/spec/template/spec/containers")
             .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|c| c.get("name").and_then(|v| v.as_str()).map(String::from)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|c| c.get("name").and_then(|v| v.as_str()).map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
+        let mut ports: Vec<u16> = it
+            .pointer("/spec/template/spec/containers")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                let mut ps = Vec::new();
+                for c in arr {
+                    if let Some(ports_arr) = c.get("ports").and_then(|v| v.as_array()) {
+                        for p in ports_arr {
+                            if let Some(cp) = p.get("containerPort").and_then(|v| v.as_u64()) {
+                                if cp > 0 && cp <= 65535 {
+                                    ps.push(cp as u16);
+                                }
+                            }
+                        }
+                    }
+                }
+                ps
+            })
+            .unwrap_or_default();
+        ports.sort_unstable();
+        ports.dedup();
         let image = it
             .pointer("/spec/template/spec/containers/0/image")
             .and_then(|v| v.as_str())
@@ -378,44 +1064,26 @@ pub fn ks_list_deployments(namespace: String) -> Result<Vec<DeployInfo>, String>
             .pointer("/status/conditions")
             .and_then(|v| v.as_array())
             .and_then(|arr| {
-                arr.iter().find(|c| c.get("type").and_then(|t| t.as_str()) == Some("Progressing"))
+                arr.iter()
+                    .find(|c| c.get("type").and_then(|t| t.as_str()) == Some("Progressing"))
             })
             .and_then(|c| c.get("reason").and_then(|v| v.as_str()))
             .map(String::from);
 
-        // ReplicaSet revision 映射（区分新/旧 Pod）
-        let mut rs_map: HashMap<String, String> = HashMap::new();
-        if let Ok((_, rsd)) = ks_api("GET", &format!("/apis/apps/v1/namespaces/{ns}/replicasets?labelSelector={}&limit=50", selector_of(&it)), None) {
-            if let Some(arr) = rsd.pointer("/items").and_then(|v| v.as_array()) {
-                for rs in arr {
-                    if let (Some(n), Some(rev)) = (
-                        rs.pointer("/metadata/name").and_then(|v| v.as_str()),
-                        rs.pointer("/metadata/annotations/deployment.kubernetes.io~1revision").and_then(|v| v.as_str()),
-                    ) {
-                        rs_map.insert(n.to_string(), rev.to_string());
-                    }
-                }
-            }
-        }
-
         let mut new_pods: Vec<PodInfo> = Vec::new();
         let mut old_pods: Vec<PodInfo> = Vec::new();
-        if let Ok((_, pd)) = ks_api("GET", &format!("/api/v1/namespaces/{ns}/pods?labelSelector={}&limit=20", selector_of(&it)), None) {
-            if let Some(arr) = pd.pointer("/items").and_then(|v| v.as_array()) {
-                for po in arr {
-                    let info = parse_pod(po);
-                    let owner_rs = po
-                        .pointer("/metadata/ownerReferences")
-                        .and_then(|v| v.as_array())
-                        .and_then(|arr| {
-                            arr.iter().find(|o| o.get("kind").and_then(|k| k.as_str()) == Some("ReplicaSet"))
-                        })
-                        .and_then(|o| o.get("name").and_then(|v| v.as_str()));
-                    let is_new = match (cur_rev.as_deref(), owner_rs) {
-                        (Some(rev), Some(rs)) => rs_map.get(rs).map(|r| r == rev).unwrap_or(false),
-                        _ => false,
-                    };
-                    if is_new { new_pods.push(info) } else { old_pods.push(info) }
+        if let Some(rs_names) = rs_by_deploy.get(&name) {
+            for rs_name in rs_names {
+                let is_new = match (cur_rev.as_deref(), rs_rev.get(rs_name).map(|s| s.as_str())) {
+                    (Some(rev), Some(rs_r)) => rev == rs_r,
+                    _ => false,
+                };
+                if let Some(pods) = pods_by_rs.remove(rs_name) {
+                    if is_new {
+                        new_pods.extend(pods);
+                    } else {
+                        old_pods.extend(pods);
+                    }
                 }
             }
         }
@@ -425,14 +1093,26 @@ pub fn ks_list_deployments(namespace: String) -> Result<Vec<DeployInfo>, String>
         let status = deploy_status(prog_reason.as_deref(), desired, &new_pods, &old_pods);
         out.push(DeployInfo {
             name,
+            alias,
             image,
             containers,
+            ports,
             status,
             pods: PodsGroup { new_pods, old_pods },
             revision: cur_rev.unwrap_or_default(),
         });
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!(
+            "ks_list_deployments ok ns={namespace} deps={} rs={} pods={} elapsed_ms={}",
+            out.len(),
+            rs_items.len(),
+            pod_items.len(),
+            t0.elapsed().as_millis()
+        ),
+    );
     Ok(out)
 }
 
@@ -518,6 +1198,460 @@ pub fn ks_list_deployment_revisions(namespace: String, deployment: String) -> Re
     Ok(out)
 }
 
+/// K8s metadata.name：小写 RFC 1123 subdomain
+fn is_rfc1123_subdomain(name: &str) -> bool {
+    if name.is_empty() || name.len() > 253 {
+        return false;
+    }
+    let bytes = name.as_bytes();
+    let first = bytes[0];
+    let last = bytes[bytes.len() - 1];
+    if !(first.is_ascii_lowercase() || first.is_ascii_digit()) {
+        return false;
+    }
+    if !(last.is_ascii_lowercase() || last.is_ascii_digit()) {
+        return false;
+    }
+    name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.')
+}
+
+fn require_rfc1123_name(kind: &str, name: &str) -> Result<String, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(format!("{kind} 名称不能为空"));
+    }
+    if !is_rfc1123_subdomain(&name) {
+        return Err(format!(
+            "{kind} 名称「{name}」不合法：须为小写字母/数字/'-'/'.'，且以字母或数字开头结尾（例：klcj-test-service）"
+        ));
+    }
+    Ok(name)
+}
+
+/// 读取 ConfigMap 的 data keys（用于展开为 env[].valueFrom.configMapKeyRef）
+fn fetch_configmap_keys(namespace: &str, name: &str) -> Result<Vec<String>, String> {
+    let ns = urlencoding(namespace);
+    let n = urlencoding(name);
+    let (status, json) = ks_api("GET", &format!("/api/v1/namespaces/{ns}/configmaps/{n}"), None)?;
+    if status != 200 {
+        return Err(format!("读取配置字典「{name}」失败 HTTP {status}"));
+    }
+    let mut keys: Vec<String> = json
+        .get("data")
+        .and_then(|v| v.as_object())
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default();
+    keys.sort();
+    Ok(keys)
+}
+
+fn normalize_health_path(raw: Option<&str>) -> Result<String, String> {
+    let mut p = raw.unwrap_or("/actuator/health").trim().to_string();
+    if p.is_empty() {
+        p = "/actuator/health".into();
+    }
+    if !p.starts_with('/') {
+        p = format!("/{p}");
+    }
+    if p.contains(' ') || p.contains('\n') {
+        return Err("健康检查路径不能包含空格或换行".into());
+    }
+    Ok(p)
+}
+
+/// 生成完整 Deployment JSON（创建与预览共用模板）
+/// `config_map`：对齐 KubeSphere——对该 ConfigMap 每个 key 生成
+/// `env[].valueFrom.configMapKeyRef`（不是 envFrom 整表引用）
+fn build_deployment_json(
+    namespace: &str,
+    name: &str,
+    image: &str,
+    alias: &str,
+    port: u16,
+    replicas: u32,
+    envs: &[String],
+    config_map: Option<&str>,
+    health_path: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    let name = require_rfc1123_name("部署", name)?;
+    let image = image.trim().to_string();
+    if image.is_empty() {
+        return Err("镜像地址不能为空".into());
+    }
+    if port == 0 {
+        return Err("容器端口无效".into());
+    }
+    let health = normalize_health_path(health_path)?;
+    let alias = alias.trim().to_string();
+    let mut env: Vec<serde_json::Value> = Vec::new();
+
+    // 1) 配置字典：每个 key → configMapKeyRef（与 KS 控制台一致）
+    if let Some(cm) = config_map.map(str::trim).filter(|s| !s.is_empty()) {
+        let keys = fetch_configmap_keys(namespace, cm)?;
+        if keys.is_empty() {
+            return Err(format!("配置字典「{cm}」没有 data key，无法引用"));
+        }
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!("build_deployment_json configMapKeyRef cm={cm} keys={}", keys.len()),
+        );
+        for key in keys {
+            // SW_AGENT_NAME 固定取部署名称，不走配置字典
+            if key == "SW_AGENT_NAME" {
+                continue;
+            }
+            env.push(serde_json::json!({
+                "name": key,
+                "valueFrom": {
+                    "configMapKeyRef": {
+                        "name": cm,
+                        "key": key
+                    }
+                }
+            }));
+        }
+    }
+
+    // SW_AGENT_NAME：SkyWalking 探针名 = 部署名称
+    env.push(serde_json::json!({ "name": "SW_AGENT_NAME", "value": name.clone() }));
+
+    // 2) 手写 K=V（可叠加；同名会排在后面，K8s 以最后为准）
+    for kv in envs {
+        let kv = kv.trim();
+        if kv.is_empty() { continue; }
+        if let Some(eq) = kv.find('=') {
+            let k = kv[..eq].trim().to_string();
+            let v = kv[eq + 1..].trim().to_string();
+            if !k.is_empty() {
+                env.push(serde_json::json!({ "name": k, "value": v }));
+            }
+        }
+    }
+
+    let port_name = format!("http-{port}");
+    let probe = serde_json::json!({
+        "httpGet": { "path": health, "port": port, "scheme": "HTTP" },
+        "timeoutSeconds": 1,
+        "periodSeconds": 10,
+        "successThreshold": 1,
+        "failureThreshold": 3
+    });
+
+    let container = serde_json::json!({
+        "name": "container-main",
+        "image": image,
+        "imagePullPolicy": "IfNotPresent",
+        "ports": [{ "name": port_name, "protocol": "TCP", "containerPort": port }],
+        "env": env,
+        "resources": {},
+        "volumeMounts": [{ "name": "host-time", "mountPath": "/etc/localtime", "readOnly": true }],
+        "livenessProbe": probe.clone(),
+        "readinessProbe": probe.clone(),
+        "startupProbe": probe,
+        "terminationMessagePath": "/dev/termination-log",
+        "terminationMessagePolicy": "File"
+    });
+
+    Ok(serde_json::json!({
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+            "namespace": namespace,
+            "name": name,
+            "labels": { "app": name },
+            "annotations": {
+                "kubesphere.io/alias-name": if alias.is_empty() { name.clone() } else { alias.clone() },
+                "kubesphere.io/description": ""
+            }
+        },
+        "spec": {
+            "replicas": replicas,
+            "selector": { "matchLabels": { "app": name } },
+            "template": {
+                "metadata": {
+                    "labels": { "app": name },
+                    "annotations": { "kubesphere.io/imagepullsecrets": "{}" }
+                },
+                "spec": {
+                    "containers": [container],
+                    "restartPolicy": "Always",
+                    "terminationGracePeriodSeconds": 30,
+                    "dnsPolicy": "ClusterFirst",
+                    "volumes": [{
+                        "name": "host-time",
+                        "hostPath": { "path": "/etc/localtime", "type": "" }
+                    }]
+                }
+            },
+            "strategy": {
+                "type": "RollingUpdate",
+                "rollingUpdate": { "maxUnavailable": "25%", "maxSurge": "25%" }
+            },
+            "revisionHistoryLimit": 10,
+            "progressDeadlineSeconds": 600
+        }
+    }))
+}
+
+/// 创建 Deployment：只收必传项，完整 Deployment 由后端模板拼接
+/// 参数：namespace/name/image 必填；alias 别名、port 容器端口、replicas 副本数、
+///       envs 额外环境变量（"K=V" 每项）可选；
+///       config_map 引用配置字典（展开为 env[].valueFrom.configMapKeyRef）可选；
+///       health_path HTTP 探针路径（默认 /actuator/health）；dry_run 仅校验
+#[tauri::command]
+pub fn ks_create_deployment(
+    namespace: String,
+    name: String,
+    image: String,
+    alias: Option<String>,
+    port: Option<u16>,
+    replicas: Option<u32>,
+    envs: Option<Vec<String>>,
+    config_map: Option<String>,
+    health_path: Option<String>,
+    dry_run: Option<bool>,
+) -> Result<String, String> {
+    let cm = config_map.and_then(|s| {
+        let t = s.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    });
+    let health = health_path.as_deref();
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!(
+            "ks_create_deployment ns={} name={} port={} healthPath={:?} dryRun={} configMap={:?}",
+            namespace, name, port.unwrap_or(8080), health, dry_run.unwrap_or(false), cm
+        ),
+    );
+    let deployment = build_deployment_json(
+        &namespace, &name, &image,
+        alias.as_deref().unwrap_or(""),
+        port.unwrap_or(8080),
+        replicas.unwrap_or(1),
+        &envs.unwrap_or_default(),
+        cm.as_deref(),
+        health,
+    )?;
+    let ns = urlencoding(&namespace);
+    let path = if dry_run.unwrap_or(false) {
+        format!("/apis/apps/v1/namespaces/{ns}/deployments?dryRun=All")
+    } else {
+        format!("/apis/apps/v1/namespaces/{ns}/deployments")
+    };
+    let (status, resp) = ks_api_raw("POST", &path, Some(deployment.to_string()), Some("application/json"))?;
+    if status != 201 && status != 200 {
+        let msg = resp
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("未知错误");
+        let detail = resp
+            .get("details")
+            .map(|d| d.to_string())
+            .unwrap_or_default();
+        crate::diag::diag_log("kubesphere", &format!("ks_create_deployment fail HTTP {status}: {msg}"));
+        return Err(format!("创建失败 HTTP {status}: {msg}{detail}"));
+    }
+    let created = resp
+        .pointer("/metadata/name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Ok(if created.is_empty() {
+        "创建成功（dryRun 校验通过）".to_string()
+    } else {
+        format!("创建成功：{created}")
+    })
+}
+
+/// ---------------------------------------------------------------------------
+/// ConfigMap 管理：列表 / 读取（复制用）/ 表单创建 / YAML 创建 / 预览
+/// ---------------------------------------------------------------------------
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigMapInfo {
+    pub name: String,
+    pub alias: String,
+    pub keys: Vec<String>,
+    pub data_size: usize,
+}
+
+/// 列出命名空间下全部 ConfigMap（名称 / 别名 / 键列表 / 数据大小）
+#[tauri::command]
+pub fn ks_list_configmaps(namespace: String) -> Result<Vec<ConfigMapInfo>, String> {
+    let ns = urlencoding(&namespace);
+    let t0 = Instant::now();
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_list_configmaps start ns={namespace}"),
+    );
+    let (status, json) = ks_api(
+        "GET",
+        &format!("/api/v1/namespaces/{ns}/configmaps?limit={LIST_LIMIT_CM}"),
+        None,
+    )?;
+    if status != 200 {
+        return Err(format!("读取 ConfigMap 列表失败 HTTP {status}"));
+    }
+    let items = json
+        .pointer("/items")
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
+    warn_if_list_truncated("configmaps", &json, items.len(), LIST_LIMIT_CM);
+    let mut out: Vec<ConfigMapInfo> = Vec::with_capacity(items.len());
+    for it in items {
+        let name = it.pointer("/metadata/name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let alias = it
+            .pointer("/metadata/annotations/kubesphere.io~1alias-name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        // 只取 key 名，不 clone 整份 data（大 ConfigMap 否则会拖垮列表）
+        let keys: Vec<String> = it
+            .get("data")
+            .and_then(|v| v.as_object())
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default();
+        let data_size = keys.len();
+        out.push(ConfigMapInfo { name, alias, keys, data_size });
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!(
+            "ks_list_configmaps ok ns={namespace} count={} elapsed_ms={}",
+            out.len(),
+            t0.elapsed().as_millis()
+        ),
+    );
+    Ok(out)
+}
+
+/// 读取单个 ConfigMap 的 data（供「复制创建」预填）
+#[tauri::command]
+pub fn ks_get_configmap(namespace: String, name: String) -> Result<serde_json::Value, String> {
+    let ns = urlencoding(&namespace);
+    let n = urlencoding(&name);
+    let (status, json) = ks_api("GET", &format!("/api/v1/namespaces/{ns}/configmaps/{n}"), None)?;
+    if status != 200 {
+        return Err(format!("读取 ConfigMap 失败 HTTP {status}"));
+    }
+    Ok(json.get("data").cloned().unwrap_or(serde_json::Value::Null))
+}
+
+/// 生成 ConfigMap JSON（表单模式：name + data 的 "K=V" 行）
+fn build_configmap_json(namespace: &str, name: &str, data_lines: &[String]) -> Result<serde_json::Value, String> {
+    let name = require_rfc1123_name("ConfigMap", name)?;
+    let mut data = serde_json::Map::new();
+    for kv in data_lines {
+        let kv = kv.trim();
+        if kv.is_empty() { continue; }
+        if let Some(eq) = kv.find('=') {
+            let k = kv[..eq].trim().to_string();
+            let v = kv[eq + 1..].to_string();
+            if !k.is_empty() {
+                data.insert(k, serde_json::Value::String(v));
+            }
+        }
+    }
+    if data.is_empty() {
+        return Err("至少需要一个键值对（K=V）".into());
+    }
+    // 仅当已有 SW_AGENT_NAME 时同步为 ConfigMap 名称；没有则不创建
+    if data.contains_key("SW_AGENT_NAME") {
+        data.insert(
+            "SW_AGENT_NAME".into(),
+            serde_json::Value::String(name.clone()),
+        );
+    }
+    Ok(serde_json::json!({
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": { "name": name, "namespace": namespace },
+        "data": data,
+    }))
+}
+
+/// 表单模式创建 ConfigMap（窗口弹窗：名称 + K=V 行）
+#[tauri::command]
+pub fn ks_create_configmap(
+    namespace: String,
+    name: String,
+    data: Vec<String>,
+    dry_run: Option<bool>,
+) -> Result<String, String> {
+    let cm = build_configmap_json(&namespace, &name, &data)?;
+    let ns = urlencoding(&namespace);
+    let path = if dry_run.unwrap_or(false) {
+        format!("/api/v1/namespaces/{ns}/configmaps?dryRun=All")
+    } else {
+        format!("/api/v1/namespaces/{ns}/configmaps")
+    };
+    let (status, resp) = ks_api_raw("POST", &path, Some(cm.to_string()), Some("application/json"))?;
+    if status != 201 && status != 200 {
+        let msg = resp.get("message").and_then(|v| v.as_str()).unwrap_or("未知错误");
+        return Err(format!("创建失败 HTTP {status}: {msg}"));
+    }
+    let created = resp.pointer("/metadata/name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    Ok(if created.is_empty() { "创建成功（dryRun 校验通过）".to_string() } else { format!("创建成功：{created}") })
+}
+
+/// YAML 模式创建 ConfigMap（粘贴完整 YAML）
+#[tauri::command]
+pub fn ks_create_configmap_yaml(namespace: String, yaml: String, dry_run: Option<bool>) -> Result<String, String> {
+    let ns = urlencoding(&namespace);
+    let path = if dry_run.unwrap_or(false) {
+        format!("/api/v1/namespaces/{ns}/configmaps?dryRun=All")
+    } else {
+        format!("/api/v1/namespaces/{ns}/configmaps")
+    };
+    let (status, resp) = ks_api_raw("POST", &path, Some(yaml), Some("application/yaml"))?;
+    if status != 201 && status != 200 {
+        let msg = resp.get("message").and_then(|v| v.as_str()).unwrap_or("未知错误");
+        return Err(format!("创建失败 HTTP {status}: {msg}"));
+    }
+    let created = resp.pointer("/metadata/name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    Ok(if created.is_empty() { "创建成功（dryRun 校验通过）".to_string() } else { format!("创建成功：{created}") })
+}
+
+/// 预览生成的 ConfigMap YAML（复制用）
+#[tauri::command]
+pub fn ks_preview_configmap(namespace: String, name: String, data: Vec<String>) -> Result<String, String> {
+    let cm = build_configmap_json(&namespace, &name, &data)?;
+    let yaml = serde_yaml::to_string(&cm).map_err(|e| format!("YAML 生成失败: {e}"))?;
+    Ok(yaml)
+}
+
+/// 预览生成的 Deployment YAML（不创建，用于复制到 kubectl / 控制台）
+#[tauri::command]
+pub fn ks_preview_deployment(
+    namespace: String,
+    name: String,
+    image: String,
+    alias: Option<String>,
+    port: Option<u16>,
+    replicas: Option<u32>,
+    envs: Option<Vec<String>>,
+    config_map: Option<String>,
+    health_path: Option<String>,
+) -> Result<String, String> {
+    let cm = config_map.and_then(|s| {
+        let t = s.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    });
+    let deployment = build_deployment_json(
+        &namespace, &name, &image,
+        alias.as_deref().unwrap_or(""),
+        port.unwrap_or(8080),
+        replicas.unwrap_or(1),
+        &envs.unwrap_or_default(),
+        cm.as_deref(),
+        health_path.as_deref(),
+    )?;
+    let yaml = serde_yaml::to_string(&deployment).map_err(|e| format!("YAML 生成失败: {e}"))?;
+    Ok(yaml)
+}
+
 /// 修改 Deployment 镜像并发布（strategic-merge-patch，触发滚动发布）
 #[tauri::command]
 pub fn ks_update_image(namespace: String, deployment: String, container: String, image: String) -> Result<UpdateResult, String> {
@@ -555,11 +1689,248 @@ pub fn ks_update_image(namespace: String, deployment: String, container: String,
     Ok(UpdateResult { ok: new_image == image, old_image, new_image, revision: new_rev })
 }
 
-/// 登出（清空会话）
+/// 修改弹框回填：与创建表单字段对齐
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeployEditInfo {
+    pub name: String,
+    pub alias: String,
+    pub image: String,
+    pub container: String,
+    pub port: u16,
+    pub replicas: u32,
+    pub health_path: String,
+    pub config_map: Option<String>,
+    pub envs: Vec<String>,
+}
+
 #[tauri::command]
-pub fn ks_logout() -> Result<(), String> {
+pub fn ks_get_deployment_edit(namespace: String, deployment: String) -> Result<DeployEditInfo, String> {
+    let ns = urlencoding(&namespace);
+    let dep = urlencoding(&deployment);
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_get_deployment_edit ns={namespace} dep={deployment}"),
+    );
+    let (status, json) = ks_api("GET", &format!("/apis/apps/v1/namespaces/{ns}/deployments/{dep}"), None)?;
+    if status != 200 {
+        return Err(format!("读取部署失败 HTTP {status}"));
+    }
+    let name = json
+        .pointer("/metadata/name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&deployment)
+        .to_string();
+    let alias = json
+        .pointer("/metadata/annotations/kubesphere.io~1alias-name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let replicas = json.pointer("/spec/replicas").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+    let containers = json
+        .pointer("/spec/template/spec/containers")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let c0 = containers.first().cloned().unwrap_or(serde_json::Value::Null);
+    let container = c0
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("container-main")
+        .to_string();
+    let image = c0
+        .get("image")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let port = c0
+        .pointer("/ports/0/containerPort")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(8080) as u16;
+    let health_path = c0
+        .pointer("/livenessProbe/httpGet/path")
+        .or_else(|| c0.pointer("/readinessProbe/httpGet/path"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("/actuator/health")
+        .to_string();
+
+    let mut cm_votes: HashMap<String, usize> = HashMap::new();
+    let mut envs: Vec<String> = Vec::new();
+    if let Some(arr) = c0.get("env").and_then(|v| v.as_array()) {
+        for e in arr {
+            let key = e.get("name").and_then(|v| v.as_str()).unwrap_or("").trim();
+            if key.is_empty() || key == "SW_AGENT_NAME" {
+                continue;
+            }
+            if let Some(cm) = e
+                .pointer("/valueFrom/configMapKeyRef/name")
+                .and_then(|v| v.as_str())
+            {
+                *cm_votes.entry(cm.to_string()).or_default() += 1;
+                continue;
+            }
+            if let Some(val) = e.get("value").and_then(|v| v.as_str()) {
+                envs.push(format!("{key}={val}"));
+            }
+        }
+    }
+    let config_map = cm_votes
+        .into_iter()
+        .max_by_key(|(_, n)| *n)
+        .map(|(k, _)| k);
+
+    Ok(DeployEditInfo {
+        name,
+        alias,
+        image,
+        container,
+        port,
+        replicas,
+        health_path,
+        config_map,
+        envs,
+    })
+}
+
+/// 按创建表单同款字段更新 Deployment（merge-patch，触发滚动发布）
+#[tauri::command]
+pub fn ks_update_deployment(
+    namespace: String,
+    name: String,
+    image: String,
+    alias: Option<String>,
+    port: Option<u16>,
+    replicas: Option<u32>,
+    envs: Option<Vec<String>>,
+    config_map: Option<String>,
+    health_path: Option<String>,
+    container: Option<String>,
+) -> Result<UpdateResult, String> {
+    let ns = urlencoding(&namespace);
+    let dep = urlencoding(&name);
+    let container = container
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("container-main")
+        .to_string();
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!(
+            "ks_update_deployment ns={} name={} port={} healthPath={:?} configMap={:?}",
+            namespace,
+            name,
+            port.unwrap_or(8080),
+            health_path,
+            config_map
+        ),
+    );
+
+    let (s1, cur) = ks_api("GET", &format!("/apis/apps/v1/namespaces/{ns}/deployments/{dep}"), None)?;
+    if s1 != 200 {
+        return Err(format!("读取部署失败 HTTP {s1}"));
+    }
+    let old_image = cur
+        .pointer("/spec/template/spec/containers/0/image")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let old_rev = cur
+        .pointer("/metadata/annotations/deployment.kubernetes.io~1revision")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?")
+        .to_string();
+
+    // 复用创建模板拼出目标容器字段（含 SW_AGENT_NAME / ConfigMap / 探针）
+    let built = build_deployment_json(
+        &namespace,
+        &name,
+        &image,
+        alias.as_deref().unwrap_or(""),
+        port.unwrap_or(8080),
+        replicas.unwrap_or(1),
+        &envs.unwrap_or_default(),
+        config_map.as_deref(),
+        health_path.as_deref(),
+    )?;
+    let built_container = built
+        .pointer("/spec/template/spec/containers/0")
+        .cloned()
+        .ok_or_else(|| "生成容器配置失败".to_string())?;
+    let mut container_patch = built_container;
+    if let Some(obj) = container_patch.as_object_mut() {
+        obj.insert("name".into(), serde_json::Value::String(container.clone()));
+    }
+    let alias_val = alias.as_deref().unwrap_or("").trim();
+    let alias_final = if alias_val.is_empty() { name.as_str() } else { alias_val };
+
+    let patch = serde_json::json!({
+        "metadata": {
+            "annotations": {
+                "kubesphere.io/alias-name": alias_final
+            }
+        },
+        "spec": {
+            "replicas": replicas.unwrap_or(1),
+            "template": {
+                "spec": {
+                    "containers": [container_patch]
+                }
+            }
+        }
+    });
+
+    let (s2, resp) = ks_api_raw(
+        "PATCH",
+        &format!("/apis/apps/v1/namespaces/{ns}/deployments/{dep}"),
+        Some(patch.to_string()),
+        Some("application/merge-patch+json"),
+    )?;
+    if s2 != 200 {
+        let msg = resp.get("message").and_then(|v| v.as_str()).unwrap_or("未知错误");
+        return Err(format!("更新失败 HTTP {s2}: {msg}"));
+    }
+
+    let (s3, ver) = ks_api("GET", &format!("/apis/apps/v1/namespaces/{ns}/deployments/{dep}"), None)?;
+    let new_image = if s3 == 200 {
+        ver.pointer("/spec/template/spec/containers/0/image")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&image)
+            .to_string()
+    } else {
+        image.clone()
+    };
+    let new_rev = if s3 == 200 {
+        ver.pointer("/metadata/annotations/deployment.kubernetes.io~1revision")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&old_rev)
+            .to_string()
+    } else {
+        old_rev.clone()
+    };
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_update_deployment ok name={name} rev={new_rev}"),
+    );
+    Ok(UpdateResult {
+        ok: new_image == image.trim(),
+        old_image,
+        new_image,
+        revision: new_rev,
+    })
+}
+
+/// 登出（清空内存会话；传 env_id 时同时清该环境落盘缓存）
+#[tauri::command]
+pub fn ks_logout(env_id: Option<String>) -> Result<(), String> {
     let mut guard = SESSION.lock().map_err(|_| "会话锁不可用".to_string())?;
     *guard = None;
+    if let Some(id) = env_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        clear_persisted(Some(id));
+        crate::diag::diag_log("kubesphere", &format!("ks_logout cleared env={id}"));
+    } else {
+        crate::diag::diag_log("kubesphere", "ks_logout memory only");
+    }
     Ok(())
 }
 
@@ -592,6 +1963,34 @@ fn selector_of(dep: &serde_json::Value) -> String {
         .unwrap_or_default()
 }
 
+/// 取 ownerReferences 中指定 kind 的 name
+fn owner_name(obj: &serde_json::Value, kind: &str) -> Option<String> {
+    obj.pointer("/metadata/ownerReferences")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|o| o.get("kind").and_then(|k| k.as_str()) == Some(kind))
+        })
+        .and_then(|o| o.get("name").and_then(|v| v.as_str()).map(String::from))
+}
+
+/// list 触达 limit 或带 continue 时打诊断日志（避免静默丢数据）
+fn warn_if_list_truncated(kind: &str, json: &serde_json::Value, count: usize, limit: u32) {
+    let has_continue = json
+        .pointer("/metadata/continue")
+        .and_then(|v| v.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    if has_continue || count as u32 >= limit {
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!(
+                "list truncated? kind={kind} count={count} limit={limit} continue={has_continue}"
+            ),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -603,6 +2002,39 @@ mod tests {
         let expected = "MDEwMTAxMDExMTExMTAxMTExMDE=@\\fTfllW[a]^LSMniS\\GI";
         assert_eq!(got, expected, "encrypt mismatch: {got:?}");
     }
+
+    #[test]
+    fn infra_http_covers_gateway_errors() {
+        assert!(is_infra_http(502));
+        assert!(is_infra_http(503));
+        assert!(is_infra_http(504));
+        assert!(is_infra_http(500));
+        assert!(!is_infra_http(401));
+        assert!(!is_infra_http(200));
+    }
+
+    #[test]
+    fn unreachable_msg_keeps_session_hint() {
+        let msg = console_unreachable_msg("探测 HTTP 502", "会话已保留");
+        assert!(msg.contains("控制台暂时不可用"));
+        assert!(msg.contains("不会强制重新登录"));
+        assert!(msg.contains("会话已保留"));
+    }
+
+    #[test]
+    fn owner_name_picks_matching_kind() {
+        let obj = serde_json::json!({
+            "metadata": {
+                "ownerReferences": [
+                    { "kind": "ReplicaSet", "name": "app-7d9f" },
+                    { "kind": "Deployment", "name": "app" }
+                ]
+            }
+        });
+        assert_eq!(owner_name(&obj, "Deployment").as_deref(), Some("app"));
+        assert_eq!(owner_name(&obj, "ReplicaSet").as_deref(), Some("app-7d9f"));
+        assert_eq!(owner_name(&obj, "Pod"), None);
+    }
 }
 
 #[cfg(test)]
@@ -612,9 +2044,13 @@ mod integration {
     #[test]
     #[ignore] // 需要真实控制台；手动运行: cargo test -- --ignored
     fn real_login_and_list() {
-        let sess = login("http://192.168.31.254:30880", "admin", "1qaz!QAZ@klcj").expect("login failed");
-        println!("cookie head: {}", &sess.cookie[..60]);
-        *SESSION.lock().unwrap() = Some(sess);
+        let r = ks_connect(
+            "dev".into(),
+            "http://192.168.31.254:30880".into(),
+            "admin".into(),
+            "1qaz!QAZ@klcj".into(),
+        ).expect("connect failed");
+        println!("connect mode={} msg={}", r.mode, r.message);
         let ns = ks_list_namespaces().expect("ns failed");
         println!("namespaces: {:?}", ns);
         let deps = ks_list_deployments("klcj-zt-dev".into()).expect("deps failed");
@@ -628,5 +2064,53 @@ mod integration {
             "gen".into(), gen.image.clone(),
         ).expect("update failed");
         println!("update: ok={} rev={} img_same={}", r.ok, r.revision, r.old_image == r.new_image);
+        // 创建部署（dryRun 校验，不实际创建）——使用用户提供的 finance YAML 结构
+        let create = ks_create_deployment(
+            "klcj-zt-dev".into(),
+            "ks-create-dryrun-test".into(),
+            "dockerhub.kubekey.local/tksy-admin/test:v1".into(),
+            Some("测试服务".into()),
+            Some(8080),
+            Some(1),
+            Some(vec!["TZ=Asia/Shanghai".into(), "REDIS_PASSWORD=xxx".into()]),
+            Some("klcj-ad-service".into()),
+            Some("/actuator/health".into()),
+            Some(true),
+        ).expect("create dryRun failed");
+        println!("create(dryRun): {create}");
+        let preview = ks_preview_deployment(
+            "klcj-zt-dev".into(),
+            "preview-test".into(),
+            "dockerhub.kubekey.local/tksy-admin/test:v1".into(),
+            Some("预览".into()),
+            Some(9616),
+            Some(1),
+            Some(vec!["TZ=Asia/Shanghai".into()]),
+            Some("klcj-ad-service".into()),
+            Some("/health".into()),
+        ).expect("preview failed");
+        println!("preview head: {}", &preview.lines().next().unwrap_or(""));
+        // ConfigMap：列表 + 表单创建 dryRun + YAML 创建 dryRun + 预览
+        let cms = ks_list_configmaps("klcj-zt-dev".into()).expect("cm list failed");
+        println!("configmaps: {} (first: {:?})", cms.len(), cms.first().map(|c| &c.name));
+        let cm_create = ks_create_configmap(
+            "klcj-zt-dev".into(),
+            "ks-cm-dryrun-test".into(),
+            vec!["TZ=Asia/Shanghai".into(), "SPRING_PROFILES_ACTIVE=dev".into()],
+            Some(true),
+        ).expect("cm create dryRun failed");
+        println!("cm create(dryRun): {cm_create}");
+        let cm_yaml = ks_create_configmap_yaml(
+            "klcj-zt-dev".into(),
+            "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ks-cm-yaml-test\n  namespace: klcj-zt-dev\ndata:\n  KEY: value\n".into(),
+            Some(true),
+        ).expect("cm yaml dryRun failed");
+        println!("cm yaml(dryRun): {cm_yaml}");
+        let cm_preview = ks_preview_configmap(
+            "klcj-zt-dev".into(),
+            "cm-preview".into(),
+            vec!["A=1".into(), "B=2".into()],
+        ).expect("cm preview failed");
+        println!("cm preview head: {}", cm_preview.lines().next().unwrap_or(""));
     }
 }

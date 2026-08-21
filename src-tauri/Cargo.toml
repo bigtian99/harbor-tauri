@@ -36,4 +36,5 @@ semver = "1"
 url = "2"
 md-5 = "0.10"
 base64 = "0.22"
+serde_yaml = "0.9"
 tauri-plugin-notification = { version = "2", features = ["windows7-compat"] }

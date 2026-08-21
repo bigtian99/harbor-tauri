@@ -6,6 +6,7 @@ import { notifications } from "@mantine/notifications";
 import {
   Badge,
   Button,
+  Checkbox,
   Group,
   Pagination,
   Paper,
@@ -16,7 +17,8 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { Globe, Loader2, RefreshCw, Search, Upload, XCircle } from "lucide-react";
+import { Globe, Loader2, RefreshCw, Search, StopCircle, Upload, XCircle } from "lucide-react";
+import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { isTauriRuntime } from "../types";
 
 export interface BtPhpSiteInfo {
@@ -39,6 +41,7 @@ interface BtPhpDeployProgress {
 }
 
 const PAGE_SIZE_OPTIONS = ["10", "20", "50"] as const;
+const AUTO_REFRESH_OPTIONS = ["10", "30", "60"] as const;
 
 function siteKey(row: Pick<BtPhpSiteInfo, "id" | "name">): string {
   return row.id || row.name;
@@ -102,6 +105,7 @@ interface BtPhpTableProps {
   busyKey: string | null;
   fileDragActive: boolean;
   dragOverKey: string | null;
+  onStop: (row: BtPhpSiteInfo) => void | Promise<void>;
   onCancel: () => void | Promise<void>;
 }
 
@@ -112,6 +116,7 @@ const BtPhpSitesTable = memo(function BtPhpSitesTable({
   busyKey,
   fileDragActive,
   dragOverKey,
+  onStop,
   onCancel,
 }: BtPhpTableProps) {
   return (
@@ -208,7 +213,21 @@ const BtPhpSitesTable = memo(function BtPhpSitesTable({
                         取消
                       </Button>
                     ) : (
-                      <Text size="xs" c="dimmed">拖入上传</Text>
+                      <Group gap={6} justify="center" wrap="nowrap">
+                        <Text size="xs" c="dimmed">拖入上传</Text>
+                        {row.status === "1" && (
+                          <Button
+                            size="xs"
+                            color="red"
+                            variant="light"
+                            leftSection={<StopCircle size={14} />}
+                            disabled={busyKey !== null}
+                            onClick={() => { void onStop(row); }}
+                          >
+                            停止
+                          </Button>
+                        )}
+                      </Group>
                     )}
                   </Table.Td>
                 </Table.Tr>
@@ -222,6 +241,7 @@ const BtPhpSitesTable = memo(function BtPhpSitesTable({
 });
 
 export function BtPhpSitesPanel() {
+  const { confirm } = useConfirmDialog();
   const [rows, setRows] = useState<BtPhpSiteInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -233,6 +253,9 @@ export function BtPhpSitesPanel() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshSec, setRefreshSec] = useState("30");
+  const autoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCancelRef = useRef(0);
   const userCancelledRef = useRef(false);
   const rowsRef = useRef(rows);
@@ -318,6 +341,17 @@ export function BtPhpSitesPanel() {
     return undefined;
   }, [load]);
 
+  // 自动刷新
+  useEffect(() => {
+    if (autoTimerRef.current) { clearInterval(autoTimerRef.current); autoTimerRef.current = null; }
+    if (autoRefresh && !busyRef.current) {
+      autoTimerRef.current = setInterval(() => {
+        if (!busyRef.current) void invoke<BtPhpSiteInfo[]>("list_bt_php_sites").then((list) => setRows(list)).catch(() => {});
+      }, Number(refreshSec) * 1000);
+    }
+    return () => { if (autoTimerRef.current) clearInterval(autoTimerRef.current); };
+  }, [autoRefresh, refreshSec]);
+
   useEffect(() => {
     if (!isTauriRuntime()) return;
     let disposed = false;
@@ -359,6 +393,40 @@ export function BtPhpSitesPanel() {
       unlisten?.();
     };
   }, [bumpBar]);
+
+  const stopSite = useCallback(async (row: BtPhpSiteInfo) => {
+    if (!isTauriRuntime()) return;
+    const ok = await confirm({
+      title: "停止 PHP 站点",
+      message: `确认停止 Nginx 站点「${row.name}」？`,
+      details: row.path ? [row.path] : undefined,
+      confirmLabel: "确认停止",
+      variant: "danger",
+    });
+    if (!ok) return;
+    const key = siteKey(row);
+    setBusyKey(key);
+    setProgressMessage(`正在停止 ${row.name}…`);
+    diagBuild(`开始停止站点 ${row.name} id=${row.id}`);
+    try {
+      const msg = await invoke<string>("stop_bt_php_site", {
+        siteName: row.name,
+        siteId: row.id,
+      });
+      setProgressMessage(msg);
+      diagBuild(msg);
+      notifications.show({ title: "已停止", message: msg, color: "teal", autoClose: 2500 });
+      setBusyKey(null);
+      await load({ resetPage: false });
+    } catch (e) {
+      const msg = String(e);
+      notifications.show({ title: "停止失败", message: msg, color: "red" });
+      setProgressMessage(`停止失败：${msg}`);
+      diagBuild(`停止站点失败 ${row.name}: ${msg}`);
+    } finally {
+      setBusyKey(null);
+    }
+  }, [confirm, load]);
 
   const cancelTask = useCallback(async () => {
     userCancelledRef.current = true;
@@ -574,14 +642,31 @@ export function BtPhpSitesPanel() {
             把目录 / zip / 站点文件拖到某一行上，松开即 FTP 覆盖到该站点路径（无需重启）
           </Text>
         </div>
-        <Button
-          leftSection={loading ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
-          onClick={() => void load({ resetPage: true })}
-          disabled={loading || busyKey !== null}
-          variant="light"
-        >
-          刷新
-        </Button>
+        <Group gap="sm" align="center">
+          <Checkbox
+            label="自动刷新"
+            checked={autoRefresh}
+            onChange={(e) => setAutoRefresh(e.currentTarget.checked)}
+            size="xs"
+          />
+          {autoRefresh && (
+            <Select
+              data={AUTO_REFRESH_OPTIONS.map((v) => ({ value: v, label: `${v}s` }))}
+              value={refreshSec}
+              onChange={(v) => v && setRefreshSec(v)}
+              size="xs"
+              w={72}
+            />
+          )}
+          <Button
+            leftSection={loading ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
+            onClick={() => void load({ resetPage: true })}
+            disabled={loading || busyKey !== null}
+            variant="light"
+          >
+            刷新
+          </Button>
+        </Group>
       </Group>
 
       {fileDragActive && (
@@ -656,6 +741,7 @@ export function BtPhpSitesPanel() {
         busyKey={busyKey}
         fileDragActive={fileDragActive}
         dragOverKey={dragOverKey}
+        onStop={stopSite}
         onCancel={cancelTask}
       />
 

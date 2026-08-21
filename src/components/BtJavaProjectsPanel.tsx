@@ -6,6 +6,7 @@ import { notifications } from "@mantine/notifications";
 import {
   Badge,
   Button,
+  Checkbox,
   Group,
   Pagination,
   Paper,
@@ -16,7 +17,8 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { Coffee, Loader2, RefreshCw, RotateCcw, Search, Upload, XCircle } from "lucide-react";
+import { Coffee, Loader2, RefreshCw, RotateCcw, Search, StopCircle, Upload, XCircle } from "lucide-react";
+import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { isTauriRuntime } from "../types";
 import { showSystemAlert } from "../systemAlert";
 
@@ -40,14 +42,15 @@ interface BtJavaDeployProgress {
 }
 
 const PAGE_SIZE_OPTIONS = ["10", "20", "50"] as const;
+const AUTO_REFRESH_OPTIONS = ["10", "30", "60"] as const;
 /** 重启后轮询间隔 */
 const RESTART_POLL_INTERVAL_MS = 3000;
 /** 最多轮询次数 */
 const RESTART_POLL_MAX_ATTEMPTS = 20;
 
-type BusyMode = "restart" | "upload";
+type BusyMode = "restart" | "upload" | "stop";
 /** 列表行上展示的固定阶段文案（不含百分比，避免进度条刷新带动整表闪动） */
-type BusyPhase = "upload" | "restart" | "wait_port";
+type BusyPhase = "upload" | "restart" | "wait_port" | "stop";
 
 function projectKey(row: Pick<BtJavaProjectInfo, "id" | "name">): string {
   return row.id || row.name;
@@ -122,6 +125,7 @@ function diagBuild(message: string) {
 function busyPhaseLabel(phase: BusyPhase): string {
   if (phase === "upload") return "上传中";
   if (phase === "wait_port") return "等待端口";
+  if (phase === "stop") return "停止中";
   return "重启中";
 }
 
@@ -134,6 +138,7 @@ interface BtJavaTableProps {
   fileDragActive: boolean;
   dragOverKey: string | null;
   onRestart: (row: BtJavaProjectInfo) => void | Promise<void>;
+  onStop: (row: BtJavaProjectInfo) => void | Promise<void>;
   onCancel: () => void | Promise<void>;
 }
 
@@ -147,6 +152,7 @@ const BtJavaProjectsTable = memo(function BtJavaProjectsTable({
   fileDragActive,
   dragOverKey,
   onRestart,
+  onStop,
   onCancel,
 }: BtJavaTableProps) {
   return (
@@ -210,7 +216,7 @@ const BtJavaProjectsTable = memo(function BtJavaProjectsTable({
                         {busyPhaseLabel(busyPhase)}
                       </Badge>
                     ) : (
-                      <Badge color={row.status === "1" ? "teal" : "gray"} variant="outline">
+                      <Badge color={row.status === "1" ? "teal" : row.status === "0" ? "red" : "gray"} variant="outline">
                         {row.status_text}
                       </Badge>
                     )}
@@ -233,25 +239,43 @@ const BtJavaProjectsTable = memo(function BtJavaProjectsTable({
                   </Table.Td>
                   <Table.Td className="bt-java-cell-actions">
                     {waiting ? (
-                      <Button
-                        size="xs"
-                        color="red"
-                        variant="light"
-                        leftSection={<XCircle size={14} />}
-                        onClick={() => { void onCancel(); }}
-                      >
-                        取消
-                      </Button>
+                      busyPhase === "upload" ? (
+                        <Button
+                          size="xs"
+                          color="red"
+                          variant="light"
+                          leftSection={<XCircle size={14} />}
+                          onClick={() => { void onCancel(); }}
+                        >
+                          取消
+                        </Button>
+                      ) : (
+                        <Text size="xs" c="dimmed">{busyPhase ? busyPhaseLabel(busyPhase) : "处理中"}</Text>
+                      )
                     ) : (
-                      <Button
-                        size="xs"
-                        variant="light"
-                        leftSection={<RotateCcw size={14} />}
-                        disabled={busyKey !== null}
-                        onClick={() => { void onRestart(row); }}
-                      >
-                        重启
-                      </Button>
+                      <Group gap={6} justify="center" wrap="nowrap">
+                        <Button
+                          size="xs"
+                          variant="light"
+                          leftSection={<RotateCcw size={14} />}
+                          disabled={busyKey !== null}
+                          onClick={() => { void onRestart(row); }}
+                        >
+                          重启
+                        </Button>
+                        {row.status === "1" && (
+                          <Button
+                            size="xs"
+                            color="red"
+                            variant="light"
+                            leftSection={<StopCircle size={14} />}
+                            disabled={busyKey !== null}
+                            onClick={() => { void onStop(row); }}
+                          >
+                            停止
+                          </Button>
+                        )}
+                      </Group>
                     )}
                   </Table.Td>
                 </Table.Tr>
@@ -265,6 +289,7 @@ const BtJavaProjectsTable = memo(function BtJavaProjectsTable({
 });
 
 export function BtJavaProjectsPanel() {
+  const { confirm } = useConfirmDialog();
   const [rows, setRows] = useState<BtJavaProjectInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -280,6 +305,9 @@ export function BtJavaProjectsPanel() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshSec, setRefreshSec] = useState("30");
+  const autoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCancelRef = useRef(0);
   /** 仅用户点「取消」时为 true；上传成功后仍应重启，不被面板刷新/重挂载打断 */
   const userCancelledRef = useRef(false);
@@ -375,6 +403,17 @@ export function BtJavaProjectsPanel() {
     // 否则列表重挂载/依赖变化会把「上传成功后的重启」直接跳过。
     return undefined;
   }, [load]);
+
+  // 自动刷新
+  useEffect(() => {
+    if (autoTimerRef.current) { clearInterval(autoTimerRef.current); autoTimerRef.current = null; }
+    if (autoRefresh && !busyRef.current) {
+      autoTimerRef.current = setInterval(() => {
+        if (!busyRef.current) void fetchRows().then((list) => setRows(list)).catch(() => {});
+      }, Number(refreshSec) * 1000);
+    }
+    return () => { if (autoTimerRef.current) clearInterval(autoTimerRef.current); };
+  }, [autoRefresh, refreshSec, fetchRows]);
 
   // 上传/重启进度：上传 MB 文案只增不减，避免重试把已传大小打回去
   useEffect(() => {
@@ -535,8 +574,94 @@ export function BtJavaProjectsPanel() {
     });
   }, []);
 
+  const stop = useCallback(async (row: BtJavaProjectInfo) => {
+    if (!isTauriRuntime()) return;
+    const ok = await confirm({
+      title: "停止 Java 项目",
+      message: `确认停止「${row.name}」？`,
+      details: row.project_jar ? [row.project_jar] : undefined,
+      confirmLabel: "确认停止",
+      variant: "danger",
+    });
+    if (!ok) return;
+    const key = projectKey(row);
+    userCancelledRef.current = false;
+    setBusyKey(key);
+    setBusyMode("stop");
+    setPollAttempt(0);
+    setBar(0);
+    setProgressMessage(`正在停止 ${row.name}…`);
+    diagBuild(`开始停止 ${row.name} id=${row.id}`);
+    try {
+      const msg = await invoke<string>("stop_bt_java_project", {
+        projectName: row.name,
+        projectId: row.id,
+      });
+
+      bumpBar(100);
+      notifications.show({
+        title: "已下发停止",
+        message: `${msg}，正在刷新状态…`,
+        color: "teal",
+        autoClose: 2500,
+      });
+      setProgressMessage("已下发停止，正在确认已停止…");
+
+      let stopped = false;
+      for (let attempt = 1; attempt <= RESTART_POLL_MAX_ATTEMPTS; attempt++) {
+        setProgressMessage(`确认已停止 ${attempt}/${RESTART_POLL_MAX_ATTEMPTS}…`);
+        diagBuild(`${row.name} 确认停止 attempt=${attempt}`);
+        await sleep(attempt === 1 ? 2000 : RESTART_POLL_INTERVAL_MS);
+
+        const list = await fetchRows();
+        const latest = findProject(list, row);
+        if (latest) {
+          // 只合并当前项目，避免整表状态/端口随轮询一起跳动
+          setRows((prev) => {
+            const key2 = projectKey(row);
+            const idx = prev.findIndex((r) => projectKey(r) === key2);
+            if (idx < 0) return prev;
+            const cur = prev[idx];
+            const next = prev.slice();
+            next[idx] = { ...cur, ...latest };
+            return next;
+          });
+          if (latest.status !== "1") {
+            stopped = true;
+            break;
+          }
+        }
+      }
+
+      if (stopped) {
+        await showSystemAlert("停止完成", `${row.name} 已停止`);
+        setProgressMessage("已停止");
+      } else {
+        setProgressMessage("停止已下发，但确认超时（可手动刷新）");
+      }
+    } catch (e) {
+      const msg = String(e);
+      notifications.show({ title: "停止失败", message: msg, color: "red" });
+      diagBuild(`停止失败 ${row.name}: ${msg}`);
+      setProgressMessage(`停止失败：${msg}`);
+    } finally {
+      // 若 load() 因异常提前抛出，兜底恢复 UI。
+      setBusyKey(null);
+      setPollAttempt(0);
+      await load({ resetPage: false });
+    }
+  }, [confirm, load, fetchRows, bumpBar, setBar]);
+
   const restart = useCallback(async (row: BtJavaProjectInfo) => {
     if (!isTauriRuntime()) return;
+    const ok = await confirm({
+      title: "重启 Java 项目",
+      message: `确认重启「${row.name}」？`,
+      details: row.project_jar ? [row.project_jar] : undefined,
+      confirmLabel: "确认重启",
+      variant: "danger",
+    });
+    if (!ok) return;
     const key = projectKey(row);
     userCancelledRef.current = false;
     const token = ++pollCancelRef.current;
@@ -586,7 +711,7 @@ export function BtJavaProjectsPanel() {
         setPollAttempt(0);
       }
     }
-  }, [waitForPort, bumpBar, setBar]);
+  }, [confirm, waitForPort, bumpBar, setBar]);
 
   const uploadAndRestart = useCallback(async (row: BtJavaProjectInfo, localJar: string) => {
     if (!isTauriRuntime()) return;
@@ -813,14 +938,31 @@ export function BtJavaProjectsPanel() {
               : ""}
           </Text>
         </div>
-        <Button
-          leftSection={loading ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
-          onClick={() => void load({ resetPage: true })}
-          disabled={loading || busyKey !== null}
-          variant="light"
-        >
-          刷新
-        </Button>
+        <Group gap="sm" align="center">
+          <Checkbox
+            label="自动刷新"
+            checked={autoRefresh}
+            onChange={(e) => setAutoRefresh(e.currentTarget.checked)}
+            size="xs"
+          />
+          {autoRefresh && (
+            <Select
+              data={AUTO_REFRESH_OPTIONS.map((v) => ({ value: v, label: `${v}s` }))}
+              value={refreshSec}
+              onChange={(v) => v && setRefreshSec(v)}
+              size="xs"
+              w={72}
+            />
+          )}
+          <Button
+            leftSection={loading ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
+            onClick={() => void load({ resetPage: true })}
+            disabled={loading || busyKey !== null}
+            variant="light"
+          >
+            刷新
+          </Button>
+        </Group>
       </Group>
 
       {fileDragActive && (
@@ -856,7 +998,7 @@ export function BtJavaProjectsPanel() {
                 style={{ width: `${Math.max(0, Math.min(100, barPercent))}%` }}
               />
             </div>
-            {busyKey !== null && (
+            {busyKey !== null && busyMode === "upload" && (
               <Button
                 size="xs"
                 color="red"
@@ -875,6 +1017,8 @@ export function BtJavaProjectsPanel() {
                 ? `等待端口出现 ${pollAttempt}/${RESTART_POLL_MAX_ATTEMPTS}`
                 : busyMode === "upload"
                   ? "正在上传…"
+                  : busyMode === "stop"
+                    ? "正在停止…"
                   : "处理中…")}
           </Text>
         </Paper>
@@ -902,6 +1046,7 @@ export function BtJavaProjectsPanel() {
         fileDragActive={fileDragActive}
         dragOverKey={dragOverKey}
         onRestart={restart}
+        onStop={stop}
         onCancel={cancelTask}
       />
 

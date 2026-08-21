@@ -405,6 +405,84 @@ fn restart_project(
     }
 }
 
+fn stop_project(
+    client: &reqwest::blocking::Client,
+    config: &HarborConfig,
+    project: &BtJavaProject,
+) -> Result<(), String> {
+    // 先按官方 project_name，失败再试 id
+    let by_name = panel_post(
+        client,
+        config,
+        "/mod/java/project/stop_project/stype",
+        None,
+        &[("project_name", project.name.clone())],
+    );
+    match by_name {
+        Ok(json) if json.get("status").and_then(|s| s.as_bool()) == Some(true) => Ok(()),
+        Ok(json) => {
+            let msg = json
+                .get("msg")
+                .and_then(|m| m.as_str())
+                .unwrap_or("停止失败");
+            crate::diag::diag_log(
+                "build",
+                &format!(
+                    "bt stop by project_name failed name={} msg={}；改试 id={}",
+                    project.name, msg, project.id
+                ),
+            );
+            if project.id.trim().is_empty() {
+                return Err(msg.to_string());
+            }
+            let by_id = panel_post(
+                client,
+                config,
+                "/mod/java/project/stop_project/stype",
+                None,
+                &[("id", project.id.clone())],
+            )?;
+            if by_id.get("status").and_then(|s| s.as_bool()) == Some(true) {
+                Ok(())
+            } else {
+                Err(by_id
+                    .get("msg")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("停止失败")
+                    .to_string())
+            }
+        }
+        Err(e) => {
+            crate::diag::diag_log(
+                "build",
+                &format!(
+                    "bt stop by project_name error name={} err={}；改试 id={}",
+                    project.name, e, project.id
+                ),
+            );
+            if project.id.trim().is_empty() {
+                return Err(e);
+            }
+            let by_id = panel_post(
+                client,
+                config,
+                "/mod/java/project/stop_project/stype",
+                None,
+                &[("id", project.id.clone())],
+            )?;
+            if by_id.get("status").and_then(|s| s.as_bool()) == Some(true) {
+                Ok(())
+            } else {
+                Err(by_id
+                    .get("msg")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("停止失败")
+                    .to_string())
+            }
+        }
+    }
+}
+
 fn deploy_one_jar(
     app: &AppHandle,
     client: &reqwest::blocking::Client,
@@ -822,6 +900,56 @@ fn status_text(status: &str) -> String {
     }
 }
 
+fn normalize_java_status(raw_status: &str, row: &Value, port: &str) -> String {
+    let mut status = raw_status.trim().to_string();
+    let status_desc = row
+        .get("status_text")
+        .or_else(|| row.get("statusText"))
+        .or_else(|| row.get("run_status"))
+        .or_else(|| row.get("runStatus"))
+        .or_else(|| row.get("state"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+
+    if !status_desc.is_empty() {
+        if status_desc.contains("未启动")
+            || status_desc.contains("已停止")
+            || status_desc.contains("stopped")
+            || status_desc.contains("stop")
+        {
+            status = "0".to_string();
+        } else if status_desc.contains("运行中")
+            || status_desc.contains("启动中")
+            || status_desc.contains("running")
+        {
+            status = "1".to_string();
+        }
+    }
+
+    // 宝塔偶发 status=1 但端口/进程已空，此时按停止态展示更贴近面板实际。
+    let has_port = !port.trim().is_empty() && port.trim() != "0" && port.trim() != "-";
+    if status == "1" && !has_port {
+        let pid = row
+            .get("pid")
+            .or_else(|| row.get("project_pid"))
+            .or_else(|| row.get("java_pid"))
+            .or_else(|| row.get("run_pid"))
+            .and_then(|v| match v {
+                Value::String(s) => Some(s.trim().to_string()),
+                Value::Number(n) => Some(n.to_string()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        if pid.is_empty() || pid == "0" || pid == "-" {
+            status = "0".to_string();
+        }
+    }
+
+    status
+}
+
 /// 从行数据取「最后时间」：优先更新类字段，再回退 addtime。
 fn parse_updated_at(row: &Value) -> String {
     const KEYS: &[&str] = &[
@@ -892,7 +1020,7 @@ fn parse_java_project_infos(json: &Value) -> Vec<BtJavaProjectInfo> {
         if name.trim().is_empty() {
             continue;
         }
-        let status = row
+        let raw_status = row
             .get("status")
             .map(|v| match v {
                 Value::Bool(b) => if *b { "1" } else { "0" }.to_string(),
@@ -910,6 +1038,7 @@ fn parse_java_project_infos(json: &Value) -> Vec<BtJavaProjectInfo> {
                 _ => String::new(),
             })
             .unwrap_or_default();
+        let status = normalize_java_status(&raw_status, &row, &port);
         // 未运行时不展示端口，便于「重启后等到端口出现」
         let port = if status.trim() == "1" {
             port
@@ -1136,6 +1265,81 @@ pub async fn restart_bt_java_project(
     })
     .await
     .map_err(|e| format!("重启线程异常: {}", e))?;
+    result
+}
+
+#[tauri::command]
+pub async fn stop_bt_java_project(
+    project_name: String,
+    project_id: String,
+) -> Result<String, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+        let config = crate::config_cmd::load_config_sync().unwrap_or_default();
+        require_bt_config(&config)?;
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "stop_bt_java_project name={} id={}",
+                project_name, project_id
+            ),
+        );
+        let client = panel_client(&config)?;
+        let project = BtJavaProject {
+            id: project_id,
+            name: project_name.clone(),
+            project_jar: String::new(),
+        };
+        stop_project(&client, &config, &project)?;
+        crate::diag::diag_log(
+            "build",
+            &format!("stop_bt_java_project ok name={}", project_name),
+        );
+        Ok(format!("已停止：{}", project_name))
+    })
+    .await
+    .map_err(|e| format!("停止线程异常: {}", e))?;
+    result
+}
+
+#[tauri::command]
+pub async fn stop_bt_php_site(
+    site_name: String,
+    site_id: String,
+) -> Result<String, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+        let config = crate::config_cmd::load_config_sync().unwrap_or_default();
+        require_bt_config(&config)?;
+        crate::diag::diag_log(
+            "build",
+            &format!("stop_bt_php_site name={} id={}", site_name, site_id),
+        );
+        let client = panel_client(&config)?;
+        let json = panel_post(
+            &client,
+            &config,
+            "/site",
+            Some("SiteStop"),
+            &[
+                ("id", site_id.clone()),
+                ("name", site_name.clone()),
+            ],
+        )?;
+        if json.get("status").and_then(|s| s.as_bool()) == Some(true) {
+            crate::diag::diag_log(
+                "build",
+                &format!("stop_bt_php_site ok name={}", site_name),
+            );
+            Ok(format!("已停止：{}", site_name))
+        } else {
+            let msg = json
+                .get("msg")
+                .and_then(|m| m.as_str())
+                .unwrap_or("停止失败");
+            Err(msg.to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("停止站点线程异常: {}", e))?;
     result
 }
 
