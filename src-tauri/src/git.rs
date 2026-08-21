@@ -1,6 +1,6 @@
 use crate::models::{GitBranchOption, LocalMergeCheck, RemoteBranchListResult};
 use crate::utils::{
-    create_temp_worktree_path, git_output, git_output_no_cancel, repo_root_for, silent_command,
+    create_temp_worktree_path, git_output_no_cancel, repo_root_for, silent_command,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -865,16 +865,53 @@ pub async fn get_git_remote_url(
     remote: Option<String>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = resolve_repo_root(&repo_path)?;
+        let repo_root = match resolve_repo_root(&repo_path) {
+            Ok(root) => root,
+            Err(e) => {
+                crate::diag::diag_log(
+                    "git",
+                    &format!("get_git_remote_url resolve_repo_root err={e} repo_path={repo_path}"),
+                );
+                return Err(e);
+            }
+        };
         let name = remote.unwrap_or_else(|| "origin".to_string());
         let name = name.trim();
         if name.is_empty() {
-            return Err("remote 名为空".to_string());
+            let msg = "remote 名为空".to_string();
+            crate::diag::diag_log(
+                "git",
+                &format!(
+                    "get_git_remote_url err={msg} repo={}",
+                    repo_root.display()
+                ),
+            );
+            return Err(msg);
         }
-        let url = git_output(&repo_root, &["remote", "get-url", name])?;
+        let url = match git_output_no_cancel(&repo_root, &["remote", "get-url", name]) {
+            Ok(url) => url,
+            Err(e) => {
+                crate::diag::diag_log(
+                    "git",
+                    &format!(
+                        "get_git_remote_url git remote get-url err={e} repo={} remote={name}",
+                        repo_root.display()
+                    ),
+                );
+                return Err(e);
+            }
+        };
         let url = url.trim().to_string();
         if url.is_empty() {
-            return Err(format!("remote `{name}` URL 为空"));
+            let msg = format!("remote `{name}` URL 为空");
+            crate::diag::diag_log(
+                "git",
+                &format!(
+                    "get_git_remote_url err={msg} repo={} remote={name}",
+                    repo_root.display()
+                ),
+            );
+            return Err(msg);
         }
         crate::diag::diag_log(
             "git",
@@ -883,5 +920,9 @@ pub async fn get_git_remote_url(
         Ok(url)
     })
     .await
-    .map_err(|e| format!("读取 remote 线程异常: {e}"))?
+    .map_err(|e| {
+        let msg = format!("读取 remote 线程异常: {e}");
+        crate::diag::diag_log("git", &format!("get_git_remote_url err={msg}"));
+        msg
+    })?
 }
