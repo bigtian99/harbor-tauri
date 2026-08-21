@@ -412,13 +412,62 @@ body::before {
   width: 100%;
 }
 
-/* 历史版本表：固定可视高度 + 内部滚动（避免长镜像换行把行撑爆后滚不动） */
+/* 历史版本表：固定可视高度 + 小屏横向滚动，避免列被挤成竖排字 */
 .ks-revisions-scroll {
   width: 100%;
+  max-width: 100%;
   max-height: min(360px, 42vh);
   overflow: auto;
   border: 1px solid var(--mantine-color-dark-4, rgba(255, 255, 255, 0.12));
   border-radius: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ks-revisions-table {
+  width: max-content;
+  min-width: 720px;
+  table-layout: fixed;
+}
+
+.ks-revisions-scroll .ks-rev-col-rev {
+  width: 96px;
+  white-space: nowrap;
+}
+
+.ks-revisions-scroll .ks-rev-col-image {
+  width: 280px;
+  max-width: 280px;
+}
+
+.ks-revisions-scroll .ks-rev-col-ready {
+  width: 56px;
+  white-space: nowrap;
+}
+
+.ks-revisions-scroll .ks-rev-col-dur {
+  width: 140px;
+  white-space: nowrap;
+}
+
+.ks-revisions-scroll .ks-rev-col-time {
+  width: 148px;
+  white-space: nowrap;
+}
+
+.ks-revisions-scroll .ks-rev-col-act {
+  width: 120px;
+  white-space: nowrap;
+}
+
+.ks-revisions-scroll .ks-rev-image {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 /* 部署列表 / ConfigMap：按视口拉高，少滚动多一屏 */
@@ -441,21 +490,6 @@ body::before {
 .ks-list-pager .mantine-Select-root {
   width: 100px !important;
   flex: 0 0 auto;
-}
-
-.ks-revisions-scroll .ks-rev-image {
-  display: block;
-  max-width: 420px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.ks-revisions-scroll table {
-  width: 100%;
 }
 
 /* 部署表选中行 / 当前 revision 高亮（避免组件内每次 render 注入 <style>） */

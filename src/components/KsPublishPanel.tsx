@@ -246,7 +246,7 @@ export function KsPublishPanel({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [refreshSec, setRefreshSec] = useState("60");
+  const [refreshSec, setRefreshSec] = useState("30");
   const [image, setImage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -1131,7 +1131,7 @@ export function KsPublishPanel({
                   </Button>
                 </Group>
                 <Group align="flex-start" gap="lg" wrap="wrap">
-                  <Box style={{ flex: 1, minWidth: 320 }}>
+                  <Box style={{ flex: "1 1 360px", minWidth: 0, maxWidth: "100%" }}>
                     <Text size="sm" fw={600} c="blue">🆕 新版本（当前 revision）</Text>
                     {sel.pods.new.length === 0 && <Text size="xs" c="dimmed">暂无</Text>}
                     {sel.pods.new.map((p) => (
@@ -1167,21 +1167,21 @@ export function KsPublishPanel({
                     {revisions.length > 0 && (
                       <Stack gap="xs">
                       <Box className="ks-revisions-scroll">
-                        <Table verticalSpacing="xs" stickyHeader stickyHeaderOffset={0}>
+                        <Table className="ks-revisions-table" verticalSpacing="xs" stickyHeader stickyHeaderOffset={0}>
                           <Table.Thead>
                             <Table.Tr>
-                              <Table.Th>Revision</Table.Th>
-                              <Table.Th>镜像地址</Table.Th>
-                              <Table.Th>就绪</Table.Th>
-                              <Table.Th>运行时长</Table.Th>
-                              <Table.Th>创建时间</Table.Th>
-                              <Table.Th>操作</Table.Th>
+                              <Table.Th className="ks-rev-col-rev">Revision</Table.Th>
+                              <Table.Th className="ks-rev-col-image">镜像地址</Table.Th>
+                              <Table.Th className="ks-rev-col-ready">就绪</Table.Th>
+                              <Table.Th className="ks-rev-col-dur">运行时长</Table.Th>
+                              <Table.Th className="ks-rev-col-time">创建时间</Table.Th>
+                              <Table.Th className="ks-rev-col-act">操作</Table.Th>
                             </Table.Tr>
                           </Table.Thead>
                           <Table.Tbody>
                             {revPageRows.map((rev) => (
                                 <Table.Tr key={rev.revision} className={rev.isCurrent ? "ks-rev-current" : undefined}>
-                                  <Table.Td>
+                                  <Table.Td className="ks-rev-col-rev">
                                     <Group gap={6} wrap="nowrap">
                                       <Text size="xs" fw={700} c={rev.isCurrent ? "blue.3" : undefined}>{rev.revision}</Text>
                                       {rev.isCurrent && (
@@ -1189,7 +1189,7 @@ export function KsPublishPanel({
                                       )}
                                     </Group>
                                   </Table.Td>
-                                  <Table.Td style={{ maxWidth: 420 }}>
+                                  <Table.Td className="ks-rev-col-image">
                                     {rev.isCurrent ? (
                                       <span className="ks-rev-current-tag ks-rev-image" title={rev.image || undefined}>
                                         {rev.image || "—"}
@@ -1200,10 +1200,10 @@ export function KsPublishPanel({
                                       </span>
                                     )}
                                   </Table.Td>
-                                  <Table.Td>
+                                  <Table.Td className="ks-rev-col-ready">
                                     <Text size="xs">{rev.ready}/{rev.replicas}</Text>
                                   </Table.Td>
-                                  <Table.Td>
+                                  <Table.Td className="ks-rev-col-dur">
                                     {(() => {
                                       const dur = revDurationMap.get(rev.revision);
                                       if (!dur) return <Text size="xs" c="dimmed">—</Text>;
@@ -1215,10 +1215,10 @@ export function KsPublishPanel({
                                       );
                                     })()}
                                   </Table.Td>
-                                  <Table.Td>
+                                  <Table.Td className="ks-rev-col-time">
                                     <Text size="xs" c="dimmed">{fmtTime(rev.createdAt)}</Text>
                                   </Table.Td>
-                                  <Table.Td>
+                                  <Table.Td className="ks-rev-col-act">
                                     {rev.isCurrent ? (
                                       <Text size="xs" c="dimmed">—</Text>
                                     ) : (
