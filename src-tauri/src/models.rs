@@ -252,6 +252,31 @@ pub struct HarborConfig {
     pub ks_environments: Vec<KsEnvironment>,
     #[serde(default)]
     pub ks_last_env_id: String,
+    #[serde(default)]
+    pub ks_publish_maps: Vec<KsPublishMap>,
+    #[serde(default)]
+    pub last_auto_publish_ks: bool,
+}
+
+/// Git 仓库 → KubeSphere 发布映射
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct KsPublishMap {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub git_url: String,
+    #[serde(default)]
+    pub git_url_key: String,
+    #[serde(default)]
+    pub role: String, // frontend | backend | any
+    #[serde(default)]
+    pub env_id: String,
+    #[serde(default)]
+    pub namespace: String,
+    #[serde(default)]
+    pub deployment: String,
+    #[serde(default)]
+    pub container: String,
 }
 
 /// KubeSphere 控制台环境（dev / test / prod 等）
@@ -324,6 +349,8 @@ impl Default for HarborConfig {
             ks_password: String::new(),
             ks_environments: Vec::new(),
             ks_last_env_id: String::new(),
+            ks_publish_maps: Vec::new(),
+            last_auto_publish_ks: false,
         }
     }
 }

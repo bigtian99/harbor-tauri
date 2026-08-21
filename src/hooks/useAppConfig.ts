@@ -62,6 +62,8 @@ export function createDefaultHarborConfig(): HarborConfig {
     },
     ks_environments: [],
     ks_last_env_id: "",
+    ks_publish_maps: [],
+    last_auto_publish_ks: false,
   };
 }
 

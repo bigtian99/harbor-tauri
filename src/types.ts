@@ -76,6 +76,10 @@ export interface HarborConfig {
   ks_environments?: KsEnvironment[];
   /** 发布页上次选中的环境 id */
   ks_last_env_id?: string;
+  /** Git 仓库 → KubeSphere 发布映射 */
+  ks_publish_maps?: KsPublishMap[];
+  /** 分支打包是否记忆「推送后自动发布到 KubeSphere」 */
+  last_auto_publish_ks?: boolean;
 }
 
 export interface KsEnvironment {
