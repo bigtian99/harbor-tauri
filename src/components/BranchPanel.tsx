@@ -47,6 +47,7 @@ interface BranchPanelProps {
   branchHasDockerfile: boolean;
   isBuilding: boolean;
   autoPushImage: boolean;
+  autoPublishKs: boolean;
   branchFullImage: string;
   branchImageResults: BranchImageResult[];
   imageName: string;
@@ -74,6 +75,7 @@ interface BranchPanelProps {
   onPackageWithBackendChange: (checked: boolean) => void;
   onSpringProfileChange: (profile: string) => void;
   onAutoPushImageChange: (checked: boolean) => void;
+  onAutoPublishKsChange: (checked: boolean) => void;
   onRememberSettingsChange: (checked: boolean) => void;
   setShowCommitListModal: (show: boolean) => void;
   loadCommitList: (repoPath: string, branch: string, page: number, authorFilter?: string, messageFilter?: string) => void;
@@ -105,12 +107,12 @@ export function BranchPanel({
   springProfile, springProfiles, isLoadingProfiles,
   lastCommit, isLoadingCommit, commitList, commitListTotal, showCommitListModal,
   artifactPath, backendArtifactPath, worktreePath, customDockerfile, branchHasDockerfile,
-  isBuilding, autoPushImage, branchFullImage, branchImageResults, imageName, imageTag, exposePort,
+  isBuilding, autoPushImage, autoPublishKs, branchFullImage, branchImageResults, imageName, imageTag, exposePort,
   nginxLocations, showAdvancedSettings, config,
   progress, progressMessage, log, showBuildLog, copied,
   onBranchProjectTypeChange, onRepoPathChange, onSelectRepo, onRefreshBranches,
   onBranchChange, onFrontendDirChange, onSelectedBuildScriptChange,
-  onPackageWithBackendChange, onSpringProfileChange, onAutoPushImageChange,
+  onPackageWithBackendChange, onSpringProfileChange, onAutoPushImageChange, onAutoPublishKsChange,
   onRememberSettingsChange, setShowCommitListModal, loadCommitList, loadCommitAuthors,
   commitAuthors, isLoadingCommitList, commitListPage, commitListPageSize,
   commitAuthorFilter, commitMessageFilter, setCommitAuthorFilter, setCommitMessageFilter,
@@ -346,6 +348,19 @@ export function BranchPanel({
                 : springProfile.trim().toLowerCase() === "test"
                   ? "Profile=test 时默认不推 Harbor（可手动开启）"
                   : "勾选后打包成功会自动推送镜像"}
+            </p>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={autoPublishKs}
+                disabled={!autoPushImage || isBuilding}
+                onChange={(e) => onAutoPublishKsChange(e.target.checked)}
+              />
+              <span className="checkbox-toggle"></span>
+              <span>推送后自动发布到 KubeSphere</span>
+            </label>
+            <p className="template-hint">
+              按系统设置中的 Git 地址映射发布；未配置映射则跳过，不影响推送成功
             </p>
           </div>
         )}

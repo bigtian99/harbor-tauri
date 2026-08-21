@@ -416,6 +416,7 @@ function App() {
             branchHasDockerfile={branch.branchHasDockerfile}
             isBuilding={build.isBuilding}
             autoPushImage={branch.autoPushImage}
+            autoPublishKs={branch.autoPublishKs}
             branchFullImage={branch.branchFullImage}
             branchImageResults={branch.branchImageResults}
             imageName={upload.imageName}
@@ -444,6 +445,7 @@ function App() {
             onPackageWithBackendChange={branch.setPackageWithBackend}
             onSpringProfileChange={branch.setSpringProfile}
             onAutoPushImageChange={branch.setAutoPushImage}
+            onAutoPublishKsChange={branch.setAutoPublishKs}
             onRememberSettingsChange={branch.handleRememberSettingsChange}
             setShowCommitListModal={branch.setShowCommitListModal}
             loadCommitList={branch.loadCommitList}

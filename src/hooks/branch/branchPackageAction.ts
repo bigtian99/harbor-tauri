@@ -22,6 +22,7 @@ import {
 import { sanitizeBranchForImageRef } from "../../branchRef";
 import { rememberBranchRepoSettings } from "../../branchSettings";
 import { showSystemAlert } from "../../systemAlert";
+import { runKsAutoPublish } from "../../utils/ksAutoPublish";
 import { prependPathHistory } from "./pathHistory";
 
 export interface BranchPackageActionState {
@@ -31,6 +32,7 @@ export interface BranchPackageActionState {
   frontendDir: string;
   selectedBuildScript: string;
   autoPushImage: boolean;
+  autoPublishKs: boolean;
   packageWithBackend: boolean;
   springProfile: string;
   branchExposePort: string;
@@ -77,6 +79,7 @@ export async function saveBranchSettings(deps: {
   selectedBuildScript: string;
   branchProjectType: BranchProjectType;
   autoPushImage: boolean;
+  autoPublishKs: boolean;
   packageWithBackend: boolean;
   springProfile: string;
   branchExposePort: string;
@@ -92,6 +95,7 @@ export async function saveBranchSettings(deps: {
     selectedBuildScript,
     branchProjectType,
     autoPushImage,
+    autoPublishKs,
     packageWithBackend,
     springProfile,
     branchExposePort,
@@ -110,6 +114,7 @@ export async function saveBranchSettings(deps: {
         last_build_script: selectedBuildScript,
         last_project_type: branchProjectType,
         last_auto_push_image: autoPushImage,
+        last_auto_publish_ks: autoPublishKs,
         last_package_with_backend: packageWithBackend,
         last_spring_profile: springProfile,
         last_expose_port: branchExposePort,
@@ -135,6 +140,7 @@ export type BranchPackageOverrides = {
   repoPath?: string;
   branchName?: string;
   autoPushImage?: boolean;
+  autoPublishKs?: boolean;
 };
 
 export async function handlePackageFromBranch(
@@ -172,6 +178,7 @@ export async function handlePackageFromBranch(
   const repoPath = overrides?.repoPath ?? deps.repoPath;
   const branchName = overrides?.branchName ?? deps.branchName;
   const autoPushImage = overrides?.autoPushImage ?? deps.autoPushImage;
+  const autoPublishKs = overrides?.autoPublishKs ?? deps.autoPublishKs;
 
   if (!isTauriRuntime()) {
     setLog("❌ 当前是浏览器预览环境，分支打包请在 Tauri 桌面窗口中操作");
@@ -247,6 +254,7 @@ export async function handlePackageFromBranch(
       selectedBuildScript,
       branchProjectType,
       autoPushImage,
+      autoPublishKs,
       packageWithBackend,
       springProfile,
       branchExposePort,
@@ -254,6 +262,21 @@ export async function handlePackageFromBranch(
     });
     await loadBuildHistory();
     setActiveTab("branch");
+
+    /** 推送成功后按映射发布 KS；失败不改推送成功态 */
+    async function maybeAutoPublishKs(imageResults: BranchImageResult[]) {
+      if (!autoPublishKs || imageResults.length === 0) return;
+      setProgressMessage("🚀 自动发布到 KubeSphere...");
+      await runKsAutoPublish({
+        repoPath,
+        images: imageResults.map((r) => ({ role: r.role, image: r.image })),
+        maps: config.ks_publish_maps ?? [],
+        config,
+        appendLog: (line) => {
+          setLog((prev) => (prev ? `${prev}\n${line}` : line));
+        },
+      });
+    }
 
     // 有自动推送时：推完再弹系统框，避免中途阻塞 Harbor
     if (!autoPushImage) {
@@ -341,6 +364,9 @@ export async function handlePackageFromBranch(
                 setBranchFullImage(imageList.join("\n"));
                 setLog(`✅ 分支打包并推送镜像完成\n\n${result.log}`);
                 setActiveTab("branch");
+                await maybeAutoPublishKs(
+                  imageList.map((image) => createBranchImageResult("backend", image)),
+                );
                 return;
               }
 
@@ -489,6 +515,7 @@ export async function handlePackageFromBranch(
                   : `${summary}\n\n${result.log}`,
               );
               setActiveTab("branch");
+              await maybeAutoPublishKs(successResults);
             } catch (pushErr) {
               setLog(`⚠️ 分支打包成功，但镜像推送失败:\n${pushErr}\n\n${result.log}`);
               setActiveTab("branch");

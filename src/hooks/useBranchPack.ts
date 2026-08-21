@@ -81,6 +81,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   const [customDockerfile, setCustomDockerfile] = useState("");
   const [branchHasDockerfile, setBranchHasDockerfile] = useState(false);
   const [autoPushImage, setAutoPushImage] = useState(false);
+  const [autoPublishKs, setAutoPublishKs] = useState(false);
   const [packageWithBackend, setPackageWithBackend] = useState(false);
   const [branchExposePort, setBranchExposePort] = useState("");
   const [nginxLocations, setNginxLocations] = useState<NginxLocationBlock[]>([]);
@@ -209,6 +210,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
       frontendDir,
       selectedBuildScript,
       autoPushImage,
+      autoPublishKs,
       packageWithBackend,
       springProfile,
       branchExposePort,
@@ -288,12 +290,18 @@ export function useBranchPack(deps: UseBranchPackDeps) {
         frontendDir: nextFrontendDir,
         selectedBuildScript: nextBuildScript,
         autoPushImage: autoPush,
+        autoPublishKs,
         packageWithBackend: nextPackageWithBackend,
         springProfile: nextSpringProfile,
         branchExposePort: remembered.exposePort,
         nginxLocations: remembered.nginxLocations ?? [],
       },
-      { repoPath: path, branchName: branch, autoPushImage: autoPush },
+      {
+        repoPath: path,
+        branchName: branch,
+        autoPushImage: autoPush,
+        autoPublishKs,
+      },
     );
   }
 
@@ -407,6 +415,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
           last_build_script: selectedBuildScript,
           last_project_type: branchProjectType,
           last_auto_push_image: autoPushImage,
+          last_auto_publish_ks: autoPublishKs,
           last_package_with_backend: packageWithBackend,
           last_spring_profile: springProfile,
           last_expose_port: branchExposePort,
@@ -434,6 +443,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setSelectedBuildScript("");
     setBranchProjectType("maven");
     setAutoPushImage(false);
+    setAutoPublishKs(false);
     setPackageWithBackend(false);
     setSpringProfile("");
     setSpringProfiles([]);
@@ -454,6 +464,9 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     if (savedConfig.last_build_script) setSelectedBuildScript(savedConfig.last_build_script);
     if (savedConfig.last_auto_push_image !== undefined) {
       setAutoPushImage(savedConfig.last_auto_push_image);
+    }
+    if (savedConfig.last_auto_publish_ks !== undefined) {
+      setAutoPublishKs(savedConfig.last_auto_publish_ks);
     }
     if (savedConfig.last_package_with_backend !== undefined) {
       setPackageWithBackend(savedConfig.last_package_with_backend);
@@ -488,6 +501,8 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     branchHasDockerfile,
     autoPushImage,
     setAutoPushImage,
+    autoPublishKs,
+    setAutoPublishKs,
     packageWithBackend,
     setPackageWithBackend,
     branchExposePort,
