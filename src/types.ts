@@ -87,6 +87,19 @@ export interface KsEnvironment {
   password: string;
 }
 
+export type KsPublishMapRole = "frontend" | "backend" | "any";
+
+export interface KsPublishMap {
+  id: string;
+  git_url: string;
+  git_url_key: string;
+  role: KsPublishMapRole;
+  env_id: string;
+  namespace: string;
+  deployment: string;
+  container?: string;
+}
+
 export interface PackageFromBranchResult {
   artifact_path: string;
   backend_artifact_path?: string;
