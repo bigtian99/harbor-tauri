@@ -33,8 +33,8 @@ use diag::{
     read_diagnostic_log, write_diagnostic_log,
 };
 use git::{
-    check_remote_merge, clone_repo, get_latest_tag, get_merge_conflict_diff, list_git_branches,
-    list_git_branches_from_url, list_remote_branches, merge_remote_branches,
+    check_remote_merge, clone_repo, get_git_remote_url, get_latest_tag, get_merge_conflict_diff,
+    list_git_branches, list_git_branches_from_url, list_remote_branches, merge_remote_branches,
 };
 use history::{
     clear_build_history, delete_artifact_path, delete_build_record, get_build_history,
@@ -171,6 +171,7 @@ pub fn run() {
             merge_remote_branches,
             get_merge_conflict_diff,
             get_latest_tag,
+            get_git_remote_url,
             batch_pack_sub_channels,
             open_ops_login_window,
             close_ops_login_window,

@@ -1,5 +1,7 @@
 use crate::models::{GitBranchOption, LocalMergeCheck, RemoteBranchListResult};
-use crate::utils::{create_temp_worktree_path, git_output_no_cancel, repo_root_for, silent_command};
+use crate::utils::{
+    create_temp_worktree_path, git_output, git_output_no_cancel, repo_root_for, silent_command,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -854,4 +856,32 @@ pub async fn get_latest_tag(repo_path: String) -> Result<Option<String>, String>
     })
     .await
     .map_err(|e| format!("获取 tag 线程异常: {e}"))?
+}
+
+/// 读取仓库 remote URL（默认 origin），供 KS 自动发布匹配仓库名。
+#[tauri::command]
+pub async fn get_git_remote_url(
+    repo_path: String,
+    remote: Option<String>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = resolve_repo_root(&repo_path)?;
+        let name = remote.unwrap_or_else(|| "origin".to_string());
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("remote 名为空".to_string());
+        }
+        let url = git_output(&repo_root, &["remote", "get-url", name])?;
+        let url = url.trim().to_string();
+        if url.is_empty() {
+            return Err(format!("remote `{name}` URL 为空"));
+        }
+        crate::diag::diag_log(
+            "git",
+            &format!("get_git_remote_url repo={} remote={} ok", repo_root.display(), name),
+        );
+        Ok(url)
+    })
+    .await
+    .map_err(|e| format!("读取 remote 线程异常: {e}"))?
 }
