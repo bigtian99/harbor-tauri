@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Settings, CheckCircle, AlertCircle, Eye, EyeOff, FolderOpen, Archive,
@@ -6,10 +7,11 @@ import {
   CloudUpload, Bell, Plus, Pencil, X,
 } from "lucide-react";
 import { showSystemAlert } from "../systemAlert";
-import type { HarborConfig, KsEnvironment } from "../types";
+import type { HarborConfig, KsEnvironment, KsPublishMap, KsPublishMapRole } from "../types";
 import { isTauriRuntime } from "../types";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { createKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
+import { createKsPublishMap, normalizeGitUrl } from "../utils/ksPublishMap";
 import "./Modal.css";
 
 export type CheckUpdateResult = {
@@ -34,6 +36,31 @@ interface ConfigPanelProps {
 
 type ConfigTab = "connection" | "jar" | "frontend" | "bt" | "output" | "ks" | "about";
 
+type PublishMapDraft = {
+  id?: string;
+  git_url: string;
+  role: KsPublishMapRole;
+  env_id: string;
+  namespace: string;
+  deployment: string;
+  container: string;
+};
+
+const KS_PUBLISH_ROLES: { value: KsPublishMapRole; label: string }[] = [
+  { value: "backend", label: "后端" },
+  { value: "frontend", label: "前端" },
+  { value: "any", label: "任意" },
+];
+
+const EMPTY_PUBLISH_MAP_DRAFT = (): PublishMapDraft => ({
+  git_url: "",
+  role: "backend",
+  env_id: "",
+  namespace: "",
+  deployment: "",
+  container: "",
+});
+
 const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { key: "connection", label: "Harbor 连接", icon: <Server size={14} /> },
   { key: "jar", label: "JAR 打包", icon: <Package size={14} /> },
@@ -57,6 +84,8 @@ export function ConfigPanel({
   const [gitClearMsg, setGitClearMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [envEditor, setEnvEditor] = useState<{ mode: "add" | "edit"; draft: KsEnvironment } | null>(null);
   const [envEditorPassword, setEnvEditorPassword] = useState(false);
+  const [mapEditor, setMapEditor] = useState<{ mode: "add" | "edit"; draft: PublishMapDraft } | null>(null);
+  const [mapFillLoading, setMapFillLoading] = useState(false);
 
   const gitRecordCount =
     (config.repo_path_history?.length ?? 0) + Object.keys(config.branch_repo_settings ?? {}).length;
@@ -172,6 +201,116 @@ export function ConfigPanel({
     if (ok) setKsEnvs(ksEnvs.filter((item) => item.id !== env.id));
   };
 
+  const publishMaps = config.ks_publish_maps ?? [];
+
+  const setPublishMaps = (next: KsPublishMap[]) => {
+    onConfigChange("ks_publish_maps", next);
+  };
+
+  const envNameById = (id: string) => ksEnvs.find((e) => e.id === id)?.name || id || "—";
+
+  const roleLabel = (role: KsPublishMapRole) =>
+    KS_PUBLISH_ROLES.find((r) => r.value === role)?.label ?? role;
+
+  const openAddPublishMap = () => {
+    const draft = EMPTY_PUBLISH_MAP_DRAFT();
+    draft.env_id = ksEnvs[0]?.id ?? "";
+    setMapEditor({ mode: "add", draft });
+  };
+
+  const openEditPublishMap = (map: KsPublishMap) => {
+    setMapEditor({
+      mode: "edit",
+      draft: {
+        id: map.id,
+        git_url: map.git_url,
+        role: map.role,
+        env_id: map.env_id,
+        namespace: map.namespace,
+        deployment: map.deployment,
+        container: map.container ?? "",
+      },
+    });
+  };
+
+  const closePublishMapEditor = () => {
+    setMapEditor(null);
+    setMapFillLoading(false);
+  };
+
+  const fillPublishMapGitFromRepo = async () => {
+    if (!mapEditor || mapFillLoading) return;
+    const repoPath = config.last_repo_path?.trim();
+    if (!repoPath) {
+      await showSystemAlert("无法填入", "请先在分支打包页选择过仓库路径（last_repo_path 为空）");
+      return;
+    }
+    if (!isTauriRuntime()) return;
+    setMapFillLoading(true);
+    try {
+      const url = await invoke<string>("get_git_remote_url", {
+        repoPath,
+        remote: null,
+      });
+      setMapEditor({
+        ...mapEditor,
+        draft: { ...mapEditor.draft, git_url: url.trim() },
+      });
+    } catch (e) {
+      await showSystemAlert("读取 Git 地址失败", String(e));
+    } finally {
+      setMapFillLoading(false);
+    }
+  };
+
+  const savePublishMapEditor = () => {
+    if (!mapEditor) return;
+    const draft = mapEditor.draft;
+    const git_url = draft.git_url.trim();
+    const namespace = draft.namespace.trim();
+    const deployment = draft.deployment.trim();
+    const env_id = draft.env_id.trim();
+    if (!git_url || !namespace || !deployment || !env_id) return;
+
+    const nextEntry = createKsPublishMap({
+      id: draft.id,
+      git_url,
+      role: draft.role,
+      env_id,
+      namespace,
+      deployment,
+      container: draft.container.trim() || undefined,
+    });
+
+    const dup = publishMaps.some(
+      (m) =>
+        m.git_url_key === nextEntry.git_url_key
+        && m.role === nextEntry.role
+        && m.id !== nextEntry.id,
+    );
+    if (dup) {
+      void showSystemAlert("重复映射", "同一 Git 地址 + 角色 已存在，请编辑原条目或换角色");
+      return;
+    }
+
+    if (mapEditor.mode === "add") {
+      setPublishMaps([...publishMaps, nextEntry]);
+    } else {
+      setPublishMaps(publishMaps.map((m) => (m.id === nextEntry.id ? nextEntry : m)));
+    }
+    closePublishMapEditor();
+  };
+
+  const removePublishMap = async (map: KsPublishMap) => {
+    const ok = await confirm({
+      title: "删除发布映射",
+      message: `确定删除「${map.git_url}」(${roleLabel(map.role)}) → ${map.namespace}/${map.deployment}？`,
+      confirmLabel: "删除",
+      variant: "danger",
+    });
+    if (ok) setPublishMaps(publishMaps.filter((m) => m.id !== map.id));
+  };
+
   return (
     <div className="config-panel">
       <div className="config-subtabs" role="tablist">
@@ -280,6 +419,48 @@ export function ConfigPanel({
                 ))}
               </div>
             )}
+
+            <div className="ks-publish-maps-section">
+              <div className="ks-env-toolbar">
+                <p className="template-hint" style={{ margin: 0 }}>
+                  发布映射：Git 远程地址 + 镜像角色 → 环境 / 命名空间 / 部署（分支打包推送后自动发布）
+                </p>
+                <button type="button" className="config-add-env-btn" onClick={openAddPublishMap}>
+                  <Plus size={14} />
+                  添加映射
+                </button>
+              </div>
+              {publishMaps.length === 0 && (
+                <p className="template-hint">暂无映射；打包页勾选「推送后自动发布」时需在此配置</p>
+              )}
+              {publishMaps.length > 0 && (
+                <div className="ks-env-list">
+                  {publishMaps.map((map) => (
+                    <div key={map.id} className="ks-env-row">
+                      <div className="ks-env-row-main">
+                        <span className="ks-env-name">
+                          <span className="ks-map-role-tag">{roleLabel(map.role)}</span>
+                          {map.git_url || map.git_url_key}
+                        </span>
+                        <span className="ks-env-console">
+                          {envNameById(map.env_id)} · {map.namespace}/{map.deployment}
+                          {map.container ? ` · 容器 ${map.container}` : ""}
+                        </span>
+                        <span className="ks-env-user">匹配键：{map.git_url_key}</span>
+                      </div>
+                      <div className="ks-env-row-actions">
+                        <button type="button" title="编辑" onClick={() => openEditPublishMap(map)}>
+                          <Pencil size={14} />
+                        </button>
+                        <button type="button" className="danger" title="删除" onClick={() => void removePublishMap(map)}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
 
@@ -743,6 +924,133 @@ export function ConfigPanel({
                 onClick={saveKsEnvEditor}
               >
                 {envEditor.mode === "add" ? "添加" : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mapEditor && (
+        <div className="modal-overlay" onClick={closePublishMapEditor}>
+          <div className="modal-content modal-content--sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">{mapEditor.mode === "add" ? "添加发布映射" : "编辑发布映射"}</h3>
+              <button type="button" className="modal-close" onClick={closePublishMapEditor}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Git 远程地址</label>
+                <div className="path-picker-row">
+                  <input
+                    type="text"
+                    value={mapEditor.draft.git_url}
+                    onChange={(e) => setMapEditor({
+                      ...mapEditor,
+                      draft: { ...mapEditor.draft, git_url: e.target.value },
+                    })}
+                    placeholder="git@host:group/repo.git 或 https://host/group/repo"
+                  />
+                  <button
+                    type="button"
+                    className="path-picker-btn"
+                    disabled={mapFillLoading}
+                    onClick={() => void fillPublishMapGitFromRepo()}
+                  >
+                    {mapFillLoading ? <Loader2 size={14} className="spin" /> : <FolderOpen size={14} />}
+                    填入上次仓库
+                  </button>
+                </div>
+                {mapEditor.draft.git_url.trim() && (
+                  <p className="template-hint">
+                    匹配键：{normalizeGitUrl(mapEditor.draft.git_url)}
+                  </p>
+                )}
+              </div>
+              <div className="form-group">
+                <label>镜像角色</label>
+                <select
+                  value={mapEditor.draft.role}
+                  onChange={(e) => setMapEditor({
+                    ...mapEditor,
+                    draft: { ...mapEditor.draft, role: e.target.value as KsPublishMapRole },
+                  })}
+                >
+                  {KS_PUBLISH_ROLES.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>KubeSphere 环境</label>
+                <select
+                  value={mapEditor.draft.env_id}
+                  onChange={(e) => setMapEditor({
+                    ...mapEditor,
+                    draft: { ...mapEditor.draft, env_id: e.target.value },
+                  })}
+                >
+                  <option value="">选择环境</option>
+                  {ksEnvs.map((env) => (
+                    <option key={env.id} value={env.id}>{env.name || env.id}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>命名空间</label>
+                <input
+                  type="text"
+                  value={mapEditor.draft.namespace}
+                  onChange={(e) => setMapEditor({
+                    ...mapEditor,
+                    draft: { ...mapEditor.draft, namespace: e.target.value },
+                  })}
+                  placeholder="例如: klcj-zt-dev"
+                />
+              </div>
+              <div className="form-group">
+                <label>部署名称</label>
+                <input
+                  type="text"
+                  value={mapEditor.draft.deployment}
+                  onChange={(e) => setMapEditor({
+                    ...mapEditor,
+                    draft: { ...mapEditor.draft, deployment: e.target.value },
+                  })}
+                  placeholder="Deployment metadata.name"
+                />
+              </div>
+              <div className="form-group">
+                <label>容器名（可选）</label>
+                <input
+                  type="text"
+                  value={mapEditor.draft.container}
+                  onChange={(e) => setMapEditor({
+                    ...mapEditor,
+                    draft: { ...mapEditor.draft, container: e.target.value },
+                  })}
+                  placeholder="留空则取该部署第一个容器"
+                />
+              </div>
+            </div>
+            <div className="ks-env-modal-footer">
+              <button type="button" className="ks-env-modal-cancel" onClick={closePublishMapEditor}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="ks-env-modal-ok"
+                disabled={
+                  !mapEditor.draft.git_url.trim()
+                  || !mapEditor.draft.env_id.trim()
+                  || !mapEditor.draft.namespace.trim()
+                  || !mapEditor.draft.deployment.trim()
+                  || ksEnvs.length === 0
+                }
+                onClick={savePublishMapEditor}
+              >
+                {mapEditor.mode === "add" ? "添加" : "保存"}
               </button>
             </div>
           </div>

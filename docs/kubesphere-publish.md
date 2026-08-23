@@ -53,7 +53,14 @@ KubeSphere 连接参数放在 **系统设置 → KubeSphere** tab，支持配置
 
 发布面板顶部用下拉框选择环境，切换后重新登录并刷新命名空间。上次选中的环境记在 `ks_last_env_id`。
 
-配置保存在 `HarborConfig.ks_environments`。
+配置保存在 `HarborConfig.ks_environments` 与 `HarborConfig.ks_publish_maps`。
+
+### 分支打包自动发布（Git 映射）
+
+1. **系统设置 → KubeSphere → 发布映射**：录入 Git 远程地址 + 镜像角色（前端/后端/任意）→ 环境、命名空间、部署名；可用「填入上次仓库」读 `origin`。
+2. **分支打包**：勾选「打包后联动推送镜像」与「推送后自动发布到 KubeSphere」。
+3. 推送成功后：读取当前仓库 `git remote get-url origin`，规范化后与映射表匹配；命中则 `ks_connect` + `ks_update_image`。
+4. **日志**：打包页进度 + 系统诊断 `[build]` / `[kubesphere]`。未配置映射或发布失败**不阻断**推送成功。
 
 ## 前端（React + Mantine）
 
