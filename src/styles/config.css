@@ -65,6 +65,8 @@
 .config-add-env-btn {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
+  width: fit-content;
   gap: 6px;
   flex-shrink: 0;
   padding: 6px 12px;
@@ -172,14 +174,159 @@
   vertical-align: middle;
 }
 
-.modal-content--sm .modal-body select {
+.config-select-wrapper {
+  position: relative;
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid rgba(100, 255, 218, 0.18);
-  border-radius: 6px;
-  background: rgba(15, 22, 41, 0.9);
+}
+
+.config-select {
+  width: 100%;
+  padding: 10px 36px 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.15);
+  background: rgba(15, 52, 96, 0.4);
   color: #e0e0e0;
   font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.config-select:hover:not(:disabled) {
+  border-color: rgba(100, 255, 218, 0.3);
+  background: rgba(15, 52, 96, 0.6);
+}
+
+.config-select:focus {
+  border-color: #5eead4;
+  background: rgba(15, 52, 96, 0.7);
+  box-shadow:
+    0 0 0 3px rgba(100, 255, 218, 0.12),
+    0 4px 16px rgba(100, 255, 218, 0.15);
+}
+
+.config-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.config-select option {
+  background: #0f1629;
+  color: #e0e0e0;
+}
+
+.config-select-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #8892b0;
+  pointer-events: none;
+}
+
+.config-select-wrapper--compact .config-select-icon {
+  right: 8px;
+}
+
+.config-select--compact {
+  padding: 6px 28px 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.ks-map-context-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+  margin-top: 10px;
+}
+
+.ks-map-context-field {
+  flex: 1 1 140px;
+  min-width: 120px;
+}
+
+.ks-map-context-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #8892b0;
+}
+
+.ks-map-save-btn {
+  background: rgba(100, 255, 218, 0.18) !important;
+}
+
+.ks-map-status {
+  margin-top: 6px;
+}
+
+.ks-map-grid-wrap {
+  margin-top: 10px;
+  overflow-x: auto;
+  border: 1px solid rgba(100, 255, 218, 0.12);
+  border-radius: 8px;
+}
+
+.ks-map-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ks-map-grid th,
+.ks-map-grid td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.ks-map-grid th {
+  color: #8892b0;
+  font-weight: 600;
+  background: rgba(15, 22, 41, 0.5);
+  white-space: nowrap;
+}
+
+.ks-map-grid-deploy {
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.ks-map-grid-container {
+  color: #8892b0;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ks-map-git-input {
+  width: 100%;
+  min-width: 200px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 255, 218, 0.15);
+  background: rgba(15, 52, 96, 0.35);
+  color: #e0e0e0;
+  font-size: 12px;
+  outline: none;
+}
+
+.ks-map-git-input:focus {
+  border-color: #5eead4;
+  box-shadow: 0 0 0 2px rgba(100, 255, 218, 0.1);
+}
+
+.ks-map-other-title {
+  margin-top: 16px;
+  margin-bottom: 6px;
 }
 
 .modal-content--sm .modal-body .form-group + .form-group {

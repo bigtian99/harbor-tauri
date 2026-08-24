@@ -10,10 +10,9 @@ mod push;
 mod push_helpers;
 
 pub use bt_deploy::{
-    cancel_bt_java_deploy, cancel_bt_php_deploy, list_bt_java_projects, list_bt_php_sites,
-    restart_bt_java_project, stop_bt_java_project, stop_bt_php_site,
-    upload_and_restart_bt_java_project, upload_bt_java_jar,
-    upload_bt_php_site, warmup_bt_ftp,
+    cancel_bt_java_deploy, cancel_bt_php_deploy, get_bt_temp_login_url, list_bt_java_projects,
+    list_bt_php_sites, restart_bt_java_project, stop_bt_java_project, stop_bt_php_site,
+    upload_and_restart_bt_java_project, upload_bt_java_jar, upload_bt_php_site, warmup_bt_ftp,
 };
 pub use detect::{
     cancel_build, check_dockerfile, detect_frontend_dir, detect_spring_profiles, list_npm_scripts,

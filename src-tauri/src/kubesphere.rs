@@ -184,6 +184,79 @@ fn clone_memory_session() -> Result<Session, String> {
     guard.as_ref().cloned().ok_or_else(|| "请先连接 KubeSphere（登录）".to_string())
 }
 
+/// 从本地配置取当前环境的密码，用于 refresh 失败后无感重登
+fn password_for_session(sess: &Session) -> Result<String, String> {
+    let config = crate::config_cmd::load_config_sync()?;
+    let env = config
+        .ks_environments
+        .iter()
+        .find(|e| e.id == sess.env_id)
+        .or_else(|| {
+            // 兼容旧单环境 / 控制台地址匹配
+            config.ks_environments.iter().find(|e| {
+                e.console.trim_end_matches('/') == sess.console.trim_end_matches('/')
+                    && e.username.trim() == sess.username.trim()
+            })
+        });
+    let Some(env) = env else {
+        return Err(format!(
+            "会话已失效且配置中找不到环境「{}」，请到 系统设置 → KubeSphere 检查",
+            sess.env_id
+        ));
+    };
+    let password = env.password.trim();
+    if password.is_empty() {
+        let label = if env.name.trim().is_empty() {
+            sess.env_id.as_str()
+        } else {
+            env.name.as_str()
+        };
+        return Err(format!(
+            "会话已失效且环境「{label}」未保存密码，无法自动重登"
+        ));
+    }
+    Ok(password.to_string())
+}
+
+/// refreshToken 续期；失败则用配置密码重新登录（UI 保持「已连接」）
+fn recover_session_after_401(sess: &Session) -> Result<(Session, &'static str), String> {
+    match refresh_session(sess) {
+        Ok(new_sess) => {
+            persist_session(&new_sess);
+            set_memory_session(new_sess.clone())?;
+            return Ok((new_sess, "refreshed"));
+        }
+        Err(e) => {
+            if e.contains("控制台暂时不可用") {
+                return Err(e);
+            }
+            crate::diag::diag_log(
+                "kubesphere",
+                &format!("ks recover: refresh fail → try password relogin: {e}"),
+            );
+        }
+    }
+
+    let password = password_for_session(sess)?;
+    let (base, cookie) = login(&sess.console, &sess.username, &password).map_err(|e| {
+        crate::diag::diag_log("kubesphere", &format!("ks recover: password relogin fail: {e}"));
+        format!("会话已失效，自动重登失败：{e}")
+    })?;
+    let new_sess = Session {
+        env_id: sess.env_id.clone(),
+        console: base,
+        username: sess.username.clone(),
+        cookie,
+    };
+    persist_session(&new_sess);
+    set_memory_session(new_sess.clone())?;
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks recover: password relogin ok env={}", new_sess.env_id),
+    );
+    Ok((new_sess, "relogin"))
+}
+
 // ---------------------------------------------------------------------------
 // 登录加密（复刻控制台前端 encrypt 函数）
 //   encrypt = Base64(奇偶位串) + "@" + 字符串
@@ -495,24 +568,41 @@ fn ks_api_raw(
     body: Option<String>,
     content_type: Option<&str>,
 ) -> Result<(u16, serde_json::Value), String> {
-    let mut sess = clone_memory_session()?;
+    let sess = clone_memory_session()?;
     let result = ks_api_raw_with(&sess, method, path, body.clone(), content_type)?;
-    // 401 时尝试 refresh 一次再重试
-    if result.0 == 401 {
-        crate::diag::diag_log("kubesphere", &format!("ks_api 401 {method} {path} → try refresh"));
-        match refresh_session(&sess) {
-            Ok(new_sess) => {
-                persist_session(&new_sess);
-                set_memory_session(new_sess.clone())?;
-                sess = new_sess;
-                return ks_api_raw_with(&sess, method, path, body, content_type);
-            }
-            Err(e) => {
-                crate::diag::diag_log("kubesphere", &format!("ks_api refresh fail: {e}"));
-            }
-        }
+    // 401：refresh → 失败则密码重登 → 再重试一次（前端保持「已连接」）
+    if result.0 != 401 {
+        return Ok(result);
     }
-    Ok(result)
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_api 401 {method} {path} → recover session"),
+    );
+    let (new_sess, mode) = recover_session_after_401(&sess)?;
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_api recover mode={mode} → retry {method} {path}"),
+    );
+    let retry = ks_api_raw_with(&new_sess, method, path, body.clone(), content_type)?;
+    // refresh 成功但 token 仍无效时，再尝试密码重登一次
+    if retry.0 == 401 && mode == "refreshed" {
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!("ks_api still 401 after refresh → password relogin {method} {path}"),
+        );
+        let password = password_for_session(&new_sess)?;
+        let (base, cookie) = login(&new_sess.console, &new_sess.username, &password)?;
+        let relogin = Session {
+            env_id: new_sess.env_id.clone(),
+            console: base,
+            username: new_sess.username.clone(),
+            cookie,
+        };
+        persist_session(&relogin);
+        set_memory_session(relogin.clone())?;
+        return ks_api_raw_with(&relogin, method, path, body, content_type);
+    }
+    Ok(retry)
 }
 
 fn ks_api_raw_with(
@@ -901,30 +991,48 @@ fn ks_fetch_ns_lists(
     let (mut rs_status, mut rs_json) = rs_res?;
     let (mut pod_status, mut pod_json) = pod_res?;
 
-    // 任一 401：续期一次后串行重试（避免三线程同时 refresh 抢锁）
+    // 任一 401：续期 / 密码重登一次后串行重试（避免三线程同时 refresh 抢锁）
     if dep_status == 401 || rs_status == 401 || pod_status == 401 {
         crate::diag::diag_log(
             "kubesphere",
-            "ks_list_deployments parallel 401 → refresh once then retry",
+            "ks_list_deployments parallel 401 → recover once then retry",
         );
-        let mut sess = clone_memory_session()?;
-        match refresh_session(&sess) {
-            Ok(new_sess) => {
-                persist_session(&new_sess);
-                set_memory_session(new_sess.clone())?;
-                sess = new_sess;
-            }
-            Err(e) => {
-                crate::diag::diag_log("kubesphere", &format!("ks_list_deployments refresh fail: {e}"));
-                return Err(e);
-            }
-        }
+        let sess = clone_memory_session()?;
+        let (sess, mode) = recover_session_after_401(&sess).map_err(|e| {
+            crate::diag::diag_log("kubesphere", &format!("ks_list_deployments recover fail: {e}"));
+            e
+        })?;
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!("ks_list_deployments recover mode={mode}"),
+        );
         let dep_path = format!("/apis/apps/v1/namespaces/{ns}/deployments?limit={LIST_LIMIT_DEPLOY}");
         let rs_path = format!("/apis/apps/v1/namespaces/{ns}/replicasets?limit={LIST_LIMIT_RS}");
         let pod_path = format!("/api/v1/namespaces/{ns}/pods?limit={LIST_LIMIT_POD}");
         (dep_status, dep_json) = ks_api_raw_with(&sess, "GET", &dep_path, None, None)?;
         (rs_status, rs_json) = ks_api_raw_with(&sess, "GET", &rs_path, None, None)?;
         (pod_status, pod_json) = ks_api_raw_with(&sess, "GET", &pod_path, None, None)?;
+
+        // refresh 成功但仍 401：再密码重登一次
+        if (dep_status == 401 || rs_status == 401 || pod_status == 401) && mode == "refreshed" {
+            crate::diag::diag_log(
+                "kubesphere",
+                "ks_list_deployments still 401 after refresh → password relogin",
+            );
+            let password = password_for_session(&sess)?;
+            let (base, cookie) = login(&sess.console, &sess.username, &password)?;
+            let relogin = Session {
+                env_id: sess.env_id.clone(),
+                console: base,
+                username: sess.username.clone(),
+                cookie,
+            };
+            persist_session(&relogin);
+            set_memory_session(relogin.clone())?;
+            (dep_status, dep_json) = ks_api_raw_with(&relogin, "GET", &dep_path, None, None)?;
+            (rs_status, rs_json) = ks_api_raw_with(&relogin, "GET", &rs_path, None, None)?;
+            (pod_status, pod_json) = ks_api_raw_with(&relogin, "GET", &pod_path, None, None)?;
+        }
     }
 
     if dep_status != 200 {
@@ -2019,6 +2127,22 @@ mod tests {
         assert!(msg.contains("控制台暂时不可用"));
         assert!(msg.contains("不会强制重新登录"));
         assert!(msg.contains("会话已保留"));
+    }
+
+    #[test]
+    fn password_for_session_matches_env_id() {
+        // 不依赖真实配置文件：构造 Session 后若配置无匹配应返回明确错误
+        let sess = Session {
+            env_id: "__nonexistent_env__".into(),
+            console: "http://example.invalid:30880".into(),
+            username: "nobody".into(),
+            cookie: "token=x".into(),
+        };
+        let err = password_for_session(&sess).unwrap_err();
+        assert!(
+            err.contains("找不到环境") || err.contains("未保存密码"),
+            "unexpected err: {err}"
+        );
     }
 
     #[test]

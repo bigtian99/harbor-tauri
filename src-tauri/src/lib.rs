@@ -18,11 +18,11 @@ mod utils;
 
 use build::{
     build_and_push, cancel_build, cancel_bt_java_deploy, cancel_bt_php_deploy, check_dockerfile,
-    detect_frontend_dir, detect_spring_profiles, list_bt_java_projects, list_bt_php_sites,
-    list_local_images, list_npm_scripts, open_directory, package_from_branch, push_local_image,
-    remove_local_image, restart_bt_java_project, stop_bt_java_project, stop_bt_php_site,
-    upload_and_restart_bt_java_project,
-    upload_bt_java_jar, upload_bt_php_site, warmup_bt_ftp,
+    detect_frontend_dir, detect_spring_profiles, get_bt_temp_login_url, list_bt_java_projects,
+    list_bt_php_sites, list_local_images, list_npm_scripts, open_directory, package_from_branch,
+    push_local_image, remove_local_image, restart_bt_java_project, stop_bt_java_project,
+    stop_bt_php_site, upload_and_restart_bt_java_project, upload_bt_java_jar, upload_bt_php_site,
+    warmup_bt_ftp,
 };
 use commit::{
     get_commit_authors, get_commit_diff, get_commit_list, get_last_commit, list_branch_diff_commits,
@@ -125,6 +125,7 @@ pub fn run() {
             package_from_branch,
             list_bt_java_projects,
             list_bt_php_sites,
+            get_bt_temp_login_url,
             restart_bt_java_project,
             stop_bt_java_project,
             upload_bt_java_jar,

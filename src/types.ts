@@ -62,6 +62,8 @@ export interface HarborConfig {
   bt_ftp_user?: string;
   bt_ftp_pass?: string;
   bt_auto_deploy_test?: boolean;
+  /** 触发宝塔自动部署的 Profile（默认 test） */
+  bt_auto_deploy_profile?: string;
   /** 前端 test 打包 dist 上传目录 */
   bt_frontend_remote_dir?: string;
   /** JAR 文件名 → 宝塔项目 id（同名 JAR 消歧） */

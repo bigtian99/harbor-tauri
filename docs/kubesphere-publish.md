@@ -57,10 +57,10 @@ KubeSphere 连接参数放在 **系统设置 → KubeSphere** tab，支持配置
 
 ### 分支打包自动发布（Git 映射）
 
-1. **系统设置 → KubeSphere → 发布映射**：录入 Git 远程地址 + 镜像角色（前端/后端/任意）→ 环境、命名空间、部署名；可用「填入上次仓库」读 `origin`。
+1. **系统设置 → KubeSphere → 发布映射**：选环境 →「连接并加载」→ 选命名空间，表格自动列出全部 Deployment；每行只需填 **Git 地址** 和角色，点「保存本命名空间」。
 2. **分支打包**：勾选「打包后联动推送镜像」与「推送后自动发布到 KubeSphere」。
-3. 推送成功后：读取当前仓库 `git remote get-url origin`，规范化后与映射表匹配；命中则 `ks_connect` + `ks_update_image`。
-4. **日志**：打包页进度 + 系统诊断 `[build]` / `[kubesphere]`。未配置映射或发布失败**不阻断**推送成功。
+3. 推送成功后按当前仓库 `origin` 与映射表匹配并 `ks_update_image`。
+4. **日志**：打包页进度 + 系统诊断 `[build]` / `[kubesphere]`。未配置或发布失败不阻断推送成功。
 
 ## 前端（React + Mantine）
 

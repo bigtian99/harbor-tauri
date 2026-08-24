@@ -235,6 +235,9 @@ pub struct HarborConfig {
     pub bt_ftp_pass: String,
     #[serde(default = "default_true")]
     pub bt_auto_deploy_test: bool,
+    /// 触发宝塔自动部署的 Spring Profile / 前端构建 profile（默认 test）
+    #[serde(default = "default_bt_auto_deploy_profile")]
+    pub bt_auto_deploy_profile: String,
     /// 前端 test 打包 dist 内容上传目录（面板路径或相对 FTP 根）
     #[serde(default = "default_bt_frontend_remote_dir")]
     pub bt_frontend_remote_dir: String,
@@ -342,6 +345,7 @@ impl Default for HarborConfig {
             bt_ftp_user: default_bt_ftp_user(),
             bt_ftp_pass: default_bt_ftp_pass(),
             bt_auto_deploy_test: true,
+            bt_auto_deploy_profile: default_bt_auto_deploy_profile(),
             bt_frontend_remote_dir: default_bt_frontend_remote_dir(),
             bt_jar_project_ids: default_bt_jar_project_ids(),
             ks_console: default_ks_console(),
@@ -373,6 +377,10 @@ fn default_bt_ftp_user() -> String {
 
 fn default_bt_ftp_pass() -> String {
     "pcm520..".to_string()
+}
+
+fn default_bt_auto_deploy_profile() -> String {
+    "test".to_string()
 }
 
 fn default_bt_frontend_remote_dir() -> String {

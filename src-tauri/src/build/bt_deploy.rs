@@ -152,33 +152,46 @@ fn lookup_jar_project_id<'a>(
     })
 }
 
-fn is_test_profile(profile: &Option<String>) -> bool {
+fn matches_deploy_profile(profile: &Option<String>, deploy_profile: &str) -> bool {
+    let target = deploy_profile.trim();
+    if target.is_empty() {
+        return false;
+    }
     profile
         .as_ref()
-        .map(|s| s.trim().eq_ignore_ascii_case("test"))
+        .map(|s| s.trim().eq_ignore_ascii_case(target))
         .unwrap_or(false)
 }
 
-/// npm 脚本含 test 且不含 prod 时视为测试前端构建（如 build:test）
-fn is_test_npm_script(build_script: &str) -> bool {
-    let s = build_script.trim().to_lowercase();
-    if s.is_empty() {
+/// npm 脚本含配置的 profile 且不含 prod（profile 非 prod 时）时视为对应前端构建（如 build:test）
+fn matches_npm_script_for_profile(build_script: &str, deploy_profile: &str) -> bool {
+    let profile = deploy_profile.trim().to_lowercase();
+    if profile.is_empty() {
         return false;
     }
-    s.contains("test") && !s.contains("prod")
+    let s = build_script.trim().to_lowercase();
+    if !s.contains(&profile) {
+        return false;
+    }
+    if profile != "prod" && s.contains("prod") {
+        return false;
+    }
+    true
 }
 
-/// npm 前端是否走宝塔 test 部署。
-/// Profile=test 与 build:test 任一成立即可：前后端同打时脚本常被记忆成 build:prod。
+/// npm 前端是否走宝塔自动部署。
+/// Profile 匹配与 build:profile 脚本任一成立即可：前后端同打时脚本常被记忆成 build:prod。
 fn should_deploy_frontend(
     project_type: PackageProjectType,
     build_script: &str,
     dist_exists: bool,
     spring_profile: &Option<String>,
+    deploy_profile: &str,
 ) -> bool {
     matches!(project_type, PackageProjectType::Npm)
         && dist_exists
-        && (is_test_npm_script(build_script) || is_test_profile(spring_profile))
+        && (matches_npm_script_for_profile(build_script, deploy_profile)
+            || matches_deploy_profile(spring_profile, deploy_profile))
 }
 
 fn is_jar_path(path: &str) -> bool {
@@ -608,8 +621,8 @@ fn deploy_one_jar(
 }
 
 /// 打包成功后可选部署；任何错误只汇总文案，不向上抛。
-/// - Maven / 后端 JAR：Profile=test → FTP 覆盖 + 重启
-/// - npm dist：build:test，或 Profile=test（前后端同打时常记着 build:prod）→ FTP 上传 dist
+/// - Maven / 后端 JAR：Profile 匹配配置 → FTP 覆盖 + 重启
+/// - npm dist：build:profile 或 Profile 匹配（前后端同打时常记着 build:prod）→ FTP 上传 dist
 /// - 前后端同时打包时：前端 dist 与 JAR 部署并行执行
 pub(crate) fn maybe_deploy_test_jars(
     app: &AppHandle,
@@ -626,25 +639,33 @@ pub(crate) fn maybe_deploy_test_jars(
         return None;
     }
 
+    let deploy_profile = config.bt_auto_deploy_profile.trim();
+    if deploy_profile.is_empty() {
+        crate::diag::diag_log("build", "bt_auto_deploy_profile 为空，跳过宝塔部署");
+        return None;
+    }
+
     let deploy_frontend = should_deploy_frontend(
         project_type,
         build_script,
         is_dist_dir(artifact_path),
         spring_profile,
+        deploy_profile,
     );
     crate::diag::diag_log(
         "build",
         &format!(
-            "bt deploy decide frontend={} script={} profile={:?} dist={}",
+            "bt deploy decide frontend={} script={} profile={:?} target_profile={} dist={}",
             deploy_frontend,
             build_script,
             spring_profile,
+            deploy_profile,
             artifact_path
         ),
     );
 
     let mut jars: Vec<String> = Vec::new();
-    if is_test_profile(spring_profile) {
+    if matches_deploy_profile(spring_profile, deploy_profile) {
         if is_jar_path(artifact_path) {
             jars.push(artifact_path.to_string());
         }
@@ -656,8 +677,14 @@ pub(crate) fn maybe_deploy_test_jars(
     }
 
     let deploy_jars = !jars.is_empty();
-    if is_test_profile(spring_profile) && !deploy_jars && !deploy_frontend {
-        crate::diag::diag_log("build", "profile=test 但无 JAR/前端产物，跳过宝塔部署");
+    if matches_deploy_profile(spring_profile, deploy_profile) && !deploy_jars && !deploy_frontend {
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "profile={} 但无 JAR/前端产物，跳过宝塔部署",
+                deploy_profile
+            ),
+        );
         return None;
     }
     if !deploy_frontend && !deploy_jars {
@@ -1148,6 +1175,100 @@ fn require_bt_config(config: &HarborConfig) -> Result<(), String> {
         return Err("请先在设置 → 宝塔部署中填写面板 API 密钥".to_string());
     }
     Ok(())
+}
+
+/// 从面板 `get_tmp_token` 响应中取出临时 token
+pub(crate) fn parse_bt_tmp_token(json: &Value) -> Result<String, String> {
+    let status_ok = json
+        .get("status")
+        .map(|v| match v {
+            Value::Bool(b) => *b,
+            Value::Number(n) => n.as_i64() == Some(1),
+            Value::String(s) => s == "true" || s == "1",
+            _ => false,
+        })
+        .unwrap_or(false);
+    if !status_ok {
+        let msg = json
+            .get("msg")
+            .and_then(|v| v.as_str())
+            .unwrap_or("获取临时登录 token 失败");
+        return Err(msg.to_string());
+    }
+    // 官方 return_msg：成功时 msg 即为 token；少数版本可能放在 data
+    let token = json
+        .get("msg")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && *s != "True" && *s != "true")
+        .or_else(|| {
+            json.get("data")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .unwrap_or("")
+        .to_string();
+    if token.len() < 16 {
+        return Err(format!(
+            "面板未返回有效临时 token（响应: {}）",
+            json.to_string().chars().take(200).collect::<String>()
+        ));
+    }
+    Ok(token)
+}
+
+pub(crate) fn build_bt_temp_login_url(panel_url: &str, token: &str) -> String {
+    let base = panel_url.trim().trim_end_matches('/');
+    format!("{}/login?tmp_token={}", base, token.trim())
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BtTempLoginResult {
+    pub url: String,
+    /// 约有效秒数（面板源码 timeout=600）
+    pub ttl_secs: u32,
+    pub message: String,
+}
+
+/// 获取宝塔面板临时登录地址（`/api?action=get_tmp_token`）
+#[tauri::command]
+pub async fn get_bt_temp_login_url() -> Result<BtTempLoginResult, String> {
+    tauri::async_runtime::spawn_blocking(|| -> Result<BtTempLoginResult, String> {
+        let config = crate::config_cmd::load_config_sync().unwrap_or_default();
+        require_bt_config(&config)?;
+        crate::diag::diag_log("build", "get_bt_temp_login_url");
+        let client = panel_client(&config)?;
+        // 优先 /api；失败再试 /config（同源方法转发）
+        let json = match panel_post(&client, &config, "/api", Some("get_tmp_token"), &[]) {
+            Ok(j) => j,
+            Err(e1) => {
+                crate::diag::diag_log(
+                    "build",
+                    &format!("get_bt_temp_login_url /api fail: {e1}；改试 /config"),
+                );
+                panel_post(&client, &config, "/config", Some("get_tmp_token"), &[])?
+            }
+        };
+        let token = parse_bt_tmp_token(&json)?;
+        let url = build_bt_temp_login_url(&config.bt_panel_url, &token);
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "get_bt_temp_login_url ok ttl=600 url_len={} token_len={}",
+                url.len(),
+                token.len()
+            ),
+        );
+        Ok(BtTempLoginResult {
+            url,
+            ttl_secs: 600,
+            message: "临时登录链接已生成（约 10 分钟内有效，用后即失效）".into(),
+        })
+    })
+    .await
+    .map_err(|e| format!("获取临时登录线程异常: {}", e))?
 }
 
 #[tauri::command]
@@ -1966,6 +2087,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_tmp_token_and_build_login_url() {
+        let json = serde_json::json!({
+            "status": true,
+            "msg": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUV"
+        });
+        let token = parse_bt_tmp_token(&json).expect("token");
+        assert_eq!(token.len(), 58);
+        let url = build_bt_temp_login_url("https://panel.example:10163/", &token);
+        assert_eq!(
+            url,
+            format!("https://panel.example:10163/login?tmp_token={token}")
+        );
+
+        let bad = serde_json::json!({ "status": false, "msg": "密钥校验失败" });
+        assert!(parse_bt_tmp_token(&bad).unwrap_err().contains("密钥校验失败"));
+    }
+
+    #[test]
     fn match_single_and_ambiguous() {
         let projects = vec![
             BtJavaProject {
@@ -2045,48 +2184,61 @@ mod tests {
     }
 
     #[test]
-    fn npm_test_script_detection() {
-        assert!(is_test_npm_script("build:test"));
-        assert!(is_test_npm_script("npm run build:test"));
-        assert!(is_test_npm_script("test"));
-        assert!(!is_test_npm_script("build:prod"));
-        assert!(!is_test_npm_script("npm run build:prod"));
-        assert!(!is_test_npm_script("build"));
-        assert!(!is_test_npm_script(""));
+    fn npm_profile_script_detection() {
+        assert!(matches_npm_script_for_profile("build:test", "test"));
+        assert!(matches_npm_script_for_profile("npm run build:test", "test"));
+        assert!(matches_npm_script_for_profile("test", "test"));
+        assert!(matches_npm_script_for_profile("build:dev", "dev"));
+        assert!(!matches_npm_script_for_profile("build:prod", "test"));
+        assert!(!matches_npm_script_for_profile("npm run build:prod", "test"));
+        assert!(!matches_npm_script_for_profile("build", "test"));
+        assert!(!matches_npm_script_for_profile("", "test"));
     }
 
     #[test]
-    fn frontend_deploys_when_profile_test_even_if_prod_script() {
+    fn frontend_deploys_when_profile_matches_even_if_prod_script() {
         // 复现：origin/test + Profile=test，但记忆脚本仍是 npm run build:prod
         assert!(should_deploy_frontend(
             PackageProjectType::Npm,
             "npm run build:prod",
             true,
             &Some("test".into()),
+            "test",
         ));
         assert!(should_deploy_frontend(
             PackageProjectType::Npm,
             "npm run build:test",
             true,
             &None,
+            "test",
+        ));
+        assert!(should_deploy_frontend(
+            PackageProjectType::Npm,
+            "npm run build:dev",
+            true,
+            &None,
+            "dev",
         ));
         assert!(!should_deploy_frontend(
             PackageProjectType::Npm,
             "npm run build:prod",
             true,
             &Some("prod".into()),
+            "test",
         ));
         assert!(!should_deploy_frontend(
             PackageProjectType::Npm,
             "npm run build:prod",
             false,
             &Some("test".into()),
+            "test",
         ));
         assert!(!should_deploy_frontend(
             PackageProjectType::Maven,
             "npm run build:test",
             true,
             &Some("test".into()),
+            "test",
         ));
     }
 
