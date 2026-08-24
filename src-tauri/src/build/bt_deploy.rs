@@ -918,6 +918,43 @@ fn json_id(v: &Value) -> String {
     }
 }
 
+fn json_str_field(v: Option<&Value>) -> String {
+    match v {
+        Some(Value::String(s)) => s.trim().to_string(),
+        Some(Value::Number(n)) => n.to_string(),
+        Some(Value::Bool(b)) => b.to_string(),
+        _ => String::new(),
+    }
+}
+
+fn is_static_php_version(php_version: &str) -> bool {
+    let v = php_version.trim();
+    v.is_empty() || v == "静态" || v.contains("静态")
+}
+
+/// 宝塔「PHP 项目」含 project_type=PHP 的静态站；仅按 php_version 过滤会少 4 条左右。
+fn is_php_site_row(row: &Value, php_version: &str) -> bool {
+    let project_type = json_str_field(row.get("project_type"));
+    if project_type.eq_ignore_ascii_case("php") {
+        return true;
+    }
+    !is_static_php_version(php_version)
+}
+
+fn extract_site_rows(json: &Value) -> Vec<Value> {
+    json.get("data")
+        .and_then(|d| {
+            if d.is_array() {
+                Some(d)
+            } else {
+                d.get("data")
+            }
+        })
+        .and_then(|d| d.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
 fn status_text(status: &str) -> String {
     match status.trim() {
         "1" => "运行中".to_string(),
@@ -1098,38 +1135,20 @@ fn parse_java_project_infos(json: &Value) -> Vec<BtJavaProjectInfo> {
     out
 }
 
-fn parse_php_site_infos(json: &Value) -> Vec<BtPhpSiteInfo> {
-    let rows = json
-        .get("data")
-        .and_then(|d| {
-            if d.is_array() {
-                Some(d)
-            } else {
-                d.get("data")
-            }
-        })
-        .and_then(|d| d.as_array())
-        .cloned()
-        .unwrap_or_default();
-
+fn parse_php_site_rows(rows: &[Value]) -> Vec<BtPhpSiteInfo> {
     let mut out = Vec::new();
     for row in rows {
-        let php_version = row
-            .get("php_version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        // 与 bt-gateway 一致：排除无 PHP 版本或「静态」
-        if php_version.is_empty() || php_version == "静态" {
+        let php_version = json_str_field(row.get("php_version"));
+        if !is_php_site_row(row, &php_version) {
             continue;
         }
+        let display_php = if is_static_php_version(&php_version) {
+            "静态".to_string()
+        } else {
+            php_version
+        };
         let id = row.get("id").map(json_id).unwrap_or_default();
-        let name = row
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let name = json_str_field(row.get("name"));
         if name.trim().is_empty() {
             continue;
         }
@@ -1142,29 +1161,57 @@ fn parse_php_site_infos(json: &Value) -> Vec<BtPhpSiteInfo> {
                 _ => String::new(),
             })
             .unwrap_or_default();
-        let path = row
-            .get("path")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let ps = row
-            .get("ps")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let updated_at = parse_updated_at(&row);
+        let path = json_str_field(row.get("path"));
+        let ps = json_str_field(row.get("ps"));
+        let updated_at = parse_updated_at(row);
         out.push(BtPhpSiteInfo {
             id,
             name,
             path,
             status: status.clone(),
             status_text: status_text(&status),
-            php_version,
+            php_version: display_php,
             ps,
             updated_at,
         });
     }
     out
+}
+
+fn list_php_sites_from_panel(
+    client: &reqwest::blocking::Client,
+    config: &HarborConfig,
+) -> Result<Vec<BtPhpSiteInfo>, String> {
+    const PAGE_LIMIT: usize = 200;
+    let mut all_rows: Vec<Value> = Vec::new();
+    for page in 1..=50_u32 {
+        let json = panel_post(
+            client,
+            config,
+            "/data",
+            Some("getData"),
+            &[
+                ("table", "sites".to_string()),
+                ("p", page.to_string()),
+                ("limit", PAGE_LIMIT.to_string()),
+                ("type", "-1".to_string()),
+                ("search", String::new()),
+                ("order", "id desc".to_string()),
+                ("tojs", "jarporter".to_string()),
+            ],
+        )?;
+        let rows = extract_site_rows(&json);
+        let n = rows.len();
+        all_rows.extend(rows);
+        if n < PAGE_LIMIT {
+            break;
+        }
+    }
+    crate::diag::diag_log(
+        "build",
+        &format!("list_bt_php_sites panel rows={}", all_rows.len()),
+    );
+    Ok(parse_php_site_rows(&all_rows))
 }
 
 fn require_bt_config(config: &HarborConfig) -> Result<(), String> {
@@ -1331,18 +1378,7 @@ pub async fn list_bt_php_sites() -> Result<Vec<BtPhpSiteInfo>, String> {
         require_bt_config(&config)?;
         crate::diag::diag_log("build", "list_bt_php_sites");
         let client = panel_client(&config)?;
-        let json = panel_post(
-            &client,
-            &config,
-            "/data",
-            Some("getData"),
-            &[
-                ("table", "sites".to_string()),
-                ("limit", "200".to_string()),
-                ("tojs", "jarporter".to_string()),
-            ],
-        )?;
-        let list = parse_php_site_infos(&json);
+        let list = list_php_sites_from_panel(&client, &config)?;
         crate::diag::diag_log("build", &format!("list_bt_php_sites ok count={}", list.len()));
         let host = config.bt_ftp_host.clone();
         let user = config.bt_ftp_user.clone();
@@ -2290,6 +2326,7 @@ mod tests {
                 "name": "a.com",
                 "path": "/www/wwwroot/a",
                 "status": "1",
+                "project_type": "PHP",
                 "php_version": "74",
                 "ps": "note",
                 "addtime": "2025-08-01 12:00:00"
@@ -2298,21 +2335,42 @@ mod tests {
                 "name": "static.com",
                 "path": "/www/wwwroot/s",
                 "status": "1",
+                "project_type": "PHP",
                 "php_version": "静态",
                 "ps": ""
             }, {
                 "id": 3,
-                "name": "empty.com",
+                "name": "empty-static.com",
                 "path": "/www/wwwroot/e",
                 "status": "0",
+                "project_type": "PHP",
                 "php_version": "",
+                "ps": ""
+            }, {
+                "id": 4,
+                "name": "html.com",
+                "path": "/www/wwwroot/h",
+                "status": "1",
+                "project_type": "html",
+                "php_version": "",
+                "ps": ""
+            }, {
+                "id": 5,
+                "name": "legacy.com",
+                "path": "/www/wwwroot/l",
+                "status": "1",
+                "php_version": 74,
                 "ps": ""
             }]
         });
-        let p = parse_php_site_infos(&php);
-        assert_eq!(p.len(), 1);
+        let p = parse_php_site_rows(&extract_site_rows(&php));
+        assert_eq!(p.len(), 4, "PHP 类型静态站 + 有版本站应保留，纯 html 排除");
         assert_eq!(p[0].name, "a.com");
         assert_eq!(p[0].php_version, "74");
+        assert_eq!(p[1].name, "static.com");
+        assert_eq!(p[1].php_version, "静态");
+        assert_eq!(p[3].name, "legacy.com");
+        assert_eq!(p[3].php_version, "74");
         assert_eq!(p[0].updated_at, "2025-08-01 12:00:00");
     }
 
