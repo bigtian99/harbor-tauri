@@ -116,6 +116,11 @@ if (tagExistsLocal(tag)) {
 }
 
 sh(`git tag -a ${tag} -m ${tag}`);
+
+console.log("\n---- 本次 Release 说明预览 ----");
+sh(`node scripts/release-notes.mjs ${tag}`);
+console.log("--------------------------------\n");
+
 sh("git push origin HEAD");
 sh(`git push origin ${tag}`);
 

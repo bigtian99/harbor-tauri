@@ -160,6 +160,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
 
       - name: Resolve release tag
         id: release_tag
@@ -220,6 +227,7 @@ jobs:
 
       # 不用 softprops：同名 asset 会打 update-a-release-asset 且 404
       # 改用 gh：先确保 Release 存在，再 --clobber 上传
+      # tauri-action 可能先创建空 Release；此处始终用 notes-file 写入/覆盖说明
       - name: Create or update GitHub Release
         shell: bash
         env:
@@ -228,22 +236,27 @@ jobs:
         run: |
           set -euo pipefail
 
+          node scripts/release-notes.mjs "$TAG" --out release-notes.md
+          echo "---- release notes preview ----"
+          head -40 release-notes.md || true
+
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists — will upload/clobber assets"
-            # 若是 draft，发布成正式（--latest 在部分 gh 版本不支持，失败忽略）
-            gh release edit "$TAG" --draft=false --prerelease=false || true
+            echo "Release $TAG exists — update notes and publish"
+            gh release edit "$TAG" \
+              --title "$TAG" \
+              --notes-file release-notes.md \
+              --draft=false \
+              --prerelease=false
           else
             echo "Creating release $TAG"
-            NOTES="$(node scripts/release-notes.mjs "$TAG")"
-            # --latest 在旧 gh 上可能不存在；失败则退回不带 --latest
             gh release create "$TAG" \
               --title "$TAG" \
-              --notes "$NOTES" \
+              --notes-file release-notes.md \
               --verify-tag \
               --latest \
               || gh release create "$TAG" \
                 --title "$TAG" \
-                --notes "$NOTES" \
+                --notes-file release-notes.md \
                 --verify-tag
           fi
 
@@ -256,8 +269,7 @@ jobs:
           fi
           gh release upload "$TAG" "${files[@]}" --clobber
 
-          # 确保新版本标为 Latest（避免旧 release 仍占 /releases/latest）
-          gh release edit "$TAG" --latest || true
+          gh release edit "$TAG" --latest --notes-file release-notes.md || true
 
           echo "---- release assets ----"
           # 注意：部分 gh 版本没有 isLatest 字段，只用稳定字段
