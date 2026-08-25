@@ -234,15 +234,16 @@ jobs:
             gh release edit "$TAG" --draft=false --prerelease=false || true
           else
             echo "Creating release $TAG"
+            NOTES="$(node scripts/release-notes.mjs "$TAG")"
             # --latest 在旧 gh 上可能不存在；失败则退回不带 --latest
             gh release create "$TAG" \
               --title "$TAG" \
-              --generate-notes \
+              --notes "$NOTES" \
               --verify-tag \
               --latest \
               || gh release create "$TAG" \
                 --title "$TAG" \
-                --generate-notes \
+                --notes "$NOTES" \
                 --verify-tag
           fi
 
