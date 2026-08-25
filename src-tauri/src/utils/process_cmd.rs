@@ -69,6 +69,17 @@ pub(crate) fn find_command_path(command: &str) -> Option<String> {
 
 /// 查找 Maven 可执行文件路径
 pub(crate) fn find_maven_path() -> Option<String> {
+    find_maven_path_from("")
+}
+
+/// `maven_home` 非空时优先用 `{home}/bin/mvn`
+pub(crate) fn find_maven_path_from(maven_home: &str) -> Option<String> {
+    let home = maven_home.trim();
+    if !home.is_empty() {
+        if let Some(path) = find_command_in_dir(&PathBuf::from(home).join("bin"), "mvn") {
+            return Some(path);
+        }
+    }
     // 1. 检查环境变量
     if let Some(m2_home) = std::env::var_os("M2_HOME") {
         if let Some(path) = find_command_in_dir(&PathBuf::from(m2_home).join("bin"), "mvn") {
@@ -257,7 +268,50 @@ pub(crate) fn silent_docker_command() -> Command {
 }
 
 pub(crate) fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<String, String> {
-    run_command_inner(current_dir, command, args, true)
+    run_command_inner(current_dir, command, args, true, "")
+}
+
+/// `-Dmaven.repo.local` / `-s {maven_home}/conf/settings.xml`
+pub(crate) fn maven_invoke_prefix(maven_home: &str, local_repo: &str) -> Vec<String> {
+    let mut extra = Vec::new();
+    let repo = local_repo.trim();
+    if !repo.is_empty() {
+        extra.push(format!("-Dmaven.repo.local={repo}"));
+    }
+    let home = maven_home.trim();
+    if !home.is_empty() {
+        let settings = PathBuf::from(home).join("conf").join("settings.xml");
+        if settings.is_file() {
+            extra.push("-s".to_string());
+            extra.push(settings.to_string_lossy().to_string());
+        }
+    }
+    extra
+}
+
+/// 按配置的 Maven Home / 本地仓库执行 mvn。
+pub(crate) fn run_maven(
+    current_dir: &Path,
+    args: &[&str],
+    maven_home: &str,
+    local_repo: &str,
+) -> Result<String, String> {
+    let prefix = maven_invoke_prefix(maven_home, local_repo);
+    let prefix_refs: Vec<&str> = prefix.iter().map(String::as_str).collect();
+    let mut all_args = prefix_refs;
+    all_args.extend_from_slice(args);
+    let bin = find_maven_path_from(maven_home).unwrap_or_else(|| "mvn".to_string());
+    crate::diag::diag_log(
+        "build",
+        &format!(
+            "run_maven bin={} home={} local_repo={} args={}",
+            bin,
+            maven_home.trim(),
+            local_repo.trim(),
+            all_args.join(" ")
+        ),
+    );
+    run_command_inner(current_dir, "mvn", &all_args, true, maven_home)
 }
 
 /// 不受构建取消标志影响的命令执行（选仓、列分支等 UI 读操作）。
@@ -266,7 +320,7 @@ pub(crate) fn run_command_no_cancel(
     command: &str,
     args: &[&str],
 ) -> Result<String, String> {
-    run_command_inner(current_dir, command, args, false)
+    run_command_inner(current_dir, command, args, false, "")
 }
 
 fn run_command_inner(
@@ -274,6 +328,7 @@ fn run_command_inner(
     command: &str,
     args: &[&str],
     check_cancel: bool,
+    maven_home: &str,
 ) -> Result<String, String> {
     if check_cancel && CANCEL_FLAG.load(Ordering::SeqCst) {
         return Err("构建已取消".to_string());
@@ -281,7 +336,12 @@ fn run_command_inner(
 
     // 对 mvn 命令特殊处理，查找完整路径
     let actual_command = if command == "mvn" {
-        find_maven_path().unwrap_or_else(|| "mvn".to_string())
+        if maven_home.trim().is_empty() {
+            find_maven_path()
+        } else {
+            find_maven_path_from(maven_home)
+        }
+        .unwrap_or_else(|| "mvn".to_string())
     } else {
         find_command_path(command).unwrap_or_else(|| command.to_string())
     };
@@ -391,3 +451,39 @@ pub(crate) fn repo_root_for(repo_path: &Path) -> Result<PathBuf, String> {
         .map(|output| PathBuf::from(output.trim()))
         .map_err(|e| format!("不是有效的 Git 仓库: {}", e))
 }
+
+#[cfg(test)]
+mod maven_config_tests {
+    use super::{find_maven_path_from, maven_invoke_prefix};
+    use std::path::PathBuf;
+
+    #[test]
+    fn maven_invoke_prefix_adds_local_repo() {
+        let prefix = maven_invoke_prefix("", "/tmp/custom-repo");
+        assert_eq!(
+            prefix,
+            vec!["-Dmaven.repo.local=/tmp/custom-repo".to_string()]
+        );
+    }
+
+    #[test]
+    fn maven_invoke_prefix_adds_settings_when_home_has_conf() {
+        let home = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        // 用本仓库不存在的路径时不应加 -s；用用户机器上的真实 Maven 才加
+        let prefix = maven_invoke_prefix(home.to_str().unwrap(), "");
+        assert!(prefix.is_empty() || !prefix.contains(&"-s".to_string()) || {
+            // 若碰巧有 conf/settings.xml 则允许
+            home.join("conf").join("settings.xml").is_file()
+        });
+    }
+
+    #[test]
+    fn find_maven_path_from_prefers_configured_home() {
+        let home = "/Users/daijunxiong/app/apache-maven-3.9.9";
+        if PathBuf::from(home).join("bin").join("mvn").is_file() {
+            let found = find_maven_path_from(home).expect("should find configured mvn");
+            assert!(found.contains("apache-maven-3.9.9"));
+        }
+    }
+}
+

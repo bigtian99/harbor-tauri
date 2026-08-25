@@ -211,6 +211,12 @@ pub struct HarborConfig {
     pub branch_repo_settings: HashMap<String, BranchRepoSettings>,
     pub npm_package_manager: String,
     pub npm_registry: String,
+    /// Maven 安装目录（含 bin/mvn）。空则按 PATH / Homebrew 查找
+    #[serde(default)]
+    pub maven_home: String,
+    /// Maven 本地仓库。空则用 ~/.m2/repository
+    #[serde(default)]
+    pub maven_local_repo: String,
     // 打包产物输出目录
     pub artifact_output_dir: String,
     // 运营接口 Authorization 仅在当前运行内使用，不写入本地配置
@@ -280,6 +286,9 @@ pub struct KsPublishMap {
     pub deployment: String,
     #[serde(default)]
     pub container: String,
+    /// 服务暴露端口（随 Git 映射记忆）
+    #[serde(default)]
+    pub expose_port: String,
 }
 
 /// KubeSphere 控制台环境（dev / test / prod 等）
@@ -330,6 +339,8 @@ impl Default for HarborConfig {
             branch_repo_settings: HashMap::new(),
             npm_package_manager: "npm".to_string(),
             npm_registry: String::new(),
+            maven_home: String::new(),
+            maven_local_repo: String::new(),
             // 打包产物输出目录默认为桌面
             artifact_output_dir: default_output_dir,
             // 运营接口 Authorization 不提供默认值

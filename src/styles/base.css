@@ -412,11 +412,11 @@ body::before {
   width: 100%;
 }
 
-/* 历史版本表：固定可视高度 + 小屏横向滚动，避免列被挤成竖排字 */
+/* 历史版本表：铺满容器宽度，镜像列吃剩余空间 */
 .ks-revisions-scroll {
   width: 100%;
   max-width: 100%;
-  max-height: min(360px, 42vh);
+  max-height: min(560px, 58vh);
   overflow: auto;
   border: 1px solid var(--mantine-color-dark-4, rgba(255, 255, 255, 0.12));
   border-radius: 8px;
@@ -424,7 +424,7 @@ body::before {
 }
 
 .ks-revisions-table {
-  width: max-content;
+  width: 100%;
   min-width: 720px;
   table-layout: fixed;
 }
@@ -435,8 +435,8 @@ body::before {
 }
 
 .ks-revisions-scroll .ks-rev-col-image {
-  width: 280px;
-  max-width: 280px;
+  width: auto;
+  /* 其余列固定后，镜像列占满剩余宽度 */
 }
 
 .ks-revisions-scroll .ks-rev-col-ready {
@@ -455,12 +455,13 @@ body::before {
 }
 
 .ks-revisions-scroll .ks-rev-col-act {
-  width: 120px;
+  width: 128px;
   white-space: nowrap;
 }
 
 .ks-revisions-scroll .ks-rev-image {
   display: block;
+  width: 100%;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -468,6 +469,7 @@ body::before {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.35;
+  box-sizing: border-box;
 }
 
 /* 部署列表 / ConfigMap：按视口拉高，少滚动多一屏 */
@@ -500,6 +502,9 @@ body::before {
 .ks-row-sel td:first-child {
   box-shadow: inset 3px 0 0 #329dce;
 }
+.ks-row-checked td {
+  background: rgba(50, 157, 206, 0.08) !important;
+}
 .ks-rev-current td {
   background: rgba(50, 157, 206, 0.16) !important;
   border-top: 1px solid rgba(50, 157, 206, 0.35);
@@ -509,7 +514,8 @@ body::before {
   box-shadow: inset 4px 0 0 #329dce;
 }
 .ks-rev-current-tag {
-  display: inline-block;
+  display: block;
+  width: 100%;
   max-width: 100%;
   padding: 2px 8px;
   border-radius: 4px;
@@ -520,5 +526,120 @@ body::before {
   font-weight: 700;
   border: 1px solid rgba(50, 157, 206, 0.45);
   box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── KS 批量打包弹窗 ── */
+.ks-batch-confirm-modal {
+  max-width: 560px !important;
+  border: 1px solid rgba(50, 157, 206, 0.22);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.ks-batch-meta-panel {
+  background: linear-gradient(145deg, rgba(50, 157, 206, 0.08), rgba(255, 255, 255, 0.02));
+  border-color: rgba(50, 157, 206, 0.18) !important;
+}
+
+.ks-batch-meta-icon {
+  color: #64b5e8;
+  opacity: 0.9;
+}
+
+.ks-batch-meta-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  word-break: break-all;
+}
+
+.ks-batch-deploy-scroll {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.ks-batch-deploy-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.ks-batch-progress-modal {
+  max-width: 560px !important;
+  border: 1px solid rgba(50, 157, 206, 0.24);
+  overflow: hidden;
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.ks-batch-progress-body {
+  padding: 0 !important;
+}
+
+.ks-batch-progress-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.ks-batch-progress-header {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(50, 157, 206, 0.1) 0%, rgba(50, 157, 206, 0.02) 100%);
+}
+
+.ks-batch-progress-message {
+  flex: 1;
+  min-width: 0;
+  color: #d8e4f0;
+}
+
+.ks-batch-progress-pct {
+  font-variant-numeric: tabular-nums;
+  min-width: 3.2em;
+  text-align: right;
+}
+
+.ks-batch-progress-bar-mantine {
+  --progress-section-color: linear-gradient(90deg, #2a9fd6, #64ffda);
+}
+
+.ks-batch-log-section {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 16px 8px;
+}
+
+.ks-batch-log-title {
+  flex-shrink: 0;
+  color: #8a9bb0;
+}
+
+.ks-batch-log-scroll {
+  height: 240px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0a0e14;
+}
+
+.ks-batch-log-pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #b8c5d6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ks-batch-progress-footer {
+  padding: 10px 16px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.12);
 }
 

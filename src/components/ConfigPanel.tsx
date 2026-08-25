@@ -1,16 +1,24 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Settings, CheckCircle, AlertCircle, Eye, EyeOff, FolderOpen, Archive,
   Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink, Trash2,
-  CloudUpload, Bell, Plus, Pencil, X,
+  CloudUpload, Bell, Plus, Pencil, X, Copy,
 } from "lucide-react";
 import { showSystemAlert } from "../systemAlert";
 import type { HarborConfig, KsEnvironment } from "../types";
 import { isTauriRuntime } from "../types";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { createKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
-import { openBtTempLogin } from "../utils/btTempLogin";
+import {
+  fetchBtTempLogin,
+  loadBtTempLoginOpenPref,
+  saveBtTempLoginOpenPref,
+} from "../utils/btTempLogin";
+import {
+  deriveMavenLocalRepo,
+  isDerivedMavenLocalRepo,
+} from "../utils/mavenPaths";
 import { KsPublishMapEditor } from "./KsPublishMapEditor";
 import "./Modal.css";
 
@@ -19,11 +27,18 @@ export type CheckUpdateResult = {
   message: string;
 };
 
+export type ConfigTab = "connection" | "jar" | "frontend" | "bt" | "output" | "ks" | "about";
+
 interface ConfigPanelProps {
   config: HarborConfig;
   configSaved: boolean;
   showPassword: boolean;
-  onConfigChange: (field: keyof HarborConfig, value: HarborConfig[keyof HarborConfig]) => void;
+  onConfigChange: (
+    field: keyof HarborConfig,
+    value:
+      | HarborConfig[keyof HarborConfig]
+      | ((prev: HarborConfig[keyof HarborConfig]) => HarborConfig[keyof HarborConfig]),
+  ) => void;
   onSaveConfig: () => void;
   onTogglePassword: () => void;
   /** 当前应用版本（Cargo） */
@@ -32,9 +47,9 @@ interface ConfigPanelProps {
   onCheckUpdate?: () => Promise<CheckUpdateResult>;
   /** 清空 Git 本地记录（路径历史与分支记忆） */
   onClearGitRecords?: () => Promise<boolean>;
+  /** 外部指定初始子页签（如从打包页跳转配置 Maven） */
+  initialSubTab?: ConfigTab;
 }
-
-type ConfigTab = "connection" | "jar" | "frontend" | "bt" | "output" | "ks" | "about";
 
 const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { key: "connection", label: "Harbor 连接", icon: <Server size={14} /> },
@@ -50,9 +65,27 @@ export function ConfigPanel({
   config, configSaved, showPassword,
   onConfigChange, onSaveConfig, onTogglePassword,
   appVersion, onCheckUpdate, onClearGitRecords,
+  initialSubTab,
 }: ConfigPanelProps) {
   const { confirm } = useConfirmDialog();
-  const [activeTab, setActiveTab] = useState<ConfigTab>("connection");
+  const [activeTab, setActiveTab] = useState<ConfigTab>(initialSubTab || "connection");
+
+  useEffect(() => {
+    if (initialSubTab) setActiveTab(initialSubTab);
+  }, [initialSubTab]);
+
+  const applyMavenHome = (home: string) => {
+    const nextHome = home.trim();
+    const currentRepo = (config.maven_local_repo ?? "").trim();
+    const currentHome = (config.maven_home ?? "").trim();
+    onConfigChange("maven_home", nextHome);
+    if (
+      nextHome
+      && isDerivedMavenLocalRepo(currentHome, currentRepo)
+    ) {
+      onConfigChange("maven_local_repo", deriveMavenLocalRepo(nextHome));
+    }
+  };
   const [checking, setChecking] = useState(false);
   const [checkMsg, setCheckMsg] = useState<{ type: "ok" | "update" | "err"; text: string } | null>(null);
   const [clearingGit, setClearingGit] = useState(false);
@@ -60,6 +93,15 @@ export function ConfigPanel({
   const [envEditor, setEnvEditor] = useState<{ mode: "add" | "edit"; draft: KsEnvironment } | null>(null);
   const [envEditorPassword, setEnvEditorPassword] = useState(false);
   const [tempLoginLoading, setTempLoginLoading] = useState(false);
+  const [tempLoginOpenInBrowser, setTempLoginOpenInBrowser] = useState(
+    () => loadBtTempLoginOpenPref(),
+  );
+  const flushKsMapsRef = useRef<(() => void) | null>(null);
+
+  const handleSaveConfig = () => {
+    flushKsMapsRef.current?.();
+    void onSaveConfig();
+  };
 
   const gitRecordCount =
     (config.repo_path_history?.length ?? 0) + Object.keys(config.branch_repo_settings ?? {}).length;
@@ -286,7 +328,16 @@ export function ConfigPanel({
 
             <KsPublishMapEditor
               config={config}
-              onMapsChange={(maps) => onConfigChange("ks_publish_maps", maps)}
+              onMapsChange={(updater) =>
+                onConfigChange("ks_publish_maps", (prev) => {
+                  const current = (Array.isArray(prev) ? prev : []) as NonNullable<
+                    HarborConfig["ks_publish_maps"]
+                  >;
+                  return typeof updater === "function" ? updater(current) : updater;
+                })}
+              onRegisterFlush={(flush) => {
+                flushKsMapsRef.current = flush;
+              }}
             />
           </>
         )}
@@ -310,6 +361,79 @@ export function ConfigPanel({
                 onChange={(e) => onConfigChange("expose_port", e.target.value)}
                 placeholder="例如: 8181"
               />
+            </div>
+            <div className="form-group">
+              <label><FolderOpen size={14} /> Maven Home</label>
+              <div className="path-picker-row">
+                <input
+                  type="text"
+                  value={config.maven_home ?? ""}
+                  onChange={(e) => applyMavenHome(e.target.value)}
+                  placeholder="优先读 MAVEN_HOME / M2_HOME；例如 /Users/daijunxiong/app/apache-maven-3.9.9"
+                />
+                <button
+                  type="button"
+                  className="path-picker-btn"
+                  onClick={async () => {
+                    if (!isTauriRuntime()) return;
+                    try {
+                      const current = (config.maven_home ?? "").trim();
+                      const selected = await open({
+                        multiple: false,
+                        directory: true,
+                        recursive: false,
+                        title: "选择 Maven 安装目录",
+                        defaultPath: current || undefined,
+                      });
+                      if (selected) applyMavenHome(selected as string);
+                    } catch (e) {
+                      console.error("选择 Maven Home 失败:", e);
+                    }
+                  }}
+                >
+                  <FolderOpen size={16} /> 选择
+                </button>
+              </div>
+              <p className="template-hint">
+                优先读取环境变量 MAVEN_HOME / M2_HOME；也可在此手动指定。填写后会自动带上 conf/settings.xml
+              </p>
+            </div>
+            <div className="form-group">
+              <label><FolderOpen size={14} /> Maven 本地仓库</label>
+              <div className="path-picker-row">
+                <input
+                  type="text"
+                  value={config.maven_local_repo ?? ""}
+                  onChange={(e) => onConfigChange("maven_local_repo", e.target.value)}
+                  placeholder="默认由 Maven Home 带出：{home}/repository"
+                />
+                <button
+                  type="button"
+                  className="path-picker-btn"
+                  onClick={async () => {
+                    if (!isTauriRuntime()) return;
+                    try {
+                      const current = (config.maven_local_repo ?? "").trim();
+                      const home = (config.maven_home ?? "").trim();
+                      const selected = await open({
+                        multiple: false,
+                        directory: true,
+                        recursive: false,
+                        title: "选择 Maven 本地仓库目录",
+                        defaultPath: current || home || undefined,
+                      });
+                      if (selected) onConfigChange("maven_local_repo", selected as string);
+                    } catch (e) {
+                      console.error("选择 Maven 本地仓库失败:", e);
+                    }
+                  }}
+                >
+                  <FolderOpen size={16} /> 选择
+                </button>
+              </div>
+              <p className="template-hint">
+                选择 Maven Home 后会自动带出 {"{home}/repository"}；也可单独改。留空且无 Home 时走 ~/.m2/repository
+              </p>
             </div>
             <div className="form-group">
               <label><FolderOpen size={14} /> tools 目录 (--build-context)</label>
@@ -406,25 +530,49 @@ export function ConfigPanel({
             </div>
             <div className="form-group">
               <label>临时登录</label>
-              <button
-                type="button"
-                className="config-add-env-btn"
-                disabled={
-                  tempLoginLoading
-                  || !(config.bt_panel_url ?? "").trim()
-                  || !(config.bt_panel_secret ?? "").trim()
-                }
-                onClick={() => {
-                  setTempLoginLoading(true);
-                  void openBtTempLogin().finally(() => setTempLoginLoading(false));
-                }}
-                title="生成临时登录链接并在浏览器打开（约 10 分钟有效）"
-              >
-                {tempLoginLoading ? <Loader2 size={14} className="spin" /> : <ExternalLink size={14} />}
-                打开临时登录
-              </button>
+              <div className="bt-temp-login-row">
+                <button
+                  type="button"
+                  className="config-add-env-btn"
+                  disabled={
+                    tempLoginLoading
+                    || !(config.bt_panel_url ?? "").trim()
+                    || !(config.bt_panel_secret ?? "").trim()
+                  }
+                  onClick={() => {
+                    setTempLoginLoading(true);
+                    void fetchBtTempLogin(tempLoginOpenInBrowser ? "open" : "copy")
+                      .finally(() => setTempLoginLoading(false));
+                  }}
+                  title={
+                    tempLoginOpenInBrowser
+                      ? "生成临时登录链接并在浏览器打开（约 10 分钟有效）"
+                      : "生成临时登录链接并复制到剪贴板（约 10 分钟有效）"
+                  }
+                >
+                  {tempLoginLoading
+                    ? <Loader2 size={14} className="spin" />
+                    : tempLoginOpenInBrowser
+                      ? <ExternalLink size={14} />
+                      : <Copy size={14} />}
+                  {tempLoginOpenInBrowser ? "打开临时登录" : "复制临时登录"}
+                </button>
+                <label className="checkbox-label bt-temp-login-open-pref">
+                  <input
+                    type="checkbox"
+                    checked={tempLoginOpenInBrowser}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setTempLoginOpenInBrowser(on);
+                      saveBtTempLoginOpenPref(on);
+                    }}
+                  />
+                  <span className="checkbox-toggle" aria-hidden />
+                  <span>默认打开</span>
+                </label>
+              </div>
               <p className="template-hint">
-                用上方面板地址 + API 密钥生成一次性登录链接（约 10 分钟有效，用后失效）。请先保存配置再点。
+                勾选「默认打开」则在浏览器打开；取消勾选则复制链接到剪贴板。约 10 分钟有效，用后失效。请先保存配置再点。
               </p>
             </div>
             <div className="form-group">
@@ -687,7 +835,7 @@ export function ConfigPanel({
       </div>
 
       {activeTab !== "about" && (
-        <button className="save-btn" onClick={onSaveConfig}>
+        <button className="save-btn" onClick={handleSaveConfig}>
           {configSaved ? (
             <>
               <CheckCircle size={18} /> 已保存

@@ -9,7 +9,7 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { LandingPanel } from "./components/LandingPanel";
 import { MergePanel } from "./components/MergePanel";
 import { PushImagePanel } from "./components/PushImagePanel";
-import { ConfigPanel } from "./components/ConfigPanel";
+import { ConfigPanel, type ConfigTab } from "./components/ConfigPanel";
 import { SettlementPanel } from "./components/SettlementPanel";
 import { PackSpeedPanel } from "./components/PackSpeedPanel";
 import { PrivacyPanel } from "./components/PrivacyPanel";
@@ -22,6 +22,7 @@ import { useAppConfig, type DiagDateInfo } from "./hooks/useAppConfig";
 import { useBuildProgress, useToast } from "./hooks/useBuildProgress";
 import { useUploadPush } from "./hooks/useUploadPush";
 import { useBranchPack } from "./hooks/useBranchPack";
+import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import "./App.css";
 
 import type { HarborConfig, TabType, BuildRecord } from "./types";
@@ -133,7 +134,9 @@ function LogDayPicker({
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>(() => readStoredActiveTab("upload"));
+  const [configSubTab, setConfigSubTab] = useState<ConfigTab | undefined>();
   const previewStopTimerRef = useRef<number | null>(null);
+  const { confirm } = useConfirmDialog();
 
   // 记住当前菜单：右键 reload / 刷新后回到离开前的页签
   useEffect(() => {
@@ -165,6 +168,11 @@ function App() {
     onDropRepoPath: (path) => onDropRepoPathRef.current(path),
   });
 
+  const openMavenConfig = useCallback(() => {
+    setConfigSubTab("jar");
+    setActiveTab("config");
+  }, [setActiveTab]);
+
   const branch = useBranchPack({
     config: app.config,
     setConfig: app.setConfig,
@@ -181,6 +189,8 @@ function App() {
     imageTag: upload.imageTag,
     artifactPath: upload.artifactPath,
     setArtifactPath: upload.setArtifactPath,
+    onOpenMavenConfig: openMavenConfig,
+    confirm,
   });
 
   // 保持 ref 指向最新实现
@@ -570,6 +580,7 @@ function App() {
             onTogglePassword={() => app.setShowPassword(!app.showPassword)}
             appVersion={app.appVersion || app.updateInfo?.current_version}
             onCheckUpdate={app.handleManualCheckUpdate}
+            initialSubTab={configSubTab}
             onClearGitRecords={async () => {
               const ok = await app.clearGitRecords(showToast);
               if (ok) branch.resetGitMemoryUi();

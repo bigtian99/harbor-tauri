@@ -1,14 +1,42 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Card, Title, Text, TextInput, Button, Select, Table, Badge, Modal, Textarea, NumberInput, SegmentedControl, Tooltip,
   Checkbox, Group, Stack, Divider, ScrollArea, Box, Loader, Pagination, SimpleGrid, Tabs, Autocomplete,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { RefreshCw, Download, Rocket, Container as ContainerIcon, Search, History, Plus, Copy, Pencil } from "lucide-react";
+import { RefreshCw, Download, Rocket, Container as ContainerIcon, Search, History, Plus, Copy, Pencil, Package } from "lucide-react";
 import type { HarborConfig } from "../types";
+import { isTauriRuntime } from "../types";
 import { pickKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
+import {
+  KsBatchConfirmModal,
+  KsBatchProgressModal,
+  type KsBatchMeta,
+  type KsBatchSummary,
+} from "./KsBatchPackModal";
+import {
+  detectCpuCores,
+  KS_BATCH_CONCURRENCY_AUTO,
+  loadKsBatchConcurrencyPref,
+  recommendKsBatchConcurrency,
+  runKsBatchPackPublish,
+  saveKsBatchConcurrencyPref,
+  type KsBatchConcurrencyPref,
+} from "../utils/ksBatchPackPublish";
+import {
+  defaultKsBatchBranch,
+  loadKsBatchBranchHistory,
+  rememberKsBatchBranch,
+} from "../utils/ksBatchBranchHistory";
+import {
+  appendBuildProgressLog,
+  normalizeBatchBranchInput,
+  parseBatchStepLabel,
+  scaleBatchBuildPercent,
+} from "../utils/buildProgressLog";
 
 interface PodInfo {
   name: string; phase: string; state: string; reason: string | null;
@@ -165,21 +193,32 @@ function buildRevisionDurationMap(
 const DeployRow = memo(function DeployRow({
   d,
   selected,
+  checked,
   onSelect,
+  onToggleCheck,
   onEdit,
 }: {
   d: DeployInfo;
   selected: boolean;
+  checked: boolean;
   onSelect: (d: DeployInfo) => void;
+  onToggleCheck: (name: string, checked: boolean) => void;
   onEdit: (d: DeployInfo) => void;
 }) {
   const s = d.status;
   return (
     <Table.Tr
-      className={selected ? "ks-row-sel" : undefined}
+      className={selected ? "ks-row-sel" : checked ? "ks-row-checked" : undefined}
       style={{ cursor: "pointer" }}
       onClick={() => onSelect(d)}
     >
+      <Table.Td onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          aria-label={`选择 ${d.name}`}
+          checked={checked}
+          onChange={(e) => onToggleCheck(d.name, e.currentTarget.checked)}
+        />
+      </Table.Td>
       <Table.Td>
         <Group gap={6} wrap="nowrap">
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[s.state] ?? "#9aa5b8", display: "inline-block" }} />
@@ -237,6 +276,24 @@ export function KsPublishPanel({
   const [deploys, setDeploys] = useState<DeployInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState<DeployInfo | null>(null);
+  const [checkedNames, setCheckedNames] = useState<Set<string>>(() => new Set());
+  const [batchBranch, setBatchBranch] = useState(
+    () => defaultKsBatchBranch(config.last_branch),
+  );
+  const [branchHistory, setBranchHistory] = useState(() => loadKsBatchBranchHistory());
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  const [batchMeta, setBatchMeta] = useState<KsBatchMeta | null>(null);
+  const [batchSummary, setBatchSummary] = useState<KsBatchSummary | null>(null);
+  const [batchConcurrencyPref, setBatchConcurrencyPref] = useState<KsBatchConcurrencyPref>(
+    () => loadKsBatchConcurrencyPref(),
+  );
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchLog, setBatchLog] = useState("");
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchMessage, setBatchMessage] = useState("");
+  /** 当前批量项标题，用于与 build-progress 子进度拼接 */
+  const batchStepLabelRef = useRef("");
   /** 部署名精确筛选（下拉）；空 = 全部 */
   const [filterDeploy, setFilterDeploy] = useState<string | null>(null);
   /** all | bad | 具体 status.state */
@@ -245,7 +302,7 @@ export function KsPublishPanel({
   const [filterImage, setFilterImage] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshSec, setRefreshSec] = useState("30");
   const [image, setImage] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -273,7 +330,7 @@ export function KsPublishPanel({
   const [revisions, setRevisions] = useState<DeployRevision[]>([]);
   const [revsLoading, setRevsLoading] = useState(false);
   const [revPage, setRevPage] = useState(1);
-  const [revPageSize, setRevPageSize] = useState(5);
+  const [revPageSize, setRevPageSize] = useState(10);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /** 防止自动刷新叠加重试把 UI 拖死 */
   const loadInFlightRef = useRef(false);
@@ -309,6 +366,7 @@ export function KsPublishPanel({
     setDeploys([]);
     deploysFpRef.current = "";
     setSel(null);
+    setCheckedNames(new Set());
     setStatusText(`正在连接「${env.name}」…`);
     try {
       const result = await invoke<{ mode: string; message: string }>("ks_connect", {
@@ -449,8 +507,55 @@ export function KsPublishPanel({
     setFilterImage("");
     setPage(1);
     setCmPage(1);
+    setCheckedNames(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [namespace, connected]);
+
+  const toggleDeployCheck = useCallback((name: string, on: boolean) => {
+    setCheckedNames((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(name);
+      else next.delete(name);
+      return next;
+    });
+  }, []);
+
+  const selectedDeploys = useMemo(
+    () => deploys.filter((d) => checkedNames.has(d.name)),
+    [deploys, checkedNames],
+  );
+
+  const batchBranchSuggestions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const b of [...branchHistory, config.last_branch?.trim() || ""]) {
+      const t = b.trim();
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      out.push(t);
+    }
+    return out;
+  }, [branchHistory, config.last_branch]);
+
+  // 批量执行期间订阅后端 build-progress（与分支打包页同一事件源）
+  useEffect(() => {
+    if (!batchRunning || !isTauriRuntime()) return;
+    const appWindow = getCurrentWindow();
+    const unlisten = appWindow.listen<{ percent: number; message: string }>(
+      "build-progress",
+      (event) => {
+        const { percent, message } = event.payload;
+        const step = batchStepLabelRef.current;
+        const { index, total } = parseBatchStepLabel(step);
+        setBatchProgress(scaleBatchBuildPercent(index, total, percent));
+        setBatchMessage(step ? `${step} · ${message}` : message);
+        setBatchLog((prev) => appendBuildProgressLog(prev, message));
+      },
+    );
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [batchRunning]);
 
   // ConfigMap 页签懒加载：进入时才拉，避免与部署列表抢带宽/主线程
   useEffect(() => {
@@ -675,6 +780,94 @@ export function KsPublishPanel({
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const pageAllChecked =
+    pageRows.length > 0 && pageRows.every((d) => checkedNames.has(d.name));
+  const pageSomeChecked =
+    pageRows.some((d) => checkedNames.has(d.name)) && !pageAllChecked;
+
+  const togglePageChecks = (on: boolean) => {
+    setCheckedNames((prev) => {
+      const next = new Set(prev);
+      for (const d of pageRows) {
+        if (on) next.add(d.name);
+        else next.delete(d.name);
+      }
+      return next;
+    });
+  };
+
+  const beginBatchPack = () => {
+    if (!envId || !namespace || selectedDeploys.length === 0) return;
+    if (!isTauriRuntime()) {
+      notifications.show({ color: "yellow", message: "请在 Tauri 桌面窗口中操作" });
+      return;
+    }
+    const branch = normalizeBatchBranchInput(batchBranch);
+    if (!branch) {
+      notifications.show({ color: "yellow", message: "请填写目标分支" });
+      return;
+    }
+
+    setBatchMeta({
+      branch,
+      namespace,
+      envName: selectedEnv?.name ?? envId,
+      deployNames: selectedDeploys.map((d) => d.name),
+    });
+    setBatchConfirmOpen(true);
+  };
+
+  const startBatchPack = async () => {
+    if (!envId || !namespace || !batchMeta) return;
+    const branch = batchMeta.branch;
+
+    setBatchConfirmOpen(false);
+    setBranchHistory(rememberKsBatchBranch(branch));
+    setBatchOpen(true);
+    setBatchRunning(true);
+    setBatchSummary(null);
+    setBatchLog("");
+    setBatchProgress(0);
+    batchStepLabelRef.current = "";
+    setBatchMessage("正在解析本地仓库…");
+
+    try {
+      const summary = await runKsBatchPackPublish({
+        config,
+        envId,
+        namespace,
+        branchName: branch,
+        concurrency: batchConcurrencyPref === KS_BATCH_CONCURRENCY_AUTO
+          ? KS_BATCH_CONCURRENCY_AUTO
+          : batchConcurrencyPref,
+        deployments: selectedDeploys.map((d) => ({
+          name: d.name,
+          containers: d.containers,
+        })),
+        appendLog: (line) => setBatchLog((prev) => (prev ? `${prev}\n${line}` : line)),
+        onProgress: (pct, msg) => {
+          batchStepLabelRef.current = msg;
+          setBatchProgress(pct);
+          setBatchMessage(msg);
+        },
+      });
+      setBatchSummary({
+        success: summary.success,
+        failed: summary.failed,
+        skipped: summary.skipped,
+      });
+      notifications.show({
+        color: summary.failed > 0 ? "orange" : "green",
+        title: "批量完成",
+        message: `成功 ${summary.success} · 失败 ${summary.failed} · 跳过 ${summary.skipped}`,
+        autoClose: 5000,
+      });
+      void load({ silent: true });
+    } finally {
+      setBatchRunning(false);
+    }
+  };
 
   const cmTotalPages = Math.max(1, Math.ceil(cms.length / cmPageSize));
   const cmSafePage = Math.min(cmPage, cmTotalPages);
@@ -1016,8 +1209,49 @@ export function KsPublishPanel({
                     <Button size="xs" variant="default" leftSection={<Download size={13} />} onClick={exportCsv}>
                       导出 CSV
                     </Button>
+                    <Autocomplete
+                      size="xs"
+                      w={180}
+                      placeholder="分支（可点选历史）"
+                      data={batchBranchSuggestions}
+                      value={batchBranch}
+                      onChange={setBatchBranch}
+                      disabled={batchRunning}
+                      aria-label="批量打包目标分支"
+                    />
+                    <Button
+                      size="xs"
+                      variant="filled"
+                      color="blue"
+                      leftSection={<Package size={13} />}
+                      disabled={
+                        checkedNames.size === 0
+                        || batchRunning
+                        || !batchBranch.trim()
+                      }
+                      loading={batchRunning}
+                      onClick={beginBatchPack}
+                    >
+                      批量打包并发布{checkedNames.size > 0 ? ` (${checkedNames.size})` : ""}
+                    </Button>
                   </Group>
                 </Group>
+                {checkedNames.size > 0 && (
+                  <Text size="xs" c="blue">
+                    已选 {checkedNames.size} 个部署
+                    {batchBranch.trim()
+                      ? ` · 分支 ${batchBranch.trim()}`
+                      : " · 请输入或点选历史分支"}
+                    {" · "}
+                    <Button
+                      variant="subtle"
+                      size="compact-xs"
+                      onClick={() => setCheckedNames(new Set())}
+                    >
+                      清空选择
+                    </Button>
+                  </Text>
+                )}
                 <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
                   <Select
                     label="部署"
@@ -1064,6 +1298,14 @@ export function KsPublishPanel({
                 <Table striped highlightOnHover verticalSpacing="xs">
                   <Table.Thead>
                     <Table.Tr>
+                      <Table.Th w={36}>
+                        <Checkbox
+                          aria-label="全选当前页"
+                          checked={pageAllChecked}
+                          indeterminate={pageSomeChecked}
+                          onChange={(e) => togglePageChecks(e.currentTarget.checked)}
+                        />
+                      </Table.Th>
                       <Table.Th>状态</Table.Th><Table.Th>部署</Table.Th><Table.Th>别名</Table.Th><Table.Th>容器</Table.Th>
                       <Table.Th>端口</Table.Th><Table.Th>镜像地址</Table.Th><Table.Th>就绪</Table.Th><Table.Th>版本</Table.Th>
                       <Table.Th>操作</Table.Th>
@@ -1071,14 +1313,16 @@ export function KsPublishPanel({
                   </Table.Thead>
                   <Table.Tbody>
                     {pageRows.length === 0 && (
-                      <Table.Tr><Table.Td colSpan={9} align="center" c="dimmed">没有匹配的部署</Table.Td></Table.Tr>
+                      <Table.Tr><Table.Td colSpan={10} align="center" c="dimmed">没有匹配的部署</Table.Td></Table.Tr>
                     )}
                     {pageRows.map((d) => (
                       <DeployRow
                         key={d.name}
                         d={d}
                         selected={sel?.name === d.name}
+                        checked={checkedNames.has(d.name)}
                         onSelect={setSel}
+                        onToggleCheck={toggleDeployCheck}
                         onEdit={beginEdit}
                       />
                     ))}
@@ -1131,7 +1375,7 @@ export function KsPublishPanel({
                   </Button>
                 </Group>
                 <Group align="flex-start" gap="lg" wrap="wrap">
-                  <Box style={{ flex: "1 1 360px", minWidth: 0, maxWidth: "100%" }}>
+                  <Box style={{ flex: "1 1 520px", minWidth: 0, maxWidth: "100%" }}>
                     <Text size="sm" fw={600} c="blue">🆕 新版本（当前 revision）</Text>
                     {sel.pods.new.length === 0 && <Text size="xs" c="dimmed">暂无</Text>}
                     {sel.pods.new.map((p) => (
@@ -1729,6 +1973,35 @@ export function KsPublishPanel({
           )}
         </Stack>
       </Modal>
+      <KsBatchConfirmModal
+        opened={batchConfirmOpen}
+        meta={batchMeta}
+        concurrencyPref={batchConcurrencyPref}
+        recommendedConcurrency={recommendKsBatchConcurrency({
+          itemCount: batchMeta?.deployNames.length ?? selectedDeploys.length,
+        })}
+        cpuCores={detectCpuCores()}
+        onConcurrencyPrefChange={(n) => {
+          const pref = (n === 0 || n === 1 || n === 2 || n === 3 || n === 4
+            ? n
+            : KS_BATCH_CONCURRENCY_AUTO) as KsBatchConcurrencyPref;
+          setBatchConcurrencyPref(pref);
+          saveKsBatchConcurrencyPref(pref);
+        }}
+        onClose={() => setBatchConfirmOpen(false)}
+        onStart={() => void startBatchPack()}
+      />
+      <KsBatchProgressModal
+        opened={batchOpen}
+        meta={batchMeta}
+        running={batchRunning}
+        progress={batchProgress}
+        message={batchMessage}
+        log={batchLog}
+        summary={batchSummary}
+        onClose={() => setBatchOpen(false)}
+        onCancelBuild={() => void invoke("cancel_build").catch(() => {})}
+      />
     </>
   );
 }

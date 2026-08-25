@@ -46,6 +46,8 @@ export function createDefaultHarborConfig(): HarborConfig {
     branch_repo_settings: {},
     npm_package_manager: "npm",
     npm_registry: "",
+    maven_home: "",
+    maven_local_repo: "",
     artifact_output_dir: "",
     custom_docker_extras_dir: "",
     build_history: [],
@@ -87,6 +89,9 @@ export function useAppConfig(deps: UseAppConfigDeps) {
   onConfigLoadedRef.current = onConfigLoaded;
 
   const [config, setConfig] = useState<HarborConfig>(createDefaultHarborConfig);
+  /** 保存配置时读最新快照，避免闭包里的 config 滞后于 setConfig */
+  const configRef = useRef(config);
+  configRef.current = config;
   /** load_config 完成（成功或失败）后为 true；KS 等面板需等此标志再自动连接，避免 reload 抢跑空配置 */
   const [configLoaded, setConfigLoaded] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
@@ -119,6 +124,7 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     }
     try {
       const savedConfig = withSessionConfigDefaults(await invoke<HarborConfig>("load_config"));
+      configRef.current = savedConfig;
       setConfig(savedConfig);
       setBuildHistory(savedConfig.build_history || []);
       await onConfigLoadedRef.current?.(savedConfig);
@@ -136,7 +142,8 @@ export function useAppConfig(deps: UseAppConfigDeps) {
       return;
     }
     try {
-      await invoke("save_config", { config });
+      const snapshot = configRef.current;
+      await invoke("save_config", { config: snapshot });
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 2000);
     } catch (e) {
@@ -147,9 +154,22 @@ export function useAppConfig(deps: UseAppConfigDeps) {
 
   function handleConfigChange(
     field: keyof HarborConfig,
-    value: HarborConfig[keyof HarborConfig],
+    value:
+      | HarborConfig[keyof HarborConfig]
+      | ((prev: HarborConfig[keyof HarborConfig]) => HarborConfig[keyof HarborConfig]),
   ) {
-    setConfig((prev) => ({ ...prev, [field]: value }));
+    setConfig((prev) => {
+      const next = {
+        ...prev,
+        [field]: typeof value === "function"
+          ? (value as (p: HarborConfig[keyof HarborConfig]) => HarborConfig[keyof HarborConfig])(
+            prev[field],
+          )
+          : value,
+      };
+      configRef.current = next;
+      return next;
+    });
   }
 
   async function handleOpsAuthorizationSave(authorization: string) {

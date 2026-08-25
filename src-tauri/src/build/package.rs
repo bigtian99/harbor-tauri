@@ -39,6 +39,27 @@ pub async fn package_from_branch(
     emit_progress(&app, 50, package_message, "build");
 
     let config = load_config_sync().unwrap_or_default();
+    let (maven_home, maven_local_repo) =
+        crate::utils::resolve_maven_paths(&config.maven_home, &config.maven_local_repo);
+    crate::diag::diag_log(
+        "build",
+        &format!(
+            "package_from_branch maven_home={} local_repo={}",
+            maven_home, maven_local_repo
+        ),
+    );
+    if matches!(project_type, PackageProjectType::Maven)
+        || package_with_backend.unwrap_or(false)
+    {
+        if maven_home.trim().is_empty()
+            || !crate::utils::maven_home_looks_valid(&maven_home)
+        {
+            return Err(
+                "未配置有效的 Maven Home（也未检测到 MAVEN_HOME/M2_HOME）。请到「系统设置 → JAR 打包」填写 Maven 安装目录后再打包。"
+                    .to_string(),
+            );
+        }
+    }
     let pm = package_manager
         .clone()
         .filter(|s| !s.trim().is_empty())
@@ -71,6 +92,8 @@ pub async fn package_from_branch(
                 npm_registry,
                 spring_profile: spring_profile_clone,
                 package_with_backend: package_with_backend_clone,
+                maven_home,
+                maven_local_repo,
             },
         )
     })

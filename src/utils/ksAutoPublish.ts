@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { HarborConfig, KsPublishMap } from "../types";
 import { pickKsEnvironment, resolveKsEnvironments } from "./ksEnvironments";
-import { lookupKsPublishMap, normalizeGitUrl } from "./ksPublishMap";
+import { lookupKsPublishMaps, normalizeGitUrl } from "./ksPublishMap";
 
 export interface KsAutoPublishDeps {
   repoPath: string;
@@ -123,8 +123,8 @@ export async function runKsAutoPublish(
 
   for (const item of images) {
     const roleLabel = item.role;
-    const map = lookupKsPublishMap(maps, key, item.role);
-    if (!map) {
+    const matchedMaps = lookupKsPublishMaps(maps, key, item.role);
+    if (matchedMaps.length === 0) {
       summary.skipped += 1;
       note(
         summary,
@@ -134,119 +134,121 @@ export async function runKsAutoPublish(
       continue;
     }
 
-    note(
-      summary,
-      appendLog,
-      `KS 命中：role=${roleLabel} → ${map.namespace}/${map.deployment}` +
-        `（env_id=${map.env_id}，map_id=${map.id}）`,
-    );
-
-    const env = pickKsEnvironment(envs, map.env_id);
-    if (!env || env.id !== map.env_id) {
-      summary.skipped += 1;
+    for (const map of matchedMaps) {
       note(
         summary,
         appendLog,
-        `KS 跳过：role=${roleLabel} 环境 id=${map.env_id} 未找到`,
-        ["build", "kubesphere"],
+        `KS 命中：role=${roleLabel} → ${map.namespace}/${map.deployment}` +
+          `（env_id=${map.env_id}，map_id=${map.id}）`,
       );
-      continue;
-    }
 
-    const consoleUrl = env.console?.trim() || "";
-    const username = env.username?.trim() || "";
-    const password = env.password ?? "";
-    if (!consoleUrl || !username || !password) {
-      summary.skipped += 1;
-      note(
-        summary,
-        appendLog,
-        `KS 跳过：环境「${env.name}」未配齐 console/username/password`,
-        ["build", "kubesphere"],
-      );
-      continue;
-    }
-
-    summary.attempted += 1;
-
-    try {
-      await invoke("ks_connect", {
-        envId: env.id,
-        console: consoleUrl,
-        username,
-        password,
-      });
-      note(
-        summary,
-        appendLog,
-        `KS 已连接：env=${env.name}（${env.id}）`,
-        ["build", "kubesphere"],
-      );
-    } catch (e) {
-      summary.failed += 1;
-      note(
-        summary,
-        appendLog,
-        `KS 发布失败：连接「${env.name}」失败 — ${String(e)}`,
-        ["build", "kubesphere"],
-      );
-      continue;
-    }
-
-    const containerResult = await resolveContainer(map);
-    if ("skip" in containerResult) {
-      summary.skipped += 1;
-      summary.attempted -= 1;
-      note(
-        summary,
-        appendLog,
-        `KS 跳过：role=${roleLabel} ${containerResult.skip}`,
-        ["build", "kubesphere"],
-      );
-      continue;
-    }
-    const { container } = containerResult;
-
-    try {
-      diag(
-        "kubesphere",
-        `ks_update_image ns=${map.namespace} deploy=${map.deployment} ` +
-          `container=${container} image=${item.image}`,
-      );
-      const r = await invoke<UpdateResult>("ks_update_image", {
-        namespace: map.namespace,
-        deployment: map.deployment,
-        container,
-        image: item.image,
-      });
-      if (r.ok) {
-        summary.success += 1;
+      const env = pickKsEnvironment(envs, map.env_id);
+      if (!env || env.id !== map.env_id) {
+        summary.skipped += 1;
         note(
           summary,
           appendLog,
-          `KS 发布成功：${map.namespace}/${map.deployment}` +
-            ` container=${container} revision=${r.revision}` +
-            ` ${r.oldImage} → ${r.newImage}`,
+          `KS 跳过：role=${roleLabel} 环境 id=${map.env_id} 未找到`,
           ["build", "kubesphere"],
         );
-      } else {
+        continue;
+      }
+
+      const consoleUrl = env.console?.trim() || "";
+      const username = env.username?.trim() || "";
+      const password = env.password ?? "";
+      if (!consoleUrl || !username || !password) {
+        summary.skipped += 1;
+        note(
+          summary,
+          appendLog,
+          `KS 跳过：环境「${env.name}」未配齐 console/username/password`,
+          ["build", "kubesphere"],
+        );
+        continue;
+      }
+
+      summary.attempted += 1;
+
+      try {
+        await invoke("ks_connect", {
+          envId: env.id,
+          console: consoleUrl,
+          username,
+          password,
+        });
+        note(
+          summary,
+          appendLog,
+          `KS 已连接：env=${env.name}（${env.id}）`,
+          ["build", "kubesphere"],
+        );
+      } catch (e) {
         summary.failed += 1;
         note(
           summary,
           appendLog,
-          `KS 发布失败：${map.namespace}/${map.deployment}` +
-            ` revision=${r.revision} ${r.oldImage} → ${r.newImage}`,
+          `KS 发布失败：连接「${env.name}」失败 — ${String(e)}`,
+          ["build", "kubesphere"],
+        );
+        continue;
+      }
+
+      const containerResult = await resolveContainer(map);
+      if ("skip" in containerResult) {
+        summary.skipped += 1;
+        summary.attempted -= 1;
+        note(
+          summary,
+          appendLog,
+          `KS 跳过：role=${roleLabel} ${containerResult.skip}`,
+          ["build", "kubesphere"],
+        );
+        continue;
+      }
+      const { container } = containerResult;
+
+      try {
+        diag(
+          "kubesphere",
+          `ks_update_image ns=${map.namespace} deploy=${map.deployment} ` +
+            `container=${container} image=${item.image}`,
+        );
+        const r = await invoke<UpdateResult>("ks_update_image", {
+          namespace: map.namespace,
+          deployment: map.deployment,
+          container,
+          image: item.image,
+        });
+        if (r.ok) {
+          summary.success += 1;
+          note(
+            summary,
+            appendLog,
+            `KS 发布成功：${map.namespace}/${map.deployment}` +
+              ` container=${container} revision=${r.revision}` +
+              ` ${r.oldImage} → ${r.newImage}`,
+            ["build", "kubesphere"],
+          );
+        } else {
+          summary.failed += 1;
+          note(
+            summary,
+            appendLog,
+            `KS 发布失败：${map.namespace}/${map.deployment}` +
+              ` revision=${r.revision} ${r.oldImage} → ${r.newImage}`,
+            ["build", "kubesphere"],
+          );
+        }
+      } catch (e) {
+        summary.failed += 1;
+        note(
+          summary,
+          appendLog,
+          `KS 发布失败：${map.namespace}/${map.deployment} — ${String(e)}`,
           ["build", "kubesphere"],
         );
       }
-    } catch (e) {
-      summary.failed += 1;
-      note(
-        summary,
-        appendLog,
-        `KS 发布失败：${map.namespace}/${map.deployment} — ${String(e)}`,
-        ["build", "kubesphere"],
-      );
     }
   }
 

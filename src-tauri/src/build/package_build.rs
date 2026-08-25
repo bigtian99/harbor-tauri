@@ -4,7 +4,7 @@ use crate::build::emit_progress;
 use crate::git::{find_maven_artifact, find_npm_artifact};
 use crate::models::PackageProjectType;
 use crate::utils::{
-    detect_npm_build_script, lock_file_hash, run_command, save_node_modules_to_cache,
+    detect_npm_build_script, lock_file_hash, run_command, run_maven, save_node_modules_to_cache,
     try_restore_node_modules,
 };
 use std::path::PathBuf;
@@ -22,6 +22,8 @@ pub(crate) struct BuildParams {
     pub npm_registry: String,
     pub spring_profile: Option<String>,
     pub package_with_backend: Option<bool>,
+    pub maven_home: String,
+    pub maven_local_repo: String,
 }
 
 /// 在阻塞线程中执行 Maven 或 npm 打包（含可选并行后端）。
@@ -40,7 +42,12 @@ pub(crate) fn run_project_build(app: &AppHandle, params: BuildParams) -> Result<
                 }
             }
             build_script_used = format!("mvn {}", mvn_args.join(" "));
-            logs.push(run_command(&params.worktree_for_build, "mvn", &mvn_args)?);
+            logs.push(run_maven(
+                &params.worktree_for_build,
+                &mvn_args,
+                &params.maven_home,
+                &params.maven_local_repo,
+            )?);
             let artifact_path = find_maven_artifact(&params.worktree_for_build)?;
             Ok((artifact_path, build_script_used, logs, None))
         }
@@ -87,9 +94,11 @@ fn run_npm_build(
                 "📦 前端安装依赖... | ☕ 后端并行打包中",
                 "build",
             );
+            let maven_home = params.maven_home.clone();
+            let maven_local_repo = params.maven_local_repo.clone();
             Some(std::thread::spawn(move || {
                 let mvn_args: Vec<&str> = mvn_base.split_whitespace().collect();
-                let mvn_log = run_command(&root, "mvn", &mvn_args)
+                let mvn_log = run_maven(&root, &mvn_args, &maven_home, &maven_local_repo)
                     .map_err(|e| format!("后端 Maven 打包失败: {}", e))?;
                 let jar = find_maven_artifact(&root)?;
                 Ok((jar.to_string_lossy().to_string(), mvn_log))

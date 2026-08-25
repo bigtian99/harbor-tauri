@@ -43,6 +43,10 @@ export interface HarborConfig {
   branch_repo_settings: Record<string, BranchRepoSettings | undefined>;
   npm_package_manager: string;
   npm_registry: string;
+  /** Maven 安装目录（含 bin/mvn），空则走 PATH */
+  maven_home?: string;
+  /** Maven 本地仓库，空则用 ~/.m2/repository */
+  maven_local_repo?: string;
   // 打包产物输出目录
   artifact_output_dir: string;
   // 运营接口 Authorization，仅当前运行内保留
@@ -104,6 +108,8 @@ export interface KsPublishMap {
   namespace: string;
   deployment: string;
   container?: string;
+  /** 服务暴露端口（随 Git 映射一起记忆，分支打包可带出） */
+  expose_port?: string;
 }
 
 export interface PackageFromBranchResult {

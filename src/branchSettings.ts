@@ -80,3 +80,27 @@ export function rememberBranchRepoSettings<T extends { branch_repo_settings?: Re
     branch_repo_settings: branchRepoSettings,
   };
 }
+
+/**
+ * 是否已有「该仓库专属」端口记忆（优先于 klcj-zt 模块默认端口）。
+ */
+export function hasRememberedRepoExposePort(
+  config: RememberedBranchSettingsConfig,
+  repoPath?: string,
+): boolean {
+  if (!config.remember_branch_settings) return false;
+  const repoKey = normalizeRepoPath(repoPath);
+  if (repoKey && config.branch_repo_settings?.[repoKey]?.exposePort?.trim()) {
+    return true;
+  }
+  const legacyRepoKey = normalizeRepoPath(config.last_repo_path);
+  if (
+    repoKey
+    && legacyRepoKey
+    && repoKey === legacyRepoKey
+    && config.last_expose_port.trim()
+  ) {
+    return true;
+  }
+  return false;
+}

@@ -41,6 +41,16 @@ pub(crate) fn normalize_config(mut config: HarborConfig) -> HarborConfig {
     for (jar, id) in crate::models::HarborConfig::default().bt_jar_project_ids {
         config.bt_jar_project_ids.entry(jar).or_insert(id);
     }
+    // Maven：配置为空时用环境变量 MAVEN_HOME/M2_HOME 预填；本地仓库空则由 Home 推导
+    if config.maven_home.trim().is_empty() {
+        let env_home = crate::utils::maven_home_from_env();
+        if !env_home.is_empty() {
+            config.maven_home = env_home;
+        }
+    }
+    if config.maven_local_repo.trim().is_empty() && !config.maven_home.trim().is_empty() {
+        config.maven_local_repo = crate::utils::derive_maven_local_repo(&config.maven_home);
+    }
     config
 }
 

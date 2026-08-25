@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ChevronDown, FolderOpen, Loader2, RefreshCw, Save } from "lucide-react";
 import type { HarborConfig, KsPublishMap, KsPublishMapRole } from "../types";
 import { isTauriRuntime } from "../types";
 import { resolveKsEnvironments } from "../utils/ksEnvironments";
+import {
+  resolveKlcjZtExposePort,
+  suggestKlcjZtByGitUrl,
+  suggestKlcjZtGit,
+} from "../utils/klcjZtGitDefaults";
 import { createKsPublishMap } from "../utils/ksPublishMap";
 import { showSystemAlert } from "../systemAlert";
 
@@ -23,6 +28,7 @@ interface GridRow {
   container: string;
   role: KsPublishMapRole;
   git_url: string;
+  expose_port: string;
   mapId?: string;
 }
 
@@ -43,11 +49,19 @@ function buildGridRows(
         && m.namespace === namespace
         && m.deployment === d.name,
     );
+    const suggested = suggestKlcjZtGit(d.name);
+    const git_url = existing?.git_url?.trim() || suggested?.git_url || "";
+    const expose_port = resolveKlcjZtExposePort({
+      deployment: d.name,
+      gitUrl: git_url,
+      existingPort: existing?.expose_port,
+    }) || suggested?.expose_port || "";
     return {
       deployment: d.name,
       container: existing?.container?.trim() || d.containers[0]?.trim() || "",
-      role: existing?.role ?? "backend",
-      git_url: existing?.git_url ?? "",
+      role: existing?.role ?? suggested?.role ?? "backend",
+      git_url,
+      expose_port,
       mapId: existing?.id,
     };
   });
@@ -56,12 +70,17 @@ function buildGridRows(
 export function KsPublishMapEditor({
   config,
   onMapsChange,
+  onRegisterFlush,
 }: {
   config: HarborConfig;
-  onMapsChange: (maps: KsPublishMap[]) => void;
+  onMapsChange: (updater: KsPublishMap[] | ((prev: KsPublishMap[]) => KsPublishMap[])) => void;
+  /** 注册「把当前命名空间表格写入 config」回调，供底部「保存配置」前自动合并 */
+  onRegisterFlush?: (flush: () => void) => void;
 }) {
   const ksEnvs = resolveKsEnvironments(config);
   const publishMaps = config.ks_publish_maps ?? [];
+  const publishMapsRef = useRef(publishMaps);
+  publishMapsRef.current = publishMaps;
 
   const [envId, setEnvId] = useState(
     () => config.ks_last_env_id || ksEnvs[0]?.id || "",
@@ -86,6 +105,8 @@ export function KsPublishMapEditor({
     [publishMaps, envId, namespace],
   );
 
+  const connectSeqRef = useRef(0);
+
   const connect = useCallback(async (targetEnvId?: string) => {
     const id = targetEnvId ?? envId;
     const env = ksEnvs.find((e) => e.id === id);
@@ -106,6 +127,7 @@ export function KsPublishMapEditor({
       setConnected(false);
       return;
     }
+    const seq = ++connectSeqRef.current;
     setConnecting(true);
     setConnected(false);
     setNamespaces([]);
@@ -120,7 +142,9 @@ export function KsPublishMapEditor({
         username,
         password,
       });
+      if (seq !== connectSeqRef.current) return;
       const ns = await invoke<string[]>("ks_list_namespaces");
+      if (seq !== connectSeqRef.current) return;
       if (ns.length === 0) {
         setStatusText(`「${env.name}」未拿到命名空间，请重连`);
         return;
@@ -131,12 +155,21 @@ export function KsPublishMapEditor({
       setNamespace(prefer);
       setStatusText(`已连接「${env.name}」，共 ${ns.length} 个命名空间`);
     } catch (e) {
+      if (seq !== connectSeqRef.current) return;
       setStatusText(`连接失败：${e}`);
       setConnected(false);
     } finally {
-      setConnecting(false);
+      if (seq === connectSeqRef.current) setConnecting(false);
     }
   }, [envId, ksEnvs]);
+
+  // 选中环境后默认自动连接（无需点「连接并加载」）
+  useEffect(() => {
+    if (!envId || ksEnvs.length === 0) return;
+    void connect(envId);
+    // 仅随 envId 变化自动连接；connect 本身依赖 ksEnvs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [envId]);
 
   const loadDeploys = useCallback(async (ns: string) => {
     if (!connected || !ns) return;
@@ -145,7 +178,8 @@ export function KsPublishMapEditor({
     try {
       const list = await invoke<DeployRow[]>("ks_list_deployments", { namespace: ns });
       setDeploys(list);
-      setRows(buildGridRows(list, publishMaps, envId, ns));
+      // 用 ref，避免 publishMaps 变化触发整表重载、冲掉未保存编辑
+      setRows(buildGridRows(list, publishMapsRef.current, envId, ns));
       setStatusText(`已加载 ${list.length} 个部署`);
     } catch (e) {
       setDeploys([]);
@@ -154,7 +188,7 @@ export function KsPublishMapEditor({
     } finally {
       setLoadingDeploys(false);
     }
-  }, [connected, publishMaps, envId]);
+  }, [connected, envId]);
 
   useEffect(() => {
     if (connected && namespace) {
@@ -164,7 +198,25 @@ export function KsPublishMapEditor({
 
   const updateRow = (deployment: string, patch: Partial<GridRow>) => {
     setRows((prev) =>
-      prev.map((r) => (r.deployment === deployment ? { ...r, ...patch } : r)),
+      prev.map((r) => {
+        if (r.deployment !== deployment) return r;
+        const next = { ...r, ...patch };
+        if (patch.git_url === undefined) return next;
+
+        const oldDefault =
+          suggestKlcjZtGit(r.deployment)?.expose_port
+          || suggestKlcjZtByGitUrl(r.git_url)?.expose_port
+          || "";
+        const newDefault =
+          suggestKlcjZtGit(r.deployment)?.expose_port
+          || suggestKlcjZtByGitUrl(next.git_url)?.expose_port
+          || "";
+        // 端口为空，或仍是旧 Git 对应的默认端口时，随 Git 一起带出新端口
+        if (!next.expose_port.trim() || next.expose_port.trim() === oldDefault) {
+          if (newDefault) next.expose_port = newDefault;
+        }
+        return next;
+      }),
     );
   };
 
@@ -182,7 +234,31 @@ export function KsPublishMapEditor({
         remote: null,
       });
       const git = url.trim();
-      setRows((prev) => prev.map((r) => (r.git_url.trim() ? r : { ...r, git_url: git })));
+      const byGit = suggestKlcjZtByGitUrl(git);
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.git_url.trim()) return r;
+          const byDeploy = suggestKlcjZtGit(r.deployment);
+          // 仅填「部署名已匹配到同一 Git」或「完全空行且只有一个空部署」时用当前仓库
+          const sameGit =
+            byDeploy && byGit && byDeploy.git_url === byGit.git_url;
+          if (!sameGit && byDeploy) {
+            // 部署已有模块默认 Git，不覆盖成当前仓库
+            return r;
+          }
+          const expose_port =
+            r.expose_port.trim()
+            || byDeploy?.expose_port
+            || byGit?.expose_port
+            || "";
+          return {
+            ...r,
+            git_url: byDeploy?.git_url || git,
+            role: r.role || byDeploy?.role || byGit?.role || "backend",
+            expose_port,
+          };
+        }),
+      );
     } catch (e) {
       await showSystemAlert("读取 Git 地址失败", String(e));
     } finally {
@@ -190,48 +266,70 @@ export function KsPublishMapEditor({
     }
   };
 
+  const rowToMap = (r: GridRow) =>
+    createKsPublishMap({
+      id: r.mapId,
+      git_url: r.git_url.trim(),
+      role: r.role,
+      env_id: envId,
+      namespace,
+      deployment: r.deployment,
+      container: r.container.trim() || undefined,
+      expose_port: r.expose_port.trim() || undefined,
+    });
+
   const saveNamespaceMaps = async () => {
     if (!envId || !namespace) {
       await showSystemAlert("无法保存", "请先选择环境并连接加载命名空间");
       return;
     }
-    const toSave = rows
-      .filter((r) => r.git_url.trim())
-      .map((r) =>
-        createKsPublishMap({
-          id: r.mapId,
-          git_url: r.git_url.trim(),
-          role: r.role,
-          env_id: envId,
-          namespace,
-          deployment: r.deployment,
-          container: r.container.trim() || undefined,
-        }),
+    const toSave = rows.filter((r) => r.git_url.trim()).map(rowToMap);
+
+    onMapsChange((prev) => {
+      const rest = prev.filter(
+        (m) => !(m.env_id === envId && m.namespace === namespace),
       );
-
-    const dup = new Set<string>();
-    for (const m of toSave) {
-      const key = `${m.git_url_key}\0${m.role}`;
-      if (dup.has(key)) {
-        await showSystemAlert("重复映射", `同一 Git 地址 + 角色「${roleLabel(m.role)}」出现多次，请检查`);
-        return;
-      }
-      dup.add(key);
-    }
-
-    const rest = publishMaps.filter(
-      (m) => !(m.env_id === envId && m.namespace === namespace),
-    );
-    onMapsChange([...rest, ...toSave]);
-    setRows(buildGridRows(deploys, [...rest, ...toSave], envId, namespace));
+      const next = [...rest, ...toSave];
+      publishMapsRef.current = next;
+      return next;
+    });
+    setRows(buildGridRows(deploys, publishMapsRef.current, envId, namespace));
     await showSystemAlert(
       "已保存到当前配置",
-      `本命名空间已保存 ${toSave.length} 条 Git 映射。请点击页面底部「保存配置」写入磁盘。`,
+      `本命名空间已保存 ${toSave.length} 条 Git 映射（当前配置共 ${publishMapsRef.current.length} 条）。请点击页面底部「保存配置」写入磁盘。`,
     );
   };
 
+  const flushNamespaceMapsToConfig = useCallback(() => {
+    if (!envId || !namespace || rows.length === 0) return;
+    const toSave = rows.filter((r) => r.git_url.trim()).map((r) =>
+      createKsPublishMap({
+        id: r.mapId,
+        git_url: r.git_url.trim(),
+        role: r.role,
+        env_id: envId,
+        namespace,
+        deployment: r.deployment,
+        container: r.container.trim() || undefined,
+        expose_port: r.expose_port.trim() || undefined,
+      }),
+    );
+    onMapsChange((prev) => {
+      const rest = prev.filter(
+        (m) => !(m.env_id === envId && m.namespace === namespace),
+      );
+      const next = [...rest, ...toSave];
+      publishMapsRef.current = next;
+      return next;
+    });
+  }, [envId, namespace, rows, onMapsChange]);
+
+  useEffect(() => {
+    onRegisterFlush?.(flushNamespaceMapsToConfig);
+  }, [onRegisterFlush, flushNamespaceMapsToConfig]);
+
   const removeMap = (map: KsPublishMap) => {
-    onMapsChange(publishMaps.filter((m) => m.id !== map.id));
+    onMapsChange((prev) => prev.filter((m) => m.id !== map.id));
   };
 
   if (ksEnvs.length === 0) {
@@ -243,75 +341,82 @@ export function KsPublishMapEditor({
   return (
     <div className="ks-publish-maps-section">
       <p className="template-hint" style={{ margin: 0 }}>
-        选择环境并连接 → 选命名空间自动列出部署 → 每行填 Git 地址即可（无需手打部署名）
+        选择环境后自动连接 → 再选命名空间列出部署。未保存过的行会按 klcj-zt 模块预填 Git 与端口；输入 Git 或选本地仓库时端口会一起带出。
       </p>
 
       <div className="ks-map-context-bar">
-        <div className="ks-map-context-field">
-          <label>环境</label>
-          <div className="config-select-wrapper">
-            <select
-              className="config-select"
-              value={envId}
-              onChange={(e) => {
-                setEnvId(e.target.value);
-                setConnected(false);
-                setNamespace("");
-                setDeploys([]);
-                setRows([]);
-              }}
-            >
-              {ksEnvs.map((env) => (
-                <option key={env.id} value={env.id}>{env.name || env.id}</option>
-              ))}
-            </select>
-            <ChevronDown size={16} className="config-select-icon" aria-hidden />
+        <div className="ks-map-context-fields">
+          <div className="ks-map-context-field">
+            <label>环境</label>
+            <div className="config-select-wrapper">
+              <select
+                className="config-select"
+                value={envId}
+                disabled={connecting}
+                onChange={(e) => {
+                  setEnvId(e.target.value);
+                  setConnected(false);
+                  setNamespace("");
+                  setNamespaces([]);
+                  setDeploys([]);
+                  setRows([]);
+                }}
+              >
+                {ksEnvs.map((env) => (
+                  <option key={env.id} value={env.id}>{env.name || env.id}</option>
+                ))}
+              </select>
+              <ChevronDown size={16} className="config-select-icon" aria-hidden />
+            </div>
+          </div>
+          <div className="ks-map-context-field">
+            <label>命名空间</label>
+            <div className="config-select-wrapper">
+              <select
+                className="config-select"
+                value={namespace}
+                disabled={connecting || !connected || namespaces.length === 0}
+                onChange={(e) => setNamespace(e.target.value)}
+              >
+                {!namespace && <option value="">选择命名空间</option>}
+                {namespaces.map((ns) => (
+                  <option key={ns} value={ns}>{ns}</option>
+                ))}
+              </select>
+              <ChevronDown size={16} className="config-select-icon" aria-hidden />
+            </div>
           </div>
         </div>
-        <div className="ks-map-context-field">
-          <label>命名空间</label>
-          <div className="config-select-wrapper">
-            <select
-              className="config-select"
-              value={namespace}
-              disabled={!connected || namespaces.length === 0}
-              onChange={(e) => setNamespace(e.target.value)}
-            >
-              {!namespace && <option value="">选择命名空间</option>}
-              {namespaces.map((ns) => (
-                <option key={ns} value={ns}>{ns}</option>
-              ))}
-            </select>
-            <ChevronDown size={16} className="config-select-icon" aria-hidden />
-          </div>
+        <div className="ks-map-context-actions">
+          <button
+            type="button"
+            className="config-add-env-btn"
+            disabled={connecting || !envId}
+            onClick={() => void connect()}
+            title="连接失败或命名空间过期时手动重连"
+          >
+            {connecting ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
+            {connecting ? "连接中…" : "重新连接"}
+          </button>
+          <button
+            type="button"
+            className="config-add-env-btn"
+            disabled={fillLoading || rows.length === 0}
+            onClick={() => void fillGitFromLastRepo()}
+          >
+            {fillLoading ? <Loader2 size={14} className="spin" /> : <FolderOpen size={14} />}
+            空行填入当前仓库
+          </button>
+          <button
+            type="button"
+            className="config-add-env-btn ks-map-save-btn"
+            disabled={!connected || !namespace || rows.length === 0}
+            onClick={() => void saveNamespaceMaps()}
+          >
+            <Save size={14} />
+            保存本命名空间
+          </button>
         </div>
-        <button
-          type="button"
-          className="config-add-env-btn"
-          disabled={connecting || !envId}
-          onClick={() => void connect()}
-        >
-          {connecting ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
-          {connected ? "重新连接" : "连接并加载"}
-        </button>
-        <button
-          type="button"
-          className="config-add-env-btn"
-          disabled={fillLoading || rows.length === 0}
-          onClick={() => void fillGitFromLastRepo()}
-        >
-          {fillLoading ? <Loader2 size={14} className="spin" /> : <FolderOpen size={14} />}
-          空行填入当前仓库
-        </button>
-        <button
-          type="button"
-          className="config-add-env-btn ks-map-save-btn"
-          disabled={!connected || !namespace || rows.length === 0}
-          onClick={() => void saveNamespaceMaps()}
-        >
-          <Save size={14} />
-          保存本命名空间
-        </button>
       </div>
 
       {statusText && <p className="template-hint ks-map-status">{statusText}</p>}
@@ -328,6 +433,7 @@ export function KsPublishMapEditor({
                 <th>部署</th>
                 <th>容器</th>
                 <th>角色</th>
+                <th>端口</th>
                 <th>Git 远程地址</th>
               </tr>
             </thead>
@@ -352,6 +458,17 @@ export function KsPublishMapEditor({
                       </select>
                       <ChevronDown size={14} className="config-select-icon" aria-hidden />
                     </div>
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      className="ks-map-port-input"
+                      value={row.expose_port}
+                      placeholder="9613"
+                      inputMode="numeric"
+                      onChange={(e) =>
+                        updateRow(row.deployment, { expose_port: e.target.value })}
+                    />
                   </td>
                   <td>
                     <input
@@ -387,6 +504,7 @@ export function KsPublishMapEditor({
                   </span>
                   <span className="ks-env-console">
                     {envNameById(map.env_id)} · {map.namespace}/{map.deployment}
+                    {map.expose_port?.trim() ? ` · :${map.expose_port}` : ""}
                   </span>
                 </div>
                 <div className="ks-env-row-actions">

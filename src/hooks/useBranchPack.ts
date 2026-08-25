@@ -9,8 +9,12 @@ import type {
   TabType,
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
-import { isTauriRuntime } from "../types";
-import { getRememberedBranchAdvancedSettings, rememberBranchRepoSettings } from "../branchSettings";
+import { isGitUrl, isTauriRuntime } from "../types";
+import { getRememberedBranchAdvancedSettings, hasRememberedRepoExposePort, rememberBranchRepoSettings } from "../branchSettings";
+import {
+  suggestKlcjZtByGitUrl,
+  suggestKlcjZtByRepoPath,
+} from "../utils/klcjZtGitDefaults";
 import {
   autoPushHarborForSpringProfile,
   buildScriptAfterMerge,
@@ -45,6 +49,16 @@ interface UseBranchPackDeps {
   /** 与 upload 共享的产物路径（分支打包完成后会写入 artifactPath） */
   artifactPath: string;
   setArtifactPath: (value: string) => void;
+  /** 未配置 Maven 时引导跳转设置页 */
+  onOpenMavenConfig?: () => void;
+  /** 二次确认弹窗 */
+  confirm?: (opts: {
+    title: string;
+    message: string;
+    details?: string[];
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }) => Promise<boolean>;
 }
 
 /**
@@ -68,6 +82,8 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     imageTag,
     // setImageTag 由 upload 侧持有，分支打包只读 imageTag 用于自动 tag
     setArtifactPath,
+    onOpenMavenConfig,
+    confirm,
   } = deps;
 
   const [repoPath, setRepoPath] = useState("");
@@ -112,14 +128,49 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     return ++branchLoadRequestRef.current;
   }
 
-  function restoreRememberedBranchAdvancedSettings(
+  async function restoreRememberedBranchAdvancedSettings(
     sourceConfig = config,
     sourceRepoPath = repoPath,
   ) {
-    const remembered = getRememberedBranchAdvancedSettings(sourceConfig, sourceRepoPath);
+    const trimmedRepoPath = sourceRepoPath.trim();
+    const repoPathIsGitUrl = isGitUrl(trimmedRepoPath);
+    const remembered = getRememberedBranchAdvancedSettings(
+      sourceConfig,
+      sourceRepoPath,
+    );
+    let exposePort = remembered.exposePort;
+    // 无仓库专属记忆时，按本地路径 / Git 远程带出 klcj-zt 模块端口
+    if (!hasRememberedRepoExposePort(sourceConfig, sourceRepoPath)) {
+      const fromModule =
+        suggestKlcjZtByRepoPath(sourceRepoPath)?.expose_port
+        || (repoPathIsGitUrl ? suggestKlcjZtByGitUrl(trimmedRepoPath)?.expose_port : "")
+        || "";
+      if (fromModule) exposePort = fromModule;
+    }
     setSpringProfile(remembered.springProfile);
-    setBranchExposePort(remembered.exposePort);
+    setBranchExposePort(exposePort);
     setNginxLocations(remembered.nginxLocations ?? []);
+
+    // 二次精化：本地仓库尝试按 origin 再补一次端口（不会覆盖用户已记忆值）
+    if (
+      !repoPathIsGitUrl
+      && isTauriRuntime()
+      && trimmedRepoPath
+      && !hasRememberedRepoExposePort(sourceConfig, sourceRepoPath)
+    ) {
+      try {
+        const gitUrl = await invoke<string>("get_git_remote_url", {
+          repoPath: trimmedRepoPath,
+          remote: null,
+        });
+        const fromRemote = suggestKlcjZtByGitUrl(gitUrl)?.expose_port || "";
+        if (fromRemote) {
+          setBranchExposePort((prev) => (prev.trim() ? prev : fromRemote));
+        }
+      } catch {
+        /* 非 git 目录或无 origin：忽略 */
+      }
+    }
   }
 
   const commits = useBranchCommits({
@@ -183,7 +234,56 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     }
   }
 
+  async function ensureMavenConfigured(): Promise<boolean> {
+    const needsMaven =
+      branchProjectType === "maven" || (branchProjectType === "npm" && packageWithBackend);
+    if (!needsMaven) return true;
+    if (!isTauriRuntime()) return true;
+
+    try {
+      const info = await invoke<{
+        effective_home: string;
+        home_valid: boolean;
+        source: string;
+        env_home: string;
+      }>("resolve_maven_settings", { config });
+
+      if (info.home_valid && info.effective_home.trim()) {
+        return true;
+      }
+
+      const details = [
+        "优先读取环境变量 MAVEN_HOME / M2_HOME；",
+        "也可在「系统设置 → JAR 打包」手动指定 Maven Home 与本地仓库。",
+        "本地仓库默认由 Home 带出为 {home}/repository。",
+      ];
+      if (info.env_home) {
+        details.push(`当前环境变量: ${info.env_home}（目录无效或不含 bin/mvn）`);
+      }
+
+      if (confirm) {
+        const go = await confirm({
+          title: "未配置 Maven",
+          message: "分支打包需要有效的 Maven 安装目录，否则会用错仓库（如 ~/.m2）导致依赖解析失败。",
+          details,
+          confirmLabel: "去配置 Maven",
+          cancelLabel: "取消",
+        });
+        if (go) onOpenMavenConfig?.();
+        return false;
+      }
+
+      showToast("未配置 Maven，请到系统设置 → JAR 打包填写");
+      onOpenMavenConfig?.();
+      return false;
+    } catch (e) {
+      console.error("[Maven] resolve_maven_settings failed:", e);
+      return true; // 探测失败不阻断，交给后端再报错
+    }
+  }
+
   async function handlePackageFromBranch() {
+    if (!(await ensureMavenConfigured())) return;
     await runPackageFromBranch({
       config,
       setConfig,
@@ -228,6 +328,11 @@ export function useBranchPack(deps: UseBranchPackDeps) {
 
     const autoPush = shouldPushHarborAfterMerge(branch);
     const remembered = getRememberedBranchAdvancedSettings(config, path);
+    let mergeExposePort = remembered.exposePort;
+    if (!hasRememberedRepoExposePort(config, path)) {
+      const fromModule = suggestKlcjZtByRepoPath(path)?.expose_port || "";
+      if (fromModule) mergeExposePort = fromModule;
+    }
     const nextSpringProfile = springProfileAfterMerge(branch);
     // npm：rc-master → build:prod，其它目标 → build:test（覆盖记忆脚本）
     const nextBuildScript = buildScriptAfterMerge(branch);
@@ -253,7 +358,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setBranchName(branch);
     setAutoPushImage(autoPush);
     setSpringProfile(nextSpringProfile);
-    setBranchExposePort(remembered.exposePort);
+    setBranchExposePort(mergeExposePort);
     setNginxLocations(remembered.nginxLocations ?? []);
     setBranchProjectType(nextProjectType);
     setFrontendDir(nextFrontendDir);
@@ -293,7 +398,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
         autoPublishKs,
         packageWithBackend: nextPackageWithBackend,
         springProfile: nextSpringProfile,
-        branchExposePort: remembered.exposePort,
+        branchExposePort: mergeExposePort,
         nginxLocations: remembered.nginxLocations ?? [],
       },
       {
@@ -321,7 +426,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
         const selectedPath = selected as string;
         setRepoPath(selectedPath);
         setImageName("");
-        restoreRememberedBranchAdvancedSettings(config, selectedPath);
+        void restoreRememberedBranchAdvancedSettings(config, selectedPath);
         setShowAdvancedSettings(true);
         await loadGitBranches(selectedPath);
         if (config.remember_branch_settings) {
@@ -362,7 +467,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setRepoPath(value);
     if (value.trim()) {
       setImageName("");
-      restoreRememberedBranchAdvancedSettings(config, value);
+      void restoreRememberedBranchAdvancedSettings(config, value);
       loadGitBranches(value);
     } else {
       setBranchOptions([]);
@@ -377,7 +482,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   function handleDropRepoPath(path: string) {
     setRepoPath(path);
     setImageName("");
-    restoreRememberedBranchAdvancedSettings(config, path);
+    void restoreRememberedBranchAdvancedSettings(config, path);
     loadGitBranches(path);
   }
 
@@ -456,7 +561,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
    * 由 App 在 loadConfig 成功后调用。
    */
   async function applyRememberedConfig(savedConfig: HarborConfig) {
-    restoreRememberedBranchAdvancedSettings(savedConfig, savedConfig.last_repo_path);
+    await restoreRememberedBranchAdvancedSettings(savedConfig, savedConfig.last_repo_path);
     if (!savedConfig.remember_branch_settings) return;
     if (savedConfig.last_repo_path) setRepoPath(savedConfig.last_repo_path);
     if (savedConfig.last_branch) setBranchName(savedConfig.last_branch);
