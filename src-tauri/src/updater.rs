@@ -8,8 +8,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 const GITHUB_REPO: &str = "bigtian99/harbor-tauri";
-const GITHUB_API_LATEST: &str =
-    "https://api.github.com/repos/bigtian99/harbor-tauri/releases/latest";
+const GITHUB_API_RELEASES: &str =
+    "https://api.github.com/repos/bigtian99/harbor-tauri/releases?per_page=30";
 const USER_AGENT: &str = "JarPorter-Updater/1.0";
 const REQUEST_TIMEOUT: u64 = 15;
 const DOWNLOAD_TIMEOUT: u64 = 600; // 10 分钟，dmg 可能较大
@@ -37,6 +37,22 @@ fn empty_update(current_version: String, latest_version: String) -> UpdateInfo {
         file_size: 0,
         release_notes: String::new(),
     }
+}
+
+/// 从 releases 列表按 semver 取最高正式版（不依赖 GitHub /latest 标记，避免旧版仍标 Latest）
+fn pick_latest_release_json(releases: &[serde_json::Value]) -> Option<&serde_json::Value> {
+    let mut candidates: Vec<(semver::Version, &serde_json::Value)> = releases
+        .iter()
+        .filter(|r| r["draft"].as_bool() != Some(true))
+        .filter(|r| r["prerelease"].as_bool() != Some(true))
+        .filter_map(|r| {
+            let tag = r["tag_name"].as_str()?;
+            let ver_str = tag.strip_prefix('v').unwrap_or(tag);
+            semver::Version::parse(ver_str).ok().map(|v| (v, r))
+        })
+        .collect();
+    candidates.sort_by(|a, b| b.0.cmp(&a.0));
+    candidates.first().map(|(_, r)| *r)
 }
 
 fn http_client(timeout_secs: u64) -> Result<reqwest::blocking::Client, String> {
@@ -113,12 +129,12 @@ pub fn check_update() -> Result<UpdateInfo, String> {
         }
     };
 
-    let response = match client.get(GITHUB_API_LATEST).send() {
+    let response = match client.get(GITHUB_API_RELEASES).send() {
         Ok(r) => r,
         Err(e) => {
             crate::diag::diag_log("updater", &format!(
                 "check_update: network error fetching {}, error={}",
-                GITHUB_API_LATEST, e
+                GITHUB_API_RELEASES, e
             ));
             return Ok(empty_update(current_version, String::new()));
         }
@@ -129,18 +145,26 @@ pub fn check_update() -> Result<UpdateInfo, String> {
         crate::diag::diag_log("updater", &format!(
             "check_update: non-200 status {} from {}",
             status.as_u16(),
-            GITHUB_API_LATEST
+            GITHUB_API_RELEASES
         ));
         return Ok(empty_update(current_version, String::new()));
     }
 
-    let json: serde_json::Value = response.json().map_err(|e| {
+    let releases: Vec<serde_json::Value> = response.json().map_err(|e| {
         crate::diag::diag_log("updater", &format!(
             "check_update: failed to parse JSON response from {}, error={}",
-            GITHUB_API_LATEST, e
+            GITHUB_API_RELEASES, e
         ));
         format!("解析 GitHub API 响应失败: {}", e)
     })?;
+
+    let json = match pick_latest_release_json(&releases) {
+        Some(r) => r,
+        None => {
+            crate::diag::diag_log("updater", "check_update: no semver release found in list");
+            return Ok(empty_update(current_version, String::new()));
+        }
+    };
 
     let tag_name = json["tag_name"].as_str().unwrap_or("");
     let latest_version = tag_name.strip_prefix('v').unwrap_or(tag_name).to_string();
@@ -654,4 +678,22 @@ pub async fn download_and_install(
     _file_size: Option<u64>,
 ) -> Result<(), String> {
     Err("当前平台不支持自动更新，请手动下载最新版本".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_latest_release_json;
+    use serde_json::json;
+
+    #[test]
+    fn pick_latest_release_by_semver_not_publish_order() {
+        let releases = vec![
+            json!({"tag_name": "v0.2.71", "draft": false, "prerelease": false}),
+            json!({"tag_name": "v0.2.70", "draft": false, "prerelease": false}),
+            json!({"tag_name": "v0.2.72", "draft": false, "prerelease": false}),
+            json!({"tag_name": "v0.2.73-rc1", "draft": false, "prerelease": true}),
+        ];
+        let picked = pick_latest_release_json(&releases).unwrap();
+        assert_eq!(picked["tag_name"], "v0.2.72");
+    }
 }

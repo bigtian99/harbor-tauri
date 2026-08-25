@@ -255,6 +255,9 @@ jobs:
           fi
           gh release upload "$TAG" "${files[@]}" --clobber
 
+          # 确保新版本标为 Latest（避免旧 release 仍占 /releases/latest）
+          gh release edit "$TAG" --latest || true
+
           echo "---- release assets ----"
           # 注意：部分 gh 版本没有 isLatest 字段，只用稳定字段
           gh release view "$TAG" --json tagName,isDraft,isPrerelease,assets \
