@@ -206,6 +206,94 @@ pub(crate) fn pack_worktree_dir(output_base: &Path, repo_name: &str) -> PathBuf 
     output_base.join(repo_name).join("_pack")
 }
 
+fn is_git_worktree_dir(path: &Path) -> bool {
+    path.join(".git").exists()
+}
+
+fn reset_pack_to_ref(pack_dir: &Path, branch_ref: &str) -> Result<(), String> {
+    crate::diag::diag_log(
+        "build",
+        &format!("pack_reset path={} ref={}", pack_dir.display(), branch_ref),
+    );
+    crate::utils::git_output(pack_dir, &["checkout", "--detach", branch_ref])
+        .map_err(|e| format!("切换打包目录到 {branch_ref} 失败: {e}"))?;
+    crate::utils::git_output(pack_dir, &["reset", "--hard", branch_ref])
+        .map_err(|e| format!("重置打包目录到 {branch_ref} 失败: {e}"))?;
+    Ok(())
+}
+
+fn create_pack_worktree(
+    repo_root: &Path,
+    pack_dir: &Path,
+    branch_ref: &str,
+) -> Result<(), String> {
+    if pack_dir.exists() {
+        cleanup_worktree(repo_root, pack_dir);
+        let _ = fs::remove_dir_all(pack_dir);
+    }
+    if let Some(parent) = pack_dir.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建 _pack 父目录失败: {e}"))?;
+    }
+    let output = silent_command("git")
+        .args(["worktree", "add", "--detach"])
+        .arg(pack_dir)
+        .arg(branch_ref)
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("创建 _pack worktree 失败: {e}"))?;
+    if !output.status.success() {
+        let _ = fs::remove_dir_all(pack_dir);
+        return Err(format!(
+            "创建 _pack worktree 失败:\n{}",
+            command_output_text(&output)
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_pack_worktree(
+    repo_root: &Path,
+    pack_dir: &Path,
+    branch_ref: &str,
+) -> Result<&'static str, String> {
+    if is_git_worktree_dir(pack_dir) {
+        match reset_pack_to_ref(pack_dir, branch_ref) {
+            Ok(()) => {
+                crate::diag::diag_log(
+                    "build",
+                    &format!(
+                        "pack_reuse path={} branch={}",
+                        pack_dir.display(),
+                        branch_ref
+                    ),
+                );
+                return Ok("reuse");
+            }
+            Err(e) => {
+                crate::diag::diag_log(
+                    "build",
+                    &format!("pack_reuse failed, recreate: {e}"),
+                );
+                cleanup_worktree(repo_root, pack_dir);
+                let _ = fs::remove_dir_all(pack_dir);
+            }
+        }
+    } else if pack_dir.exists() {
+        let _ = fs::remove_dir_all(pack_dir);
+    }
+
+    create_pack_worktree(repo_root, pack_dir, branch_ref)?;
+    crate::diag::diag_log(
+        "build",
+        &format!(
+            "pack_create path={} branch={}",
+            pack_dir.display(),
+            branch_ref
+        ),
+    );
+    Ok("create")
+}
+
 /// 将 UI 传入的远程跟踪引用拆成 `(remote, branch)`。
 /// 例如 `origin/master`、`origin/feature/x`；纯本地名返回 `None`。
 pub(crate) fn split_remote_tracking_ref(branch_ref: &str) -> Option<(&str, &str)> {
@@ -261,7 +349,7 @@ fn fetch_target_branch(repo_root: &std::path::Path, branch_ref: &str) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::{pack_worktree_dir, split_remote_tracking_ref};
+    use super::{is_git_worktree_dir, pack_worktree_dir, split_remote_tracking_ref};
     use std::path::Path;
 
     #[test]
@@ -290,6 +378,11 @@ mod tests {
     fn split_local_name_has_no_remote() {
         assert_eq!(split_remote_tracking_ref("main"), None);
         assert_eq!(split_remote_tracking_ref(""), None);
+    }
+
+    #[test]
+    fn is_git_worktree_dir_false_for_missing() {
+        assert!(!is_git_worktree_dir(Path::new("/tmp/jarporter-no-such-pack-dir")));
     }
 }
 
