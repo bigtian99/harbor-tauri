@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ArrowRight, Download, Loader2, Rocket, X, AlertCircle, ExternalLink, FileText } from "lucide-react";
 import { openReleasePage, RELEASE_LATEST_URL } from "../utils/releasePage";
+import "./UpdateModal.css";
 
 /** 与 Rust updater.rs 中 UpdateInfo 一一对应 */
 export interface UpdateInfo {
