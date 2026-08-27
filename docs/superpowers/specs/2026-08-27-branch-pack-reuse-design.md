@@ -1,7 +1,7 @@
 # 分支打包：复用输出目录 `_pack`（切分支更新）
 
 **日期**: 2026-08-27  
-**状态**: 待用户确认规格  
+**状态**: 已实现  
 **范围**: `package_from_branch` 的 Git 准备 / worktree 生命周期；Maven 仍全量 `clean package`  
 **参考**: `src-tauri/src/build/package_worktree.rs`、`package_finish.rs`、产物输出目录配置 `artifact_output_dir`
 

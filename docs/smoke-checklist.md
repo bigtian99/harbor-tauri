@@ -7,7 +7,8 @@
 - [ ] **上传推送（JAR）**：选 JAR → 构建镜像 → 推送 Harbor → 历史有记录
 - [ ] **上传推送（前端 dist）**：选 dist 目录 → nginx 镜像推送成功
 - [ ] **镜像推送**：本地镜像列表 → tag 推送 Harbor
-- [ ] **分支打包（Maven）**：指定分支 → `mvn` 产物输出 → 可选联动推送
+- [ ] **分支打包（Maven）**：指定分支 → `mvn` 产物输出 → 可选联动推送  
+  _pack 复用：首次出现 `{output}/{repo}/_pack/`，产物仍在 `{branch}_{ts}/`；同仓同分支再打 → 系统日志有 `[build] pack_reuse`，无新 `_{branch}_{ts}` 源码目录；换分支 → `_pack` 对应新分支（`pack_reset`/`pack_reuse`）；开发仓当前分支未变；无 `fetch --all`
 - [ ] **分支打包（npm）**：install/缓存命中 → `npm run` 产物
 - [ ] **分支打包（npm+后端）**：前后端并行产物均存在
 
