@@ -93,15 +93,14 @@ pub(crate) async fn prepare_worktree(
         None
     };
 
-    emit_progress(app, 6, "⬇️ 校验仓库并更新分支代码...", "fetch");
+    emit_progress(app, 6, "⬇️ 校验仓库并更新目标分支...", "fetch");
 
     let repo_path_clone = repo_path.clone();
     let branch_for_git = branch.to_string();
     let result = tauri::async_runtime::spawn_blocking(move || -> Result<PathBuf, String> {
         let repo_root = repo_root_for(&repo_path_clone)?;
 
-        crate::utils::git_output(&repo_root, &["fetch", "--all", "--prune"])
-            .map_err(|e| format!("更新分支代码失败: {}", e))?;
+        fetch_target_branch(&repo_root, &branch_for_git)?;
 
         crate::utils::git_output(
             &repo_root,
@@ -201,3 +200,84 @@ pub(crate) fn validate_project_in_worktree(
         _ => Ok(()),
     }
 }
+
+/// 将 UI 传入的远程跟踪引用拆成 `(remote, branch)`。
+/// 例如 `origin/master`、`origin/feature/x`；纯本地名返回 `None`。
+pub(crate) fn split_remote_tracking_ref(branch_ref: &str) -> Option<(&str, &str)> {
+    let branch_ref = branch_ref.trim();
+    let (remote, name) = branch_ref.split_once('/')?;
+    if remote.is_empty() || name.is_empty() {
+        return None;
+    }
+    Some((remote, name))
+}
+
+/// 只拉取目标分支，避免 `fetch --all` 扫全远程。
+///
+/// - `origin/feature/x` → `git fetch origin +refs/heads/feature/x:refs/remotes/origin/feature/x`
+/// - 本地名 `main` → 尝试 `git fetch origin main`（失败则仅记日志，由后续 rev-parse 判断）
+fn fetch_target_branch(repo_root: &std::path::Path, branch_ref: &str) -> Result<(), String> {
+    let branch_ref = branch_ref.trim();
+    if branch_ref.is_empty() {
+        return Err("目标分支为空".into());
+    }
+
+    if let Some((remote, name)) = split_remote_tracking_ref(branch_ref) {
+        let refspec = format!("+refs/heads/{name}:refs/remotes/{remote}/{name}");
+        crate::diag::diag_log(
+            "git",
+            &format!(
+                "fetch_target_branch remote={remote} branch={name} refspec={refspec}"
+            ),
+        );
+        crate::utils::git_output(repo_root, &["fetch", remote, &refspec]).map_err(|e| {
+            format!("更新目标分支失败（{remote}/{name}）: {e}")
+        })?;
+        return Ok(());
+    }
+
+    crate::diag::diag_log(
+        "git",
+        &format!("fetch_target_branch local-like ref={branch_ref}, try origin"),
+    );
+    match crate::utils::git_output(repo_root, &["fetch", "origin", branch_ref]) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            crate::diag::diag_log(
+                "git",
+                &format!(
+                    "fetch_target_branch skip origin fetch for local ref={branch_ref}: {e}"
+                ),
+            );
+            Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_remote_tracking_ref;
+
+    #[test]
+    fn split_origin_master() {
+        assert_eq!(
+            split_remote_tracking_ref("origin/master"),
+            Some(("origin", "master"))
+        );
+    }
+
+    #[test]
+    fn split_origin_nested_feature() {
+        assert_eq!(
+            split_remote_tracking_ref("origin/feature/x"),
+            Some(("origin", "feature/x"))
+        );
+    }
+
+    #[test]
+    fn split_local_name_has_no_remote() {
+        assert_eq!(split_remote_tracking_ref("main"), None);
+        assert_eq!(split_remote_tracking_ref(""), None);
+    }
+}
+
