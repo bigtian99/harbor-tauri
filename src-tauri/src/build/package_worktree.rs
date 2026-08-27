@@ -21,6 +21,9 @@ pub(crate) struct WorktreeContext {
     pub repo_name: String,
     pub branch_slug: String,
     pub build_timestamp: String,
+    /// 持有至本轮打包结束，保证同仓库 `_pack` 互斥（仅靠 Drop 释放，无需读字段）。
+    #[allow(dead_code)]
+    pub pack_guard: PackRepoGuard,
 }
 
 /// 解析仓库路径（本地目录或远程 URL 克隆）、清理旧临时目录、创建 worktree。
@@ -55,7 +58,10 @@ pub(crate) async fn prepare_worktree(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    // 生成时间戳，用于输出目录命名
+    // 同仓库串行：抢锁失败则立刻返回，避免并行抢用同一 `_pack`
+    let pack_guard = PackRepoGuard::try_acquire(&repo_name)?;
+
+    // 生成时间戳，用于产物目录命名（源码目录固定为 `_pack`，不再带时间戳）
     let build_timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
     let branch_slug = branch.replace('/', "_");
 
@@ -66,14 +72,12 @@ pub(crate) async fn prepare_worktree(
         dirs::desktop_dir().unwrap_or_else(|| std::env::temp_dir())
     };
 
-    // worktree 放在输出目录下（和产物同一目录，构建完清理只留产物）
-    let worktree_path = output_base
-        .join(&repo_name)
-        .join(format!("_{}_{}", &branch_slug, &build_timestamp));
+    // 持久打包 worktree：`{output}/{repo}/_pack`
+    let worktree_path = pack_worktree_dir(&output_base, &repo_name);
 
     // 确保父目录存在
     fs::create_dir_all(worktree_path.parent().unwrap())
-        .map_err(|e| format!("创建 worktree 父目录失败: {}", e))?;
+        .map_err(|e| format!("创建 _pack 父目录失败: {}", e))?;
 
     crate::diag::diag_log(
         "build",
@@ -122,32 +126,23 @@ pub(crate) async fn prepare_worktree(
 
     let repo_root = result?;
 
-    emit_progress(app, 20, "🌿 已更新分支代码，创建隔离 worktree...", "worktree");
+    emit_progress(app, 20, "🌿 准备打包目录 (_pack)...", "worktree");
 
-    let repo_root_for_worktree = repo_root.clone();
-    let worktree_for_add = worktree_path.clone();
-    let branch_for_add = branch.to_string();
-    tauri::async_runtime::spawn_blocking(move || {
-        let output = silent_command("git")
-            .args(["worktree", "add", "--detach"])
-            .arg(&worktree_for_add)
-            .arg(&branch_for_add)
-            .current_dir(&repo_root_for_worktree)
-            .output()
-            .map_err(|e| format!("创建 worktree 失败: {}", e))?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            fs::remove_dir_all(&worktree_for_add).ok();
-            Err(format!(
-                "创建 worktree 失败:\n{}",
-                command_output_text(&output)
-            ))
-        }
+    let repo_root_for_pack = repo_root.clone();
+    let worktree_for_pack = worktree_path.clone();
+    let branch_for_pack = branch.to_string();
+    let mode = tauri::async_runtime::spawn_blocking(move || {
+        ensure_pack_worktree(&repo_root_for_pack, &worktree_for_pack, &branch_for_pack)
     })
     .await
-    .map_err(|e| format!("创建 worktree 线程异常: {}", e))??;
+    .map_err(|e| format!("准备 _pack 线程异常: {}", e))??;
+
+    let msg = if mode == "reuse" {
+        "🌿 已复用 _pack 并更新到目标分支"
+    } else {
+        "🌿 已创建 _pack 打包目录"
+    };
+    emit_progress(app, 22, msg, "worktree");
 
     // 确定实际构建目录
     let actual_build_path = if let Some(ref dir) = build_dir {
@@ -165,10 +160,11 @@ pub(crate) async fn prepare_worktree(
         repo_name,
         branch_slug,
         build_timestamp,
+        pack_guard,
     })
 }
 
-/// 校验 worktree 内是否具备 Maven/npm 构建入口文件；失败时清理 worktree。
+/// 校验 worktree 内是否具备 Maven/npm 构建入口文件；失败时保留 `_pack`（不删除）。
 pub(crate) fn validate_project_in_worktree(
     project_type: PackageProjectType,
     ctx: &WorktreeContext,
@@ -184,18 +180,16 @@ pub(crate) fn validate_project_in_worktree(
                         .join("\n")
                 })
                 .unwrap_or_else(|e| format!("  无法读取目录: {}", e));
-            cleanup_worktree(&ctx.repo_root, &ctx.worktree_path);
             Err(format!(
-                "目标分支缺少 pom.xml\n\n期望路径: {}\n\nworktree 中的文件:\n{}\n\n已清理临时 worktree: {}",
+                "目标分支缺少 pom.xml\n\n期望路径: {}\n\nworktree 中的文件:\n{}\n\n已保留 _pack（未删除）: {}",
                 ctx.actual_build_path.join("pom.xml").display(),
                 files_in_worktree,
                 ctx.worktree_path.display()
             ))
         }
         PackageProjectType::Npm if !ctx.actual_build_path.join("package.json").is_file() => {
-            cleanup_worktree(&ctx.repo_root, &ctx.worktree_path);
             Err(format!(
-                "目标分支缺少 package.json，已清理临时 worktree: {}",
+                "目标分支缺少 package.json，已保留 _pack（未删除）: {}",
                 ctx.worktree_path.display()
             ))
         }
