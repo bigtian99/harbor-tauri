@@ -6,7 +6,7 @@ use crate::git::cleanup_worktree;
 use crate::models::PackageProjectType;
 use crate::utils::{cleanup_old_temp_dirs, command_output_text, repo_root_for, silent_command};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
 /// 打包前准备好的路径与元信息。
@@ -201,6 +201,11 @@ pub(crate) fn validate_project_in_worktree(
     }
 }
 
+/// 持久打包 worktree 路径：`{output_base}/{repo_name}/_pack`
+pub(crate) fn pack_worktree_dir(output_base: &Path, repo_name: &str) -> PathBuf {
+    output_base.join(repo_name).join("_pack")
+}
+
 /// 将 UI 传入的远程跟踪引用拆成 `(remote, branch)`。
 /// 例如 `origin/master`、`origin/feature/x`；纯本地名返回 `None`。
 pub(crate) fn split_remote_tracking_ref(branch_ref: &str) -> Option<(&str, &str)> {
@@ -256,7 +261,14 @@ fn fetch_target_branch(repo_root: &std::path::Path, branch_ref: &str) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::split_remote_tracking_ref;
+    use super::{pack_worktree_dir, split_remote_tracking_ref};
+    use std::path::Path;
+
+    #[test]
+    fn pack_worktree_dir_joins_repo_and_pack() {
+        let p = pack_worktree_dir(Path::new("/out"), "my-service");
+        assert_eq!(p, Path::new("/out/my-service/_pack"));
+    }
 
     #[test]
     fn split_origin_master() {
