@@ -179,7 +179,14 @@ pub async fn build_and_push(
             fs::remove_file(path).ok();
         }
         if let Some(path) = cleanup_dir {
-            fs::remove_dir_all(path).ok();
+            if path.file_name().and_then(|s| s.to_str()) == Some("_pack") {
+                crate::diag::diag_log(
+                    "docker",
+                    &format!("skip cleanup persistent _pack: {}", path.display()),
+                );
+            } else {
+                let _ = fs::remove_dir_all(&path);
+            }
         }
         Ok(output)
     })

@@ -1,9 +1,8 @@
-//! 分支打包：产物复制、Dockerfile 探测、worktree 清理、构建历史。
+//! 分支打包：产物复制、Dockerfile 探测、保留 `_pack`、构建历史。
 
 use crate::build::bt_deploy::maybe_deploy_test_jars;
 use crate::build::emit_progress;
 use crate::config_cmd::load_config_sync;
-use crate::git::cleanup_worktree;
 use crate::history::save_build_record_direct;
 use crate::models::{BuildRecord, PackageFromBranchResult, PackageProjectType};
 use crate::utils::{copy_artifact_to_output_internal, git_output, repo_root_for};
@@ -61,7 +60,7 @@ pub(crate) fn copy_package_artifacts(
     (final_artifact_path, backend_final_path)
 }
 
-/// 探测自定义 Dockerfile；无自定义 Dockerfile 时清理 worktree。
+/// 探测自定义 Dockerfile；始终保留 `_pack` 供下次复用。
 /// 返回 (dockerfile_path, dockerfile_context)。
 pub(crate) fn detect_dockerfile_and_maybe_cleanup(
     app: &AppHandle,
@@ -101,26 +100,27 @@ pub(crate) fn detect_dockerfile_and_maybe_cleanup(
     };
 
     if dockerfile_context.is_some() {
-        // 有自定义 Dockerfile，保留 worktree 作为构建上下文
+        // 有自定义 Dockerfile：_pack 同时作为 Docker 上下文，且供下次复用
         emit_progress(
             app,
             95,
-            "📄 检测到自定义 Dockerfile，保留 worktree 作为构建上下文...",
+            "📄 检测到自定义 Dockerfile，_pack 作为 Docker 上下文...",
             "cleanup",
         );
         crate::diag::diag_log(
             "build",
-            &format!("保留 worktree 用于 Docker 构建: {}", ctx.worktree_path.display()),
+            &format!(
+                "_pack 作为 Docker 上下文（不删除）: {}",
+                ctx.worktree_path.display()
+            ),
         );
     } else {
-        // 没有自定义 Dockerfile，正常清理 worktree
-        emit_progress(app, 88, "🧹 清理 worktree 源码...", "cleanup");
-        cleanup_worktree(&ctx.repo_root, &ctx.worktree_path);
+        emit_progress(app, 88, "📦 保留 _pack 供下次复用...", "cleanup");
         crate::diag::diag_log(
             "build",
-            &format!("Worktree 已清理: {}", ctx.worktree_path.display()),
+            &format!("保留 _pack（不删除）: {}", ctx.worktree_path.display()),
         );
-        emit_progress(app, 89, "✅ worktree 已清理", "cleanup");
+        emit_progress(app, 89, "✅ _pack 已保留", "cleanup");
     }
 
     (dockerfile_path, dockerfile_context)
@@ -168,8 +168,8 @@ pub(crate) fn finish_package(params: FinishPackageParams<'_>) -> PackageFromBran
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    // 产物输出目录 — worktree 同级的干净目录
-    // worktree:  <output_base>/<repo_name>/_{branch}_{timestamp}/   (构建后清理)
+    // 产物输出目录 — 与持久 _pack 同级
+    // worktree:  <output_base>/<repo_name>/_pack/                   (持久复用，不删)
     // artifact: <output_base>/<repo_name>/<branch>_<timestamp>/     (最终输出)
     let artifact_dir = ctx
         .output_base
@@ -266,7 +266,7 @@ pub(crate) fn finish_package(params: FinishPackageParams<'_>) -> PackageFromBran
     PackageFromBranchResult {
         artifact_path: final_artifact_path,
         backend_artifact_path: backend_final_path,
-        // 返回产物输出目录（worktree 已清理，或保留为 Docker 构建上下文）
+        // 返回产物输出目录（_pack 始终保留供复用 / Docker 上下文）
         worktree_path: artifact_dir.to_string_lossy().to_string(),
         build_script,
         log,

@@ -1,4 +1,4 @@
-//! 分支打包：worktree 准备（clone/fetch、创建隔离 worktree、项目类型校验）。
+//! 分支打包：worktree 准备（clone/fetch、持久 `_pack` worktree 复用/重置、项目类型校验）。
 
 use crate::build::emit_progress;
 use crate::config_cmd::load_config_sync;
