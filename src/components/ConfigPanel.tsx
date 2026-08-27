@@ -19,6 +19,7 @@ import {
   deriveMavenLocalRepo,
   isDerivedMavenLocalRepo,
 } from "../utils/mavenPaths";
+import { openReleasePage } from "../utils/releasePage";
 import { KsPublishMapEditor } from "./KsPublishMapEditor";
 import "./Modal.css";
 
@@ -755,15 +756,14 @@ export function ConfigPanel({
                   {checking ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
                   {checking ? "检查中…" : "检查更新"}
                 </button>
-                <a
+                <button
+                  type="button"
                   className="about-link"
-                  href="https://github.com/bigtian99/harbor-tauri/releases"
-                  target="_blank"
-                  rel="noreferrer"
+                  onClick={() => { void openReleasePage(); }}
                 >
                   发布页
                   <ExternalLink size={12} />
-                </a>
+                </button>
               </div>
 
               {checkMsg && (

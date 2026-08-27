@@ -229,6 +229,38 @@ function resolveGitForDeployment(
   return { gitUrl, role, exposePort, container };
 }
 
+/** 批量部署对应的 Git URL 列表（去重） */
+export function collectGitUrlsForBatchDeployments(
+  config: HarborConfig,
+  envId: string,
+  namespace: string,
+  deployments: KsBatchDeployItem[],
+): string[] {
+  const maps = config.ks_publish_maps ?? [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const dep of deployments) {
+    const { gitUrl } = resolveGitForDeployment(maps, envId, namespace, dep.name);
+    const key = normalizeGitUrl(gitUrl);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(gitUrl);
+  }
+  return out;
+}
+
+/** 确认弹窗打开时预热仓库索引，点开始时可秒开 */
+export async function prewarmKsBatchRepoIndex(
+  config: HarborConfig,
+  envId: string,
+  namespace: string,
+  deployments: KsBatchDeployItem[],
+): Promise<void> {
+  const gitUrls = collectGitUrlsForBatchDeployments(config, envId, namespace, deployments);
+  if (gitUrls.length === 0) return;
+  await buildGitUrlRepoPathIndex(config, gitUrls);
+}
+
 /** 解析批量目标；无法解析本地仓库的项进入 skips */
 export async function resolveKsBatchTargets(
   config: HarborConfig,
@@ -362,6 +394,9 @@ export async function runKsBatchPackPublish(
     summary.skipped = summary.total;
     return summary;
   }
+
+  onProgress(1, "正在解析本地仓库…");
+  note(summary, appendLog, "正在解析本地仓库路径…");
 
   const { targets, skips } = await resolveKsBatchTargets(
     config,

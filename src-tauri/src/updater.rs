@@ -65,20 +65,71 @@ fn http_client(timeout_secs: u64) -> Result<reqwest::blocking::Client, String> {
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
 }
 
-/// 匹配当前 macOS 架构的 .dmg：文件名含 aarch64 / arm64 或 x64 / x86_64
-fn match_dmg_asset(name: &str, arch: &str) -> bool {
-    if !name.ends_with(".dmg") {
+/// 匹配当前平台的 Release 安装包（macOS dmg / Windows msi·setup.exe）
+fn match_release_asset(name: &str, os: &str, arch: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    if lower.contains("ops") {
         return false;
     }
-    let lower = name.to_ascii_lowercase();
-    // 跳过 ops 变体（若命名带 ops）
-    if lower.contains("ops") {
+    match os {
+        "macos" => match_macos_dmg(&lower, arch),
+        "windows" => match_windows_installer(&lower, arch),
+        _ => false,
+    }
+}
+
+fn match_macos_dmg(lower: &str, arch: &str) -> bool {
+    if !lower.ends_with(".dmg") {
         return false;
     }
     match arch {
         "aarch64" => lower.contains("aarch64") || lower.contains("arm64"),
         _ => lower.contains("x64") || lower.contains("x86_64") || lower.contains("amd64"),
     }
+}
+
+fn match_windows_installer(lower: &str, arch: &str) -> bool {
+    let arch_ok = match arch {
+        "aarch64" => lower.contains("aarch64") || lower.contains("arm64"),
+        _ => {
+            lower.contains("x64")
+                || lower.contains("x86_64")
+                || lower.contains("amd64")
+                || (!lower.contains("aarch64") && !lower.contains("arm64"))
+        }
+    };
+    if !arch_ok {
+        return false;
+    }
+    lower.ends_with(".msi")
+        || (lower.ends_with(".exe") && (lower.contains("setup") || lower.contains("jarporter") || lower.contains("shipforge")))
+}
+
+fn release_asset_score(name: &str, os: &str, arch: &str) -> i32 {
+    if !match_release_asset(name, os, arch) {
+        return -1;
+    }
+    let lower = name.to_ascii_lowercase();
+    match os {
+        "macos" => 100,
+        "windows" => {
+            if lower.ends_with(".exe") && lower.contains("setup") {
+                100
+            } else if lower.ends_with(".msi") {
+                90
+            } else if lower.ends_with(".exe") {
+                80
+            } else {
+                -1
+            }
+        }
+        _ => -1,
+    }
+}
+
+/// 匹配当前 macOS 架构的 .dmg（兼容旧测试）
+fn match_dmg_asset(name: &str, arch: &str) -> bool {
+    match_release_asset(name, "macos", arch)
 }
 
 /// 粗检：真实 dmg 通常 >1MB，且不是 HTML/JSON 错误页
@@ -110,6 +161,43 @@ fn validate_dmg_file(path: &std::path::Path, expected_size: u64) -> Result<(), S
         ));
     }
     Ok(())
+}
+
+/// Windows/Linux 安装包：只做体积与完整性粗检
+fn validate_installer_file(path: &std::path::Path, expected_size: u64) -> Result<(), String> {
+    let meta = fs::metadata(path).map_err(|e| format!("读取下载文件失败: {}", e))?;
+    let len = meta.len();
+    if len < 500_000 {
+        let mut f = fs::File::open(path).map_err(|e| e.to_string())?;
+        let mut head = [0u8; 200];
+        let n = f.read(&mut head).unwrap_or(0);
+        let preview = String::from_utf8_lossy(&head[..n]);
+        let kind = if preview.contains("<!DOCTYPE") || preview.contains("<html") {
+            "HTML 页面"
+        } else if preview.trim_start().starts_with('{') {
+            "JSON"
+        } else {
+            "未知内容"
+        };
+        return Err(format!(
+            "下载文件异常（{}，仅 {} 字节）。请检查网络/代理后重试。",
+            kind, len
+        ));
+    }
+    if expected_size > 0 && len + 64 * 1024 < expected_size {
+        return Err(format!(
+            "文件不完整: 预期约 {} 字节, 实际 {} 字节",
+            expected_size, len
+        ));
+    }
+    Ok(())
+}
+
+fn validate_downloaded_file(path: &std::path::Path, expected_size: u64) -> Result<(), String> {
+    match path.extension().and_then(|s| s.to_str()) {
+        Some("dmg") => validate_dmg_file(path, expected_size),
+        _ => validate_installer_file(path, expected_size),
+    }
 }
 
 #[tauri::command]
@@ -194,6 +282,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
         return Ok(empty_update(current_version, latest.to_string()));
     }
 
+    let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
     let assets = match json["assets"].as_array() {
         Some(a) => a,
@@ -205,28 +294,31 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     let mut download_url = String::new();
     let mut asset_id = 0u64;
     let mut file_size = 0u64;
+    let mut best_score = -1i32;
 
     for asset in assets {
         let name = asset["name"].as_str().unwrap_or("");
-        if match_dmg_asset(name, arch) {
-            download_url = asset["browser_download_url"]
-                .as_str()
-                .unwrap_or("")
-                .to_string();
-            asset_id = asset["id"].as_u64().unwrap_or(0);
-            file_size = asset["size"].as_u64().unwrap_or(0);
-            crate::diag::diag_log("updater", &format!(
-                "check_update: matched asset name={}, id={}, size={}",
-                name, asset_id, file_size
-            ));
-            break;
+        let score = release_asset_score(name, os, arch);
+        if score <= best_score {
+            continue;
         }
+        best_score = score;
+        download_url = asset["browser_download_url"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        asset_id = asset["id"].as_u64().unwrap_or(0);
+        file_size = asset["size"].as_u64().unwrap_or(0);
+        crate::diag::diag_log("updater", &format!(
+            "check_update: matched asset name={}, id={}, size={}, os={}",
+            name, asset_id, file_size, os
+        ));
     }
 
     if download_url.is_empty() {
         crate::diag::diag_log("updater", &format!(
-            "check_update: current={}, latest={}, needs_update=false (no matching {} dmg asset found)",
-            current_version, latest_version, arch
+            "check_update: current={}, latest={}, needs_update=false (no matching {} asset for os={})",
+            current_version, latest_version, arch, os
         ));
     } else {
         crate::diag::diag_log("updater", &format!(
@@ -246,13 +338,13 @@ pub fn check_update() -> Result<UpdateInfo, String> {
     })
 }
 
-/// 下载 dmg：优先 GitHub API asset，失败再试 browser 直链
-fn download_dmg_file(
+/// 下载 Release 安装包：优先 GitHub API asset，失败再试 browser 直链
+fn download_release_file(
     client: &reqwest::blocking::Client,
     download_url: &str,
     asset_id: u64,
     expected_size: u64,
-    dmg_path: &std::path::Path,
+    dest_path: &std::path::Path,
     app: &AppHandle,
 ) -> Result<u64, String> {
     let mut last_err = String::new();
@@ -266,7 +358,7 @@ fn download_dmg_file(
             "download_and_install: try API asset url={}",
             api_url
         ));
-        match try_download(client, &api_url, true, expected_size, dmg_path, app) {
+        match try_download(client, &api_url, true, expected_size, dest_path, app) {
             Ok(n) => return Ok(n),
             Err(e) => {
                 crate::diag::diag_log("updater", &format!(
@@ -274,7 +366,7 @@ fn download_dmg_file(
                     e
                 ));
                 last_err = e;
-                let _ = fs::remove_file(dmg_path);
+                let _ = fs::remove_file(dest_path);
             }
         }
     }
@@ -284,7 +376,7 @@ fn download_dmg_file(
             "download_and_install: try browser url={}",
             download_url
         ));
-        match try_download(client, download_url, false, expected_size, dmg_path, app) {
+        match try_download(client, download_url, false, expected_size, dest_path, app) {
             Ok(n) => return Ok(n),
             Err(e) => {
                 crate::diag::diag_log("updater", &format!(
@@ -292,7 +384,7 @@ fn download_dmg_file(
                     e
                 ));
                 last_err = e;
-                let _ = fs::remove_file(dmg_path);
+                let _ = fs::remove_file(dest_path);
             }
         }
     }
@@ -418,7 +510,7 @@ fn try_download(
     }
     drop(file);
 
-    validate_dmg_file(dmg_path, expected_size.max(total_size))?;
+    validate_downloaded_file(dmg_path, expected_size.max(total_size))?;
     app.emit(
         "update-progress",
         serde_json::json!({
@@ -481,7 +573,7 @@ fn download_and_install_blocking(
     .ok();
 
     let client = http_client(DOWNLOAD_TIMEOUT)?;
-    let size = download_dmg_file(
+    let size = download_release_file(
         &client,
         &download_url,
         asset_id,
@@ -640,6 +732,107 @@ fn download_and_install_blocking(
     std::process::exit(0);
 }
 
+/// Windows：下载 NSIS/MSI 安装包并启动安装程序，随后退出当前进程。
+#[cfg(target_os = "windows")]
+fn download_and_install_blocking(
+    app: AppHandle,
+    download_url: String,
+    asset_id: u64,
+    expected_size: u64,
+) -> Result<(), String> {
+    crate::diag::diag_log("updater", &format!(
+        "download_and_install(windows): url={}, asset_id={}, expected_size={}",
+        download_url, asset_id, expected_size
+    ));
+    let cache_dir = dirs::cache_dir()
+        .ok_or("无法获取缓存目录")?
+        .join("jarporter")
+        .join("update");
+    fs::create_dir_all(&cache_dir).map_err(|e| format!("创建缓存目录失败: {}", e))?;
+
+    if let Ok(entries) = fs::read_dir(&cache_dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
+            if ext.eq_ignore_ascii_case("exe") || ext.eq_ignore_ascii_case("msi") {
+                let _ = fs::remove_file(&p);
+            }
+        }
+    }
+
+    let filename = download_url
+        .split('/')
+        .last()
+        .filter(|s| {
+            let lower = s.to_ascii_lowercase();
+            lower.ends_with(".exe") || lower.ends_with(".msi")
+        })
+        .unwrap_or("JarPorter-update-setup.exe");
+    let installer_path = cache_dir.join(filename);
+
+    app.emit(
+        "update-progress",
+        serde_json::json!({
+            "phase": "downloading",
+            "percent": 0,
+            "message": "正在下载更新..."
+        }),
+    )
+    .ok();
+
+    let client = http_client(DOWNLOAD_TIMEOUT)?;
+    let size = download_release_file(
+        &client,
+        &download_url,
+        asset_id,
+        expected_size,
+        &installer_path,
+        &app,
+    )?;
+    crate::diag::diag_log("updater", &format!(
+        "download_and_install(windows): download complete, file={}, size={}",
+        installer_path.display(),
+        size
+    ));
+
+    app.emit(
+        "update-progress",
+        serde_json::json!({
+            "phase": "installing",
+            "percent": 100,
+            "message": "正在启动安装程序..."
+        }),
+    )
+    .ok();
+
+    validate_downloaded_file(&installer_path, expected_size)?;
+
+    let ext = installer_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let path_str = installer_path
+        .to_str()
+        .ok_or("安装包路径无效")?;
+
+    if ext == "msi" {
+        Command::new("msiexec")
+            .args(["/i", path_str, "/passive"])
+            .spawn()
+            .map_err(|e| format!("启动 msi 安装失败: {e}"))?;
+    } else {
+        Command::new(path_str)
+            .spawn()
+            .map_err(|e| format!("启动安装程序失败: {e}"))?;
+    }
+
+    crate::diag::diag_log("updater", &format!(
+        "download_and_install(windows): installer spawned path={path_str}"
+    ));
+    std::process::exit(0);
+}
+
 /// async 命令 + spawn_blocking：下载/安装不堵 UI 线程，进度条才能动。
 #[cfg(target_os = "macos")]
 #[tauri::command]
@@ -669,7 +862,34 @@ pub async fn download_and_install(
     .map_err(|e| format!("下载任务异常: {}", e))?
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn download_and_install(
+    app: AppHandle,
+    download_url: String,
+    asset_id: Option<u64>,
+    file_size: Option<u64>,
+) -> Result<(), String> {
+    let asset_id = asset_id.unwrap_or(0);
+    let expected_size = file_size.unwrap_or(0);
+    app.emit(
+        "update-progress",
+        serde_json::json!({
+            "phase": "downloading",
+            "percent": 0,
+            "message": "正在准备下载…"
+        }),
+    )
+    .ok();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        download_and_install_blocking(app, download_url, asset_id, expected_size)
+    })
+    .await
+    .map_err(|e| format!("下载任务异常: {}", e))?
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 #[tauri::command]
 pub async fn download_and_install(
     _app: AppHandle,
@@ -682,7 +902,7 @@ pub async fn download_and_install(
 
 #[cfg(test)]
 mod tests {
-    use super::pick_latest_release_json;
+    use super::{match_release_asset, pick_latest_release_json, release_asset_score};
     use serde_json::json;
 
     #[test]
@@ -695,5 +915,24 @@ mod tests {
         ];
         let picked = pick_latest_release_json(&releases).unwrap();
         assert_eq!(picked["tag_name"], "v0.2.72");
+    }
+
+    #[test]
+    fn match_windows_setup_exe() {
+        assert!(match_release_asset(
+            "ShipForge_0.2.73_x64-setup.exe",
+            "windows",
+            "x86_64",
+        ));
+        assert!(release_asset_score(
+            "ShipForge_0.2.73_x64-setup.exe",
+            "windows",
+            "x86_64",
+        ) >= 80);
+        assert!(!match_release_asset(
+            "JarPorter-ops_0.2.73_x64-setup.exe",
+            "windows",
+            "x86_64",
+        ));
     }
 }

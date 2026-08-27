@@ -31,22 +31,74 @@ function joinPath(parent: string, child: string): string {
   return `${p}${sep}${child}`;
 }
 
+/** 从历史路径收集父目录候选（含上一级），避免只猜 last_repo 同级目录 */
+function collectParentCandidates(config: HarborConfig): string[] {
+  const history = collectCandidateRepoPaths(config);
+  const parents = new Set<string>();
+  const add = (raw: string) => {
+    const t = raw.trim();
+    if (t) parents.add(t);
+  };
+  for (const path of history) {
+    const p1 = parentDir(path);
+    add(p1);
+    if (p1) add(parentDir(p1));
+  }
+  const lp = config.last_repo_path?.trim() ?? "";
+  if (lp) {
+    const p1 = parentDir(lp);
+    add(p1);
+    if (p1) add(parentDir(p1));
+  }
+  return [...parents];
+}
+
 /** 会话内缓存：normalizeGitUrl → 本地路径（避免重复 git） */
 const repoPathCache = new Map<string, string>();
+
+const PROBE_PATH_CAP = 48;
+
+interface GitRepoPathMatch {
+  path: string;
+  remote_url: string;
+}
 
 export function clearRepoPathCache(): void {
   repoPathCache.clear();
 }
 
-async function probeGitUrl(path: string): Promise<string> {
-  try {
-    const remote = await invoke<string>("get_git_remote_url", {
-      repoPath: path,
-      remote: null,
-    });
-    return normalizeGitUrl(remote);
-  } catch {
-    return "";
+/** 单次 IPC 批量匹配路径 → remote（Rust 侧顺序 git，无 N 次往返） */
+async function matchGitRepoPaths(paths: string[]): Promise<Map<string, string>> {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const p of paths) {
+    const t = p.trim();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    unique.push(t);
+  }
+  if (unique.length === 0) return new Map();
+
+  const rows = await invoke<GitRepoPathMatch[]>("match_git_repo_paths", { paths: unique });
+  const out = new Map<string, string>();
+  for (const row of rows) {
+    const key = normalizeGitUrl(row.remote_url);
+    if (!key || out.has(key)) continue;
+    out.set(key, row.path);
+  }
+  return out;
+}
+
+function mergeMatchesIntoIndex(
+  matches: Map<string, string>,
+  needed: Set<string>,
+  index: Map<string, string>,
+): void {
+  for (const [key, path] of matches) {
+    if (index.has(key)) continue;
+    index.set(key, path);
+    repoPathCache.set(key, path);
+    needed.delete(key);
   }
 }
 
@@ -60,8 +112,7 @@ export async function buildGitUrlRepoPathIndex(
 ): Promise<Map<string, string>> {
   const index = new Map<string, string>();
   const history = collectCandidateRepoPaths(config);
-  const parent = parentDir(config.last_repo_path ?? "")
-    || parentDir(history[0] ?? "");
+  const parentCandidates = collectParentCandidates(config);
 
   const urls = (neededGitUrls ?? [])
     .map((u) => normalizeGitUrl(u))
@@ -72,49 +123,46 @@ export async function buildGitUrlRepoPathIndex(
     if (hit) index.set(key, hit);
   }
 
-  for (const key of urls) {
-    if (index.has(key)) continue;
+  const needed = new Set(urls.filter((k) => !index.has(k)));
+
+  const guessPaths: string[] = [];
+  const seenGuess = new Set<string>();
+  for (const key of needed) {
     const guessed = guessRepoPathSync(key, config);
-    if (guessed) {
-      index.set(key, guessed);
-      repoPathCache.set(key, guessed);
-    }
+    if (!guessed || seenGuess.has(guessed)) continue;
+    seenGuess.add(guessed);
+    guessPaths.push(guessed);
+  }
+  if (guessPaths.length > 0) {
+    mergeMatchesIntoIndex(await matchGitRepoPaths(guessPaths), needed, index);
   }
 
-  const stillMissing = urls.filter((k) => !index.has(k));
-  if (stillMissing.length === 0) return index;
+  if (needed.size === 0) return index;
 
   const probePaths: string[] = [];
   const seenProbe = new Set<string>();
   const addProbe = (p: string) => {
+    if (probePaths.length >= PROBE_PATH_CAP) return;
     const t = p.trim();
     if (!t || seenProbe.has(t)) return;
     seenProbe.add(t);
     probePaths.push(t);
   };
 
-  for (const key of stillMissing) {
+  for (const key of needed) {
     for (const dir of expectedDirsForGitUrl(key)) {
       for (const path of history) {
         if (basenamePath(path).toLowerCase() === dir.toLowerCase()) addProbe(path);
       }
-      if (parent) addProbe(joinPath(parent, dir));
+      for (const parent of parentCandidates) {
+        addProbe(joinPath(parent, dir));
+      }
     }
   }
   for (const path of history.slice(0, 8)) addProbe(path);
 
-  const results = await Promise.all(
-    probePaths.map(async (path) => {
-      const key = await probeGitUrl(path);
-      return { path, key };
-    }),
-  );
-  for (const { path, key } of results) {
-    if (!key) continue;
-    if (!index.has(key)) {
-      index.set(key, path);
-      repoPathCache.set(key, path);
-    }
+  if (probePaths.length > 0) {
+    mergeMatchesIntoIndex(await matchGitRepoPaths(probePaths), needed, index);
   }
 
   return index;
@@ -122,21 +170,13 @@ export async function buildGitUrlRepoPathIndex(
 
 export function resolveRepoPathFromIndex(
   gitUrl: string,
-  config: HarborConfig,
+  _config: HarborConfig,
   index: Map<string, string>,
-  deploymentHint?: string,
+  _deploymentHint?: string,
 ): string | null {
   const key = normalizeGitUrl(gitUrl);
   if (!key) return null;
-  if (index.has(key)) return index.get(key)!;
-
-  const guessed = guessRepoPathSync(gitUrl, config, deploymentHint);
-  if (guessed) {
-    index.set(key, guessed);
-    repoPathCache.set(key, guessed);
-    return guessed;
-  }
-  return null;
+  return index.get(key) ?? null;
 }
 
 export async function resolveRepoPathForGitUrl(
@@ -148,11 +188,6 @@ export async function resolveRepoPathForGitUrl(
   if (!key) return null;
   const cached = repoPathCache.get(key);
   if (cached) return cached;
-  const guessed = guessRepoPathSync(gitUrl, config, deploymentHint);
-  if (guessed) {
-    repoPathCache.set(key, guessed);
-    return guessed;
-  }
   const index = await buildGitUrlRepoPathIndex(config, [gitUrl]);
   return resolveRepoPathFromIndex(gitUrl, config, index, deploymentHint);
 }

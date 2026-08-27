@@ -462,7 +462,9 @@
   border-radius: 12px;
   width: 90%;
   max-width: 720px;
-  height: 80vh;
+  height: auto;
+  max-height: 80vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -511,19 +513,27 @@
   margin-bottom: 12px;
 }
 
-/* 提交记录弹窗内部列表区域留出左右内边距 */
+/* 提交记录弹窗：列表随内容收缩，超出 max-height 时再滚动 */
 .commit-modal .modal-list-wrapper {
   padding: 0 20px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.commit-modal .modal-list {
+  flex: 0 1 auto;
 }
 
 /* 提交记录弹窗内部分页贴底 */
 .commit-modal .modal-pagination {
   margin-top: 0;
+  flex-shrink: 0;
 }
 
 .commit-diff-modal {
   max-width: 1120px;
   width: 94%;
+  height: 80vh;
 }
 
 .commit-diff-modal .commit-modal-header h3 {

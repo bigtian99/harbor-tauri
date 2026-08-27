@@ -1797,6 +1797,131 @@ pub fn ks_update_image(namespace: String, deployment: String, container: String,
     Ok(UpdateResult { ok: new_image == image, old_image, new_image, revision: new_rev })
 }
 
+/// 拉取 Pod 容器日志（纯文本；不走 JSON ks_api，避免非 JSON 被误判 401）
+fn ks_fetch_text(sess: &Session, path: &str) -> Result<(u16, String), String> {
+    let client = http_client()?;
+    let url = format!("{}{}", sess.console, path);
+    let resp = client
+        .get(&url)
+        .header("Accept", "*/*")
+        .header("Cookie", &sess.cookie)
+        .send()
+        .map_err(|e| format!("请求失败: {e}"))?;
+    let status = resp.status().as_u16();
+    if matches!(status, 301 | 302 | 303 | 307 | 308) {
+        return Ok((401, String::new()));
+    }
+    let text = resp.text().unwrap_or_default();
+    Ok((status, text))
+}
+
+fn ks_fetch_text_with_recover(path: &str) -> Result<(u16, String), String> {
+    let sess = clone_memory_session()?;
+    let result = ks_fetch_text(&sess, path)?;
+    if result.0 != 401 {
+        return Ok(result);
+    }
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_get_pod_logs 401 {path} → recover session"),
+    );
+    let (new_sess, mode) = recover_session_after_401(&sess)?;
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_get_pod_logs recover mode={mode} → retry"),
+    );
+    let retry = ks_fetch_text(&new_sess, path)?;
+    if retry.0 == 401 && mode == "refreshed" {
+        let password = password_for_session(&new_sess)?;
+        let (base, cookie) = login(&new_sess.console, &new_sess.username, &password)?;
+        let relogin = Session {
+            env_id: new_sess.env_id.clone(),
+            console: base,
+            username: new_sess.username.clone(),
+            cookie,
+        };
+        persist_session(&relogin);
+        set_memory_session(relogin.clone())?;
+        return ks_fetch_text(&relogin, path);
+    }
+    Ok(retry)
+}
+
+/// 查看 Pod 日志：`GET .../pods/{pod}/log?timestamps&tailLines[&container][&previous]`
+#[tauri::command]
+pub fn ks_get_pod_logs(
+    namespace: String,
+    pod: String,
+    container: Option<String>,
+    tail_lines: Option<u32>,
+    previous: Option<bool>,
+) -> Result<String, String> {
+    let ns = urlencoding(namespace.trim());
+    let pod_name = urlencoding(pod.trim());
+    if ns.is_empty() || pod_name.is_empty() {
+        return Err("namespace / pod 不能为空".into());
+    }
+    let mut tail = tail_lines.unwrap_or(500);
+    if tail == 0 {
+        tail = 500;
+    }
+    tail = tail.min(5000);
+
+    let mut path = format!(
+        "/api/v1/namespaces/{ns}/pods/{pod_name}/log?timestamps=true&tailLines={tail}"
+    );
+    if let Some(c) = container.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        path.push_str(&format!("&container={}", urlencoding(c)));
+    }
+    if previous.unwrap_or(false) {
+        path.push_str("&previous=true");
+    }
+
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!(
+            "ks_get_pod_logs ns={} pod={} container={} previous={} tail={}",
+            namespace.trim(),
+            pod.trim(),
+            container.as_deref().unwrap_or("-"),
+            previous.unwrap_or(false),
+            tail
+        ),
+    );
+
+    let (status, text) = ks_fetch_text_with_recover(&path)?;
+    if status == 401 {
+        return Err("未授权：会话失效，请重新连接环境".into());
+    }
+    if status != 200 {
+        let snippet: String = text.chars().take(200).collect();
+        let msg = serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .and_then(|v| {
+                v.get("message")
+                    .and_then(|m| m.as_str())
+                    .map(|s| s.to_string())
+            })
+            .unwrap_or(snippet);
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!("ks_get_pod_logs fail HTTP {status}: {msg}"),
+        );
+        return Err(format!("拉取日志失败 HTTP {status}: {msg}"));
+    }
+
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!(
+            "ks_get_pod_logs ok ns={} pod={} len={}",
+            namespace.trim(),
+            pod.trim(),
+            text.len()
+        ),
+    );
+    Ok(text)
+}
+
 /// 修改弹框回填：与创建表单字段对齐
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]

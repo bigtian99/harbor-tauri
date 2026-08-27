@@ -19,6 +19,7 @@ import {
 } from "@mantine/core";
 import { Globe, Loader2, RefreshCw, Search, StopCircle, Upload, XCircle } from "lucide-react";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
+import { displayBtUpdatedAt, setBtLastUpload } from "../utils/btLastUpload";
 import { isTauriRuntime } from "../types";
 
 export interface BtPhpSiteInfo {
@@ -105,6 +106,7 @@ interface BtPhpTableProps {
   busyKey: string | null;
   fileDragActive: boolean;
   dragOverKey: string | null;
+  uploadDisplayTick: number;
   onStop: (row: BtPhpSiteInfo) => void | Promise<void>;
   onCancel: () => void | Promise<void>;
 }
@@ -116,6 +118,7 @@ const BtPhpSitesTable = memo(function BtPhpSitesTable({
   busyKey,
   fileDragActive,
   dragOverKey,
+  uploadDisplayTick: _uploadDisplayTick,
   onStop,
   onCancel,
 }: BtPhpTableProps) {
@@ -198,7 +201,7 @@ const BtPhpSitesTable = memo(function BtPhpSitesTable({
                   </Table.Td>
                   <Table.Td className="bt-java-cell-time">
                     <Text size="sm" c="dimmed">
-                      {row.updated_at || "-"}
+                      {displayBtUpdatedAt("php", row.id, row.updated_at)}
                     </Text>
                   </Table.Td>
                   <Table.Td className="bt-java-cell-actions">
@@ -255,6 +258,7 @@ export function BtPhpSitesPanel() {
   const [pageSize, setPageSize] = useState(20);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshSec, setRefreshSec] = useState("30");
+  const [uploadDisplayTick, setUploadDisplayTick] = useState(0);
   const autoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCancelRef = useRef(0);
   const userCancelledRef = useRef(false);
@@ -476,6 +480,8 @@ export function BtPhpSitesPanel() {
       bumpBar(100);
       setProgressMessage(uploaded);
       diagBuild(uploaded);
+      setBtLastUpload("php", row.id);
+      setUploadDisplayTick((n) => n + 1);
       notifications.show({
         title: "上传完成",
         message: uploaded,
@@ -741,6 +747,7 @@ export function BtPhpSitesPanel() {
         busyKey={busyKey}
         fileDragActive={fileDragActive}
         dragOverKey={dragOverKey}
+        uploadDisplayTick={uploadDisplayTick}
         onStop={stopSite}
         onCancel={cancelTask}
       />

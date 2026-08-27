@@ -926,3 +926,54 @@ pub async fn get_git_remote_url(
         msg
     })?
 }
+
+#[derive(serde::Serialize)]
+pub struct GitRepoPathMatch {
+    pub path: String,
+    pub remote_url: String,
+}
+
+/// 批量匹配本地目录 → origin URL（单次 IPC，避免逐个 get_git_remote_url）。
+#[tauri::command]
+pub async fn match_git_repo_paths(paths: Vec<String>) -> Result<Vec<GitRepoPathMatch>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut out = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for path in paths {
+            let p = path.trim();
+            if p.is_empty() || !seen.insert(p.to_string()) {
+                continue;
+            }
+            let pb = PathBuf::from(p);
+            if !pb.is_dir() {
+                continue;
+            }
+            let repo_root = match repo_root_for(&pb) {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            let url = match git_output_no_cancel(&repo_root, &["remote", "get-url", "origin"]) {
+                Ok(u) => u.trim().to_string(),
+                Err(_) => continue,
+            };
+            if url.is_empty() {
+                continue;
+            }
+            out.push(GitRepoPathMatch {
+                path: p.to_string(),
+                remote_url: url,
+            });
+        }
+        crate::diag::diag_log(
+            "git",
+            &format!(
+                "match_git_repo_paths candidates={} matched={}",
+                seen.len(),
+                out.len()
+            ),
+        );
+        Ok(out)
+    })
+    .await
+    .map_err(|e| format!("match_git_repo_paths 线程异常: {e}"))?
+}

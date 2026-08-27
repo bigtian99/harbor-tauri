@@ -1,12 +1,12 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, memo } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, memo, startTransition } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Card, Title, Text, TextInput, Button, Select, Table, Badge, Modal, Textarea, NumberInput, SegmentedControl, Tooltip,
-  Checkbox, Group, Stack, Divider, ScrollArea, Box, Loader, Pagination, SimpleGrid, Tabs, Autocomplete,
+  Checkbox, Group, Stack, Divider, ScrollArea, Box, Loader, Pagination, SimpleGrid, Tabs, Autocomplete, ActionIcon,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { RefreshCw, Download, Rocket, Container as ContainerIcon, Search, History, Plus, Copy, Pencil, Package } from "lucide-react";
+import { RefreshCw, Download, Rocket, Container as ContainerIcon, Search, History, Plus, Copy, Pencil, Package, ScrollText, Maximize2, Minimize2, ChevronDown, ChevronUp } from "lucide-react";
 import type { HarborConfig } from "../types";
 import { isTauriRuntime } from "../types";
 import { pickKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
@@ -21,6 +21,7 @@ import {
   detectCpuCores,
   KS_BATCH_CONCURRENCY_AUTO,
   loadKsBatchConcurrencyPref,
+  prewarmKsBatchRepoIndex,
   recommendKsBatchConcurrency,
   runKsBatchPackPublish,
   saveKsBatchConcurrencyPref,
@@ -37,6 +38,14 @@ import {
   parseBatchStepLabel,
   scaleBatchBuildPercent,
 } from "../utils/buildProgressLog";
+import {
+  buildPodLogLines,
+  findNextLevelIndex,
+  findPrevLevelIndex,
+  POD_LOG_LEVEL_LABEL,
+  POD_LOG_LEVELS,
+  type PodLogLevel,
+} from "../utils/podLogLevels";
 
 interface PodInfo {
   name: string; phase: string; state: string; reason: string | null;
@@ -331,6 +340,21 @@ export function KsPublishPanel({
   const [revsLoading, setRevsLoading] = useState(false);
   const [revPage, setRevPage] = useState(1);
   const [revPageSize, setRevPageSize] = useState(10);
+  const [podLogOpen, setPodLogOpen] = useState(false);
+  const [podLogPod, setPodLogPod] = useState("");
+  const [podLogContainer, setPodLogContainer] = useState<string | null>(null);
+  const [podLogPrevious, setPodLogPrevious] = useState(false);
+  const [podLogText, setPodLogText] = useState("");
+  const [podLogLoading, setPodLogLoading] = useState(false);
+  const [podLogAutoRefresh, setPodLogAutoRefresh] = useState(true);
+  const [podLogRefreshSec, setPodLogRefreshSec] = useState("5");
+  const [podLogFullscreen, setPodLogFullscreen] = useState(false);
+  const [podLogQuery, setPodLogQuery] = useState("");
+  const [podLogJumpLevel, setPodLogJumpLevel] = useState<PodLogLevel>("error");
+  const [podLogActiveIdx, setPodLogActiveIdx] = useState(-1);
+  const podLogViewportRef = useRef<HTMLDivElement>(null);
+  const podLogStickBottomRef = useRef(true);
+  const podLogInFlightRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /** 防止自动刷新叠加重试把 UI 拖死 */
   const loadInFlightRef = useRef(false);
@@ -490,14 +514,15 @@ export function KsPublishPanel({
     }
   }, [connected, namespace, loadCms]);
 
-  // 自动刷新：只刷部署状态，不刷 ConfigMap
+  // 自动刷新：批量弹窗打开或执行中暂停，避免后台刷新拖死 UI
+  const batchUiActive = batchConfirmOpen || batchOpen || batchRunning;
   useEffect(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (autoRefresh && connected && namespace) {
+    if (autoRefresh && connected && namespace && !batchUiActive) {
       timerRef.current = setInterval(() => { void load({ silent: true }); }, Number(refreshSec) * 1000);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [autoRefresh, refreshSec, connected, namespace, load]);
+  }, [autoRefresh, refreshSec, connected, namespace, load, batchUiActive]);
 
   // 切换命名空间自动加载部署（ConfigMap 等切到对应页签再拉）
   useEffect(() => {
@@ -524,6 +549,27 @@ export function KsPublishPanel({
     () => deploys.filter((d) => checkedNames.has(d.name)),
     [deploys, checkedNames],
   );
+
+  const batchCpuCores = useMemo(() => detectCpuCores(), []);
+  const batchRecommendedConcurrency = useMemo(
+    () => recommendKsBatchConcurrency({
+      itemCount: batchMeta?.deployNames.length ?? selectedDeploys.length,
+      cpuCores: batchCpuCores,
+    }),
+    [batchMeta?.deployNames.length, selectedDeploys.length, batchCpuCores],
+  );
+
+  // 确认弹窗打开时在后台预热仓库索引，避免点「开始」后长时间无响应
+  useEffect(() => {
+    if (!batchConfirmOpen || !envId || !namespace || !batchMeta?.deployNames.length) return;
+    if (!isTauriRuntime()) return;
+    void prewarmKsBatchRepoIndex(
+      config,
+      envId,
+      namespace,
+      batchMeta.deployNames.map((name) => ({ name, containers: [] })),
+    );
+  }, [batchConfirmOpen, envId, namespace, config, batchMeta]);
 
   const batchBranchSuggestions = useMemo(() => {
     const seen = new Set<string>();
@@ -809,13 +855,15 @@ export function KsPublishPanel({
       return;
     }
 
-    setBatchMeta({
-      branch,
-      namespace,
-      envName: selectedEnv?.name ?? envId,
-      deployNames: selectedDeploys.map((d) => d.name),
+    startTransition(() => {
+      setBatchMeta({
+        branch,
+        namespace,
+        envName: selectedEnv?.name ?? envId,
+        deployNames: selectedDeploys.map((d) => d.name),
+      });
+      setBatchConfirmOpen(true);
     });
-    setBatchConfirmOpen(true);
   };
 
   const startBatchPack = async () => {
@@ -914,6 +962,157 @@ export function KsPublishPanel({
   }, [revPage, revSafePage]);
 
   const selContainer = sel?.containers[0] ?? "";
+
+  const loadPodLogs = useCallback(async (
+    podName: string,
+    container: string | null,
+    previous: boolean,
+    opts?: { silent?: boolean },
+  ) => {
+    if (!namespace || !podName.trim()) return;
+    if (!isTauriRuntime()) {
+      notifications.show({ color: "yellow", message: "请在 Tauri 桌面窗口中操作" });
+      return;
+    }
+    if (podLogInFlightRef.current) return;
+    podLogInFlightRef.current = true;
+    if (!opts?.silent) setPodLogLoading(true);
+    try {
+      const text = await invoke<string>("ks_get_pod_logs", {
+        namespace,
+        pod: podName.trim(),
+        container: container?.trim() || null,
+        tailLines: 500,
+        previous,
+      });
+      setPodLogText(text || "（无日志内容）");
+      podLogStickBottomRef.current = true;
+      setPodLogActiveIdx(-1);
+    } catch (e) {
+      if (!opts?.silent) {
+        setPodLogText("");
+        notifications.show({
+          color: "red",
+          title: "拉取日志失败",
+          message: String(e),
+          autoClose: 8000,
+        });
+      }
+    } finally {
+      podLogInFlightRef.current = false;
+      if (!opts?.silent) setPodLogLoading(false);
+    }
+  }, [namespace]);
+
+  const openPodLogs = (podName: string) => {
+    const c = sel?.containers[0] ?? null;
+    setPodLogPod(podName);
+    setPodLogContainer(c);
+    setPodLogPrevious(false);
+    setPodLogText("");
+    setPodLogAutoRefresh(true);
+    setPodLogFullscreen(false);
+    setPodLogQuery("");
+    setPodLogJumpLevel("error");
+    setPodLogActiveIdx(-1);
+    podLogStickBottomRef.current = true;
+    setPodLogOpen(true);
+    void loadPodLogs(podName, c, false);
+  };
+
+  useEffect(() => {
+    if (!podLogOpen || !podLogAutoRefresh || !podLogPod) return;
+    const sec = Number(podLogRefreshSec) || 5;
+    const id = setInterval(() => {
+      void loadPodLogs(podLogPod, podLogContainer, podLogPrevious, { silent: true });
+    }, Math.max(3, sec) * 1000);
+    return () => clearInterval(id);
+  }, [
+    podLogOpen,
+    podLogAutoRefresh,
+    podLogRefreshSec,
+    podLogPod,
+    podLogContainer,
+    podLogPrevious,
+    loadPodLogs,
+  ]);
+
+  const podLogView = useMemo(
+    () => buildPodLogLines(podLogText, podLogQuery),
+    [podLogText, podLogQuery],
+  );
+
+  useEffect(() => {
+    if (!podLogOpen) return;
+    const id = window.setTimeout(() => {
+      const root = podLogViewportRef.current;
+      if (!root) return;
+      if (podLogActiveIdx >= 0) {
+        const el = root.querySelector(`[data-log-idx="${podLogActiveIdx}"]`) as HTMLElement | null;
+        el?.scrollIntoView({ block: "center", behavior: "smooth" });
+        return;
+      }
+      if (podLogStickBottomRef.current) {
+        root.scrollTop = root.scrollHeight;
+      }
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [podLogOpen, podLogView.lines, podLogActiveIdx]);
+
+  const jumpPodLogLevel = (dir: "next" | "prev") => {
+    const idx = dir === "next"
+      ? findNextLevelIndex(podLogView.lines, podLogJumpLevel, podLogActiveIdx)
+      : findPrevLevelIndex(podLogView.lines, podLogJumpLevel, podLogActiveIdx);
+    if (idx < 0) {
+      notifications.show({
+        color: "yellow",
+        message: `当前没有 ${POD_LOG_LEVEL_LABEL[podLogJumpLevel]} 日志`,
+        autoClose: 2000,
+      });
+      return;
+    }
+    podLogStickBottomRef.current = false;
+    setPodLogActiveIdx(idx);
+  };
+
+  const podLogJumpPos = useMemo(() => {
+    const total = podLogView.counts[podLogJumpLevel];
+    if (total <= 0) return { current: 0, total: 0 };
+    const hits = podLogView.lines
+      .map((line, i) => (line.level === podLogJumpLevel ? i : -1))
+      .filter((i) => i >= 0);
+    const at = hits.indexOf(podLogActiveIdx);
+    return {
+      current: at >= 0 ? at + 1 : 0,
+      total,
+    };
+  }, [podLogView.lines, podLogView.counts, podLogJumpLevel, podLogActiveIdx]);
+
+  const downloadPodLogs = async () => {
+    const content = podLogText.trim() ? podLogText : "";
+    if (!content) {
+      notifications.show({ color: "yellow", message: "暂无日志可下载" });
+      return;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const safePod = (podLogPod || "pod").replace(/[^\w.-]+/g, "_");
+    const safeCtr = (podLogContainer || "container").replace(/[^\w.-]+/g, "_");
+    const filename = `${safePod}-${safeCtr}-${stamp}.log`;
+    try {
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      notifications.show({ color: "teal", message: `已下载 ${filename}`, autoClose: 2500 });
+    } catch (e) {
+      notifications.show({ color: "red", message: `下载失败：${String(e)}` });
+    }
+  };
 
   const loadRevisions = useCallback(async (depName?: string) => {
     const name = depName ?? sel?.name;
@@ -1379,20 +1578,40 @@ export function KsPublishPanel({
                     <Text size="sm" fw={600} c="blue">🆕 新版本（当前 revision）</Text>
                     {sel.pods.new.length === 0 && <Text size="xs" c="dimmed">暂无</Text>}
                     {sel.pods.new.map((p) => (
-                      <Group key={p.name} gap={8} my={4} wrap="nowrap">
-                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[p.state] ?? "#9aa5b8", display: "inline-block" }} />
-                        <Text size="xs" style={{ fontFamily: "monospace" }}>{p.name}</Text>
-                        <Text size="xs" c="dimmed">{p.state === "running" ? `就绪 ${p.ready}/${p.total}` : (p.reason ?? p.state ?? p.phase)}{p.restarts ? ` · 重启${p.restarts}次` : ""}</Text>
-                        <Text size="xs" c="dimmed">{fmtTime(p.startTime)}</Text>
+                      <Group key={p.name} gap={8} my={4} wrap="nowrap" justify="space-between">
+                        <Group gap={8} wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[p.state] ?? "#9aa5b8", display: "inline-block", flexShrink: 0 }} />
+                          <Text size="xs" style={{ fontFamily: "monospace" }} truncate title={p.name}>{p.name}</Text>
+                          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>{p.state === "running" ? `就绪 ${p.ready}/${p.total}` : (p.reason ?? p.state ?? p.phase)}{p.restarts ? ` · 重启${p.restarts}次` : ""}</Text>
+                          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>{fmtTime(p.startTime)}</Text>
+                        </Group>
+                        <Button
+                          size="compact-xs"
+                          variant="light"
+                          leftSection={<ScrollText size={12} />}
+                          onClick={() => openPodLogs(p.name)}
+                        >
+                          日志
+                        </Button>
                       </Group>
                     ))}
                     <Text size="sm" fw={600} c="dimmed" mt="sm">📦 旧版本</Text>
                     {sel.pods.old.length === 0 && <Text size="xs" c="dimmed">无</Text>}
                     {sel.pods.old.map((p) => (
-                      <Group key={p.name} gap={8} my={4} wrap="nowrap" opacity={0.6}>
-                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[p.state] ?? "#9aa5b8", display: "inline-block" }} />
-                        <Text size="xs" style={{ fontFamily: "monospace" }}>{p.name}</Text>
-                        <Text size="xs" c="dimmed">{p.state === "running" ? `就绪 ${p.ready}/${p.total}` : (p.reason ?? p.state ?? p.phase)}{p.restarts ? ` · 重启${p.restarts}次` : ""}</Text>
+                      <Group key={p.name} gap={8} my={4} wrap="nowrap" justify="space-between" opacity={0.85}>
+                        <Group gap={8} wrap="nowrap" style={{ minWidth: 0, flex: 1 }} opacity={0.75}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[p.state] ?? "#9aa5b8", display: "inline-block", flexShrink: 0 }} />
+                          <Text size="xs" style={{ fontFamily: "monospace" }} truncate title={p.name}>{p.name}</Text>
+                          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>{p.state === "running" ? `就绪 ${p.ready}/${p.total}` : (p.reason ?? p.state ?? p.phase)}{p.restarts ? ` · 重启${p.restarts}次` : ""}</Text>
+                        </Group>
+                        <Button
+                          size="compact-xs"
+                          variant="default"
+                          leftSection={<ScrollText size={12} />}
+                          onClick={() => openPodLogs(p.name)}
+                        >
+                          日志
+                        </Button>
                       </Group>
                     ))}
                     <Group justify="space-between" mt="md" mb={6}>
@@ -1973,14 +2192,13 @@ export function KsPublishPanel({
           )}
         </Stack>
       </Modal>
+      {batchConfirmOpen && batchMeta && (
       <KsBatchConfirmModal
         opened={batchConfirmOpen}
         meta={batchMeta}
         concurrencyPref={batchConcurrencyPref}
-        recommendedConcurrency={recommendKsBatchConcurrency({
-          itemCount: batchMeta?.deployNames.length ?? selectedDeploys.length,
-        })}
-        cpuCores={detectCpuCores()}
+        recommendedConcurrency={batchRecommendedConcurrency}
+        cpuCores={batchCpuCores}
         onConcurrencyPrefChange={(n) => {
           const pref = (n === 0 || n === 1 || n === 2 || n === 3 || n === 4
             ? n
@@ -1991,6 +2209,8 @@ export function KsPublishPanel({
         onClose={() => setBatchConfirmOpen(false)}
         onStart={() => void startBatchPack()}
       />
+      )}
+      {(batchOpen || batchRunning) && (
       <KsBatchProgressModal
         opened={batchOpen}
         meta={batchMeta}
@@ -2002,6 +2222,283 @@ export function KsPublishPanel({
         onClose={() => setBatchOpen(false)}
         onCancelBuild={() => void invoke("cancel_build").catch(() => {})}
       />
+      )}
+      <Modal
+        opened={podLogOpen}
+        onClose={() => {
+          setPodLogOpen(false);
+          setPodLogAutoRefresh(false);
+          setPodLogFullscreen(false);
+          setPodLogQuery("");
+        }}
+        centered={!podLogFullscreen}
+        fullScreen={podLogFullscreen}
+        size="xl"
+        title={(
+          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+            <ScrollText size={16} />
+            <Stack gap={0} style={{ minWidth: 0 }}>
+              <Text fw={700} size="sm">Pod 日志</Text>
+              <Text size="xs" c="dimmed" style={{ fontFamily: "monospace" }} truncate>
+                {podLogPod || "—"}
+              </Text>
+            </Stack>
+          </Group>
+        )}
+        classNames={{
+          content: podLogFullscreen ? "ks-pod-log-modal ks-pod-log-modal--full" : "ks-pod-log-modal",
+          body: "ks-pod-log-body",
+        }}
+      >
+        <Box className="ks-pod-log-toolbar-wrap">
+          <Box className="ks-pod-log-controls">
+            <Group gap={8} wrap="wrap" align="center" className="ks-pod-log-controls-row">
+              <Text size="xs" c="dimmed" className="ks-pod-log-field-label">容器</Text>
+              <Select
+                size="xs"
+                w={200}
+                data={(sel?.containers ?? []).map((c) => ({ value: c, label: c }))}
+                value={podLogContainer}
+                onChange={(v) => {
+                  setPodLogContainer(v);
+                  if (podLogPod) void loadPodLogs(podLogPod, v, podLogPrevious);
+                }}
+                allowDeselect={false}
+                searchable
+                aria-label="容器"
+              />
+              <Checkbox
+                label="上一崩溃"
+                size="xs"
+                checked={podLogPrevious}
+                onChange={(e) => {
+                  const on = e.currentTarget.checked;
+                  setPodLogPrevious(on);
+                  if (podLogPod) void loadPodLogs(podLogPod, podLogContainer, on);
+                }}
+              />
+              <Divider orientation="vertical" visibleFrom="sm" className="ks-pod-log-vdiv" />
+              <Checkbox
+                label="定时刷新"
+                size="xs"
+                checked={podLogAutoRefresh}
+                onChange={(e) => setPodLogAutoRefresh(e.currentTarget.checked)}
+              />
+              <Select
+                size="xs"
+                w={84}
+                data={[
+                  { value: "3", label: "3秒" },
+                  { value: "5", label: "5秒" },
+                  { value: "10", label: "10秒" },
+                  { value: "30", label: "30秒" },
+                ]}
+                value={podLogRefreshSec}
+                onChange={(v) => setPodLogRefreshSec(v ?? "5")}
+                disabled={!podLogAutoRefresh}
+                allowDeselect={false}
+                aria-label="刷新间隔"
+              />
+              <Group gap={6} wrap="nowrap" ml="auto">
+                <Button
+                  size="xs"
+                  variant="default"
+                  leftSection={<RefreshCw size={13} />}
+                  loading={podLogLoading}
+                  onClick={() => {
+                    if (podLogPod) void loadPodLogs(podLogPod, podLogContainer, podLogPrevious);
+                  }}
+                >
+                  刷新
+                </Button>
+                <Button
+                  size="xs"
+                  variant="default"
+                  leftSection={<Copy size={13} />}
+                  disabled={!podLogText}
+                  onClick={() => {
+                    void navigator.clipboard.writeText(podLogText).then(() => {
+                      notifications.show({ color: "teal", message: "日志已复制", autoClose: 2000 });
+                    });
+                  }}
+                >
+                  复制
+                </Button>
+                <Button
+                  size="xs"
+                  variant="default"
+                  leftSection={<Download size={13} />}
+                  disabled={!podLogText}
+                  onClick={() => void downloadPodLogs()}
+                >
+                  下载
+                </Button>
+              </Group>
+            </Group>
+            <TextInput
+              size="xs"
+              placeholder="搜索日志内容…"
+              leftSection={<Search size={13} />}
+              value={podLogQuery}
+              onChange={(e) => {
+                setPodLogQuery(e.currentTarget.value);
+                setPodLogActiveIdx(-1);
+              }}
+              rightSection={
+                podLogQuery ? (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    color="gray"
+                    aria-label="清除搜索"
+                    onClick={() => {
+                      setPodLogQuery("");
+                      setPodLogActiveIdx(-1);
+                    }}
+                  >
+                    ×
+                  </ActionIcon>
+                ) : null
+              }
+            />
+            <Group gap={6} wrap="wrap" align="center" className="ks-pod-log-levels">
+              {POD_LOG_LEVELS.map((lv) => {
+                const n = podLogView.counts[lv];
+                const active = podLogJumpLevel === lv;
+                return (
+                  <Button
+                    key={lv}
+                    size="compact-xs"
+                    variant={active ? "filled" : "light"}
+                    color={
+                      lv === "fatal" || lv === "error"
+                        ? "red"
+                        : lv === "warn"
+                          ? "orange"
+                          : lv === "info"
+                            ? "cyan"
+                            : lv === "debug"
+                              ? "gray"
+                              : "violet"
+                    }
+                    className={`ks-pod-log-level-chip ks-pod-log-level-chip--${lv}`}
+                    disabled={n === 0}
+                    onClick={() => {
+                      setPodLogJumpLevel(lv);
+                      const idx = findNextLevelIndex(podLogView.lines, lv, -1);
+                      if (idx >= 0) {
+                        podLogStickBottomRef.current = false;
+                        setPodLogActiveIdx(idx);
+                      }
+                    }}
+                  >
+                    {POD_LOG_LEVEL_LABEL[lv]} {n}
+                  </Button>
+                );
+              })}
+              <Group gap={4} wrap="nowrap" ml={4} align="center" className="ks-pod-log-nav">
+                <Tooltip label={`上一个 ${POD_LOG_LEVEL_LABEL[podLogJumpLevel]}`}>
+                  <ActionIcon
+                    size="sm"
+                    variant="default"
+                    aria-label="上一个级别"
+                    disabled={podLogJumpPos.total === 0}
+                    onClick={() => jumpPodLogLevel("prev")}
+                  >
+                    <ChevronUp size={14} />
+                  </ActionIcon>
+                </Tooltip>
+                <Text size="xs" className="ks-pod-log-nav-pos" title={POD_LOG_LEVEL_LABEL[podLogJumpLevel]}>
+                  {podLogJumpPos.total === 0
+                    ? "0/0"
+                    : `${podLogJumpPos.current > 0 ? podLogJumpPos.current : "—"}/${podLogJumpPos.total}`}
+                </Text>
+                <Tooltip label={`下一个 ${POD_LOG_LEVEL_LABEL[podLogJumpLevel]}`}>
+                  <ActionIcon
+                    size="sm"
+                    variant="default"
+                    aria-label="下一个级别"
+                    disabled={podLogJumpPos.total === 0}
+                    onClick={() => jumpPodLogLevel("next")}
+                  >
+                    <ChevronDown size={14} />
+                  </ActionIcon>
+                </Tooltip>
+              </Group>
+            </Group>
+          </Box>
+
+          <Box className="ks-pod-log-frame">
+            <Tooltip label={podLogFullscreen ? "退出全屏" : "全屏"}>
+              <ActionIcon
+                className="ks-pod-log-fullscreen-btn"
+                variant="filled"
+                color="dark"
+                size="sm"
+                radius="sm"
+                aria-label={podLogFullscreen ? "退出全屏" : "全屏"}
+                onClick={() => setPodLogFullscreen((v) => !v)}
+              >
+                {podLogFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </ActionIcon>
+            </Tooltip>
+            <ScrollArea
+              type="auto"
+              offsetScrollbars={false}
+              scrollbarSize={8}
+              className="ks-pod-log-scroll"
+              viewportRef={podLogViewportRef}
+            >
+              {podLogLoading && !podLogText ? (
+                <Group gap={8} p="md">
+                  <Loader size={14} />
+                  <Text size="xs" c="dimmed">正在拉取日志…</Text>
+                </Group>
+              ) : podLogView.lines.length === 0 ? (
+                <Text size="xs" c="dimmed" p="md">
+                  {podLogQuery.trim() ? "（无匹配行）" : "（暂无内容）"}
+                </Text>
+              ) : (
+                <div className="ks-pod-log-lines">
+                  {podLogView.lines.map((line, i) => (
+                    <div
+                      key={`${line.index}-${i}`}
+                      data-log-idx={i}
+                      className={[
+                        "ks-pod-log-line",
+                        line.level ? `ks-pod-log-line--${line.level}` : "ks-pod-log-line--plain",
+                        i === podLogActiveIdx ? "is-active" : "",
+                      ].filter(Boolean).join(" ")}
+                      onClick={() => {
+                        if (line.level) setPodLogJumpLevel(line.level);
+                        podLogStickBottomRef.current = false;
+                        setPodLogActiveIdx(i);
+                      }}
+                    >
+                      {line.text || " "}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </Box>
+          <Group justify="space-between" className="ks-pod-log-footer">
+            <Text size="xs" c="dimmed">
+              尾部约 500 行 · 共 {podLogView.total} 行
+              {podLogQuery.trim()
+                ? ` · 搜索命中 ${podLogView.matched}`
+                : ""}
+              {podLogView.counts[podLogJumpLevel] > 0
+                ? ` · ${POD_LOG_LEVEL_LABEL[podLogJumpLevel]} ${podLogJumpPos.current > 0 ? `${podLogJumpPos.current}/` : ""}${podLogView.counts[podLogJumpLevel]}`
+                : ""}
+              {podLogAutoRefresh ? ` · 每 ${podLogRefreshSec}s 自动刷新` : " · 已关闭定时刷新"}
+            </Text>
+            {podLogLoading && podLogText ? (
+              <Text size="xs" c="dimmed">刷新中…</Text>
+            ) : null}
+          </Group>
+        </Box>
+      </Modal>
     </>
   );
 }

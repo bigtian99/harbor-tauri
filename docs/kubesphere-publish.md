@@ -15,7 +15,7 @@
 | 部署状态表 | 状态徽章（运行中/更新中/拉取失败/崩溃重启/创建中/已停止）、容器、镜像Tag、就绪、版本、Pod 原因 |
 | 新/旧版本 Pod | **新版本（当前 revision）Pod 优先**，旧版本灰显——发布中即使旧 Pod 运行，新 Pod 异常也会标红 |
 | 只看异常 | 过滤出非运行中部署 |
-| 自动/手动刷新 | 默认关闭自动刷新；可选手动开启 10s/30s/60s 轮询，或点「刷新」（保留选中；无变化时不重渲染） |
+| 自动/手动刷新 | **默认开启**自动刷新；可选 10s/30s/60s 轮询，或点「刷新」（保留选中；无变化时不重渲染） |
 | 导出 CSV | 全部部署状态导出（BOM+CRLF，Excel 中文正常） |
 | 修改镜像发布 | 选部署 → 填新镜像 → `ks_update_image`（strategic-merge-patch）→ 回读验证 revision |
 | 创建部署 | 「创建部署」按钮 → 弹窗填必传项（部署名/镜像/端口/副本/健康检查路径/引用配置字典/环境变量）；ConfigMap 按 key 展开为 `configMapKeyRef`；**`SW_AGENT_NAME` 固定取部署名称**（不走 ConfigMap） |
@@ -23,6 +23,7 @@
 | ConfigMap 创建 | 两种模式：**表单**（名称 + `K=V` 行，`ks_create_configmap` 后端拼接）或 **YAML**（粘贴完整 YAML，`ks_create_configmap_yaml`）；均支持「预览 YAML + 📋复制」「校验 (dryRun)」 |
 | ConfigMap 复制创建 | 行操作「复制创建」→ `ks_get_configmap` 读取 data → 预填表单（名称加 `-copy`）→ 改后创建 |
 | 历史版本 | 选中部署后展示 ReplicaSet revision 列表（镜像 / 就绪 / 创建时间），支持「填入」或「回滚」 |
+| Pod 日志 | 新/旧版本 Pod 行「日志」→ 尾部约 500 行；全屏 / 搜索 / 复制下载；**按级别着色**（FATAL/ERROR/WARN/INFO/DEBUG/TRACE）；点击级别芯片或上下键跳转到下一条同级别 |
 
 ## 后端（Rust）
 
@@ -35,6 +36,7 @@
 - `ks_list_deployments(namespace)`：命名空间级 **3 次并行**拉取（deployments + replicasets + pods），内存按 ownerReference / revision 分组新/旧 Pod；旧实现按部署各打 2 次 API（1+2N）易卡死
 - 前端：默认关闭自动刷新（可选手动开 60s）；静默刷新无变化时跳过 setState；搜索用 `useDeferredValue`；ConfigMap 页签 `keepMounted={false}` 懒加载；StrictMode 下连接短防抖避免双打超时
 - `ks_list_deployment_revisions(namespace, deployment)`：按 Deployment 列出 ReplicaSet 历史 revision 与镜像
+- `ks_get_pod_logs(namespace, pod, container?, tail_lines?, previous?)`：纯文本 Pod 日志（独立于 JSON `ks_api`，避免非 JSON 被误判 401）
 - `ks_update_image(namespace, deployment, container, image)`：
   `PATCH /apis/apps/v1/namespaces/{ns}/deployments/{name}`，`Content-Type: application/strategic-merge-patch+json`，
   body `{"spec":{"template":{"spec":{"containers":[{"name":..,"image":..}]}}}}`，随后回读验证

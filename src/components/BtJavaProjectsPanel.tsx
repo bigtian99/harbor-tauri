@@ -18,6 +18,7 @@ import {
   Title,
 } from "@mantine/core";
 import { Coffee, Loader2, RefreshCw, RotateCcw, Search, StopCircle, Upload, XCircle } from "lucide-react";
+import { displayBtUpdatedAt, setBtLastUpload } from "../utils/btLastUpload";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { isTauriRuntime } from "../types";
 import { showSystemAlert } from "../systemAlert";
@@ -137,6 +138,7 @@ interface BtJavaTableProps {
   busyPhase: BusyPhase | null;
   fileDragActive: boolean;
   dragOverKey: string | null;
+  uploadDisplayTick: number;
   onRestart: (row: BtJavaProjectInfo) => void | Promise<void>;
   onStop: (row: BtJavaProjectInfo) => void | Promise<void>;
   onCancel: () => void | Promise<void>;
@@ -151,6 +153,7 @@ const BtJavaProjectsTable = memo(function BtJavaProjectsTable({
   busyPhase,
   fileDragActive,
   dragOverKey,
+  uploadDisplayTick: _uploadDisplayTick,
   onRestart,
   onStop,
   onCancel,
@@ -234,7 +237,7 @@ const BtJavaProjectsTable = memo(function BtJavaProjectsTable({
                   </Table.Td>
                   <Table.Td className="bt-java-cell-time">
                     <Text size="sm" c="dimmed">
-                      {row.updated_at || "-"}
+                      {displayBtUpdatedAt("java", row.id, row.updated_at)}
                     </Text>
                   </Table.Td>
                   <Table.Td className="bt-java-cell-actions">
@@ -307,6 +310,8 @@ export function BtJavaProjectsPanel() {
   const [pageSize, setPageSize] = useState(20);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshSec, setRefreshSec] = useState("30");
+  /** 上传成功后刷新「更新时间」列（读 localStorage） */
+  const [uploadDisplayTick, setUploadDisplayTick] = useState(0);
   const autoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCancelRef = useRef(0);
   /** 仅用户点「取消」时为 true；上传成功后仍应重启，不被面板刷新/重挂载打断 */
@@ -713,6 +718,11 @@ export function BtJavaProjectsPanel() {
     }
   }, [confirm, waitForPort, bumpBar, setBar]);
 
+  const markJavaUploaded = useCallback((id: string) => {
+    setBtLastUpload("java", id);
+    setUploadDisplayTick((n) => n + 1);
+  }, []);
+
   const uploadAndRestart = useCallback(async (row: BtJavaProjectInfo, localJar: string) => {
     if (!isTauriRuntime()) return;
     const key = projectKey(row);
@@ -735,6 +745,8 @@ export function BtJavaProjectsPanel() {
         remoteJar: row.project_jar,
         projectPath: row.path,
       });
+
+      markJavaUploaded(row.id);
 
       // 上传已落盘成功：除非用户点了取消，否则必须继续重启（勿被 token/重挂载跳过）
       if (userCancelledRef.current) {
@@ -788,7 +800,7 @@ export function BtJavaProjectsPanel() {
       setBusyKey(null);
       setPollAttempt(0);
     }
-  }, [waitForPort, bumpBar, setBar]);
+  }, [waitForPort, bumpBar, setBar, markJavaUploaded]);
 
   // 窗口级拖放：按坐标命中表格行，并给每行投放提示
   useEffect(() => {
@@ -1045,6 +1057,7 @@ export function BtJavaProjectsPanel() {
         busyPhase={busyPhase}
         fileDragActive={fileDragActive}
         dragOverKey={dragOverKey}
+        uploadDisplayTick={uploadDisplayTick}
         onRestart={restart}
         onStop={stop}
         onCancel={cancelTask}

@@ -75,7 +75,9 @@ export function KsBatchConfirmModal({
       size="lg"
       padding="lg"
       radius="md"
-      overlayProps={{ blur: 4, backgroundOpacity: 0.55 }}
+      overlayProps={{ backgroundOpacity: 0.55 }}
+      lockScroll={false}
+      transitionProps={{ duration: 120 }}
       title={(
         <Group gap="sm" wrap="nowrap">
           <ThemeIcon size={36} radius="md" variant="light" color="cyan">
@@ -141,7 +143,7 @@ export function KsBatchConfirmModal({
               {count} 项
             </Badge>
           </Group>
-          <ScrollArea.Autosize mah={180} type="auto" offsetScrollbars className="ks-batch-deploy-scroll">
+          <ScrollArea mah={180} type="auto" offsetScrollbars className="ks-batch-deploy-scroll">
             <Group gap={8}>
               {(meta?.deployNames ?? []).map((name) => (
                 <Badge
@@ -156,7 +158,7 @@ export function KsBatchConfirmModal({
                 </Badge>
               ))}
             </Group>
-          </ScrollArea.Autosize>
+          </ScrollArea>
         </Stack>
 
         <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
@@ -259,7 +261,9 @@ export function KsBatchProgressModal({
       withCloseButton={!running}
       closeOnClickOutside={!running}
       closeOnEscape={!running}
-      overlayProps={{ blur: 4, backgroundOpacity: 0.55 }}
+      overlayProps={{ backgroundOpacity: 0.55 }}
+      lockScroll={false}
+      transitionProps={{ duration: 120 }}
       classNames={{ content: "ks-batch-progress-modal", body: "ks-batch-progress-body" }}
       title={null}
     >

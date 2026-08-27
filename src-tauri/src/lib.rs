@@ -36,6 +36,7 @@ use diag::{
 };
 use git::{
     check_remote_merge, clone_repo, get_git_remote_url, get_latest_tag, get_merge_conflict_diff,
+    match_git_repo_paths,
     list_git_branches, list_git_branches_from_url, list_remote_branches, merge_remote_branches,
 };
 use history::{
@@ -46,7 +47,7 @@ use history::{
 use kubesphere::{
     ks_create_deployment, ks_list_deployment_revisions, ks_list_deployments, ks_list_namespaces,
     ks_create_configmap, ks_create_configmap_yaml, ks_get_configmap, ks_list_configmaps,
-    ks_connect, ks_get_deployment_edit, ks_login, ks_logout, ks_preview_configmap,
+    ks_connect, ks_get_deployment_edit, ks_get_pod_logs, ks_login, ks_logout, ks_preview_configmap,
     ks_preview_deployment, ks_update_deployment, ks_update_image,
 };
 use landing::{
@@ -97,6 +98,7 @@ pub fn run() {
             ks_list_namespaces,
             ks_list_deployments,
             ks_list_deployment_revisions,
+            ks_get_pod_logs,
             ks_update_image,
             ks_get_deployment_edit,
             ks_update_deployment,
@@ -177,6 +179,7 @@ pub fn run() {
             get_merge_conflict_diff,
             get_latest_tag,
             get_git_remote_url,
+            match_git_repo_paths,
             batch_pack_sub_channels,
             open_ops_login_window,
             close_ops_login_window,

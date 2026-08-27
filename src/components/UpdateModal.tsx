@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ArrowRight, Download, Loader2, Rocket, X, AlertCircle, ExternalLink, FileText } from "lucide-react";
-import "./UpdateModal.css";
+import { openReleasePage, RELEASE_LATEST_URL } from "../utils/releasePage";
 
 /** 与 Rust updater.rs 中 UpdateInfo 一一对应 */
 export interface UpdateInfo {
@@ -181,6 +181,16 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
   const isLocked = phase === "downloading" || phase === "installing";
   const barPct = phase === "installing" ? 100 : progress;
   const notes = (updateInfo.release_notes || "").trim();
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const platformHint = ua.includes("Win")
+    ? "Windows · 下载安装包并启动安装程序"
+    : ua.includes("Mac")
+      ? "macOS · 自动安装并重启"
+      : "下载安装包并安装";
+
+  const openExternal = (url: string) => {
+    void openReleasePage(url);
+  };
 
   return (
     <div
@@ -224,7 +234,7 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
                 <Download size={12} />
                 {formatSize(updateInfo.file_size)}
               </span>
-              <span className="update-chip update-chip--muted">macOS · 自动安装并重启</span>
+              <span className="update-chip update-chip--muted">{platformHint}</span>
             </div>
 
             <div className="update-notes">
@@ -234,6 +244,14 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
               </div>
               <div
                 className="update-notes-body"
+                onClick={(e) => {
+                  const el = (e.target as HTMLElement).closest("a");
+                  const href = el?.getAttribute("href");
+                  if (href?.startsWith("http")) {
+                    e.preventDefault();
+                    openExternal(href);
+                  }
+                }}
                 // notesToHtml 已转义；仅渲染受控 markdown 子集
                 dangerouslySetInnerHTML={{
                   __html: notes
@@ -295,15 +313,14 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
               <AlertCircle size={16} />
               <span>更新失败：{error}</span>
             </div>
-            <a
+            <button
+              type="button"
               className="update-manual-link"
-              href="https://github.com/bigtian99/harbor-tauri/releases/latest"
-              target="_blank"
-              rel="noreferrer"
+              onClick={() => openExternal(RELEASE_LATEST_URL)}
             >
               手动下载最新版本
               <ExternalLink size={12} />
-            </a>
+            </button>
             <div className="update-actions">
               <button className="update-btn update-btn--ghost" onClick={onClose}>
                 关闭

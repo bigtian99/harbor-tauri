@@ -1014,13 +1014,14 @@ fn normalize_java_status(raw_status: &str, row: &Value, port: &str) -> String {
     status
 }
 
-/// 从行数据取「最后时间」：优先更新类字段，再回退 addtime。
+/// 从行数据取「最后时间」：优先更新类字段，再回退 addtime（不含 uptime，那是运行时长秒数）。
 fn parse_updated_at(row: &Value) -> String {
     const KEYS: &[&str] = &[
         "update_time",
-        "uptime",
         "modify_time",
         "mtime",
+        "edittime",
+        "edit_time",
         "addtime",
         "add_time",
     ];
@@ -2381,6 +2382,24 @@ mod tests {
             "/www/wwwroot/a.com/index.php"
         );
         assert!(php_site_remote_file("  ", "index.php").is_err());
+    }
+
+    #[test]
+    fn parse_updated_at_prefers_update_time_over_addtime() {
+        let row = serde_json::json!({
+            "update_time": "2026-03-01 09:00:00",
+            "addtime": "2026-01-15 10:20:30"
+        });
+        assert_eq!(parse_updated_at(&row), "2026-03-01 09:00:00");
+    }
+
+    #[test]
+    fn parse_updated_at_ignores_uptime_runtime_seconds() {
+        let row = serde_json::json!({
+            "uptime": 3600,
+            "addtime": "2026-01-15 10:20:30"
+        });
+        assert_eq!(parse_updated_at(&row), "2026-01-15 10:20:30");
     }
 
     #[test]
