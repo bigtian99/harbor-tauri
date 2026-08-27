@@ -5,8 +5,10 @@ use crate::config_cmd::load_config_sync;
 use crate::git::cleanup_worktree;
 use crate::models::PackageProjectType;
 use crate::utils::{cleanup_old_temp_dirs, command_output_text, repo_root_for, silent_command};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use tauri::AppHandle;
 
 /// 打包前准备好的路径与元信息。
@@ -201,6 +203,43 @@ pub(crate) fn validate_project_in_worktree(
     }
 }
 
+static PACK_BUSY: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+
+pub(crate) struct PackRepoGuard {
+    repo_name: String,
+}
+
+impl PackRepoGuard {
+    pub(crate) fn try_acquire(repo_name: &str) -> Result<Self, String> {
+        let map_lock = PACK_BUSY.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut map = map_lock
+            .lock()
+            .map_err(|_| "打包目录锁异常".to_string())?;
+        let busy = map.entry(repo_name.to_string()).or_insert(false);
+        if *busy {
+            return Err(format!(
+                "仓库「{repo_name}」的 _pack 正在被其他打包任务使用，请稍后再试（同仓库请串行）"
+            ));
+        }
+        *busy = true;
+        Ok(Self {
+            repo_name: repo_name.to_string(),
+        })
+    }
+}
+
+impl Drop for PackRepoGuard {
+    fn drop(&mut self) {
+        if let Some(map_lock) = PACK_BUSY.get() {
+            if let Ok(mut map) = map_lock.lock() {
+                if let Some(busy) = map.get_mut(&self.repo_name) {
+                    *busy = false;
+                }
+            }
+        }
+    }
+}
+
 /// 持久打包 worktree 路径：`{output_base}/{repo_name}/_pack`
 pub(crate) fn pack_worktree_dir(output_base: &Path, repo_name: &str) -> PathBuf {
     output_base.join(repo_name).join("_pack")
@@ -349,7 +388,9 @@ fn fetch_target_branch(repo_root: &std::path::Path, branch_ref: &str) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::{is_git_worktree_dir, pack_worktree_dir, split_remote_tracking_ref};
+    use super::{
+        is_git_worktree_dir, pack_worktree_dir, split_remote_tracking_ref, PackRepoGuard,
+    };
     use std::path::Path;
 
     #[test]
@@ -383,6 +424,14 @@ mod tests {
     #[test]
     fn is_git_worktree_dir_false_for_missing() {
         assert!(!is_git_worktree_dir(Path::new("/tmp/jarporter-no-such-pack-dir")));
+    }
+
+    #[test]
+    fn pack_repo_guard_rejects_second_acquire() {
+        let g1 = PackRepoGuard::try_acquire("ut-repo-lock").unwrap();
+        assert!(PackRepoGuard::try_acquire("ut-repo-lock").is_err());
+        drop(g1);
+        assert!(PackRepoGuard::try_acquire("ut-repo-lock").is_ok());
     }
 }
 
