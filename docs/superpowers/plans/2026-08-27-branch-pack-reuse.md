@@ -4,7 +4,7 @@
 
 **Goal:** 在产物输出目录下按仓库复用固定 `{repo}/_pack/`，切分支并只 fetch 目标分支后全量编译，不再每次新建/删除带时间戳的临时 worktree。
 
-**Architecture:** 仍用主仓 `git worktree` 挂载到 `{output_base}/{repo_name}/_pack`；首次 `worktree add --detach`，之后在 `_pack` 内 `checkout --detach` + `reset --hard` 到目标 ref。收尾不再 `cleanup_worktree`。同 `repo_name` 进程内互斥。Maven/npm 命令不变（继续 `clean package`）。
+**Architecture:** 仍用主仓 `git worktree` 挂载到 `{output_base}/{repo_name}/_pack`；首次 `worktree add --detach`，之后在 `_pack` 内 `checkout --detach` + `reset --hard` 到目标 ref。收尾不再 `cleanup_worktree`。同 `repo_name` 进程内互斥（`PackRepoGuard` 放进 `WorktreeContext`，全流程结束后 Drop）。Maven/npm 命令不变（继续 `clean package`）。
 
 **Tech Stack:** Rust / Tauri 2 / 现有 `git_output` / `silent_command` / `diag_log` / `cargo test`
 
@@ -28,8 +28,9 @@
 |------|------|
 | `src-tauri/src/build/package_worktree.rs` | `pack_dir` 路径、`ensure_pack_worktree`、复用/重置、互斥、已有 `fetch_target_branch` |
 | `src-tauri/src/build/package_finish.rs` | 无 Dockerfile 时**跳过**删除 `_pack`，改日志「保留 _pack」 |
-| `src-tauri/src/git.rs` | 仅在需要时复用 `cleanup_worktree`（重建前清理损坏目录） |
-| `docs/superpowers/specs/2026-08-27-branch-pack-reuse-design.md` | 状态改为已批准（实现后） |
+| `src-tauri/src/build/push.rs`（及清理调用点） | Docker 构建后若会删上下文，跳过名为 `_pack` 的目录 |
+| `src-tauri/src/git.rs` | 仅在重建前复用 `cleanup_worktree` |
+| `docs/superpowers/specs/2026-08-27-branch-pack-reuse-design.md` | 状态改为已实现 |
 
 **不改：** `package_build.rs` Maven/npm 参数；前端 Panel；`cleanup_old_temp_dirs`（只清 `jarporter-worktree-*`，不碰 `_pack`）。
 
@@ -45,8 +46,6 @@
 - Produces: `pub(crate) fn pack_worktree_dir(output_base: &Path, repo_name: &str) -> PathBuf`
 
 - [ ] **Step 1: Write the failing test**
-
-在 `package_worktree.rs` 的 `tests` 模块追加：
 
 ```rust
 use super::pack_worktree_dir;
@@ -100,18 +99,16 @@ EOF
 
 **Files:**
 - Modify: `src-tauri/src/build/package_worktree.rs`
-- Test: 同文件（字符串/逻辑可测部分）；Git 命令用真实 repo 过重，本任务对「判定」与「命令参数拼装」做单测，集成靠手工冒烟
 
 **Interfaces:**
-- Consumes: `pack_worktree_dir`, `fetch_target_branch`, `split_remote_tracking_ref`, `git_output`, `silent_command`, `cleanup_worktree`
+- Consumes: `git_output`, `silent_command`, `cleanup_worktree`, `command_output_text`
 - Produces:
-  - `fn is_git_worktree_dir(path: &Path) -> bool` — 存在且含 `.git` 文件或目录
+  - `fn is_git_worktree_dir(path: &Path) -> bool`
   - `fn reset_pack_to_ref(pack_dir: &Path, branch_ref: &str) -> Result<(), String>`
   - `fn create_pack_worktree(repo_root: &Path, pack_dir: &Path, branch_ref: &str) -> Result<(), String>`
-  - `fn ensure_pack_worktree(repo_root: &Path, pack_dir: &Path, branch_ref: &str) -> Result<&'static str, String>`  
-    返回 `"reuse"` | `"create"`（供日志）
+  - `fn ensure_pack_worktree(...) -> Result<&'static str, String>` 返回 `"reuse"` | `"create"`
 
-- [ ] **Step 1: Write failing tests for worktree marker**
+- [ ] **Step 1: Write failing test**
 
 ```rust
 #[test]
@@ -120,7 +117,7 @@ fn is_git_worktree_dir_false_for_missing() {
 }
 ```
 
-- [ ] **Step 2: Run to verify fail, then implement helpers**
+- [ ] **Step 2: Implement helpers**
 
 ```rust
 fn is_git_worktree_dir(path: &Path) -> bool {
@@ -132,12 +129,8 @@ fn reset_pack_to_ref(pack_dir: &Path, branch_ref: &str) -> Result<(), String> {
         "build",
         &format!("pack_reset path={} ref={}", pack_dir.display(), branch_ref),
     );
-    // detach 到目标提交，避免占用分支名
-    crate::utils::git_output(
-        pack_dir,
-        &["checkout", "--detach", branch_ref],
-    )
-    .map_err(|e| format!("切换打包目录到 {branch_ref} 失败: {e}"))?;
+    crate::utils::git_output(pack_dir, &["checkout", "--detach", branch_ref])
+        .map_err(|e| format!("切换打包目录到 {branch_ref} 失败: {e}"))?;
     crate::utils::git_output(pack_dir, &["reset", "--hard", branch_ref])
         .map_err(|e| format!("重置打包目录到 {branch_ref} 失败: {e}"))?;
     Ok(())
@@ -149,7 +142,6 @@ fn create_pack_worktree(
     branch_ref: &str,
 ) -> Result<(), String> {
     if pack_dir.exists() {
-        // 损坏残留：先按 worktree 强力摘除再删目录
         cleanup_worktree(repo_root, pack_dir);
         let _ = fs::remove_dir_all(pack_dir);
     }
@@ -173,7 +165,6 @@ fn create_pack_worktree(
     Ok(())
 }
 
-/// 复用或创建 `_pack`。成功返回 `"reuse"` 或 `"create"`。
 fn ensure_pack_worktree(
     repo_root: &Path,
     pack_dir: &Path,
@@ -222,7 +213,7 @@ fn ensure_pack_worktree(
 
 Run: `cd src-tauri && cargo test --lib build::package_worktree::tests -- --nocapture`
 
-Expected: 全部 PASS（含既有 `split_*` 与新路径/判定测试）
+Expected: PASS
 
 - [ ] **Step 4: Commit**
 
@@ -244,142 +235,26 @@ EOF
 - Modify: `src-tauri/src/build/package_worktree.rs`
 
 **Interfaces:**
-- Produces: `fn lock_pack_repo(repo_name: &str) -> Result<PackRepoGuard, String>`  
-  `PackRepoGuard` 在 drop 时释放；内部 `OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>>` 或等价
+- Produces: `PackRepoGuard::try_acquire(repo_name) -> Result<PackRepoGuard, String>`；`Drop` 时释放
 
-- [ ] **Step 1: Implement lock (参考 `privacy.rs` 的 `Mutex` 风格，按 repo_name 粒度)**
+- [ ] **Step 1: Implement busy-map lock**
 
 ```rust
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 
-struct PackRepoGuard {
-    _guard: std::sync::MutexGuard<'static, ()>,
-}
-
-fn pack_repo_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
-    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
-    LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn lock_pack_repo(repo_name: &str) -> Result<PackRepoGuard, String> {
-    let key = repo_name.to_string();
-    let arc = {
-        let mut map = pack_repo_locks()
-            .lock()
-            .map_err(|_| "打包目录锁异常".to_string())?;
-        map.entry(key)
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone()
-    };
-    let guard = arc.try_lock().map_err(|_| {
-        format!(
-            "仓库「{repo_name}」的 _pack 正在被其他打包任务使用，请稍后再试（同仓库请串行）"
-        )
-    })?;
-    // MutexGuard 生命周期：需要把 Arc 保存在 Guard 里延长锁生命
-    // 实现时用自管结构：持有 Arc<Mutex<()>> + MutexGuard<'static> 不可行；
-    // 改用：
-    // struct PackRepoGuard { lock: Arc<Mutex<()>>, guard: MutexGuard<'static, ()> } 也不行
-    // 正确写法：持有 std::sync::MutexGuard 通过 owning_ref 或简单：
-    // struct PackRepoGuard { _lock: Arc<Mutex<()>>, _guard: MutexGuard<'a, ()> } 用 lifetime
-    // ponytail 推荐：
-    Ok(PackRepoGuard { /* see note */ })
-}
-```
-
-**实现注意（必须按此落地，勿留 TBD）：** 使用拥有所有权的 guard：
-
-```rust
-struct PackRepoGuard {
-    _lock: Arc<Mutex<()>>,
-    _guard: std::sync::MutexGuard<'static, ()>, // 不可直接写
-}
-```
-
-用下面可编译的写法（`parking_lot` 未引入则坚持 std）：
-
-```rust
-struct PackRepoGuard {
-    _lock: Arc<Mutex<()>>,
-    // 用 ManuallyDrop + 裸指针不可取；改为：
-}
-
-fn lock_pack_repo(repo_name: &str) -> Result<impl Drop, String> {
-    // 最简可编译方案：
-    let lock = { /* get Arc<Mutex<()>> */ };
-    match lock.clone().try_lock() {
-        Ok(guard) => Ok(PackRepoGuardOwned { lock, guard: Some(guard) }),
-        Err(_) => Err(format!(...)),
-    }
-}
-
-struct PackRepoGuardOwned {
-    lock: Arc<Mutex<()>>,
-    guard: Option<std::sync::MutexGuard<'static, ()>>, // 仍有 lifetime 问题
-}
-```
-
-**最终采用（写进代码的版本）：**
-
-```rust
-struct PackRepoGuard {
-    lock: Arc<Mutex<()>>,
-}
-
-impl PackRepoGuard {
-    fn try_acquire(repo_name: &str) -> Result<Self, String> {
-        let lock = {
-            let mut map = pack_repo_locks()
-                .lock()
-                .map_err(|_| "打包目录锁异常".to_string())?;
-            map.entry(repo_name.to_string())
-                .or_insert_with(|| Arc::new(Mutex::new(())))
-                .clone()
-        };
-        // try_lock 成功后用 std::mem::forget 不行；改为持有 MutexGuard 在结构内：
-        let guard = lock.try_lock().map_err(|_| {
-            format!(
-                "仓库「{repo_name}」的 _pack 正在被其他打包任务使用，请稍后再试（同仓库请串行）"
-            )
-        })?;
-        // 把 guard 泄漏到堆上并在 Drop 里释放：
-        let boxed = Box::new(guard);
-        let leaked: &'static mut std::sync::MutexGuard<'_, ()> =
-            Box::leak(boxed);
-        // 过复杂。改用 parking_lot 未引入。
-
-        // === 采用此简化：持有 Option 通过扩展 lifetime ===
-        std::mem::forget(guard); // 禁止
-
-        unreachable!()
-    }
-}
-```
-
-**STOP — 计划内定稿的可编译实现（执行者照抄）：**
-
-```rust
-use std::sync::{Arc, Mutex, OnceLock, MutexGuard};
-use std::collections::HashMap;
-
-struct PackRepoGuard {
-    _guard: MutexGuard<'static, ()>,
-    // 上面 'static 来自：每个 repo 一把 'static Mutex 存在 OnceLock 的 map 的 Arc 里，
-    // 但 MutexGuard 的 lifetime 绑在 Mutex 上而非 'static。
-}
-
-// 实用方案：用 std::sync::Mutex<()> 存「是否占用」的 bool，而不是嵌套 Mutex：
 static PACK_BUSY: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 
-struct PackRepoGuard {
+pub(crate) struct PackRepoGuard {
     repo_name: String,
 }
 
 impl PackRepoGuard {
-    fn try_acquire(repo_name: &str) -> Result<Self, String> {
+    pub(crate) fn try_acquire(repo_name: &str) -> Result<Self, String> {
         let map_lock = PACK_BUSY.get_or_init(|| Mutex::new(HashMap::new()));
-        let mut map = map_lock.lock().map_err(|_| "打包目录锁异常".to_string())?;
+        let mut map = map_lock
+            .lock()
+            .map_err(|_| "打包目录锁异常".to_string())?;
         let busy = map.entry(repo_name.to_string()).or_insert(false);
         if *busy {
             return Err(format!(
@@ -406,7 +281,7 @@ impl Drop for PackRepoGuard {
 }
 ```
 
-- [ ] **Step 2: 单测「二次 try_acquire 失败」**
+- [ ] **Step 2: 单测**
 
 ```rust
 #[test]
@@ -418,7 +293,7 @@ fn pack_repo_guard_rejects_second_acquire() {
 }
 ```
 
-- [ ] **Step 3: Run tests + Commit**
+- [ ] **Step 3: Run + Commit**
 
 Run: `cd src-tauri && cargo test --lib build::package_worktree::tests::pack_repo_guard_rejects_second_acquire -- --nocapture`
 
@@ -437,41 +312,43 @@ EOF
 ### Task 4: 接入 `prepare_worktree`（替换时间戳目录）
 
 **Files:**
-- Modify: `src-tauri/src/build/package_worktree.rs` — `prepare_worktree`
-- Modify: `validate_project_in_worktree` — **失败时不要 `cleanup_worktree` 删掉 `_pack`**（改为只记日志；文案改为「未清理 _pack」）
+- Modify: `src-tauri/src/build/package_worktree.rs` — `prepare_worktree`、`WorktreeContext`、`validate_project_in_worktree`
 
 **Interfaces:**
 - Consumes: `pack_worktree_dir`, `ensure_pack_worktree`, `PackRepoGuard::try_acquire`, `fetch_target_branch`
-- Produces: `WorktreeContext.worktree_path` 恒为 `_pack`；`PackRepoGuard` 必须活到 `prepare_worktree` 返回之后——**问题**：async 函数返回后 guard 会 drop，但构建仍在进行。
+- Produces: `WorktreeContext { worktree_path: .../_pack, pack_guard: PackRepoGuard, ... }`
 
-**关键修正：** 把 `PackRepoGuard` 放进 `WorktreeContext`，在 `finish_package` 结束（或 `package_from_branch` 全流程末尾）再 drop。
+- [ ] **Step 1: 扩展结构体**
 
 ```rust
 pub(crate) struct WorktreeContext {
-    // ...existing fields...
-    pub pack_guard: PackRepoGuard, // 新字段；Drop 时释放互斥
+    pub repo_path: PathBuf,
+    pub repo_root: PathBuf,
+    pub worktree_path: PathBuf,
+    pub actual_build_path: PathBuf,
+    pub output_base: PathBuf,
+    pub repo_name: String,
+    pub branch_slug: String,
+    pub build_timestamp: String,
+    pub pack_guard: PackRepoGuard,
 }
 ```
 
-- [ ] **Step 1: 扩展 `WorktreeContext`，在 `prepare_worktree` 开头 `try_acquire(&repo_name)`**
+- [ ] **Step 2: 在解析出 `repo_name` 后立刻 `PackRepoGuard::try_acquire(&repo_name)?`**
 
-- [ ] **Step 2: 将**
-
-```rust
-let worktree_path = output_base.join(&repo_name).join(format!("_{}_{}", &branch_slug, &build_timestamp));
-```
-
-**改为**
+- [ ] **Step 3: 路径改为 `_pack`**
 
 ```rust
 let worktree_path = pack_worktree_dir(&output_base, &repo_name);
 ```
 
-- [ ] **Step 3: 在 fetch + rev-parse 成功后，调用 `ensure_pack_worktree`，按返回值改 progress 文案**
+删除 `format!("_{}_{}", &branch_slug, &build_timestamp)` 作为源码目录的逻辑。
+
+- [ ] **Step 4: fetch + rev-parse 后调用 `ensure_pack_worktree`，更新 progress**
 
 ```rust
 emit_progress(app, 20, "🌿 准备打包目录 (_pack)...", "worktree");
-let mode = ensure_pack_worktree(&repo_root, &worktree_path, &branch)?;
+let mode = ensure_pack_worktree(&repo_root, &worktree_path, branch)?;
 let msg = if mode == "reuse" {
     "🌿 已复用 _pack 并更新到目标分支"
 } else {
@@ -480,17 +357,15 @@ let msg = if mode == "reuse" {
 emit_progress(app, 22, msg, "worktree");
 ```
 
-删除旧的「每次 `worktree add` 到时间戳路径」代码块。
+- [ ] **Step 5: `validate_project_in_worktree` 去掉 `cleanup_worktree`；错误文案改为保留 `_pack`**
 
-- [ ] **Step 4: `validate_project_in_worktree` 去掉 `cleanup_worktree` 调用**（保留 `_pack`）
-
-- [ ] **Step 5: Compile check**
+- [ ] **Step 6: 测试**
 
 Run: `cd src-tauri && cargo test --lib build::package_worktree -- --nocapture`
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src-tauri/src/build/package_worktree.rs
@@ -504,21 +379,13 @@ EOF
 
 ---
 
-### Task 5: 收尾不再删除 `_pack`
+### Task 5: 收尾与 Docker 后不再删除 `_pack`
 
 **Files:**
-- Modify: `src-tauri/src/build/package_finish.rs` — `detect_dockerfile_and_maybe_cleanup`
+- Modify: `src-tauri/src/build/package_finish.rs`
+- Modify: `src-tauri/src/build/push.rs`（若存在对 `cleanup_dir` 的 `remove_dir_all`）
 
-- [ ] **Step 1: 无自定义 Dockerfile 分支改为保留 `_pack`**
-
-把：
-
-```rust
-emit_progress(app, 88, "🧹 清理 worktree 源码...", "cleanup");
-cleanup_worktree(&ctx.repo_root, &ctx.worktree_path);
-```
-
-改为：
+- [ ] **Step 1: `detect_dockerfile_and_maybe_cleanup` 无 Dockerfile 时改为保留**
 
 ```rust
 emit_progress(app, 88, "📦 保留 _pack 供下次复用...", "cleanup");
@@ -529,19 +396,18 @@ crate::diag::diag_log(
 emit_progress(app, 89, "✅ _pack 已保留", "cleanup");
 ```
 
-有自定义 Dockerfile 的分支：保持「保留」语义，日志可写「_pack 作为 Docker 上下文」。
+有 Dockerfile：日志写「_pack 作为 Docker 上下文」，同样不删。
 
-- [ ] **Step 2: 确认 `push.rs` 若在推送后 `cleanup_dir` 指向 worktree，不得再删 `_pack`**
-
-检查：`src-tauri/src/build/push.rs` 中 `cleanup_dir: Some(ctx)` — 若 Docker 构建后会 `remove_dir_all`，改为**不清理** `_pack`（或清理前判断路径文件名是否为 `_pack` 则跳过）。
-
-执行者必须打开 `push.rs` / `push_helpers` 确认；若会删上下文目录，改为：
+- [ ] **Step 2: Docker 推送清理跳过 `_pack`**
 
 ```rust
 if path.file_name().and_then(|s| s.to_str()) == Some("_pack") {
-    crate::diag::diag_log("docker", &format!("skip cleanup persistent _pack: {}", path.display()));
+    crate::diag::diag_log(
+        "docker",
+        &format!("skip cleanup persistent _pack: {}", path.display()),
+    );
 } else {
-    let _ = fs::remove_dir_all(path);
+    let _ = fs::remove_dir_all(&path);
 }
 ```
 
@@ -561,21 +427,21 @@ EOF
 
 ---
 
-### Task 6: 规格状态 + 冒烟清单
+### Task 6: 规格状态 + 冒烟
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-08-27-branch-pack-reuse-design.md` — 状态改为 `已批准并实现中/已实现`
-- 可选一行写入 `docs/smoke-checklist.md`（若文件已有分支打包项则改一句）
+- Modify: `docs/superpowers/specs/2026-08-27-branch-pack-reuse-design.md`
+- Modify: `docs/smoke-checklist.md`（若已有分支打包项则补一句 `_pack` 复用）
 
-- [ ] **Step 1: 更新规格状态行**
+- [ ] **Step 1: 规格状态改为「已实现」**
 
-- [ ] **Step 2: 手工冒烟（执行者在有 Git 仓库的机器上）**
+- [ ] **Step 2: 手工冒烟**
 
-1. `pnpm tauri`，选本地 Maven 仓，分支 A 打包一次 → 确认出现 `{output}/{repo}/_pack/`，产物在 `{branch}_{ts}/`。  
-2. 同仓同分支再打包 → 系统日志含 `pack_reuse`；**没有**新的 `_{branch}_{ts}` 源码目录。  
-3. 换分支 B 再打包 → `_pack` 内容对应该分支；日志含 `pack_reset` 或 `pack_reuse`。  
-4. 开发仓 `git status` / 当前分支未被改到打包分支。  
-5. 日志无 `fetch --all`。
+1. `pnpm tauri`，Maven 仓分支 A 打包 → 出现 `{output}/{repo}/_pack/`，产物在 `{branch}_{ts}/`  
+2. 同仓同分支再打 → 日志 `pack_reuse`；无新的 `_{branch}_{ts}` 源码目录  
+3. 换分支 B → `_pack` 对应该分支；有 `pack_reset` / `pack_reuse`  
+4. 开发仓当前分支未被切换  
+5. 无 `fetch --all`
 
 - [ ] **Step 3: Commit docs**
 
@@ -595,13 +461,11 @@ EOF
 |-----------|------|
 | `{output}/{repo}/_pack` | 1, 4 |
 | 首次创建 / 之后 reuse+reset | 2, 4 |
-| 只 fetch 目标分支 | 已有 `fetch_target_branch`；Task 4 继续调用 |
-| 不碰日常仓库 checkout | 4（只操作 pack_dir） |
+| 只 fetch 目标分支 | 现有 `fetch_target_branch` + Task 4 |
+| 不碰日常仓库 checkout | 4 |
 | 全量 clean package | 不改 `package_build.rs` |
-| 产物时间戳目录不变 | 4 只改 worktree_path |
-| 不删 _pack | 5；validate 失败不删 — 4 |
+| 产物时间戳目录不变 | 4 |
+| 不删 `_pack` | 4 validate、5 finish/push |
 | 同仓互斥 | 3 + Context 持有 guard |
 | 诊断日志 | 2, 4, 5 |
-| 无 UI / 无 ~/.cache | 全局约束 |
-
-无 TBD 占位；互斥采用 `HashMap<String,bool>` 方案避免 lifetime 陷阱。
+| 无 UI / 无 `~/.cache` | 全局约束 |
