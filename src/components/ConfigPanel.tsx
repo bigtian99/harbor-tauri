@@ -759,7 +759,11 @@ export function ConfigPanel({
                 <button
                   type="button"
                   className="about-link"
-                  onClick={() => { void openReleasePage(); }}
+                  onClick={() => {
+                    void openReleasePage().catch((e) => {
+                      void showSystemAlert("无法打开发布页", String(e));
+                    });
+                  }}
                 >
                   发布页
                   <ExternalLink size={12} />

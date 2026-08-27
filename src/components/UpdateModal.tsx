@@ -188,9 +188,25 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
       ? "macOS · 自动安装并重启"
       : "下载安装包并安装";
 
-  const openExternal = (url: string) => {
-    void openReleasePage(url);
+  const openExternal = async (url: string) => {
+    try {
+      await openReleasePage(url);
+    } catch (e) {
+      const msg = String(e);
+      setError(msg);
+      setPhase("error");
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        // ignore
+      }
+    }
   };
+
+  const manualUrl =
+    (updateInfo.download_url && updateInfo.download_url.startsWith("http")
+      ? updateInfo.download_url
+      : RELEASE_LATEST_URL);
 
   return (
     <div
@@ -249,7 +265,7 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
                   const href = el?.getAttribute("href");
                   if (href?.startsWith("http")) {
                     e.preventDefault();
-                    openExternal(href);
+                    void openExternal(href);
                   }
                 }}
                 // notesToHtml 已转义；仅渲染受控 markdown 子集
@@ -274,6 +290,14 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
                 立即更新
               </button>
             </div>
+            <button
+              type="button"
+              className="update-manual-link"
+              onClick={() => void openExternal(manualUrl)}
+            >
+              手动下载最新版本
+              <ExternalLink size={12} />
+            </button>
           </>
         )}
 
@@ -316,11 +340,14 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
             <button
               type="button"
               className="update-manual-link"
-              onClick={() => openExternal(RELEASE_LATEST_URL)}
+              onClick={() => void openExternal(manualUrl)}
             >
               手动下载最新版本
               <ExternalLink size={12} />
             </button>
+            <p className="update-manual-url" title={manualUrl}>
+              {manualUrl}
+            </p>
             <div className="update-actions">
               <button className="update-btn update-btn--ghost" onClick={onClose}>
                 关闭

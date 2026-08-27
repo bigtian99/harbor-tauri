@@ -897,7 +897,10 @@ pub async fn download_and_install(
     _asset_id: Option<u64>,
     _file_size: Option<u64>,
 ) -> Result<(), String> {
-    Err("当前平台不支持自动更新，请手动下载最新版本".into())
+    Err(format!(
+        "当前平台不支持自动更新，请到发布页手动下载：{}",
+        "https://github.com/bigtian99/harbor-tauri/releases/latest"
+    ))
 }
 
 #[cfg(test)]
@@ -920,17 +923,33 @@ mod tests {
     #[test]
     fn match_windows_setup_exe() {
         assert!(match_release_asset(
+            "JarPorter_0.2.74_x64-setup.exe",
+            "windows",
+            "x86_64",
+        ));
+        assert!(match_release_asset(
             "ShipForge_0.2.73_x64-setup.exe",
             "windows",
             "x86_64",
         ));
         assert!(release_asset_score(
-            "ShipForge_0.2.73_x64-setup.exe",
+            "JarPorter_0.2.74_x64-setup.exe",
             "windows",
             "x86_64",
-        ) >= 80);
+        ) >= 100);
+        assert!(!match_release_asset(
+            "JarPorter_0.2.74_x64-setup-ops.exe",
+            "windows",
+            "x86_64",
+        ));
         assert!(!match_release_asset(
             "JarPorter-ops_0.2.73_x64-setup.exe",
+            "windows",
+            "x86_64",
+        ));
+        // Windows 不能误匹配 macOS dmg
+        assert!(!match_release_asset(
+            "JarPorter_0.2.74_x64.dmg",
             "windows",
             "x86_64",
         ));

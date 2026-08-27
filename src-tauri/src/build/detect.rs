@@ -178,6 +178,44 @@ pub async fn open_directory(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 用系统默认浏览器打开外链（不依赖 opener 插件权限，失败可诊断）。
+#[tauri::command]
+pub async fn open_external_url(url: String) -> Result<(), String> {
+    let url = url.trim().to_string();
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        crate::diag::diag_log("utils", &format!("open_external_url reject: {url}"));
+        return Err("仅允许打开 http/https 链接".into());
+    }
+    crate::diag::diag_log("utils", &format!("open_external_url: {url}"));
+
+    #[cfg(target_os = "macos")]
+    {
+        silent_command("open")
+            .arg(&url)
+            .output()
+            .map_err(|e| format!("打开链接失败: {e}"))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // start 的第一个引号参数是窗口标题，必须留空串
+        silent_command("cmd")
+            .args(["/C", "start", "", &url])
+            .output()
+            .map_err(|e| format!("打开链接失败: {e}"))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        silent_command("xdg-open")
+            .arg(&url)
+            .output()
+            .map_err(|e| format!("打开链接失败: {e}"))?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn check_dockerfile(repo_path: String, branch: String) -> Result<bool, String> {
     let repo_path = PathBuf::from(repo_path);
