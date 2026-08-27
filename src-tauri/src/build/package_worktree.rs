@@ -260,8 +260,8 @@ fn create_pack_worktree(
     pack_dir: &Path,
     branch_ref: &str,
 ) -> Result<(), String> {
+    cleanup_worktree(repo_root, pack_dir);
     if pack_dir.exists() {
-        cleanup_worktree(repo_root, pack_dir);
         let _ = fs::remove_dir_all(pack_dir);
     }
     if let Some(parent) = pack_dir.parent() {

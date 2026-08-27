@@ -94,7 +94,7 @@ pub async fn build_and_push(
             "build",
             &format!("使用自定义Dockerfile，构建上下文: {}", ctx_path),
         );
-        // worktree 作为构建上下文，Docker 构建完后清理
+        // worktree 作为构建上下文；构建后清理（持久 `_pack` 目录跳过删除）
         DockerBuildContext {
             context_dir: ctx.clone(),
             dockerfile_path: df,
