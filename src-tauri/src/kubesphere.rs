@@ -639,7 +639,16 @@ fn ks_api_raw_with(
     req = req
         .header("Accept", "application/json")
         .header("Cookie", &sess.cookie);
-    let resp = req.send().map_err(|e| format!("请求失败: {e}"))?;
+    let resp = req.send().map_err(|e| {
+        let hint = if e.is_connect() {
+            "请确认本机与控制台同一局域网或 VPN 已连接"
+        } else if e.is_timeout() {
+            "请求超时，控制台可能负载过高或网络不稳定"
+        } else {
+            "请检查控制台地址与网络"
+        };
+        format!("请求失败: {e}（{hint}）")
+    })?;
     let status = resp.status().as_u16();
     let text = resp.text().unwrap_or_default();
     // 302→登录页 或 HTML：不要当成成功 JSON（否则命名空间会解析成 0 条）
@@ -861,17 +870,28 @@ fn parse_pod(po: &serde_json::Value) -> PodInfo {
 }
 
 // ---------------------------------------------------------------------------
-// Tauri commands
+// Tauri commands（全部 async + spawn_blocking，避免 blocking HTTP 卡死 UI）
 // ---------------------------------------------------------------------------
+
+async fn ks_blocking<F, T>(f: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("KubeSphere 任务异常: {e}"))?
+}
 
 /// 连接 KubeSphere：优先复用落盘会话 → refreshToken 续期 → 密码登录
 #[tauri::command]
-pub fn ks_connect(
+pub async fn ks_connect(
     env_id: String,
     console: String,
     username: String,
     password: String,
 ) -> Result<KsConnectResult, String> {
+    ks_blocking(move || {
     let env_id = env_id.trim().to_string();
     let username = username.trim().to_string();
     crate::diag::diag_log(
@@ -921,17 +941,22 @@ pub fn ks_connect(
         mode: "login".into(),
         message: "已登录并缓存会话".into(),
     })
+    })
+    .await
 }
 
 /// 兼容旧调用：等价于无 env_id 的密码登录（仍会落盘到 `_default`）
 #[tauri::command]
-pub fn ks_login(console: String, username: String, password: String) -> Result<(), String> {
-    ks_connect("_default".into(), console, username, password).map(|_| ())
+pub async fn ks_login(console: String, username: String, password: String) -> Result<(), String> {
+    ks_connect("_default".into(), console, username, password)
+        .await
+        .map(|_| ())
 }
 
 /// 列出集群全部命名空间
 #[tauri::command]
-pub fn ks_list_namespaces() -> Result<Vec<String>, String> {
+pub async fn ks_list_namespaces() -> Result<Vec<String>, String> {
+    ks_blocking(|| {
     let t0 = Instant::now();
     crate::diag::diag_log("kubesphere", "ks_list_namespaces start");
     let (status, json) = ks_api("GET", "/api/v1/namespaces?limit=100", None)?;
@@ -962,6 +987,8 @@ pub fn ks_list_namespaces() -> Result<Vec<String>, String> {
         ),
     );
     Ok(names)
+    })
+    .await
 }
 
 /// 并行拉取命名空间级列表（共享同一会话 Cookie，避免 3 次串行 RTT）
@@ -972,6 +999,11 @@ fn ks_fetch_ns_lists(
     let dep_path = format!("/apis/apps/v1/namespaces/{ns}/deployments?limit={LIST_LIMIT_DEPLOY}");
     let rs_path = format!("/apis/apps/v1/namespaces/{ns}/replicasets?limit={LIST_LIMIT_RS}");
     let pod_path = format!("/api/v1/namespaces/{ns}/pods?limit={LIST_LIMIT_POD}");
+
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_fetch_ns_lists parallel ns={ns} dep/rs/pod"),
+    );
 
     let (dep_res, rs_res, pod_res) = std::thread::scope(|scope| {
         let s1 = sess.clone();
@@ -987,9 +1019,27 @@ fn ks_fetch_ns_lists(
         )
     });
 
-    let (mut dep_status, mut dep_json) = dep_res?;
-    let (mut rs_status, mut rs_json) = rs_res?;
-    let (mut pod_status, mut pod_json) = pod_res?;
+    let (mut dep_status, mut dep_json) = dep_res.map_err(|e| {
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!("ks_fetch_ns_lists deployments fail ns={ns}: {e}"),
+        );
+        e
+    })?;
+    let (mut rs_status, mut rs_json) = rs_res.map_err(|e| {
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!("ks_fetch_ns_lists replicasets fail ns={ns}: {e}"),
+        );
+        e
+    })?;
+    let (mut pod_status, mut pod_json) = pod_res.map_err(|e| {
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!("ks_fetch_ns_lists pods fail ns={ns}: {e}"),
+        );
+        e
+    })?;
 
     // 任一 401：续期 / 密码重登一次后串行重试（避免三线程同时 refresh 抢锁）
     if dep_status == 401 || rs_status == 401 || pod_status == 401 {
@@ -1036,14 +1086,24 @@ fn ks_fetch_ns_lists(
     }
 
     if dep_status != 200 {
-        return Err(format!("读取部署列表失败 HTTP {dep_status}"));
+        let msg = format!("读取部署列表失败 HTTP {dep_status}");
+        crate::diag::diag_log("kubesphere", &format!("ks_fetch_ns_lists ns={ns}: {msg}"));
+        return Err(msg);
     }
     if rs_status != 200 {
-        return Err(format!("读取 ReplicaSet 列表失败 HTTP {rs_status}"));
+        let msg = format!("读取 ReplicaSet 列表失败 HTTP {rs_status}");
+        crate::diag::diag_log("kubesphere", &format!("ks_fetch_ns_lists ns={ns}: {msg}"));
+        return Err(msg);
     }
     if pod_status != 200 {
-        return Err(format!("读取 Pod 列表失败 HTTP {pod_status}"));
+        let msg = format!("读取 Pod 列表失败 HTTP {pod_status}");
+        crate::diag::diag_log("kubesphere", &format!("ks_fetch_ns_lists ns={ns}: {msg}"));
+        return Err(msg);
     }
+    crate::diag::diag_log(
+        "kubesphere",
+        &format!("ks_fetch_ns_lists ok ns={ns} dep/rs/pod HTTP 200"),
+    );
     Ok((dep_json, rs_json, pod_json))
 }
 
@@ -1051,8 +1111,7 @@ fn ks_fetch_ns_lists(
 ///
 /// 性能：命名空间级 3 次并行拉取（deployments / replicasets / pods），内存按 ownerReference 关联。
 /// 旧实现按部署各打 2 次 API（1+2N），部署一多就会把 UI 拖死。
-#[tauri::command]
-pub fn ks_list_deployments(namespace: String) -> Result<Vec<DeployInfo>, String> {
+fn ks_list_deployments_sync(namespace: String) -> Result<Vec<DeployInfo>, String> {
     let ns = urlencoding(&namespace);
     let t0 = Instant::now();
     crate::diag::diag_log(
@@ -1060,7 +1119,16 @@ pub fn ks_list_deployments(namespace: String) -> Result<Vec<DeployInfo>, String>
         &format!("ks_list_deployments start ns={namespace}"),
     );
 
-    let (json, rs_json, pod_json) = ks_fetch_ns_lists(&ns)?;
+    let (json, rs_json, pod_json) = ks_fetch_ns_lists(&ns).map_err(|e| {
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!(
+                "ks_list_deployments fail ns={namespace} elapsed_ms={}: {e}",
+                t0.elapsed().as_millis()
+            ),
+        );
+        e
+    })?;
     let items = json
         .pointer("/items")
         .and_then(|v| v.as_array())
@@ -1224,9 +1292,19 @@ pub fn ks_list_deployments(namespace: String) -> Result<Vec<DeployInfo>, String>
     Ok(out)
 }
 
+/// async + spawn_blocking：并行拉 deployments/rs/pods 可能 >15s，避免堵 UI 线程。
+#[tauri::command]
+pub async fn ks_list_deployments(namespace: String) -> Result<Vec<DeployInfo>, String> {
+    ks_blocking(move || ks_list_deployments_sync(namespace)).await
+}
+
 /// 列出 Deployment 的 ReplicaSet 历史（revision → 镜像）
 #[tauri::command]
-pub fn ks_list_deployment_revisions(namespace: String, deployment: String) -> Result<Vec<DeployRevision>, String> {
+pub async fn ks_list_deployment_revisions(
+    namespace: String,
+    deployment: String,
+) -> Result<Vec<DeployRevision>, String> {
+    ks_blocking(move || {
     let ns = urlencoding(&namespace);
     let dep = urlencoding(&deployment);
     crate::diag::diag_log(
@@ -1304,6 +1382,8 @@ pub fn ks_list_deployment_revisions(namespace: String, deployment: String) -> Re
     });
     crate::diag::diag_log("kubesphere", &format!("ks_list_deployment_revisions ok count={}", out.len()));
     Ok(out)
+    })
+    .await
 }
 
 /// K8s metadata.name：小写 RFC 1123 subdomain
@@ -1507,7 +1587,7 @@ fn build_deployment_json(
 ///       config_map 引用配置字典（展开为 env[].valueFrom.configMapKeyRef）可选；
 ///       health_path HTTP 探针路径（默认 /actuator/health）；dry_run 仅校验
 #[tauri::command]
-pub fn ks_create_deployment(
+pub async fn ks_create_deployment(
     namespace: String,
     name: String,
     image: String,
@@ -1519,6 +1599,7 @@ pub fn ks_create_deployment(
     health_path: Option<String>,
     dry_run: Option<bool>,
 ) -> Result<String, String> {
+    ks_blocking(move || {
     let cm = config_map.and_then(|s| {
         let t = s.trim().to_string();
         if t.is_empty() { None } else { Some(t) }
@@ -1569,6 +1650,8 @@ pub fn ks_create_deployment(
     } else {
         format!("创建成功：{created}")
     })
+    })
+    .await
 }
 
 /// ---------------------------------------------------------------------------
@@ -1585,7 +1668,8 @@ pub struct ConfigMapInfo {
 
 /// 列出命名空间下全部 ConfigMap（名称 / 别名 / 键列表 / 数据大小）
 #[tauri::command]
-pub fn ks_list_configmaps(namespace: String) -> Result<Vec<ConfigMapInfo>, String> {
+pub async fn ks_list_configmaps(namespace: String) -> Result<Vec<ConfigMapInfo>, String> {
+    ks_blocking(move || {
     let ns = urlencoding(&namespace);
     let t0 = Instant::now();
     crate::diag::diag_log(
@@ -1633,11 +1717,14 @@ pub fn ks_list_configmaps(namespace: String) -> Result<Vec<ConfigMapInfo>, Strin
         ),
     );
     Ok(out)
+    })
+    .await
 }
 
 /// 读取单个 ConfigMap 的 data（供「复制创建」预填）
 #[tauri::command]
-pub fn ks_get_configmap(namespace: String, name: String) -> Result<serde_json::Value, String> {
+pub async fn ks_get_configmap(namespace: String, name: String) -> Result<serde_json::Value, String> {
+    ks_blocking(move || {
     let ns = urlencoding(&namespace);
     let n = urlencoding(&name);
     let (status, json) = ks_api("GET", &format!("/api/v1/namespaces/{ns}/configmaps/{n}"), None)?;
@@ -1645,6 +1732,8 @@ pub fn ks_get_configmap(namespace: String, name: String) -> Result<serde_json::V
         return Err(format!("读取 ConfigMap 失败 HTTP {status}"));
     }
     Ok(json.get("data").cloned().unwrap_or(serde_json::Value::Null))
+    })
+    .await
 }
 
 /// 生成 ConfigMap JSON（表单模式：name + data 的 "K=V" 行）
@@ -1682,12 +1771,13 @@ fn build_configmap_json(namespace: &str, name: &str, data_lines: &[String]) -> R
 
 /// 表单模式创建 ConfigMap（窗口弹窗：名称 + K=V 行）
 #[tauri::command]
-pub fn ks_create_configmap(
+pub async fn ks_create_configmap(
     namespace: String,
     name: String,
     data: Vec<String>,
     dry_run: Option<bool>,
 ) -> Result<String, String> {
+    ks_blocking(move || {
     let cm = build_configmap_json(&namespace, &name, &data)?;
     let ns = urlencoding(&namespace);
     let path = if dry_run.unwrap_or(false) {
@@ -1702,11 +1792,18 @@ pub fn ks_create_configmap(
     }
     let created = resp.pointer("/metadata/name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     Ok(if created.is_empty() { "创建成功（dryRun 校验通过）".to_string() } else { format!("创建成功：{created}") })
+    })
+    .await
 }
 
 /// YAML 模式创建 ConfigMap（粘贴完整 YAML）
 #[tauri::command]
-pub fn ks_create_configmap_yaml(namespace: String, yaml: String, dry_run: Option<bool>) -> Result<String, String> {
+pub async fn ks_create_configmap_yaml(
+    namespace: String,
+    yaml: String,
+    dry_run: Option<bool>,
+) -> Result<String, String> {
+    ks_blocking(move || {
     let ns = urlencoding(&namespace);
     let path = if dry_run.unwrap_or(false) {
         format!("/api/v1/namespaces/{ns}/configmaps?dryRun=All")
@@ -1720,19 +1817,28 @@ pub fn ks_create_configmap_yaml(namespace: String, yaml: String, dry_run: Option
     }
     let created = resp.pointer("/metadata/name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     Ok(if created.is_empty() { "创建成功（dryRun 校验通过）".to_string() } else { format!("创建成功：{created}") })
+    })
+    .await
 }
 
 /// 预览生成的 ConfigMap YAML（复制用）
 #[tauri::command]
-pub fn ks_preview_configmap(namespace: String, name: String, data: Vec<String>) -> Result<String, String> {
+pub async fn ks_preview_configmap(
+    namespace: String,
+    name: String,
+    data: Vec<String>,
+) -> Result<String, String> {
+    ks_blocking(move || {
     let cm = build_configmap_json(&namespace, &name, &data)?;
     let yaml = serde_yaml::to_string(&cm).map_err(|e| format!("YAML 生成失败: {e}"))?;
     Ok(yaml)
+    })
+    .await
 }
 
 /// 预览生成的 Deployment YAML（不创建，用于复制到 kubectl / 控制台）
 #[tauri::command]
-pub fn ks_preview_deployment(
+pub async fn ks_preview_deployment(
     namespace: String,
     name: String,
     image: String,
@@ -1743,6 +1849,7 @@ pub fn ks_preview_deployment(
     config_map: Option<String>,
     health_path: Option<String>,
 ) -> Result<String, String> {
+    ks_blocking(move || {
     let cm = config_map.and_then(|s| {
         let t = s.trim().to_string();
         if t.is_empty() { None } else { Some(t) }
@@ -1758,11 +1865,19 @@ pub fn ks_preview_deployment(
     )?;
     let yaml = serde_yaml::to_string(&deployment).map_err(|e| format!("YAML 生成失败: {e}"))?;
     Ok(yaml)
+    })
+    .await
 }
 
 /// 修改 Deployment 镜像并发布（strategic-merge-patch，触发滚动发布）
 #[tauri::command]
-pub fn ks_update_image(namespace: String, deployment: String, container: String, image: String) -> Result<UpdateResult, String> {
+pub async fn ks_update_image(
+    namespace: String,
+    deployment: String,
+    container: String,
+    image: String,
+) -> Result<UpdateResult, String> {
+    ks_blocking(move || {
     let ns = urlencoding(&namespace);
     let dep = urlencoding(&deployment);
     // 读当前镜像
@@ -1795,6 +1910,8 @@ pub fn ks_update_image(namespace: String, deployment: String, container: String,
         old_rev.clone()
     };
     Ok(UpdateResult { ok: new_image == image, old_image, new_image, revision: new_rev })
+    })
+    .await
 }
 
 /// 拉取 Pod 容器日志（纯文本；不走 JSON ks_api，避免非 JSON 被误判 401）
@@ -1849,13 +1966,14 @@ fn ks_fetch_text_with_recover(path: &str) -> Result<(u16, String), String> {
 
 /// 查看 Pod 日志：`GET .../pods/{pod}/log?timestamps&tailLines[&container][&previous]`
 #[tauri::command]
-pub fn ks_get_pod_logs(
+pub async fn ks_get_pod_logs(
     namespace: String,
     pod: String,
     container: Option<String>,
     tail_lines: Option<u32>,
     previous: Option<bool>,
 ) -> Result<String, String> {
+    ks_blocking(move || {
     let ns = urlencoding(namespace.trim());
     let pod_name = urlencoding(pod.trim());
     if ns.is_empty() || pod_name.is_empty() {
@@ -1920,6 +2038,8 @@ pub fn ks_get_pod_logs(
         ),
     );
     Ok(text)
+    })
+    .await
 }
 
 /// 修改弹框回填：与创建表单字段对齐
@@ -1938,7 +2058,8 @@ pub struct DeployEditInfo {
 }
 
 #[tauri::command]
-pub fn ks_get_deployment_edit(namespace: String, deployment: String) -> Result<DeployEditInfo, String> {
+pub async fn ks_get_deployment_edit(namespace: String, deployment: String) -> Result<DeployEditInfo, String> {
+    ks_blocking(move || {
     let ns = urlencoding(&namespace);
     let dep = urlencoding(&deployment);
     crate::diag::diag_log(
@@ -2023,11 +2144,13 @@ pub fn ks_get_deployment_edit(namespace: String, deployment: String) -> Result<D
         config_map,
         envs,
     })
+    })
+    .await
 }
 
 /// 按创建表单同款字段更新 Deployment（merge-patch，触发滚动发布）
 #[tauri::command]
-pub fn ks_update_deployment(
+pub async fn ks_update_deployment(
     namespace: String,
     name: String,
     image: String,
@@ -2039,6 +2162,7 @@ pub fn ks_update_deployment(
     health_path: Option<String>,
     container: Option<String>,
 ) -> Result<UpdateResult, String> {
+    ks_blocking(move || {
     let ns = urlencoding(&namespace);
     let dep = urlencoding(&name);
     let container = container
@@ -2151,11 +2275,14 @@ pub fn ks_update_deployment(
         new_image,
         revision: new_rev,
     })
+    })
+    .await
 }
 
 /// 登出（清空内存会话；传 env_id 时同时清该环境落盘缓存）
 #[tauri::command]
-pub fn ks_logout(env_id: Option<String>) -> Result<(), String> {
+pub async fn ks_logout(env_id: Option<String>) -> Result<(), String> {
+    ks_blocking(move || {
     let mut guard = SESSION.lock().map_err(|_| "会话锁不可用".to_string())?;
     *guard = None;
     if let Some(id) = env_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
@@ -2165,6 +2292,8 @@ pub fn ks_logout(env_id: Option<String>) -> Result<(), String> {
         crate::diag::diag_log("kubesphere", "ks_logout memory only");
     }
     Ok(())
+    })
+    .await
 }
 
 // ---------------------------------------------------------------------------
@@ -2302,7 +2431,7 @@ mod integration {
         println!("connect mode={} msg={}", r.mode, r.message);
         let ns = ks_list_namespaces().expect("ns failed");
         println!("namespaces: {:?}", ns);
-        let deps = ks_list_deployments("klcj-zt-dev".into()).expect("deps failed");
+        let deps = ks_list_deployments_sync("klcj-zt-dev".into()).expect("deps failed");
         for d in &deps {
             println!("{} | {} | {} | new{} old{}", d.name, d.status.label, d.status.detail, d.pods.new_pods.len(), d.pods.old_pods.len());
         }

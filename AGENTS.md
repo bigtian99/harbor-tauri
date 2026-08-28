@@ -96,6 +96,14 @@ pnpm release
 - `@tauri-apps/plugin-shell` — shell command execution
 - `@tauri-apps/plugin-opener` — open URLs/files in system default app
 
+## 防 UI 卡死（强制性）
+
+新增/修改 Tauri 命令时遵守 [docs/non-blocking-ui-spec.md](docs/non-blocking-ui-spec.md)：
+
+- **>50ms 的 I/O**（网络、git/docker/mvn 子进程、大文件）→ `async` command + `spawn_blocking`，禁止同步 `#[tauri::command]` + `reqwest::blocking`
+- HTTP/子进程必须设超时；长任务 emit 进度 + 前端 loading
+- 启动路径延迟非关键网络；自动检查更新失败静默跳过
+
 ## 日志规范（强制性）
 
 **每个功能开发都必须输出诊断日志**，方便通过「系统日志」查看器排查问题，不依赖控制台或外部工具。

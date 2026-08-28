@@ -206,6 +206,8 @@ export function ConfigPanel({
       setKsEnvs(ksEnvs.map((env) => (env.id === draft.id ? draft : env)));
     }
     closeKsEnvEditor();
+    // 立刻落盘，避免只改内存后切到发布页以为已保存、重启又丢
+    handleSaveConfig();
   };
 
   const removeKsEnv = async (env: KsEnvironment) => {
@@ -215,7 +217,10 @@ export function ConfigPanel({
       confirmLabel: "删除",
       variant: "danger",
     });
-    if (ok) setKsEnvs(ksEnvs.filter((item) => item.id !== env.id));
+    if (ok) {
+      setKsEnvs(ksEnvs.filter((item) => item.id !== env.id));
+      handleSaveConfig();
+    }
   };
 
   return (

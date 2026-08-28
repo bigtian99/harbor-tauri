@@ -240,7 +240,7 @@ export function BranchPanel({
             </label>
             <p className="template-hint">
               {packageWithBackend
-                ? "前端构建完成后将在仓库根目录执行 mvn clean package -DskipTests"
+                ? "前端构建完成后将在仓库根目录执行 mvn clean package -Dmaven.test.skip=true"
                 : "勾选后会将仓库根目录的 Spring Boot 后端一同打包"}
             </p>
           </div>
@@ -317,13 +317,13 @@ export function BranchPanel({
         <div className="branch-command-preview">
           固定命令：
           <code>{branchProjectType === "maven"
-            ? `mvn clean package -DskipTests${springProfile.trim() ? ` -Dspring.profiles.active=${springProfile.trim()}` : ""}`
+            ? `mvn clean package -Dmaven.test.skip=true${springProfile.trim() ? ` -Dspring.profiles.active=${springProfile.trim()}` : ""}`
             : `npm install && npm run ${selectedBuildScript || "build"}`}</code>
           {branchProjectType === "npm" && packageWithBackend && (
             <>
               <br />
               <span style={{ marginLeft: "2.5em" }}>+</span>{" "}
-              <code>mvn clean package -DskipTests</code>
+              <code>mvn clean package -Dmaven.test.skip=true</code>
               {" "}<span style={{ color: "var(--muted)", fontSize: "0.8em" }}>(仓库根目录)</span>
             </>
           )}

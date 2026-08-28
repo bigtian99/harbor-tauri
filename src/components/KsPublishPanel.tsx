@@ -35,7 +35,6 @@ import {
 import {
   appendBuildProgressLog,
   normalizeBatchBranchInput,
-  parseBatchStepLabel,
   scaleBatchBuildPercent,
 } from "../utils/buildProgressLog";
 import {
@@ -303,6 +302,8 @@ export function KsPublishPanel({
   const [batchMessage, setBatchMessage] = useState("");
   /** 当前批量项标题，用于与 build-progress 子进度拼接 */
   const batchStepLabelRef = useRef("");
+  const batchItemIndexRef = useRef(0);
+  const batchItemTotalRef = useRef(1);
   /** 部署名精确筛选（下拉）；空 = 全部 */
   const [filterDeploy, setFilterDeploy] = useState<string | null>(null);
   /** all | bad | 具体 status.state */
@@ -364,10 +365,13 @@ export function KsPublishPanel({
   const deploysFpRef = useRef("");
 
   const selectedEnv = pickKsEnvironment(envs, envId);
+  /** 环境列表指纹：新增/删除环境后需重新自动连接 */
+  const envsFp = envs.map((e) => e.id).join(",");
 
-  const connect = async (id?: string | null) => {
+  const connect = useCallback(async (id?: string | null) => {
     const gen = ++connectGenRef.current;
-    const env = pickKsEnvironment(envs, id ?? envId);
+    const latestEnvs = resolveKsEnvironments(config);
+    const env = pickKsEnvironment(latestEnvs, id ?? envId);
     if (!env) {
       if (gen !== connectGenRef.current) return;
       setStatusText("未配置环境：请到 系统设置 → KubeSphere 添加 dev / test / prod");
@@ -406,7 +410,7 @@ export function KsPublishPanel({
         setNamespaces([]);
         setNamespace(null);
         setConnected(false);
-        setStatusText(`「${env.name}」已连接但未拿到命名空间，会话可能已失效，请再点环境重连`);
+        setStatusText(`「${env.name}」已连接但未拿到命名空间，会话可能已失效，请点「重新连接」`);
         notifications.show({
           color: "yellow",
           message: `「${env.name}」命名空间为空，请重新连接`,
@@ -437,7 +441,7 @@ export function KsPublishPanel({
     } finally {
       if (gen === connectGenRef.current) setConnecting(false);
     }
-  };
+  }, [config, envId]);
 
   const switchEnv = (id: string | null) => {
     setEnvId(id);
@@ -445,14 +449,24 @@ export function KsPublishPanel({
     void connect(id);
   };
 
-  // 等配置加载完成再自动连接；避免 reload 恢复页签时抢跑空默认配置
+  // 配置就绪 + 环境列表变化时自动连接（新建环境后进入本页也能连上）
   useEffect(() => {
     if (!configReady) {
       setStatusText("正在加载配置…");
       return;
     }
-    const nextId = pickKsEnvironment(envs, config.ks_last_env_id)?.id ?? null;
+    if (envs.length === 0) {
+      setEnvId(null);
+      setConnected(false);
+      setStatusText("未配置环境：请到 系统设置 → KubeSphere 添加环境");
+      return;
+    }
+    const nextId =
+      (envId && envs.some((e) => e.id === envId) ? envId : null)
+      ?? pickKsEnvironment(envs, config.ks_last_env_id)?.id
+      ?? null;
     setEnvId(nextId);
+    if (nextId) onLastEnvChange?.(nextId);
     const t = setTimeout(() => {
       void connect(nextId);
     }, 40);
@@ -461,7 +475,7 @@ export function KsPublishPanel({
       connectGenRef.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configReady]);
+  }, [configReady, envsFp]);
 
   const loadCms = useCallback(async () => {
     if (!connected || !namespace) return;
@@ -513,6 +527,15 @@ export function KsPublishPanel({
       if (seq === loadSeqRef.current && !silent) setLoading(false);
     }
   }, [connected, namespace, loadCms]);
+
+  /** 未连接时点刷新/重连应走 connect；已连接则拉部署列表 */
+  const handleRefreshOrReconnect = () => {
+    if (!connected) {
+      void connect(envId);
+      return;
+    }
+    void load({ silent: false, withCms: mainTab === "config" });
+  };
 
   // 自动刷新：批量弹窗打开或执行中暂停，避免后台刷新拖死 UI
   const batchUiActive = batchConfirmOpen || batchOpen || batchRunning;
@@ -592,8 +615,10 @@ export function KsPublishPanel({
       (event) => {
         const { percent, message } = event.payload;
         const step = batchStepLabelRef.current;
-        const { index, total } = parseBatchStepLabel(step);
-        setBatchProgress(scaleBatchBuildPercent(index, total, percent));
+        const index = batchItemIndexRef.current;
+        const total = batchItemTotalRef.current;
+        const scaled = scaleBatchBuildPercent(index, total, percent);
+        setBatchProgress((prev) => Math.max(prev, scaled));
         setBatchMessage(step ? `${step} · ${message}` : message);
         setBatchLog((prev) => appendBuildProgressLog(prev, message));
       },
@@ -894,9 +919,13 @@ export function KsPublishPanel({
           containers: d.containers,
         })),
         appendLog: (line) => setBatchLog((prev) => (prev ? `${prev}\n${line}` : line)),
-        onProgress: (pct, msg) => {
+        onProgress: (pct, msg, ctx) => {
           batchStepLabelRef.current = msg;
-          setBatchProgress(pct);
+          if (ctx) {
+            batchItemIndexRef.current = ctx.itemIndex;
+            batchItemTotalRef.current = ctx.itemTotal;
+          }
+          setBatchProgress((prev) => Math.max(prev, pct));
           setBatchMessage(msg);
         },
       });
@@ -1349,15 +1378,29 @@ export function KsPublishPanel({
             </Group>
           </Group>
           <SimpleGrid cols={connected ? 2 : 1} spacing="md" className="ks-form-2col">
-            <Select
-              label="环境"
-              description="KubeSphere 控制台环境"
-              data={envs.map((env) => ({ value: env.id, label: env.name || env.id }))}
-              value={envId}
-              onChange={switchEnv}
-              placeholder={envs.length ? "选择环境" : "请先在设置中添加环境"}
-              disabled={connecting || envs.length === 0}
-            />
+            <Group align="flex-end" gap="sm" wrap="nowrap" grow>
+              <Select
+                style={{ flex: 1 }}
+                label="环境"
+                description="KubeSphere 控制台环境"
+                data={envs.map((env) => ({ value: env.id, label: env.name || env.id }))}
+                value={envId}
+                onChange={switchEnv}
+                placeholder={envs.length ? "选择环境" : "请先在设置中添加环境"}
+                disabled={connecting || envs.length === 0}
+              />
+              <Button
+                size="sm"
+                variant="default"
+                leftSection={<RefreshCw size={14} />}
+                loading={connecting}
+                disabled={envs.length === 0 || !envId}
+                onClick={() => void connect(envId)}
+                title="重新连接当前环境"
+              >
+                重新连接
+              </Button>
+            </Group>
             {connected && (
               <Select
                 label="命名空间"
@@ -1399,8 +1442,8 @@ export function KsPublishPanel({
                       size="xs"
                       disabled={!autoRefresh}
                     />
-                    <Button size="xs" variant="default" leftSection={<RefreshCw size={13} />} loading={loading} onClick={() => void load({ silent: false, withCms: mainTab === "config" })}>
-                      刷新
+                    <Button size="xs" variant="default" leftSection={<RefreshCw size={13} />} loading={loading || connecting} onClick={handleRefreshOrReconnect}>
+                      {connected ? "刷新" : "重新连接"}
                     </Button>
                     <Button size="xs" variant="default" leftSection={<Plus size={13} />} onClick={() => setCreateOpen(true)}>
                       创建部署

@@ -33,7 +33,7 @@ export function SpringProfileSection({
       />
       <p className="template-hint">
         {springProfile
-          ? `将执行: mvn clean package -DskipTests -Dspring.profiles.active=${springProfile}`
+          ? `将执行: mvn clean package -Dmaven.test.skip=true -Dspring.profiles.active=${springProfile}`
           : springProfiles.length > 0
             ? `检测到 ${springProfiles.length} 个 profile: ${springProfiles.join(", ")}`
             : "留空则不添加 -Dspring.profiles.active 参数"}

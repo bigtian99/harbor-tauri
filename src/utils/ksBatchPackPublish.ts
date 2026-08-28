@@ -63,7 +63,11 @@ export interface KsBatchPackOptions {
   /** 并行度；0/省略 = 按 CPU·任务·仓库数自动算 */
   concurrency?: number;
   appendLog: (line: string) => void;
-  onProgress: (pct: number, message: string) => void;
+  onProgress: (
+    pct: number,
+    message: string,
+    ctx?: { itemIndex: number; itemTotal: number },
+  ) => void;
 }
 
 interface UpdateResult {
@@ -462,15 +466,29 @@ export async function runKsBatchPackPublish(
   let active = 0;
   const withRepoGate = createRepoPathGate();
 
-  const bumpProgress = (label: string) => {
+  /** 进行中用「已开始数」；完成时用「已完成数」，避免 0/1 打包中 */
+  const slotCount = (phase: "running" | "done") =>
+    phase === "done" ? finished : finished + active;
+
+  const bumpProgress = (
+    phase: "running" | "done",
+    detail: string,
+    ctx?: { itemIndex: number },
+  ) => {
     const pct = Math.round((finished / total) * 100);
-    onProgress(pct, active > 0 ? `并行 ${active} · ${label}` : label);
+    const label = `${slotCount(phase)}/${total} · ${detail}`;
+    const message = active > 0 ? `并行 ${active} · ${label}` : label;
+    onProgress(
+      pct,
+      message,
+      ctx ? { itemIndex: ctx.itemIndex, itemTotal: total } : undefined,
+    );
   };
 
   await mapPool(targets, concurrency, async (target, i) => {
     const step = i + 1;
     active += 1;
-    bumpProgress(`[${step}/${total}] ${target.deployment} 打包中…`);
+    bumpProgress("running", `${target.deployment} 打包中…`, { itemIndex: i });
     note(
       summary,
       appendLog,
@@ -522,7 +540,7 @@ export async function runKsBatchPackPublish(
         return;
       }
 
-      bumpProgress(`[${step}/${total}] ${target.deployment} 发布到 K8s…`);
+      bumpProgress("running", `${target.deployment} 发布到 K8s…`, { itemIndex: i });
       note(summary, appendLog, `  ✓ 已推送 ${image}`);
 
       const r = await publishImageToDeploy(
@@ -548,7 +566,7 @@ export async function runKsBatchPackPublish(
     } finally {
       active -= 1;
       finished += 1;
-      bumpProgress(`[${finished}/${total}] 已完成`);
+      bumpProgress("done", `${target.deployment} 已完成`);
     }
   });
 

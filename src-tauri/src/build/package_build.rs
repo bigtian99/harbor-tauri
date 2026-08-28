@@ -33,7 +33,7 @@ pub(crate) fn run_project_build(app: &AppHandle, params: BuildParams) -> Result<
 
     match params.project_type {
         PackageProjectType::Maven => {
-            let mut mvn_args = vec!["clean", "package", "-DskipTests"];
+            let mut mvn_args = vec!["clean", "package", "-Dmaven.test.skip=true"];
             let profile_arg;
             if let Some(ref profile) = params.spring_profile {
                 if !profile.trim().is_empty() {
@@ -81,11 +81,11 @@ fn run_npm_build(
             }
             let mvn_base = if let Some(ref profile) = sp {
                 format!(
-                    "clean package -DskipTests -Dspring.profiles.active={}",
+                    "clean package -Dmaven.test.skip=true -Dspring.profiles.active={}",
                     profile
                 )
             } else {
-                "clean package -DskipTests".to_string()
+                "clean package -Dmaven.test.skip=true".to_string()
             };
             logs.push(format!("☕ 启动后端并行构建: mvn {}", mvn_base));
             emit_progress(

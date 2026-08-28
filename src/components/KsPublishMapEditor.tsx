@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ChevronDown, FolderOpen, Loader2, RefreshCw, Save } from "lucide-react";
 import type { HarborConfig, KsPublishMap, KsPublishMapRole } from "../types";
 import { isTauriRuntime } from "../types";
-import { resolveKsEnvironments } from "../utils/ksEnvironments";
+import { pickKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
 import {
   resolveKlcjZtExposePort,
   suggestKlcjZtByGitUrl,
@@ -107,24 +107,37 @@ export function KsPublishMapEditor({
 
   const connectSeqRef = useRef(0);
 
+  /** 环境凭证指纹：保存配置或改地址/密码后需重新连接 */
+  const envsFp = useMemo(
+    () =>
+      resolveKsEnvironments(config)
+        .map((e) => `${e.id}:${e.console}:${e.username}:${e.password}`)
+        .join("|"),
+    [config],
+  );
+
   const connect = useCallback(async (targetEnvId?: string) => {
     const id = targetEnvId ?? envId;
-    const env = ksEnvs.find((e) => e.id === id);
+    const latestEnvs = resolveKsEnvironments(config);
+    const env = latestEnvs.find((e) => e.id === id);
     if (!env) {
       setStatusText("请先添加 KubeSphere 环境");
       setConnected(false);
+      setNamespaces([]);
       return;
     }
     if (!isTauriRuntime()) {
       setStatusText("请在 Tauri 桌面窗口中连接");
+      setConnected(false);
       return;
     }
     const consoleUrl = env.console?.trim() || "";
     const username = env.username?.trim() || "";
     const password = env.password ?? "";
     if (!consoleUrl || !username || !password) {
-      setStatusText(`环境「${env.name}」未配齐地址/账号/密码`);
+      setStatusText(`环境「${env.name}」未配齐地址/账号/密码，请先保存 KubeSphere 配置`);
       setConnected(false);
+      setNamespaces([]);
       return;
     }
     const seq = ++connectSeqRef.current;
@@ -146,7 +159,10 @@ export function KsPublishMapEditor({
       const ns = await invoke<string[]>("ks_list_namespaces");
       if (seq !== connectSeqRef.current) return;
       if (ns.length === 0) {
-        setStatusText(`「${env.name}」未拿到命名空间，请重连`);
+        setNamespaces([]);
+        setNamespace("");
+        setConnected(false);
+        setStatusText(`「${env.name}」已连接但未拿到命名空间，请点「重新连接」`);
         return;
       }
       setNamespaces(ns);
@@ -156,20 +172,41 @@ export function KsPublishMapEditor({
       setStatusText(`已连接「${env.name}」，共 ${ns.length} 个命名空间`);
     } catch (e) {
       if (seq !== connectSeqRef.current) return;
-      setStatusText(`连接失败：${e}`);
+      setStatusText(`连接失败：${e}（请检查 KubeSphere 地址/账号/密码）`);
       setConnected(false);
+      setNamespaces([]);
     } finally {
       if (seq === connectSeqRef.current) setConnecting(false);
     }
-  }, [envId, ksEnvs]);
+  }, [config, envId]);
 
-  // 选中环境后默认自动连接（无需点「连接并加载」）
+  // 配置保存或环境列表变化时自动连接；切换 envId 由下拉 onChange 触发 connect
   useEffect(() => {
-    if (!envId || ksEnvs.length === 0) return;
-    void connect(envId);
-    // 仅随 envId 变化自动连接；connect 本身依赖 ksEnvs
+    const envs = resolveKsEnvironments(config);
+    if (envs.length === 0) {
+      setConnected(false);
+      setNamespaces([]);
+      setStatusText("请先添加 KubeSphere 环境");
+      return;
+    }
+    const validId =
+      (envId && envs.some((e) => e.id === envId) ? envId : null)
+      ?? pickKsEnvironment(envs, config.ks_last_env_id)?.id
+      ?? envs[0]?.id
+      ?? "";
+    if (validId && validId !== envId) {
+      setEnvId(validId);
+    }
+    if (!validId) return;
+    const t = setTimeout(() => {
+      void connect(validId);
+    }, 40);
+    return () => {
+      clearTimeout(t);
+      connectSeqRef.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [envId]);
+  }, [envsFp]);
 
   const loadDeploys = useCallback(async (ns: string) => {
     if (!connected || !ns) return;
@@ -354,12 +391,14 @@ export function KsPublishMapEditor({
                 value={envId}
                 disabled={connecting}
                 onChange={(e) => {
-                  setEnvId(e.target.value);
+                  const next = e.target.value;
+                  setEnvId(next);
                   setConnected(false);
                   setNamespace("");
                   setNamespaces([]);
                   setDeploys([]);
                   setRows([]);
+                  void connect(next);
                 }}
               >
                 {ksEnvs.map((env) => (
@@ -375,8 +414,15 @@ export function KsPublishMapEditor({
               <select
                 className="config-select"
                 value={namespace}
-                disabled={connecting || !connected || namespaces.length === 0}
+                disabled={connecting || namespaces.length === 0}
                 onChange={(e) => setNamespace(e.target.value)}
+                title={
+                  connecting
+                    ? "连接中…"
+                    : namespaces.length === 0
+                      ? "请先连接环境以加载命名空间"
+                      : undefined
+                }
               >
                 {!namespace && <option value="">选择命名空间</option>}
                 {namespaces.map((ns) => (

@@ -206,7 +206,13 @@ pub fn get_app_version() -> String {
 }
 
 #[tauri::command]
-pub fn check_update() -> Result<UpdateInfo, String> {
+pub async fn check_update() -> Result<UpdateInfo, String> {
+    tauri::async_runtime::spawn_blocking(check_update_sync)
+        .await
+        .map_err(|e| format!("检查更新任务异常: {e}"))?
+}
+
+fn check_update_sync() -> Result<UpdateInfo, String> {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
 
     let client = match http_client(REQUEST_TIMEOUT) {
