@@ -6,9 +6,9 @@
   gap: 10px;
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px dashed rgba(100, 255, 218, 0.55);
-  background: rgba(100, 255, 218, 0.1);
-  color: #64ffda;
+  border: 1px dashed var(--color-primary-muted);
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
   font-size: 13px;
   font-weight: 600;
 }
@@ -67,12 +67,12 @@
 }
 
 .bt-java-row.bt-java-row--drag-active {
-  background: rgba(100, 255, 218, 0.03);
+  background: var(--color-primary-muted);
 }
 
 .bt-java-row.bt-java-row--drop-target {
-  background: rgba(100, 255, 218, 0.16) !important;
-  box-shadow: inset 0 0 0 2px #64ffda;
+  background: var(--color-primary-muted) !important;
+  box-shadow: inset 0 0 0 2px var(--color-primary);
 }
 
 .bt-java-row-hint {
@@ -85,7 +85,7 @@
   border-radius: 999px;
   font-size: 11px;
   line-height: 1.4;
-  color: #8892b0;
+  color: var(--color-text-muted);
   background: rgba(136, 146, 176, 0.12);
   border: 1px solid rgba(136, 146, 176, 0.25);
   white-space: nowrap;
@@ -95,15 +95,15 @@
 }
 
 .bt-java-row.bt-java-row--drag-active .bt-java-row-hint {
-  color: #64ffda;
-  background: rgba(100, 255, 218, 0.12);
-  border-color: rgba(100, 255, 218, 0.4);
+  color: var(--color-primary);
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary-muted);
 }
 
 .bt-java-row.bt-java-row--drop-target .bt-java-row-hint {
-  color: #0a0e27;
-  background: #64ffda;
-  border-color: #64ffda;
+  color: #fff;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
   font-weight: 700;
 }
 
@@ -138,8 +138,8 @@
 .bt-java-progress-bar {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #5eead4 0%, #48c9b0 100%);
-  box-shadow: 0 0 10px rgba(100, 255, 218, 0.45);
+  background: linear-gradient(90deg, var(--color-primary-hover) 0%, var(--color-success) 100%);
+  box-shadow: 0 0 10px var(--color-primary-muted);
   /* 平滑追进度：时长略大于 FTP 回调间隔，看起来是连续涨而不是一截一截跳 */
   transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: width;

@@ -1,0 +1,45 @@
+/* 隐私协议：提高次要按钮对比度，压低留白 */
+
+.privacy-panel .privacy-btn-secondary {
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-border-strong) !important;
+  background: var(--color-bg-elevated) !important;
+  font-weight: 560;
+}
+
+.privacy-panel .privacy-btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-bg-elevated) 70%, var(--color-primary-muted)) !important;
+  border-color: var(--color-primary-muted) !important;
+  color: var(--color-text) !important;
+}
+
+.privacy-panel .privacy-btn-secondary:disabled {
+  opacity: 0.45;
+  color: var(--color-text-muted) !important;
+}
+
+.privacy-panel .privacy-btn-danger {
+  color: var(--color-error) !important;
+  border: 1px solid var(--color-border-strong) !important;
+  background: var(--color-bg-elevated) !important;
+  font-weight: 560;
+}
+
+.privacy-panel .privacy-btn-danger:hover:not(:disabled) {
+  background: var(--color-error-muted, rgba(239, 68, 68, 0.15)) !important;
+  border-color: color-mix(in srgb, var(--color-error) 45%, transparent) !important;
+}
+
+.privacy-panel .privacy-btn-danger:disabled {
+  opacity: 0.4;
+}
+
+.privacy-panel .mantine-Table-th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.privacy-panel .mantine-Table-td {
+  color: var(--color-text);
+}

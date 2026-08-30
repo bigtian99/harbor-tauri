@@ -3,6 +3,10 @@ import {
   Button,
   Group,
   Title,
+  Paper,
+  Stack,
+  SegmentedControl,
+  Text,
 } from "@mantine/core";
 import {
   Globe,
@@ -13,6 +17,12 @@ import {
   Package,
 } from "lucide-react";
 import type { LandingMode } from "../../hooks/useLanding";
+import {
+  panelFieldStyles,
+  panelPaperStyles,
+  panelPrimaryButtonStyles,
+  panelSegmentedStyles,
+} from "../../theme/panelStyles";
 
 interface LandingChannelFormProps {
   landingIds: string;
@@ -51,107 +61,107 @@ export function LandingChannelForm({
 }: LandingChannelFormProps) {
   return (
     <>
-      {/* 标题 */}
-      <Group gap="xs">
-        <Globe size={22} />
-        <Title order={3}>生成落地页</Title>
-      </Group>
-
-      {/* 模式切换 */}
-      <Group gap={0} mb="xs">
-        <Button
-          size="xs"
-          variant="filled"
-          style={{
-            borderRadius: "6px 0 0 6px",
-            background: landingMode === "sub_channel" ? "#5eead4" : "#1a2332",
-            color: landingMode === "sub_channel" ? "#0a0f1a" : "#8892b0",
-            border: "1px solid #2a3a5c",
-            fontWeight: landingMode === "sub_channel" ? 700 : 400,
-          }}
-          onClick={() => setLandingMode("sub_channel")}
-        >
-          子渠道
-        </Button>
-        <Button
-          size="xs"
-          variant="filled"
-          style={{
-            borderRadius: "0 6px 6px 0",
-            background: landingMode === "vest" ? "#5eead4" : "#1a2332",
-            color: landingMode === "vest" ? "#0a0f1a" : "#8892b0",
-            border: "1px solid #2a3a5c",
-            borderLeft: "none",
-            fontWeight: landingMode === "vest" ? 700 : 400,
-          }}
-          onClick={() => setLandingMode("vest")}
-        >
-          马甲包
-        </Button>
-      </Group>
-
-      {/* 马甲包 Authorization */}
-      {landingMode === "vest" && (
-        <TextInput
-          value={vestAuthorization}
-          onChange={(e) => setVestAuthorization(e.currentTarget.value)}
-          placeholder="Bearer token 或 Authorization 值"
-          label="Authorization"
-          type="password"
-        />
-      )}
-
-      {/* IDs */}
-      <TextInput
-        value={landingIds}
-        onChange={(e) => setLandingIds(e.currentTarget.value)}
-        placeholder={landingMode === "vest" ? "例如: 512,513" : "例如: 154,155,156"}
-        label={landingMode === "vest" ? "马甲包 IDs（逗号分隔）" : "子渠道 IDs（逗号分隔）"}
-      />
-
-      {/* 操作按钮 */}
-      <Group gap="sm">
-        {!hasGeneratedResults && (
-          <Button
-            leftSection={isFetchingPreview || isGenerating ? <Loader2 size={14} className="spin" /> : <Rocket size={14} />}
-            disabled={!landingIds || isFetchingPreview || isGenerating}
-            onClick={onPreview}
-            variant="gradient"
-            gradient={{ from: "teal", to: "cyan" }}
-          >
-            预览数据
-          </Button>
-        )}
-        {hasGeneratedResults && !isGenerating && (
-          <Button
-            leftSection={isUploadingToFtp ? <Loader2 size={14} className="spin" /> : <ExternalLink size={14} />}
-            disabled={isUploadingToFtp}
-            onClick={onFtpUpload}
-            color="blue"
-          >
-            上传到 FTP
-          </Button>
-        )}
-        {hasFtpResults && !isGenerating && (
-          <Button
-            leftSection={<Copy size={14} />}
-            onClick={onCopyAllLinks}
-            variant="outline"
-            color="gray"
-          >
-            复制所有链接
-          </Button>
-        )}
+      <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+        <Group gap="sm" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
+          <Globe size={20} color="var(--color-primary)" style={{ marginTop: 2, flexShrink: 0 }} />
+          <div style={{ minWidth: 0 }}>
+            <Title order={3} c="var(--color-text)" style={{ lineHeight: 1.25 }}>
+              生成落地页
+            </Title>
+            <Text size="xs" c="var(--color-text-muted)" mt={4}>
+              按子渠道或马甲包生成落地页，预览后可上传 FTP。
+            </Text>
+          </div>
+        </Group>
         <Button
           leftSection={<Package size={14} />}
           onClick={onOpenTemplateManager}
-          variant="light"
-          color="gray"
-          style={{ marginLeft: "auto" }}
+          variant="default"
+          size="sm"
+          className="ops-btn-secondary"
         >
           管理模板
         </Button>
       </Group>
+
+      <Paper p="lg" radius="md" styles={panelPaperStyles}>
+        <Stack gap="md">
+          <SegmentedControl
+            size="sm"
+            value={landingMode}
+            onChange={(v) => setLandingMode(v as LandingMode)}
+            data={[
+              { value: "sub_channel", label: "子渠道" },
+              { value: "vest", label: "马甲包" },
+            ]}
+            styles={panelSegmentedStyles}
+          />
+
+          {landingMode === "vest" && (
+            <TextInput
+              value={vestAuthorization}
+              onChange={(e) => setVestAuthorization(e.currentTarget.value)}
+              placeholder="Bearer token 或 Authorization 值"
+              label="Authorization"
+              type="password"
+              styles={panelFieldStyles}
+            />
+          )}
+
+          <TextInput
+            value={landingIds}
+            onChange={(e) => setLandingIds(e.currentTarget.value)}
+            placeholder={landingMode === "vest" ? "例如: 512,513" : "例如: 154,155,156"}
+            label={landingMode === "vest" ? "马甲包 IDs（逗号分隔）" : "子渠道 IDs（逗号分隔）"}
+            styles={panelFieldStyles}
+          />
+
+          <Group gap="sm" mt={4}>
+            {!hasGeneratedResults && (
+              <Button
+                leftSection={
+                  isFetchingPreview || isGenerating ? (
+                    <Loader2 size={14} className="spin" />
+                  ) : (
+                    <Rocket size={14} />
+                  )
+                }
+                disabled={!landingIds || isFetchingPreview || isGenerating}
+                onClick={onPreview}
+                variant="filled"
+                color="blue"
+                styles={panelPrimaryButtonStyles}
+              >
+                预览数据
+              </Button>
+            )}
+            {hasGeneratedResults && !isGenerating && (
+              <Button
+                leftSection={
+                  isUploadingToFtp ? <Loader2 size={14} className="spin" /> : <ExternalLink size={14} />
+                }
+                disabled={isUploadingToFtp}
+                onClick={onFtpUpload}
+                variant="filled"
+                color="blue"
+                styles={panelPrimaryButtonStyles}
+              >
+                上传到 FTP
+              </Button>
+            )}
+            {hasFtpResults && !isGenerating && (
+              <Button
+                leftSection={<Copy size={14} />}
+                onClick={onCopyAllLinks}
+                variant="default"
+                className="ops-btn-secondary"
+              >
+                复制所有链接
+              </Button>
+            )}
+          </Group>
+        </Stack>
+      </Paper>
     </>
   );
 }

@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  Alert,
+  Button,
+  Group,
+  NumberInput,
+  Paper,
+  PasswordInput,
+  SegmentedControl,
+  Stack,
+  Text,
+  Textarea,
+} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AlertTriangle, CheckCircle, KeyRound, Loader2, LogIn, Rocket } from "lucide-react";
 
@@ -14,6 +26,9 @@ import { isTauriRuntime } from "../types";
 import type { BatchPackResult } from "../types";
 import type { BatchPackType } from "../opsBatchPack";
 
+import { panelPaperStyles, panelPrimaryButtonStyles, panelSegmentedStyles, panelFieldStyles } from "../theme/panelStyles";
+import "../styles/ops-panel.css";
+
 interface PackSpeedPanelProps {
   authorization: string;
   onAuthorizationChange: (value: string) => void;
@@ -26,6 +41,8 @@ interface OpsAuthTokenCapturedPayload {
   packType?: BatchPackType;
 }
 
+const fieldStyles = panelFieldStyles;
+
 export function PackSpeedPanel({
   authorization,
   onAuthorizationChange,
@@ -36,7 +53,7 @@ export function PackSpeedPanel({
   const [localAuthorization, setLocalAuthorization] = useState(authorization);
   const [batchPackType, setBatchPackType] = useState<BatchPackType>("subChannel");
   const [idsText, setIdsText] = useState("");
-  const [priority, setPriority] = useState("0");
+  const [priority, setPriority] = useState<number | string>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpeningLogin, setIsOpeningLogin] = useState(false);
   const [result, setResult] = useState<BatchPackResult | null>(null);
@@ -84,7 +101,7 @@ export function PackSpeedPanel({
             message: syncedIds.length > 0
               ? `登录 token 已获取，并同步 ${syncedIds.length} 个${getBatchPackIdLabel(event.payload.packType || batchPackType)}`
               : "登录 token 已在本次运行中可用",
-            color: "teal",
+            color: "cyan",
             autoClose: 3000,
           });
         } catch (e) {
@@ -145,7 +162,7 @@ export function PackSpeedPanel({
   }
 
   const ids = parseSubChannelIds(idsText);
-  const numericPriority = Number.parseInt(priority || "0", 10);
+  const numericPriority = typeof priority === "number" ? priority : Number.parseInt(String(priority || "0"), 10);
   const idLabel = getBatchPackIdLabel(batchPackType);
   const canSubmit =
     localAuthorization.trim() &&
@@ -205,7 +222,7 @@ export function PackSpeedPanel({
       if (response.code === 200) {
         notifications.show({
           message: response.message || "打包加速已提交",
-          color: "teal",
+          color: "cyan",
           autoClose: 3000,
         });
       } else {
@@ -228,105 +245,122 @@ export function PackSpeedPanel({
     }
   }
 
+  const resultColor = result
+    ? isBatchPackUnauthorized(result) || result.code !== 200
+      ? "yellow"
+      : "cyan"
+    : "cyan";
+
   return (
-    <div className="branch-panel pack-speed-panel">
-      <div className="branch-card">
-        <div className="form-group">
-          <label><KeyRound size={14} /> Authorization</label>
-          <div className="auth-input-row">
-            <input
-              type="password"
-              value={localAuthorization}
-              onChange={(event) => {
-                setLocalAuthorization(event.currentTarget.value);
-                onAuthorizationChange(event.currentTarget.value);
-              }}
-              placeholder="输入运营后台 Authorization token"
-              autoComplete="off"
+    <Stack gap="md" className="pack-speed-panel">
+      <Paper p="md" radius="md" styles={panelPaperStyles}>
+        <Stack gap="md">
+          <PasswordInput
+            label={
+              <Group gap={6}>
+                <KeyRound size={14} />
+                <span>Authorization</span>
+              </Group>
+            }
+            value={localAuthorization}
+            onChange={(event) => {
+              setLocalAuthorization(event.currentTarget.value);
+              onAuthorizationChange(event.currentTarget.value);
+            }}
+            placeholder="输入运营后台 Authorization token"
+            autoComplete="off"
+            rightSectionWidth={120}
+            rightSection={
+              <Button
+                variant="default"
+                size="xs"
+                onClick={handleOpenLogin}
+                disabled={isOpeningLogin}
+                leftSection={
+                  isOpeningLogin
+                    ? <Loader2 size={14} className="spin" />
+                    : <LogIn size={14} />
+                }
+                className="ops-btn-secondary"
+                style={{ marginRight: 4 }}
+              >
+                自动获取
+              </Button>
+            }
+            styles={fieldStyles}
+            description="自动获取会打开内嵌运营后台登录页；Authorization 仅本次运行内保留，不会写入本地配置。"
+          />
+
+          <Stack gap={6}>
+            <Text size="sm" fw={600} c="var(--color-text)">类型</Text>
+            <SegmentedControl
+              value={batchPackType}
+              onChange={(value) => setBatchPackType(value as BatchPackType)}
+              data={[
+                { label: "子渠道", value: "subChannel" },
+                { label: "马甲包", value: "vest" },
+              ]}
+              styles={panelSegmentedStyles}
             />
-            <button
-              type="button"
-              className="secondary-action-btn auth-login-btn"
-              onClick={handleOpenLogin}
-              disabled={isOpeningLogin}
-            >
-              {isOpeningLogin ? <Loader2 size={16} className="spin" /> : <LogIn size={16} />}
-              自动获取
-            </button>
-          </div>
-          <p className="template-hint">自动获取会打开内嵌运营后台登录页；Authorization 仅本次运行内保留，不会写入本地配置。</p>
-        </div>
+          </Stack>
 
-        <div className="form-group">
-          <label>类型</label>
-          <div className="pack-type-options" role="radiogroup" aria-label="打包加速类型">
-            <label className={`pack-type-option ${batchPackType === "subChannel" ? "active" : ""}`}>
-              <input
-                type="radio"
-                name="batch-pack-type"
-                value="subChannel"
-                checked={batchPackType === "subChannel"}
-                onChange={() => setBatchPackType("subChannel")}
-              />
-              <span>子渠道</span>
-            </label>
-            <label className={`pack-type-option ${batchPackType === "vest" ? "active" : ""}`}>
-              <input
-                type="radio"
-                name="batch-pack-type"
-                value="vest"
-                checked={batchPackType === "vest"}
-                onChange={() => setBatchPackType("vest")}
-              />
-              <span>马甲包</span>
-            </label>
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label>{idLabel}</label>
-          <textarea
+          <Textarea
+            label={idLabel}
             value={idsText}
             onChange={(event) => setIdsText(event.currentTarget.value)}
             placeholder={"10593,10594\n或一行一个 ID"}
+            minRows={4}
+            styles={{
+              ...fieldStyles,
+              input: {
+                ...fieldStyles.input,
+                fontFamily: 'var(--mantine-font-family-monospace)',
+              },
+            }}
+            description={`已解析 ${ids.length} 个 ID，支持英文逗号、空格、换行分隔。`}
           />
-          <p className="template-hint">已解析 {ids.length} 个 ID，支持英文逗号、空格、换行分隔。</p>
-        </div>
 
-        <div className="form-group">
-          <label>优先级</label>
-          <input
-            type="number"
+          <NumberInput
+            label="优先级"
             value={priority}
-            onChange={(event) => setPriority(event.currentTarget.value)}
+            onChange={setPriority}
             min={0}
             step={1}
             placeholder="0"
+            styles={fieldStyles}
           />
-        </div>
 
-        <div className="pack-speed-actions">
-          <button
-            type="button"
-            className="build-btn"
+          <Button
+            variant="filled"
+            color="blue"
+            fullWidth
+            size="md"
             onClick={handleSubmit}
             disabled={!canSubmit}
+            loading={isSubmitting}
+            leftSection={!isSubmitting ? <Rocket size={18} /> : undefined}
+            styles={panelPrimaryButtonStyles}
+            className="pack-speed-submit"
           >
-            {isSubmitting ? <Loader2 size={18} className="spin" /> : <Rocket size={18} />}
             {isSubmitting ? "提交中..." : getBatchPackSubmitText(batchPackType)}
-          </button>
-        </div>
+          </Button>
 
-        {result && (
-          <div className={`pack-speed-result ${isBatchPackUnauthorized(result) ? "warning" : result.code === 200 ? "success" : "warning"}`}>
-            {result.code === 200 ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
-            <div>
-              <strong>{result.code}</strong>
-              <span>{result.message || "无返回消息"}</span>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+          {result && (
+            <Alert
+              variant="light"
+              color={resultColor}
+              icon={
+                result.code === 200 && !isBatchPackUnauthorized(result)
+                  ? <CheckCircle size={18} />
+                  : <AlertTriangle size={18} />
+              }
+              title={String(result.code)}
+            >
+              {result.message || "无返回消息"}
+            </Alert>
+          )}
+        </Stack>
+      </Paper>
+    </Stack>
   );
 }

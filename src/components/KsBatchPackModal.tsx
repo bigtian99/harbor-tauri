@@ -195,7 +195,8 @@ export function KsBatchConfirmModal({
           </Button>
           <Button
             leftSection={<Rocket size={16} />}
-            color="cyan"
+            variant="filled"
+            color="blue"
             onClick={onStart}
             disabled={count === 0}
           >
@@ -280,7 +281,7 @@ export function KsBatchProgressModal({
         <Box className="ks-batch-progress-header">
           <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
             <Group gap="sm" wrap="nowrap">
-              <ThemeIcon size={34} radius="md" variant="gradient" gradient={{ from: "cyan", to: "teal", deg: 135 }}>
+              <ThemeIcon size={34} radius="md" variant="gradient" gradient={{ from: "blue", to: "cyan", deg: 135 }}>
                 <Rocket size={16} />
               </ThemeIcon>
               <Stack gap={2}>
@@ -329,7 +330,7 @@ export function KsBatchProgressModal({
                   <Badge
                     leftSection={<SkipForward size={12} />}
                     variant="light"
-                    color="gray"
+                    color="yellow"
                     size="lg"
                     radius="sm"
                   >

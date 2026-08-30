@@ -1,3 +1,4 @@
+import { Button, Group, Modal, Progress, Stack, Text, ThemeIcon } from "@mantine/core";
 import { AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
 import type { MergeOverlayPhase } from "./types";
 
@@ -11,6 +12,15 @@ interface MergeProgressOverlayProps {
   onClose: () => void;
 }
 
+const modalStyles = {
+  content: {
+    background: "var(--color-bg-surface)",
+    border: "1px solid var(--color-border)",
+  },
+  header: { background: "var(--color-bg-surface)" },
+  body: { padding: "28px 24px 24px" },
+} as const;
+
 export function MergeProgressOverlay({
   phase,
   sourceBranch,
@@ -20,53 +30,72 @@ export function MergeProgressOverlay({
   resultMessage,
   onClose,
 }: MergeProgressOverlayProps) {
-  if (phase === "idle") return null;
+  const isRunning = phase === "running";
 
   return (
-    <div className="merge-progress-overlay" role="dialog" aria-modal="true" aria-labelledby="merge-progress-title">
-      <div className="merge-progress-modal">
+    <Modal
+      opened={phase !== "idle"}
+      onClose={isRunning ? () => {} : onClose}
+      withCloseButton={false}
+      closeOnClickOutside={!isRunning}
+      closeOnEscape={!isRunning}
+      centered
+      size="sm"
+      padding="md"
+      styles={modalStyles}
+      title={null}
+    >
+      <Stack align="center" gap="sm" ta="center">
         {phase === "running" && (
           <>
-            <Loader2 size={42} className="spin merge-progress-icon" />
-            <h3 id="merge-progress-title" className="merge-progress-title">正在合并分支</h3>
-            <p className="merge-progress-subtitle">
+            <ThemeIcon size={52} radius="xl" variant="light" color="cyan">
+              <Loader2 size={28} className="spin" />
+            </ThemeIcon>
+            <Text fw={700} size="md" c="var(--color-text)">正在合并分支</Text>
+            <Text size="xs" c="var(--color-text-muted)" ff="monospace">
               {sourceBranch} → {targetBranch}
-            </p>
-            <p className="merge-progress-message">{progressMessage || "处理中..."}</p>
-            <div className="merge-progress-track">
-              <div
-                className="merge-progress-bar"
-                style={{ width: `${Math.max(progress, 8)}%` }}
-              />
-            </div>
-            <span className="merge-progress-percent">{progress}%</span>
+            </Text>
+            <Text size="sm" c="var(--color-text-muted)">
+              {progressMessage || "处理中..."}
+            </Text>
+            <Progress
+              value={Math.max(progress, 8)}
+              color="cyan"
+              size="sm"
+              radius="xl"
+              w="100%"
+              mt="xs"
+            />
+            <Text size="sm" fw={700} c="var(--color-primary)">{progress}%</Text>
           </>
         )}
         {phase === "success" && (
           <>
-            <CheckCircle size={42} className="merge-progress-icon merge-progress-icon--success" />
-            <h3 id="merge-progress-title" className="merge-progress-title">合并成功</h3>
-            <p className="merge-progress-message merge-progress-message--center">
+            <ThemeIcon size={52} radius="xl" variant="light" color="teal">
+              <CheckCircle size={28} />
+            </ThemeIcon>
+            <Text fw={700} size="md" c="var(--color-text)">合并成功</Text>
+            <Text size="sm" c="var(--color-text-muted)" maw={340}>
               {resultMessage}
-            </p>
-            <button type="button" className="merge-progress-btn" onClick={onClose}>
-              完成
-            </button>
+            </Text>
+            <Button variant="filled" color="teal" onClick={onClose} mt="xs">完成</Button>
           </>
         )}
         {phase === "error" && (
           <>
-            <AlertTriangle size={42} className="merge-progress-icon merge-progress-icon--error" />
-            <h3 id="merge-progress-title" className="merge-progress-title">合并失败</h3>
-            <p className="merge-progress-message merge-progress-message--center">
+            <ThemeIcon size={52} radius="xl" variant="light" color="red">
+              <AlertTriangle size={28} />
+            </ThemeIcon>
+            <Text fw={700} size="md" c="var(--color-text)">合并失败</Text>
+            <Text size="sm" c="var(--color-text-muted)" maw={340}>
               {resultMessage}
-            </p>
-            <button type="button" className="merge-progress-btn" onClick={onClose}>
-              关闭
-            </button>
+            </Text>
+            <Group justify="center" mt="xs">
+              <Button color="cyan" variant="light" onClick={onClose}>关闭</Button>
+            </Group>
           </>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Modal>
   );
 }

@@ -27,6 +27,8 @@ import {
 
 import type { SettlementGenerateResult } from "../types";
 import { isTauriRuntime } from "../types";
+import { panelFieldStyles, panelPaperStyles } from "../theme/panelStyles";
+import "../styles/ops-panel.css";
 
 type PathPickerProps = {
   label: string;
@@ -80,11 +82,12 @@ function PathPicker({ label, value, placeholder, directory, onChange }: PathPick
       placeholder={placeholder}
       autoCapitalize="none"
       rightSectionWidth={96}
+      styles={panelFieldStyles}
       rightSection={
         <Button
           size="compact-sm"
-          variant="subtle"
-          color="teal"
+          variant="default"
+          className="ops-btn-secondary"
           leftSection={<FolderOpen size={14} />}
           onClick={handleSelect}
         >
@@ -198,18 +201,29 @@ export function SettlementPanel() {
   }
 
   return (
-    <Box className="settlement-panel" style={{ padding: "32px 40px" }}>
+    <Box className="settlement-panel">
       <Stack gap="md">
-        <Group gap="xs">
-          <FileText size={22} />
-          <Title order={3}>结算单</Title>
+        <Group gap="sm" align="flex-start" wrap="nowrap">
+          <FileText size={20} color="var(--color-primary)" style={{ marginTop: 2, flexShrink: 0 }} />
+          <div style={{ minWidth: 0 }}>
+            <Title order={3} c="var(--color-text)" style={{ lineHeight: 1.25 }}>
+              结算单
+            </Title>
+            <Text size="xs" c="var(--color-text-muted)" mt={4}>
+              选择渠道打款表与结算数据，生成结算单文件。
+            </Text>
+          </div>
         </Group>
 
-        <Paper p="md" withBorder radius="md">
+        <Paper p="md" radius="md" styles={panelPaperStyles}>
           <Stack gap="md">
             <Group justify="space-between" align="center">
-              <Text size="sm" c="dimmed">模板</Text>
-              <Badge color="gray" variant="light">默认模板</Badge>
+              <Text size="sm" c="var(--color-text-muted)">
+                模板
+              </Text>
+              <Badge color="blue" variant="light">
+                默认模板
+              </Badge>
             </Group>
             <PathPicker
               label="渠道打款信息表"
@@ -248,8 +262,8 @@ export function SettlementPanel() {
                 leftSection={isGenerating ? <Loader2 size={14} className="spin" /> : <Play size={14} />}
                 disabled={!canGenerate}
                 onClick={handleGenerate}
-                variant="gradient"
-                gradient={{ from: "teal", to: "cyan" }}
+                variant="filled"
+                color="blue"
               >
                 生成结算单
               </Button>
@@ -257,23 +271,27 @@ export function SettlementPanel() {
                 leftSection={<ExternalLink size={14} />}
                 disabled={!result && !outputBaseDir}
                 onClick={handleOpenOutput}
-                variant="light"
-                color="gray"
+                variant="default"
+                className="ops-btn-secondary"
               >
                 打开目录
               </Button>
             </Group>
 
             {isGenerating && (
-              <Paper p="sm" withBorder radius="md">
+              <Paper p="sm" radius="md" styles={panelPaperStyles}>
                 <Stack gap={6}>
                   <Group justify="space-between" gap="sm">
-                    <Text size="sm">{progress.message || "处理中..."}</Text>
-                    <Text size="sm" fw={600}>{progress.percent}%</Text>
+                    <Text size="sm" c="var(--color-text)">
+                      {progress.message || "处理中..."}
+                    </Text>
+                    <Text size="sm" fw={600} c="var(--color-primary-hover)">
+                      {progress.percent}%
+                    </Text>
                   </Group>
-                  <Progress value={progress.percent} animated color="teal" size="sm" />
+                  <Progress value={progress.percent} animated color="blue" size="sm" />
                   {progress.total > 0 && (
-                    <Text size="xs" c="dimmed">
+                    <Text size="xs" c="var(--color-text-muted)">
                       账号进度 {progress.current}/{progress.total}
                     </Text>
                   )}
@@ -284,17 +302,23 @@ export function SettlementPanel() {
         </Paper>
 
         {result && (
-          <Paper p="md" withBorder radius="md">
+          <Paper p="md" radius="md" styles={panelPaperStyles}>
             <Stack gap="sm">
               <Group gap="xs">
-                <CheckCircle size={18} color="#35d07f" />
-                <Text fw={600}>生成完成</Text>
-                <Badge color="teal" variant="light">{result.created} 个文件</Badge>
-                <Badge color="blue" variant="light">{result.channels} 个渠道</Badge>
+                <CheckCircle size={18} color="var(--color-success)" />
+                <Text fw={600} c="var(--color-text)">
+                  生成完成
+                </Text>
+                <Badge color="teal" variant="light">
+                  {result.created} 个文件
+                </Badge>
+                <Badge color="blue" variant="light">
+                  {result.channels} 个渠道
+                </Badge>
               </Group>
               <Box className="settlement-result-list">
                 {result.files.map((file) => (
-                  <Text key={file} size="sm" c="dimmed" style={{ wordBreak: "break-all" }}>
+                  <Text key={file} size="sm" c="var(--color-text-muted)" style={{ wordBreak: "break-all" }}>
                     {file}
                   </Text>
                 ))}

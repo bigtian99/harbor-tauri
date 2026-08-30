@@ -255,6 +255,7 @@ export function KsBatchCloneConfirmModal({
             取消
           </Button>
           <Button
+            variant="filled"
             color="teal"
             disabled={!canStart}
             onClick={() => {

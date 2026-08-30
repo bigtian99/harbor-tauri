@@ -25,8 +25,8 @@
   width: min(100%, 420px);
   padding: 22px 22px 18px;
   border-radius: 16px;
-  border: 1px solid rgba(100, 255, 218, 0.18);
-  background: linear-gradient(160deg, rgba(26, 31, 58, 0.98) 0%, rgba(10, 14, 32, 0.99) 100%);
+  border: 1px solid var(--color-primary-muted);
+  background: linear-gradient(160deg, var(--color-bg-surface) 0%, var(--color-bg-base) 100%);
   box-shadow:
     0 24px 64px rgba(0, 0, 0, 0.55),
     0 0 0 1px rgba(255, 255, 255, 0.03) inset;
@@ -34,10 +34,10 @@
 }
 
 .confirm-dialog--danger {
-  border-color: rgba(255, 107, 107, 0.28);
+  border-color: color-mix(in srgb, var(--color-error) 28%, transparent);
   box-shadow:
     0 24px 64px rgba(0, 0, 0, 0.55),
-    0 0 48px rgba(255, 107, 107, 0.08);
+    0 0 48px color-mix(in srgb, var(--color-error) 8%, transparent);
 }
 
 @keyframes confirm-dialog-in {
@@ -60,18 +60,18 @@
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #8a93a8;
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+  color: var(--color-text-muted);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .confirm-dialog-close:hover:not(:disabled) {
-  color: #e8eef8;
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  border-color: color-mix(in srgb, var(--color-text) 16%, transparent);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
 }
 
 .confirm-dialog-close:disabled {
@@ -87,22 +87,22 @@
   height: 44px;
   margin-bottom: 12px;
   border-radius: 12px;
-  color: #64ffda;
-  background: rgba(100, 255, 218, 0.1);
-  border: 1px solid rgba(100, 255, 218, 0.22);
+  color: var(--color-primary);
+  background: var(--color-primary-muted);
+  border: 1px solid var(--color-primary-muted);
 }
 
 .confirm-dialog--danger .confirm-dialog-icon-wrap {
-  color: #ff8a8a;
-  background: rgba(255, 107, 107, 0.12);
-  border-color: rgba(255, 107, 107, 0.28);
+  color: color-mix(in srgb, var(--color-error) 70%, white);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-error) 28%, transparent);
 }
 
 .confirm-dialog-title {
   margin: 0 0 8px;
   font-size: 17px;
   font-weight: 700;
-  color: #eef2f8;
+  color: var(--color-text);
   letter-spacing: 0.01em;
 }
 
@@ -110,7 +110,7 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.55;
-  color: #9aa3b5;
+  color: var(--color-text-muted);
 }
 
 .confirm-dialog-details {
@@ -118,14 +118,14 @@
   padding: 10px 12px 10px 28px;
   list-style: disc;
   border-radius: 10px;
-  background: rgba(255, 107, 107, 0.06);
-  border: 1px solid rgba(255, 107, 107, 0.14);
+  background: color-mix(in srgb, var(--color-error) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-error) 14%, transparent);
 }
 
 .confirm-dialog-details li {
   font-size: 12px;
   line-height: 1.5;
-  color: #c5cad6;
+  color: var(--color-text-muted);
 }
 
 .confirm-dialog-details li + li {
@@ -160,41 +160,41 @@
 }
 
 .confirm-dialog-btn--cancel {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: #b8c0d0;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+  color: var(--color-text-muted);
 }
 
 .confirm-dialog-btn--cancel:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #e8eef8;
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 20%, transparent);
+  color: var(--color-text);
 }
 
 .confirm-dialog-btn--confirm {
-  border: 1px solid rgba(100, 255, 218, 0.35);
-  background: linear-gradient(135deg, rgba(100, 255, 218, 0.22), rgba(42, 201, 154, 0.18));
-  color: #d7fff4;
+  border: 1px solid var(--color-primary-muted);
+  background: linear-gradient(135deg, var(--color-primary-muted), color-mix(in srgb, var(--color-success) 18%, transparent));
+  color: var(--color-text);
 }
 
 .confirm-dialog-btn--confirm:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: rgba(100, 255, 218, 0.55);
+  border-color: var(--color-primary-muted);
 }
 
 .confirm-dialog-btn--danger {
-  border: 1px solid rgba(255, 90, 90, 0.72);
-  background: linear-gradient(135deg, rgba(255, 66, 66, 0.42), rgba(189, 0, 0, 0.28));
-  color: #ffffff;
+  border: 1px solid color-mix(in srgb, var(--color-error) 72%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-error) 42%, transparent), color-mix(in srgb, var(--color-error) 28%, black));
+  color: var(--color-text);
   box-shadow:
-    0 12px 28px rgba(189, 0, 0, 0.24),
-    0 0 0 1px rgba(255, 90, 90, 0.12) inset;
+    0 12px 28px color-mix(in srgb, var(--color-error) 24%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-error) 12%, transparent) inset;
 }
 
 .confirm-dialog-btn--danger:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: rgba(255, 90, 90, 0.95);
-  background: linear-gradient(135deg, rgba(255, 66, 66, 0.56), rgba(189, 0, 0, 0.34));
+  border-color: color-mix(in srgb, var(--color-error) 95%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-error) 56%, transparent), color-mix(in srgb, var(--color-error) 34%, black));
 }
 
 .confirm-dialog .spin {

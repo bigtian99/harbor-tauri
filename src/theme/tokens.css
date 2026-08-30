@@ -1,0 +1,48 @@
+:root {
+  /* 丰富暗色：靛蓝底 + 天蓝主色 + 琥珀/翠绿点缀 */
+  --color-primary: #3b9eff;
+  --color-primary-hover: #7ec8ff;
+  --color-primary-muted: rgba(59, 158, 255, 0.28);
+  --color-primary-subtle: rgba(59, 158, 255, 0.14);
+  --color-accent: #a78bfa;
+  --color-accent-muted: rgba(167, 139, 250, 0.18);
+  --color-bg-base: #0a0e17;
+  --color-bg-surface: #101826;
+  --color-bg-elevated: #182338;
+  --color-bg-card: #141c2b;
+  --color-border: rgba(120, 170, 255, 0.12);
+  --color-border-strong: rgba(120, 170, 255, 0.22);
+  --color-text: #eef3ff;
+  --color-text-muted: #93a4c3;
+  --color-success: #34d399;
+  --color-success-muted: rgba(52, 211, 153, 0.18);
+  --color-warning: #fbbf24;
+  --color-warning-muted: rgba(251, 191, 36, 0.18);
+  --color-error: #f87171;
+  --color-error-muted: rgba(248, 113, 113, 0.18);
+  --radius-md: 8px;
+  --font-size-base: 14px;
+  --font-size-sm: 12px;
+  --sidebar-width: 220px;
+  --sidebar-width-collapsed: 56px;
+  --glow-primary: 0 0 24px rgba(59, 158, 255, 0.18);
+}
+
+[data-mantine-color-scheme="dark"] {
+  --mantine-color-body: var(--color-bg-base);
+  --mantine-color-dark-0: #eef3ff;
+  --mantine-color-dark-1: #c5d0e8;
+  --mantine-color-dark-2: #93a4c3;
+  --mantine-color-dark-3: #6b7d9e;
+  --mantine-color-dark-4: #4a5a78;
+  --mantine-color-dark-5: #2f3d58;
+  --mantine-color-dark-6: #182338;
+  --mantine-color-dark-7: #101826;
+  --mantine-color-dark-8: #0a0e17;
+  --mantine-color-dark-9: #060910;
+  --mantine-primary-color-filled: var(--color-primary);
+  --mantine-primary-color-filled-hover: var(--color-primary-hover);
+  --mantine-primary-color-light: var(--color-primary-muted);
+  --mantine-primary-color-light-hover: rgba(59, 158, 255, 0.36);
+  --mantine-primary-color-light-color: var(--color-primary-hover);
+}

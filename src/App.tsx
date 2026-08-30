@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { CalendarDays, CheckCircle, ChevronDown, ScrollText, Search, X, Download, FolderOpen } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 
-
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, getAppShellNavbarConfig } from "./components/Sidebar";
+import { AppShell } from "@mantine/core";
 import { UploadPanel } from "./components/UploadPanel";
 import { BranchPanel } from "./components/BranchPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
@@ -17,8 +17,9 @@ import { KsPublishPanel } from "./components/KsPublishPanel";
 import { BtJavaProjectsPanel } from "./components/BtJavaProjectsPanel";
 import { BtPhpSitesPanel } from "./components/BtPhpSitesPanel";
 import { UpdateModal } from "./components/UpdateModal";
+import { DiagnosticLogModal } from "./components/DiagnosticLogModal";
 import { useLanding } from "./hooks/useLanding";
-import { useAppConfig, type DiagDateInfo } from "./hooks/useAppConfig";
+import { useAppConfig } from "./hooks/useAppConfig";
 import { useBuildProgress, useToast } from "./hooks/useBuildProgress";
 import { useUploadPush } from "./hooks/useUploadPush";
 import { useBranchPack } from "./hooks/useBranchPack";
@@ -31,106 +32,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { resolveHistoryJarPushConfig } from "./historyJarPush.ts";
 import { shouldKeepPreviewServer } from "./utils/previewLifecycle";
 import { readStoredActiveTab, writeStoredActiveTab } from "./utils/activeTabStorage";
-
-/** 系统日志日期 card 选择器（替代原生 select） */
-function LogDayPicker({
-  logDay,
-  logDates,
-  onSelect,
-}: {
-  logDay: string | null;
-  logDates: DiagDateInfo[];
-  onSelect: (day: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
-
-  const label = logDay
-    ? (() => {
-        const hit = logDates.find((d) => d.date === logDay);
-        if (!hit) return logDay;
-        return `${hit.date} · ${hit.lines} 行`;
-      })()
-    : "最近 3 天";
-
-  const pick = (day: string | null) => {
-    onSelect(day);
-    setOpen(false);
-  };
-
-  return (
-    <div className="log-day-picker" ref={rootRef}>
-      <button
-        type="button"
-        className={`log-day-trigger${open ? " open" : ""}`}
-        title="切换日志日期"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-      >
-        <CalendarDays size={14} className="log-day-trigger-icon" aria-hidden />
-        <span className="log-day-trigger-label">{label}</span>
-        <ChevronDown size={14} className="log-day-trigger-chevron" aria-hidden />
-      </button>
-      {open && (
-        <div
-          className="log-day-panel"
-          role="listbox"
-          aria-label="日志日期"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            role="option"
-            aria-selected={!logDay}
-            className={`log-day-card${!logDay ? " selected" : ""}`}
-            onClick={() => pick(null)}
-          >
-            <span className="log-day-card-date">最近 3 天</span>
-            <span className="log-day-card-meta">合并视图 · 新日志在前</span>
-            {!logDay && <CheckCircle size={14} className="log-day-card-check" aria-hidden />}
-          </button>
-          {logDates.map((d) => {
-            const selected = logDay === d.date;
-            return (
-              <button
-                key={d.date}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                className={`log-day-card${selected ? " selected" : ""}`}
-                onClick={() => pick(d.date)}
-              >
-                <span className="log-day-card-date">{d.date}</span>
-                <span className="log-day-card-meta">
-                  {d.lines} 行 · {(d.size / 1024).toFixed(1)} KB
-                </span>
-                {selected && <CheckCircle size={14} className="log-day-card-check" aria-hidden />}
-              </button>
-            );
-          })}
-          {logDates.length === 0 && (
-            <div className="log-day-empty">暂无按日日志文件</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>(() => readStoredActiveTab("upload"));
@@ -326,7 +227,32 @@ function App() {
   );
 
   return (
-    <div className="app">
+    <AppShell
+      className="app"
+      padding={0}
+      navbar={getAppShellNavbarConfig(app.sidebarCollapsed)}
+      styles={{
+        root: {
+          height: "100vh",
+          minHeight: 0,
+          background: "var(--color-bg-base)",
+          overflow: "visible",
+        },
+        main: {
+          background: "var(--color-bg-base)",
+          minHeight: 0,
+          height: "100vh",
+          overflow: "auto",
+          zIndex: 1,
+        },
+        navbar: {
+          background: "var(--color-bg-surface)",
+          borderRight: "1px solid var(--color-border-strong)",
+          overflow: "visible",
+          zIndex: 200,
+        },
+      }}
+    >
       <Sidebar
         activeTab={activeTab}
         sidebarCollapsed={app.sidebarCollapsed}
@@ -336,7 +262,7 @@ function App() {
         onOpenLog={app.openDiagnosticLog}
       />
 
-      <main className="content">
+      <AppShell.Main className="content">
         {activeTab === "upload" && (
           <UploadPanel
             artifactType={upload.artifactType}
@@ -591,88 +517,23 @@ function App() {
             }}
           />
         )}
-      </main>
+      </AppShell.Main>
 
-      {app.showLogViewer && (
-        <div className="log-viewer-overlay" onClick={() => { app.setShowLogViewer(false); app.setLogSearch(""); }}>
-          <div className="log-viewer" onClick={(e) => e.stopPropagation()}>
-            <div className="log-viewer-header">
-              <ScrollText size={18} className="log-viewer-title-icon" />
-              <h3>系统诊断日志</h3>
-              <LogDayPicker
-                logDay={app.logDay}
-                logDates={app.logDates}
-                onSelect={(day) => { void app.selectDiagnosticDay(day); }}
-              />
-              <div className="log-viewer-search-wrap">
-                <Search size={14} className="log-viewer-search-icon" />
-                <input
-                  className="log-viewer-search"
-                  type="text"
-                  placeholder="搜索日志..."
-                  value={app.logSearch}
-                  onChange={(e) => app.setLogSearch(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  autoComplete="off"
-                  spellCheck={false}
-                  style={{ textTransform: "none" }}
-                />
-                {app.logSearch && (
-                  <button className="log-viewer-search-clear" onClick={() => app.setLogSearch("")}>
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                className="log-viewer-download"
-                title="在文件管理器中打开日志文件"
-                onClick={() => void app.revealDiagnosticLogFile(showToast)}
-              >
-                <FolderOpen size={16} />
-                目录
-              </button>
-              <button
-                type="button"
-                className="log-viewer-download"
-                title="下载完整诊断日志"
-                onClick={() => void app.downloadDiagnosticLog(showToast)}
-              >
-                <Download size={16} />
-                下载
-              </button>
-              <button className="log-viewer-close" onClick={() => { app.setShowLogViewer(false); app.setLogSearch(""); }}>
-                <X size={18} />
-              </button>
-            </div>
-            <pre
-              className="log-viewer-content"
-              dangerouslySetInnerHTML={{ __html: (() => {
-                const raw = app.logContent || "（无日志内容）";
-                if (!app.logSearch.trim()) return raw;
-                const lines = raw.split("\n");
-                const q = app.logSearch.toLowerCase();
-                return lines
-                  .map((line) => {
-                    const lower = line.toLowerCase();
-                    if (!lower.includes(q)) return null;
-                    const parts = line.split(new RegExp(`(${app.logSearch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
-                    return parts.map((p) =>
-                      p.toLowerCase() === q
-                        ? `<mark class="log-highlight">${p}</mark>`
-                        : p
-                    ).join("");
-                  })
-                  .filter(Boolean)
-                  .join("\n");
-              })() }}
-            />
-          </div>
-        </div>
-      )}
+      <DiagnosticLogModal
+        opened={app.showLogViewer}
+        logContent={app.logContent}
+        logSearch={app.logSearch}
+        logDay={app.logDay}
+        logDates={app.logDates}
+        onClose={() => {
+          app.setShowLogViewer(false);
+          app.setLogSearch("");
+        }}
+        onSearchChange={app.setLogSearch}
+        onSelectDay={(day) => { void app.selectDiagnosticDay(day); }}
+        onRevealFile={() => { void app.revealDiagnosticLogFile(showToast); }}
+        onDownload={() => { void app.downloadDiagnosticLog(showToast); }}
+      />
 
       {toast.show && (
         <div className="toast">
@@ -686,7 +547,7 @@ function App() {
         onClose={() => app.setUpdateModalOpen(false)}
         updateInfo={app.updateInfo}
       />
-    </div>
+    </AppShell>
   );
 }
 

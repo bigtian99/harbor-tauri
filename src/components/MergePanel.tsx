@@ -1,4 +1,4 @@
-import "./Modal.css";
+import { Stack } from "@mantine/core";
 import type { MergePanelProps } from "./merge/types";
 import { useMergePanel } from "./merge/useMergePanel";
 import { MergeProgressOverlay } from "./merge/MergeProgressOverlay";
@@ -12,7 +12,7 @@ export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge }: Mer
   const m = useMergePanel(config, onOpenDirectory, onPackageAfterMerge);
 
   return (
-    <div className="merge-panel">
+    <Stack gap="sm" className="merge-panel">
       <MergeProgressOverlay
         phase={m.mergeOverlayPhase}
         sourceBranch={m.sourceBranch}
@@ -116,6 +116,6 @@ export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge }: Mer
         onDiffCommitSearchChange={m.setDiffCommitSearch}
         onOpenCommitDiff={m.openCommitDiffModal}
       />
-    </div>
+    </Stack>
   );
 }

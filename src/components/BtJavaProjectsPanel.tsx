@@ -219,7 +219,7 @@ const BtJavaProjectsTable = memo(function BtJavaProjectsTable({
                         {busyPhaseLabel(busyPhase)}
                       </Badge>
                     ) : (
-                      <Badge color={row.status === "1" ? "teal" : row.status === "0" ? "red" : "gray"} variant="outline">
+                      <Badge color={row.status === "1" ? "teal" : row.status === "0" ? "red" : "orange"} variant="light">
                         {row.status_text}
                       </Badge>
                     )}
@@ -936,7 +936,7 @@ export function BtJavaProjectsPanel() {
     : (pollAttempt > 0 ? "wait_port" : busyMode);
 
   return (
-    <Stack gap="md" p="md">
+    <Stack gap="md">
       <Group justify="space-between" align="flex-end">
         <div>
           <Group gap="xs" mb={4}>
@@ -970,7 +970,8 @@ export function BtJavaProjectsPanel() {
             leftSection={loading ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
             onClick={() => void load({ resetPage: true })}
             disabled={loading || busyKey !== null}
-            variant="light"
+            variant="filled"
+            color="blue"
           >
             刷新
           </Button>
@@ -987,7 +988,7 @@ export function BtJavaProjectsPanel() {
       )}
 
       {showProgress && (
-        <Paper withBorder p="sm" radius="md" style={{ borderColor: "rgba(100, 255, 218, 0.35)" }}>
+        <Paper withBorder p="sm" radius="md" style={{ borderColor: "var(--color-primary-muted)" }}>
           <Group justify="space-between" mb={6} wrap="nowrap">
             <Text size="sm" fw={500}>
               {busyKey !== null ? "任务进度" : "最近任务"}

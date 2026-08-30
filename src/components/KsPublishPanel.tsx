@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, memo, startTransition } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -51,221 +51,28 @@ import {
   POD_LOG_LEVELS,
   type PodLogLevel,
 } from "../utils/podLogLevels";
-
-interface PodInfo {
-  name: string; phase: string; state: string; reason: string | null;
-  restarts: number; ready: number; total: number; startTime: string; node: string;
-}
-interface DeployStatus { state: string; label: string; reason: string | null; detail: string; old: string; }
-interface DeployInfo {
-  name: string;
-  alias: string;
-  image: string;
-  containers: string[];
-  ports: number[];
-  status: DeployStatus; pods: { new: PodInfo[]; old: PodInfo[] }; revision: string;
-}
-interface UpdateResult { ok: boolean; oldImage: string; newImage: string; revision: string; }
-interface ConfigMapInfo { name: string; alias: string; keys: string[]; dataSize: number; }
-interface DeployRevision {
-  revision: string;
-  image: string;
-  containers: { name: string; image: string }[];
-  replicas: number;
-  ready: number;
-  createdAt: string;
-  isCurrent: boolean;
-}
-
-interface DeployEditInfo {
-  name: string;
-  alias: string;
-  image: string;
-  container: string;
-  port: number;
-  replicas: number;
-  healthPath: string;
-  configMap: string | null;
-  envs: string[];
-}
-
-const EMPTY_DEPLOY_FORM = {
-  name: "",
-  image: "",
-  alias: "",
-  port: 8080,
-  replicas: 1,
-  healthPath: "/actuator/health",
-  envs: "",
-  configMap: null as string | null,
-  container: "container-main",
-};
-
-const STATUS_DOT: Record<string, string> = {
-  running: "#34c877", updating: "#4aa3e8", pull: "#e5484d", crash: "#e5484d",
-  creating: "#f5a623", stopped: "#9aa5b8", pending: "#9aa5b8", unknown: "#9aa5b8",
-};
-const STATUS_COLOR: Record<string, string> = {
-  running: "green", updating: "blue", pull: "red", crash: "red",
-  creating: "orange", stopped: "gray", pending: "gray", unknown: "gray",
-};
-const BAD_STATES = ["pull", "crash", "creating", "updating", "pending", "stopped"];
-const PAGE_SIZE_OPTIONS = ["10", "20", "50"] as const;
-const REV_PAGE_SIZE_OPTIONS = ["5", "10", "20"] as const;
-const HEALTH_PATH_OPTIONS = ["/actuator/health", "/health"] as const;
-/** K8s metadata.name：小写 RFC 1123 subdomain */
-const RFC1123_NAME = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
-
-function isRfc1123Name(name: string): boolean {
-  const n = name.trim();
-  return n.length > 0 && n.length <= 253 && RFC1123_NAME.test(n);
-}
-
-/** 仅当已有 SW_AGENT_NAME 行时，将其值同步为 ConfigMap 名称；没有则不新增 */
-function syncSwAgentNameIfPresent(data: string, cmName: string): string {
-  const name = cmName.trim();
-  if (!name) return data;
-  const lines = data.split("\n");
-  let found = false;
-  const next = lines.map((line) => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) return line;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) return line;
-    const key = trimmed.slice(0, eq).trim();
-    if (key !== "SW_AGENT_NAME") return line;
-    found = true;
-    const indent = line.match(/^\s*/)?.[0] ?? "";
-    return `${indent}SW_AGENT_NAME=${name}`;
-  });
-  return found ? next.join("\n") : data;
-}
-
-function fmtTime(iso?: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d
-    .toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })
-    .replace(/\//g, "-");
-}
-
-/** 轻量指纹：静默刷新无变化时跳过 setState，避免整表重渲染卡顿 */
-function deployListFingerprint(list: DeployInfo[]): string {
-  let s = String(list.length);
-  for (const d of list) {
-    const headNew = d.pods.new[0];
-    const headOld = d.pods.old[0];
-    s += `|${d.name}:${d.alias ?? ""}:${d.revision}:${d.image}:${d.status.state}:${d.status.detail}:${d.ports.join(",")}:${d.pods.new.length}:${d.pods.old.length}:${headNew?.reason ?? headNew?.state ?? ""}:${headOld?.reason ?? headOld?.state ?? ""}`;
-  }
-  return s;
-}
-
-/** 毫秒 → 中文可读时长（如 2 天 3 小时） */
-function fmtDurationMs(ms: number): string {
-  if (ms <= 0) return "";
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec} 秒`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} 分钟`;
-  const hour = Math.floor(min / 60);
-  const rmin = min % 60;
-  if (hour < 24) return rmin > 0 ? `${hour} 小时 ${rmin} 分` : `${hour} 小时`;
-  const day = Math.floor(hour / 24);
-  const rhour = hour % 24;
-  if (day < 30) return rhour > 0 ? `${day} 天 ${rhour} 小时` : `${day} 天`;
-  const month = Math.floor(day / 30);
-  const rday = day % 30;
-  return rday > 0 ? `${month} 个月 ${rday} 天` : `${month} 个月`;
-}
-
-/** 按 revision 时间线推算各版本运行时长：当前版至今，历史版至下一 revision 创建 */
-function buildRevisionDurationMap(
-  revisions: DeployRevision[],
-  nowMs: number,
-): Map<string, { label: string; ongoing: boolean }> {
-  const map = new Map<string, { label: string; ongoing: boolean }>();
-  if (revisions.length === 0) return map;
-  const sorted = [...revisions].sort((a, b) => {
-    const ra = Number.parseInt(a.revision, 10) || 0;
-    const rb = Number.parseInt(b.revision, 10) || 0;
-    return ra - rb;
-  });
-  for (let i = 0; i < sorted.length; i++) {
-    const rev = sorted[i];
-    const start = new Date(rev.createdAt).getTime();
-    if (Number.isNaN(start)) continue;
-    const ongoing = rev.isCurrent;
-    const nextStart = sorted[i + 1] ? new Date(sorted[i + 1].createdAt).getTime() : NaN;
-    const end = ongoing ? nowMs : nextStart;
-    if (Number.isNaN(end) || end <= start) continue;
-    map.set(rev.revision, { label: fmtDurationMs(end - start), ongoing });
-  }
-  return map;
-}
-
-const DeployRow = memo(function DeployRow({
-  d,
-  selected,
-  checked,
-  onSelect,
-  onToggleCheck,
-  onEdit,
-}: {
-  d: DeployInfo;
-  selected: boolean;
-  checked: boolean;
-  onSelect: (d: DeployInfo) => void;
-  onToggleCheck: (name: string, checked: boolean) => void;
-  onEdit: (d: DeployInfo) => void;
-}) {
-  const s = d.status;
-  return (
-    <Table.Tr
-      className={selected ? "ks-row-sel" : checked ? "ks-row-checked" : undefined}
-      style={{ cursor: "pointer" }}
-      onClick={() => onSelect(d)}
-    >
-      <Table.Td onClick={(e) => e.stopPropagation()}>
-        <Checkbox
-          aria-label={`选择 ${d.name}`}
-          checked={checked}
-          onChange={(e) => onToggleCheck(d.name, e.currentTarget.checked)}
-        />
-      </Table.Td>
-      <Table.Td>
-        <Group gap={6} wrap="nowrap">
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[s.state] ?? "#9aa5b8", display: "inline-block" }} />
-          <Badge color={STATUS_COLOR[s.state] ?? "gray"} variant="light" size="xs">{s.label}</Badge>
-        </Group>
-      </Table.Td>
-      <Table.Td fw={700}>{d.name}</Table.Td>
-      <Table.Td>{d.alias?.trim() || "-"}</Table.Td>
-      <Table.Td>{d.containers.join(", ") || "-"}</Table.Td>
-      <Table.Td style={{ fontFamily: "monospace", fontSize: 12 }}>
-        {(d.ports ?? []).length ? d.ports.join(", ") : "-"}
-      </Table.Td>
-      <Table.Td style={{ fontFamily: "monospace", fontSize: 11, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.image}>
-        {d.image || "-"}
-      </Table.Td>
-      <Table.Td>{s.detail.split(" · ")[0]}{s.old && <Text span size="xs" c="dimmed">{s.old}</Text>}</Table.Td>
-      <Table.Td>{d.revision}</Table.Td>
-      <Table.Td>
-        <Button
-          size="compact-xs"
-          variant="light"
-          leftSection={<Pencil size={12} />}
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(d);
-          }}
-        >
-          修改
-        </Button>
-      </Table.Td>
-    </Table.Tr>
-  );
-});
+import {
+  type DeployInfo,
+  type DeployEditInfo,
+  type DeployRevision,
+  type ConfigMapInfo,
+  type UpdateResult,
+  EMPTY_DEPLOY_FORM,
+  BAD_STATES,
+  PAGE_SIZE_OPTIONS,
+  REV_PAGE_SIZE_OPTIONS,
+  HEALTH_PATH_OPTIONS,
+  STATUS_DOT,
+  STATUS_COLOR,
+} from "./ksPublish/types";
+import {
+  isRfc1123Name,
+  syncSwAgentNameIfPresent,
+  fmtTime,
+  deployListFingerprint,
+  buildRevisionDurationMap,
+} from "./ksPublish/utils";
+import { DeployRow } from "./ksPublish/DeployRow";
 
 export function KsPublishPanel({
   config,
@@ -1902,6 +1709,8 @@ export function KsPublishPanel({
                     />
                     <Button
                       fullWidth
+                      variant="filled"
+                      color="blue"
                       leftSection={<Rocket size={15} />}
                       loading={submitting}
                       onClick={() => void submitImageOnly()}
@@ -2089,6 +1898,8 @@ export function KsPublishPanel({
             </Button>
             <Button
               size="xs"
+              variant="filled"
+              color="blue"
               leftSection={<Rocket size={14} />}
               loading={submitting || editLoading}
               onClick={() => void submit()}
@@ -2218,7 +2029,7 @@ export function KsPublishPanel({
             <Button size="xs" variant="default" loading={createBusy} onClick={() => void doCreate(true)}>
               校验 (dryRun)
             </Button>
-            <Button size="xs" loading={createBusy} onClick={() => void doCreate(false)}>
+            <Button size="xs" variant="filled" color="blue" loading={createBusy} onClick={() => void doCreate(false)}>
               创建
             </Button>
           </Group>
@@ -2309,7 +2120,7 @@ export function KsPublishPanel({
               <Group justify="flex-end">
                 <Button size="xs" variant="default" loading={cmBusy} onClick={() => void doCmPreview()}>预览 YAML</Button>
                 <Button size="xs" variant="default" loading={cmBusy} onClick={() => void doCmCreate(true)}>校验 (dryRun)</Button>
-                <Button size="xs" loading={cmBusy} onClick={() => void doCmCreate(false)}>创建</Button>
+                <Button size="xs" variant="filled" color="blue" loading={cmBusy} onClick={() => void doCmCreate(false)}>创建</Button>
               </Group>
               {cmPreview && (
                 <Stack>
@@ -2338,7 +2149,7 @@ export function KsPublishPanel({
               />
               <Group justify="flex-end">
                 <Button size="xs" variant="default" loading={cmBusy} onClick={() => void doCmCreate(true)}>校验 (dryRun)</Button>
-                <Button size="xs" loading={cmBusy} onClick={() => void doCmCreate(false)}>创建</Button>
+                <Button size="xs" variant="filled" color="blue" loading={cmBusy} onClick={() => void doCmCreate(false)}>创建</Button>
               </Group>
             </>
           )}

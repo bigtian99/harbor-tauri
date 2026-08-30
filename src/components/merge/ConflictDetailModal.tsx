@@ -1,7 +1,9 @@
 import type { MutableRefObject } from "react";
-import { ArrowDown, ArrowUp, FileText, GitBranch, Loader2, X } from "lucide-react";
+import { Button, Group, Modal } from "@mantine/core";
+import { ArrowDown, ArrowUp, FileText, GitBranch, Loader2 } from "lucide-react";
 import type { MergeConflictDetail } from "../../types";
 import type { ConflictBlock } from "./types";
+import "../Modal.css";
 
 interface ConflictDetailModalProps {
   conflictDetail: MergeConflictDetail;
@@ -17,6 +19,28 @@ interface ConflictDetailModalProps {
   onJumpBlock: (step: -1 | 1) => void;
 }
 
+const modalStyles = {
+  content: {
+    background: "var(--color-bg-surface)",
+    border: "1px solid var(--color-border)",
+    maxWidth: "78vw",
+    width: "78vw",
+    maxHeight: "82vh",
+    display: "flex",
+    flexDirection: "column" as const,
+  },
+  header: { background: "var(--color-bg-surface)", flexShrink: 0 },
+  title: { color: "var(--color-text)", fontWeight: 600 },
+  body: {
+    padding: 0,
+    flex: 1,
+    display: "flex",
+    flexDirection: "column" as const,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+} as const;
+
 export function ConflictDetailModal({
   conflictDetail,
   isLoading,
@@ -31,102 +55,111 @@ export function ConflictDetailModal({
   onJumpBlock,
 }: ConflictDetailModalProps) {
   return (
-    <div
-      className="commit-modal-overlay commit-diff-modal-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="conflict-diff-title"
-      onClick={onClose}
-    >
-      <div className="commit-modal merge-conflict-compare-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="commit-modal-header">
-          <h3 id="conflict-diff-title"><FileText size={16} /> 冲突文件对比</h3>
-          <span className="template-hint" style={{ marginLeft: 12 }}>
+    <Modal
+      opened
+      onClose={onClose}
+      title={
+        <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+          <Group gap={6} style={{ flexShrink: 0 }}>
+            <FileText size={16} />
+            <span>冲突文件对比</span>
+          </Group>
+          <span className="template-hint" style={{ fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {conflictDetail.filePath}
           </span>
-          <div className="commit-diff-jump-actions" style={{ marginLeft: "auto", marginRight: 8 }}>
-            <button
+          <div className="commit-diff-jump-actions" style={{ marginLeft: "auto" }}>
+            <Button
               type="button"
+              variant="default"
+              color="cyan"
+              size="compact-sm"
               className="commit-diff-jump-btn"
               onClick={() => onJumpBlock(-1)}
               disabled={conflictBlocks.length === 0}
               title="上一个冲突块"
+              leftSection={<ArrowUp size={14} />}
             >
-              <ArrowUp size={14} /> 上一个
-            </button>
+              上一个
+            </Button>
             <span className="commit-diff-jump-count">
               {conflictBlocks.length > 0 ? `${activeConflictBlock + 1 || 0}/${conflictBlocks.length}` : "0/0"}
             </span>
-            <button
+            <Button
               type="button"
+              variant="default"
+              color="cyan"
+              size="compact-sm"
               className="commit-diff-jump-btn"
               onClick={() => onJumpBlock(1)}
               disabled={conflictBlocks.length === 0}
               title="下一个冲突块"
+              leftSection={<ArrowDown size={14} />}
             >
-              <ArrowDown size={14} /> 下一个
-            </button>
+              下一个
+            </Button>
           </div>
-          <button className="commit-modal-close" onClick={onClose} title="关闭">
-            <X size={16} />
-          </button>
+        </Group>
+      }
+      size="90%"
+      centered
+      classNames={{ content: "merge-conflict-compare-modal" }}
+      styles={modalStyles}
+    >
+      {isLoading ? (
+        <div className="modal-loading"><Loader2 size={16} className="spin" /> 加载中...</div>
+      ) : (
+        <div className="merge-conflict-compare">
+          <div className="merge-conflict-panel">
+            <div className="merge-conflict-panel-header">
+              <GitBranch size={14} /> {targetBranch.replace(/^origin\//, "")}
+              <span className="merge-conflict-role-tag">目标</span>
+            </div>
+            <div className="merge-conflict-content">
+              {conflictDetail.targetContent.split("\n").map((line, i) => {
+                const ln = i + 1;
+                const changed = conflictChangedLines.targetLines.has(ln);
+                const activeBlock = conflictBlocks[activeConflictBlock];
+                const inActiveBlock = activeBlock && activeBlock.targetLines.has(ln);
+                return (
+                  <div
+                    key={i}
+                    ref={(el) => { targetLineRefs.current[ln] = el; }}
+                    className={`merge-conflict-line${changed ? " merge-conflict-line--removed" : ""}${inActiveBlock ? " merge-conflict-line--active" : ""}`}
+                  >
+                    <span className="merge-conflict-ln">{ln}</span>
+                    <span className="merge-conflict-text">{line || " "}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="merge-conflict-divider" />
+          <div className="merge-conflict-panel">
+            <div className="merge-conflict-panel-header">
+              <GitBranch size={14} /> {sourceBranch.replace(/^origin\//, "")}
+              <span className="merge-conflict-role-tag merge-conflict-role-tag--source">源</span>
+            </div>
+            <div className="merge-conflict-content">
+              {conflictDetail.sourceContent.split("\n").map((line, i) => {
+                const ln = i + 1;
+                const changed = conflictChangedLines.sourceLines.has(ln);
+                const activeBlock = conflictBlocks[activeConflictBlock];
+                const inActiveBlock = activeBlock && activeBlock.sourceLines.has(ln);
+                return (
+                  <div
+                    key={i}
+                    ref={(el) => { sourceLineRefs.current[ln] = el; }}
+                    className={`merge-conflict-line${changed ? " merge-conflict-line--added" : ""}${inActiveBlock ? " merge-conflict-line--active" : ""}`}
+                  >
+                    <span className="merge-conflict-ln">{ln}</span>
+                    <span className="merge-conflict-text">{line || " "}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        {isLoading ? (
-          <div className="modal-loading"><Loader2 size={16} className="spin" /> 加载中...</div>
-        ) : (
-          <div className="merge-conflict-compare">
-            <div className="merge-conflict-panel">
-              <div className="merge-conflict-panel-header">
-                <GitBranch size={14} /> {targetBranch.replace(/^origin\//, "")}
-                <span className="merge-conflict-role-tag">目标</span>
-              </div>
-              <div className="merge-conflict-content">
-                {conflictDetail.targetContent.split("\n").map((line, i) => {
-                  const ln = i + 1;
-                  const changed = conflictChangedLines.targetLines.has(ln);
-                  const activeBlock = conflictBlocks[activeConflictBlock];
-                  const inActiveBlock = activeBlock && activeBlock.targetLines.has(ln);
-                  return (
-                    <div
-                      key={i}
-                      ref={(el) => { targetLineRefs.current[ln] = el; }}
-                      className={`merge-conflict-line${changed ? " merge-conflict-line--removed" : ""}${inActiveBlock ? " merge-conflict-line--active" : ""}`}
-                    >
-                      <span className="merge-conflict-ln">{ln}</span>
-                      <span className="merge-conflict-text">{line || " "}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="merge-conflict-divider" />
-            <div className="merge-conflict-panel">
-              <div className="merge-conflict-panel-header">
-                <GitBranch size={14} /> {sourceBranch.replace(/^origin\//, "")}
-                <span className="merge-conflict-role-tag merge-conflict-role-tag--source">源</span>
-              </div>
-              <div className="merge-conflict-content">
-                {conflictDetail.sourceContent.split("\n").map((line, i) => {
-                  const ln = i + 1;
-                  const changed = conflictChangedLines.sourceLines.has(ln);
-                  const activeBlock = conflictBlocks[activeConflictBlock];
-                  const inActiveBlock = activeBlock && activeBlock.sourceLines.has(ln);
-                  return (
-                    <div
-                      key={i}
-                      ref={(el) => { sourceLineRefs.current[ln] = el; }}
-                      className={`merge-conflict-line${changed ? " merge-conflict-line--added" : ""}${inActiveBlock ? " merge-conflict-line--active" : ""}`}
-                    >
-                      <span className="merge-conflict-ln">{ln}</span>
-                      <span className="merge-conflict-text">{line || " "}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }

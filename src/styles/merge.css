@@ -24,7 +24,7 @@
   display: flex;
   align-items: center;
   height: 42px;
-  color: var(--primary, #5eead4);
+  color: var(--color-primary-hover);
   flex-shrink: 0;
 }
 
@@ -35,8 +35,8 @@
   gap: 8px;
   padding: 10px 0;
   margin-bottom: 8px;
-  border-top: 1px solid rgba(100, 255, 218, 0.1);
-  border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .merge-result {
@@ -47,8 +47,8 @@
 }
 
 .merge-result.can-merge {
-  border-color: rgba(100, 255, 218, 0.45);
-  background: rgba(100, 255, 218, 0.08);
+  border-color: var(--color-primary-muted);
+  background: var(--color-primary-muted);
 }
 
 .merge-result.has-conflict {
@@ -72,7 +72,7 @@
   margin: 4px 0 0;
   padding-left: 22px;
   font-size: 0.82em;
-  color: #ff6b6b;
+  color: var(--color-error);
   max-height: 160px;
   overflow-y: auto;
 }
@@ -88,7 +88,7 @@
   gap: 5px;
   background: none;
   border: none;
-  color: #ff6b6b;
+  color: var(--color-error);
   cursor: pointer;
   font-size: inherit;
   padding: 1px 4px;
@@ -102,7 +102,7 @@
 
 .conflict-file-btn:hover {
   background: rgba(255, 107, 107, 0.1);
-  color: #ff4444;
+  color: var(--color-error);
 }
 
 /* 冲突文件左右对比 */
@@ -134,9 +134,9 @@
   padding: 8px 14px;
   font-size: 0.85em;
   font-weight: 600;
-  color: #e0e0e0;
-  background: rgba(100, 255, 218, 0.06);
-  border-bottom: 1px solid rgba(100, 255, 218, 0.12);
+  color: var(--color-text);
+  background: var(--color-primary-muted);
+  border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 
@@ -144,14 +144,14 @@
   font-size: 0.72em;
   padding: 1px 7px;
   border-radius: 3px;
-  background: rgba(100, 255, 218, 0.15);
-  color: #5eead4;
+  background: var(--color-primary-muted);
+  color: var(--color-primary-hover);
   margin-left: 4px;
 }
 
 .merge-conflict-role-tag--source {
   background: rgba(255, 165, 0, 0.15);
-  color: #ffa500;
+  color: var(--color-warning);
 }
 
 .merge-conflict-content {
@@ -161,8 +161,8 @@
   line-height: 1.55;
   font-family: "Fira Code", "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
   tab-size: 4;
-  color: #c9d1d9;
-  background: #0d1117;
+  color: var(--color-text);
+  background: var(--color-bg-base);
 }
 
 .merge-conflict-line {
@@ -173,17 +173,17 @@
 
 .merge-conflict-line--removed {
   background: rgba(255, 107, 107, 0.15);
-  border-left: 3px solid #ff6b6b;
+  border-left: 3px solid var(--color-error);
 }
 
 .merge-conflict-line--added {
   background: rgba(100, 255, 150, 0.1);
-  border-left: 3px solid #64ff96;
+  border-left: 3px solid var(--color-success);
 }
 
 .merge-conflict-line--active {
   background: rgba(100, 200, 255, 0.2) !important;
-  border-left: 3px solid #64c8ff !important;
+  border-left: 3px solid var(--color-primary-hover) !important;
   box-shadow: inset 0 0 0 1px rgba(100, 200, 255, 0.3);
 }
 
@@ -195,7 +195,7 @@
   color: rgba(140, 150, 165, 0.5);
   user-select: none;
   flex-shrink: 0;
-  border-right: 1px solid rgba(100, 255, 218, 0.08);
+  border-right: 1px solid var(--color-border);
   margin-right: 8px;
 }
 
@@ -207,7 +207,7 @@
 .merge-conflict-divider {
   width: 1px;
   flex-shrink: 0;
-  background: rgba(100, 255, 218, 0.15);
+  background: var(--color-primary-muted);
 }
 
 .pr-state {
@@ -221,17 +221,17 @@
 }
 
 .pr-state-ok {
-  color: #5eead4;
-  background: rgba(100, 255, 218, 0.1);
+  color: var(--color-primary-hover);
+  background: var(--color-primary-muted);
 }
 
 .pr-state-conflict {
-  color: #ff6b6b;
+  color: var(--color-error);
   background: rgba(255, 107, 107, 0.1);
 }
 
 .pr-state-info {
-  color: #9ed0ff;
+  color: var(--color-primary-hover);
   background: rgba(100, 181, 255, 0.18);
   border: 1px solid rgba(100, 181, 255, 0.35);
   font-weight: 600;
@@ -244,8 +244,8 @@
   gap: 8px;
   padding: 12px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(100, 255, 218, 0.12);
-  background: rgba(100, 255, 218, 0.04);
+  border: 1px solid var(--color-border);
+  background: var(--color-primary-muted);
 }
 
 .merge-diff-section--empty {
@@ -255,7 +255,7 @@
 }
 
 .merge-diff-section--empty .merge-diff-header {
-  color: #9ed0ff;
+  color: var(--color-primary-hover);
 }
 
 .merge-diff-empty {
@@ -266,14 +266,14 @@
   border-radius: 8px;
   border: 1px solid rgba(100, 181, 255, 0.45);
   background: rgba(100, 181, 255, 0.16);
-  color: #64b5ff;
+  color: var(--color-primary-hover);
   box-shadow: 0 2px 10px rgba(100, 181, 255, 0.12);
 }
 
 .merge-diff-empty > svg {
   flex-shrink: 0;
   margin-top: 2px;
-  color: #9ed0ff;
+  color: var(--color-primary-hover);
 }
 
 .merge-diff-empty-text {
@@ -285,7 +285,7 @@
 }
 
 .merge-diff-empty-text strong {
-  color: #cfe8ff;
+  color: var(--color-primary-hover);
   font-size: 1em;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -300,7 +300,7 @@
   align-items: center;
   gap: 8px;
   font-size: 0.88em;
-  color: var(--text, #e6f1ff);
+  color: var(--color-text);
   font-weight: 600;
 }
 
@@ -308,7 +308,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--muted, #8892b0);
+  color: var(--color-text-muted);
   font-size: 0.85em;
   padding: 4px 0;
 }
@@ -322,28 +322,28 @@
 .merge-diff-search-icon {
   position: absolute;
   left: 10px;
-  color: var(--muted, #8892b0);
+  color: var(--color-text-muted);
   pointer-events: none;
 }
 
 .merge-diff-search-input {
   width: 100%;
   background: rgba(15, 52, 96, 0.35);
-  border: 1px solid rgba(100, 255, 218, 0.15);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 32px 8px 32px;
-  color: var(--text, #e6f1ff);
+  color: var(--color-text);
   font-size: 0.85em;
   outline: none;
   transition: border-color 0.2s ease;
 }
 
 .merge-diff-search-input::placeholder {
-  color: var(--muted, #8892b0);
+  color: var(--color-text-muted);
 }
 
 .merge-diff-search-input:focus {
-  border-color: rgba(100, 255, 218, 0.45);
+  border-color: var(--color-primary-muted);
 }
 
 .merge-diff-search-clear {
@@ -358,14 +358,14 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--muted, #8892b0);
+  color: var(--color-text-muted);
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
 }
 
 .merge-diff-search-clear:hover {
-  color: var(--text, #e6f1ff);
+  color: var(--color-text);
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -373,7 +373,7 @@
   margin: 0;
   padding: 10px 0 4px;
   font-size: 0.85em;
-  color: var(--muted, #8892b0);
+  color: var(--color-text-muted);
   text-align: center;
 }
 
@@ -393,14 +393,14 @@
   padding: 8px 10px;
   border-radius: 8px;
   background: rgba(15, 52, 96, 0.24);
-  border: 1px solid rgba(100, 255, 218, 0.08);
+  border: 1px solid var(--color-border);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .merge-diff-item:hover,
 .merge-diff-item:focus-visible {
-  border-color: rgba(100, 255, 218, 0.35);
+  border-color: var(--color-primary-muted);
   background: rgba(15, 52, 96, 0.38);
   outline: none;
 }
@@ -414,13 +414,13 @@
 }
 
 .merge-diff-item-main .commit-hash {
-  color: var(--primary, #5eead4);
+  color: var(--color-primary-hover);
   font-family: var(--font-mono, monospace);
   font-size: 0.82em;
 }
 
 .merge-diff-item-main .commit-message {
-  color: var(--text, #e6f1ff);
+  color: var(--color-text);
   font-size: 0.85em;
   white-space: nowrap;
   overflow: hidden;
@@ -432,12 +432,12 @@
   align-items: center;
   gap: 12px;
   font-size: 0.76em;
-  color: var(--muted, #8892b0);
+  color: var(--color-text-muted);
   flex-shrink: 0;
 }
 
 .merge-diff-item-action {
-  color: var(--primary, #5eead4);
+  color: var(--color-primary-hover);
   font-weight: 600;
 }
 
@@ -452,7 +452,7 @@
 
 .merge-authors-label {
   font-size: 0.8em;
-  color: var(--muted, #8892b0);
+  color: var(--color-text-muted);
   margin-right: 4px;
 }
 
@@ -462,23 +462,23 @@
   gap: 5px;
   padding: 3px 8px 3px 4px;
   border-radius: 20px;
-  border: 1px solid rgba(100, 255, 218, 0.15);
+  border: 1px solid var(--color-border);
   background: rgba(15, 52, 96, 0.25);
-  color: var(--text, #e6f1ff);
+  color: var(--color-text);
   cursor: pointer;
   font-size: 0.8em;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .merge-author-pill:hover {
-  border-color: rgba(100, 255, 218, 0.4);
-  background: rgba(100, 255, 218, 0.08);
+  border-color: var(--color-primary-muted);
+  background: var(--color-primary-muted);
 }
 
 .merge-author-pill--active {
-  border-color: rgba(100, 255, 218, 0.65);
-  background: rgba(100, 255, 218, 0.12);
-  box-shadow: 0 0 8px rgba(100, 255, 218, 0.15);
+  border-color: var(--color-primary-muted);
+  background: var(--color-primary-muted);
+  box-shadow: 0 0 8px var(--color-primary-muted);
 }
 
 .merge-author-avatar {
@@ -506,9 +506,9 @@
 }
 
 .merge-author-count {
-  color: var(--muted, #8892b0);
+  color: var(--color-text-muted);
   font-size: 0.85em;
-  background: rgba(100, 255, 218, 0.08);
+  background: var(--color-primary-muted);
   border-radius: 10px;
   padding: 0 5px;
   min-width: 18px;
@@ -518,7 +518,7 @@
 .merge-author-clear {
   border: none;
   background: rgba(255, 107, 107, 0.15);
-  color: #ff6b6b;
+  color: var(--color-error);
   border-radius: 50%;
   width: 22px;
   height: 22px;
@@ -551,7 +551,7 @@
   width: min(92vw, 420px);
   padding: 28px 24px 24px;
   border-radius: 14px;
-  border: 1px solid rgba(100, 255, 218, 0.22);
+  border: 1px solid var(--color-primary-muted);
   background: linear-gradient(160deg, rgba(26, 31, 58, 0.98) 0%, rgba(15, 22, 41, 0.98) 100%);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
   display: flex;
@@ -563,36 +563,36 @@
 }
 
 .merge-progress-icon {
-  color: #5eead4;
+  color: var(--color-primary-hover);
   flex-shrink: 0;
 }
 
 .merge-progress-icon--success {
-  color: #5eead4;
+  color: var(--color-primary-hover);
 }
 
 .merge-progress-icon--error {
-  color: #ff6b6b;
+  color: var(--color-error);
 }
 
 .merge-progress-title {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 700;
-  color: #e6f1ff;
+  color: var(--color-text);
 }
 
 .merge-progress-subtitle {
   margin: 0;
   font-size: 0.82rem;
-  color: #8892b0;
+  color: var(--color-text-muted);
   font-family: var(--font-mono, monospace);
 }
 
 .merge-progress-message {
   margin: 4px 0 0;
   font-size: 0.9rem;
-  color: #ccd6f6;
+  color: var(--color-text);
   line-height: 1.5;
 }
 
@@ -613,23 +613,23 @@
 .merge-progress-bar {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #5eead4 0%, #48c9b0 100%);
+  background: linear-gradient(90deg, var(--color-primary-hover) 0%, var(--color-success) 100%);
   transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .merge-progress-percent {
   font-size: 0.82rem;
   font-weight: 700;
-  color: #5eead4;
+  color: var(--color-primary-hover);
 }
 
 .merge-progress-btn {
   margin-top: 8px;
   padding: 8px 22px;
   border-radius: 8px;
-  border: 1px solid rgba(100, 255, 218, 0.35);
-  background: rgba(100, 255, 218, 0.12);
-  color: #5eead4;
+  border: 1px solid var(--color-primary-muted);
+  background: var(--color-primary-muted);
+  color: var(--color-primary-hover);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
@@ -637,8 +637,8 @@
 }
 
 .merge-progress-btn:hover {
-  background: rgba(100, 255, 218, 0.2);
-  border-color: rgba(100, 255, 218, 0.55);
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary-muted);
 }
 
 @keyframes merge-overlay-in {

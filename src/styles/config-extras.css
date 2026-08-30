@@ -16,7 +16,7 @@
   right: 12px;
   background: none;
   border: none;
-  color: #8892b0;
+  color: var(--color-text-muted);
   cursor: pointer;
   padding: 4px;
   display: flex;
@@ -27,16 +27,16 @@
 }
 
 .password-toggle:hover {
-  color: #5eead4;
-  background: rgba(100, 255, 218, 0.1);
+  color: var(--color-primary-hover);
+  background: var(--color-primary-muted);
 }
 
 .save-btn {
   padding: 12px 20px;
   border-radius: 12px;
   border: none;
-  background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
-  color: #5eead4;
+  background: linear-gradient(135deg, var(--color-bg-surface) 0%, var(--color-bg-elevated) 100%);
+  color: var(--color-primary-hover);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -54,7 +54,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(100, 255, 218, 0.2), rgba(72, 201, 176, 0.1));
+  background: linear-gradient(135deg, var(--color-primary-muted), rgba(56, 189, 248, 0.08));
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -66,8 +66,8 @@
 .save-btn:hover {
   transform: translateY(-2px);
   box-shadow:
-    0 8px 28px rgba(100, 255, 218, 0.25),
-    0 0 40px rgba(100, 255, 218, 0.15);
+    0 8px 28px var(--color-primary-muted),
+    0 0 40px var(--color-primary-muted);
 }
 
 .save-btn:disabled {
@@ -85,18 +85,18 @@
 .config-tip {
   margin-top: 10px;
   padding: 14px;
-  background: linear-gradient(135deg, rgba(100, 255, 218, 0.08), rgba(72, 201, 176, 0.06));
+  background: linear-gradient(135deg, var(--color-primary-muted), rgba(56, 189, 248, 0.05));
   border-radius: 12px;
-  border: 1px solid rgba(100, 255, 218, 0.2);
-  box-shadow: 0 4px 16px rgba(100, 255, 218, 0.1);
+  border: 1px solid var(--color-primary-muted);
+  box-shadow: 0 4px 16px var(--color-primary-muted);
 }
 
 .config-tip p {
-  color: #5eead4;
+  color: var(--color-primary-hover);
   font-weight: 700;
   margin-bottom: 12px;
   font-size: 14px;
-  text-shadow: 0 0 10px rgba(100, 255, 218, 0.3);
+  text-shadow: 0 0 10px var(--color-primary-muted);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -115,7 +115,7 @@
 }
 
 .config-tip li {
-  color: #ccd6f6;
+  color: var(--color-text);
   font-size: 12px;
   padding-left: 18px;
   position: relative;
@@ -126,7 +126,7 @@
   content: "•";
   position: absolute;
   left: 0;
-  color: #5eead4;
+  color: var(--color-primary-hover);
   font-size: 16px;
   font-weight: bold;
 }
@@ -142,25 +142,25 @@
   padding: 18px 18px 16px;
   border-radius: 14px;
   background: linear-gradient(145deg, rgba(26, 31, 58, 0.95), rgba(12, 16, 36, 0.98));
-  border: 1px solid rgba(100, 255, 218, 0.16);
+  border: 1px solid var(--color-primary-muted);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
 .about-app-name {
   font-size: 18px;
   font-weight: 700;
-  color: #e8eef8;
+  color: var(--color-text);
   letter-spacing: 0.02em;
 }
 
 .about-version {
   margin-top: 6px;
   font-size: 13px;
-  color: #8a93a8;
+  color: var(--color-text-muted);
 }
 
 .about-version strong {
-  color: #64ffda;
+  color: var(--color-primary);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
@@ -168,7 +168,7 @@
 .about-desc {
   margin: 10px 0 0;
   font-size: 12px;
-  color: #6b7488;
+  color: var(--color-text-muted);
 }
 
 .about-actions {
@@ -190,9 +190,9 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
-  color: #0a0e27;
-  background: linear-gradient(135deg, #64ffda, #2ac99a);
-  box-shadow: 0 6px 16px rgba(100, 255, 218, 0.2);
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-success));
+  box-shadow: 0 6px 16px var(--color-primary-muted);
   transition: transform 0.12s, opacity 0.15s;
 }
 
@@ -210,7 +210,7 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #64ffda;
+  color: var(--color-primary);
   text-decoration: none;
   border: none;
   background: none;
@@ -240,21 +240,21 @@
 }
 
 .about-check-msg--ok {
-  background: rgba(100, 255, 218, 0.08);
-  border: 1px solid rgba(100, 255, 218, 0.22);
-  color: #7aebca;
+  background: var(--color-primary-muted);
+  border: 1px solid var(--color-primary-muted);
+  color: var(--color-primary-hover);
 }
 
 .about-check-msg--update {
   background: rgba(96, 165, 250, 0.1);
   border: 1px solid rgba(96, 165, 250, 0.28);
-  color: #93c5fd;
+  color: var(--color-primary-hover);
 }
 
 .about-check-msg--err {
   background: rgba(255, 107, 107, 0.08);
   border: 1px solid rgba(255, 107, 107, 0.25);
-  color: #ff9b9b;
+  color: var(--color-error);
 }
 
 .about-data-card {
@@ -264,14 +264,14 @@
 .about-data-title {
   font-size: 14px;
   font-weight: 650;
-  color: #e8eef8;
+  color: var(--color-text);
 }
 
 .about-data-desc {
   margin: 8px 0 0;
   font-size: 12px;
   line-height: 1.5;
-  color: #8a93a8;
+  color: var(--color-text-muted);
 }
 
 .about-danger-btn {
@@ -285,7 +285,7 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
-  color: #ff8a8a;
+  color: var(--color-error);
   background: rgba(255, 107, 107, 0.08);
   transition: transform 0.12s, opacity 0.15s, background 0.15s;
 }

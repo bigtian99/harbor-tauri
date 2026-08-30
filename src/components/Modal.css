@@ -22,8 +22,8 @@
 }
 
 .modal-content {
-  background: linear-gradient(135deg, #1a1f3a 0%, #0f1629 100%);
-  border: 1px solid rgba(100, 255, 218, 0.2);
+  background: linear-gradient(135deg, var(--color-bg-surface) 0%, var(--color-bg-base) 100%);
+  border: 1px solid var(--color-primary-muted);
   border-radius: 12px;
   width: 90%;
   height: 80vh;
@@ -62,7 +62,7 @@
 .modal-title {
   font-size: 16px;
   font-weight: 600;
-  color: #64ffda;
+  color: var(--color-primary);
   margin: 0;
 }
 
@@ -121,7 +121,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   padding: 8px 12px 8px 32px;
-  color: #e0e0e0;
+  color: var(--color-text);
   font-size: 13px;
   outline: none;
   transition: border-color 0.2s ease;
@@ -132,16 +132,16 @@
 }
 
 .commit-search-input:focus {
-  border-color: rgba(100, 255, 218, 0.5);
+  border-color: var(--color-primary-muted);
 }
 
 .commit-search-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(100, 255, 218, 0.2);
-  border: 1px solid rgba(100, 255, 218, 0.4);
-  color: #64ffda;
+  background: var(--color-primary-muted);
+  border: 1px solid var(--color-primary-muted);
+  color: var(--color-primary);
   padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
@@ -151,7 +151,7 @@
 }
 
 .commit-search-btn:hover {
-  background: rgba(100, 255, 218, 0.3);
+  background: var(--color-primary-muted);
 }
 
 .commit-search-clear {
@@ -160,7 +160,7 @@
   justify-content: center;
   background: rgba(255, 107, 107, 0.1);
   border: 1px solid rgba(255, 107, 107, 0.3);
-  color: #ff6b6b;
+  color: var(--color-error);
   padding: 8px 12px;
   border-radius: 6px;
   cursor: pointer;
@@ -183,7 +183,7 @@
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #8892b0;
+  color: var(--color-text-muted);
   pointer-events: none;
   z-index: 1;
 }
@@ -192,9 +192,9 @@
   width: 100%;
   padding: 10px 14px 10px 36px;
   border-radius: 10px;
-  border: 1px solid rgba(100, 255, 218, 0.15);
+  border: 1px solid var(--color-border);
   background: rgba(15, 52, 96, 0.4);
-  color: #e0e0e0;
+  color: var(--color-text);
   font-size: 13px;
   outline: none;
   cursor: pointer;
@@ -203,21 +203,21 @@
 }
 
 .commit-author-select:hover:not(:disabled) {
-  border-color: rgba(100, 255, 218, 0.3);
+  border-color: var(--color-primary-muted);
   background: rgba(15, 52, 96, 0.6);
 }
 
 .commit-author-select:focus {
-  border-color: #64ffda;
+  border-color: var(--color-primary);
   background: rgba(15, 52, 96, 0.7);
   box-shadow:
-    0 0 0 3px rgba(100, 255, 218, 0.12),
-    0 4px 16px rgba(100, 255, 218, 0.15);
+    0 0 0 3px var(--color-primary-muted),
+    0 4px 16px var(--color-primary-muted);
 }
 
 .commit-author-select option {
-  background: #0f1629;
-  color: #e0e0e0;
+  background: var(--color-bg-base);
+  color: var(--color-text);
   padding: 8px;
 }
 
@@ -238,11 +238,11 @@
 
 .modal-loading-inline {
   text-align: center;
-  color: #64ffda;
+  color: var(--color-primary);
   padding: 8px;
   font-size: 12px;
-  background: rgba(100, 255, 218, 0.1);
-  border-bottom: 1px solid rgba(100, 255, 218, 0.2);
+  background: var(--color-primary-muted);
+  border-bottom: 1px solid var(--color-primary-muted);
 }
 
 .modal-list-item {
@@ -293,7 +293,7 @@
 /* Modal 内部历史记录样式 */
 .modal-history-item {
   background: rgba(15, 52, 96, 0.25);
-  border: 1px solid rgba(100, 255, 218, 0.1);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   margin-bottom: 12px;
   overflow: hidden;
@@ -301,16 +301,16 @@
 }
 
 .modal-history-item:hover {
-  border-color: rgba(100, 255, 218, 0.25);
+  border-color: var(--color-primary-muted);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .modal-history-item.success {
-  border-left: 3px solid #64ffda;
+  border-left: 3px solid var(--color-primary);
 }
 
 .modal-history-item.failed {
-  border-left: 3px solid #ff6b6b;
+  border-left: 3px solid var(--color-error);
 }
 
 .modal-history-item-header {
@@ -395,30 +395,30 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(100, 255, 218, 0.08);
-  border: 1px solid rgba(100, 255, 218, 0.15);
+  background: var(--color-primary-muted);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .project-group-header:hover {
-  background: rgba(100, 255, 218, 0.12);
+  background: var(--color-primary-muted);
 }
 
 .project-group-name {
   font-weight: 600;
-  color: #64ffda;
+  color: var(--color-primary);
   font-size: 14px;
 }
 
 .project-group-count {
-  color: #8892b0;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .project-group-arrow {
-  color: #8892b0;
+  color: var(--color-text-muted);
   transition: transform 0.2s ease;
   font-size: 10px;
 }
@@ -457,8 +457,8 @@
 }
 
 .commit-modal {
-  background: linear-gradient(135deg, #1a1f3a 0%, #0f1629 100%);
-  border: 1px solid rgba(100, 255, 218, 0.2);
+  background: linear-gradient(135deg, var(--color-bg-surface) 0%, var(--color-bg-base) 100%);
+  border: 1px solid var(--color-primary-muted);
   border-radius: 12px;
   width: 90%;
   max-width: 720px;
@@ -483,7 +483,7 @@
 .commit-modal-header h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #64ffda;
+  color: var(--color-primary);
   margin: 0;
 }
 
@@ -557,16 +557,16 @@
   height: 28px;
   padding: 0 10px;
   border-radius: 6px;
-  border: 1px solid rgba(100, 255, 218, 0.24);
+  border: 1px solid var(--color-primary-muted);
   background: rgba(15, 52, 96, 0.42);
-  color: #64ffda;
+  color: var(--color-primary);
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .commit-diff-jump-btn:hover:not(:disabled) {
-  border-color: rgba(100, 255, 218, 0.52);
+  border-color: var(--color-primary-muted);
   background: rgba(15, 52, 96, 0.72);
 }
 
@@ -576,7 +576,7 @@
 }
 
 .commit-diff-jump-count {
-  color: #8892b0;
+  color: var(--color-text-muted);
   font-size: 12px;
   min-width: 42px;
   text-align: center;
@@ -596,7 +596,7 @@
 }
 
 .commit-diff-summary-main strong {
-  color: #e6f1ff;
+  color: var(--color-text);
   font-size: 13px;
   font-weight: 600;
   overflow: hidden;
@@ -609,7 +609,7 @@
   gap: 14px;
   padding-left: 72px;
   margin-top: 6px;
-  color: #8892b0;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -628,7 +628,7 @@
   flex-shrink: 0;
   overflow: auto;
   padding: 12px 10px;
-  border-right: 1px solid rgba(100, 255, 218, 0.12);
+  border-right: 1px solid var(--color-border);
   background: rgba(15, 23, 42, 0.38);
 }
 
@@ -663,7 +663,7 @@
   padding: 5px 8px;
   appearance: none;
   background: transparent;
-  color: #7dd3fc;
+  color: var(--color-primary-hover);
   font-weight: 700;
   text-align: left;
   cursor: pointer;
@@ -676,26 +676,26 @@
 
 .commit-diff-file-tree-dir:hover {
   background: rgba(14, 165, 233, 0.1);
-  color: #e0f2fe;
+  color: var(--color-primary-hover);
 }
 
 .commit-diff-file-tree-dir--collapsed {
-  color: #bae6fd;
+  color: var(--color-primary-hover);
 }
 
 .commit-diff-file-tree-file {
   padding: 5px 8px;
   background: transparent;
-  color: #cbd5e1;
+  color: var(--color-text);
   text-align: left;
   cursor: pointer;
 }
 
 .commit-diff-file-tree-file:hover,
 .commit-diff-file-tree-file--active {
-  border-color: rgba(100, 255, 218, 0.28);
-  background: rgba(100, 255, 218, 0.1);
-  color: #e6f1ff;
+  border-color: var(--color-primary-muted);
+  background: var(--color-primary-muted);
+  color: var(--color-text);
 }
 
 .commit-diff-files {
@@ -707,14 +707,14 @@
 
 .commit-diff-file {
   margin: 0 14px 12px;
-  border: 1px solid rgba(100, 255, 218, 0.12);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
   background: rgba(15, 23, 42, 0.46);
 }
 
 .commit-diff-file--active {
-  border-color: rgba(100, 255, 218, 0.36);
+  border-color: var(--color-primary-muted);
 }
 
 .commit-diff-file:last-child {
@@ -723,9 +723,9 @@
 
 .commit-diff-file-title {
   padding: 8px 12px;
-  color: #7dd3fc;
+  color: var(--color-primary-hover);
   background: rgba(14, 165, 233, 0.12);
-  border-bottom: 1px solid rgba(100, 255, 218, 0.1);
+  border-bottom: 1px solid var(--color-border);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -737,12 +737,12 @@
 .commit-diff-line {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr);
-  color: #cbd5e1;
+  color: var(--color-text);
 }
 
 .commit-diff-line-marker {
   padding: 0 10px;
-  color: #64748b;
+  color: var(--color-text-muted);
   text-align: center;
   user-select: none;
   border-right: 1px solid rgba(148, 163, 184, 0.16);
@@ -755,18 +755,18 @@
 }
 
 .commit-diff-line--addition {
-  color: #bbf7d0;
+  color: var(--color-success);
   background: rgba(34, 197, 94, 0.14);
 }
 
 .commit-diff-line--deletion {
-  color: #fecaca;
+  color: var(--color-error);
   background: rgba(239, 68, 68, 0.14);
 }
 
 .commit-diff-line--active {
-  box-shadow: inset 3px 0 0 #64ffda;
-  background: rgba(100, 255, 218, 0.18);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+  background: var(--color-primary-muted);
 }
 
 .commit-diff-error {
@@ -775,6 +775,6 @@
   border-radius: 8px;
   border: 1px solid rgba(255, 107, 107, 0.35);
   background: rgba(255, 107, 107, 0.1);
-  color: #ffb4b4;
+  color: var(--color-error);
   font-size: 13px;
 }

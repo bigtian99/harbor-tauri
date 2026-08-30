@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ChevronDown, FolderOpen, Loader2, RefreshCw, Save } from "lucide-react";
+import {
+  Button,
+  Group,
+  Paper,
+  Select,
+  Stack,
+  Text,
+  TextInput,
+} from "@mantine/core";
+import { FolderOpen, Loader2, RefreshCw, Save } from "lucide-react";
 import type { HarborConfig, KsPublishMap, KsPublishMapRole } from "../types";
 import { isTauriRuntime } from "../types";
 import { pickKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
@@ -17,6 +26,31 @@ const ROLES: { value: KsPublishMapRole; label: string }[] = [
   { value: "frontend", label: "前端" },
   { value: "any", label: "任意" },
 ];
+
+const fieldStyles = {
+  label: { color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" },
+  input: {
+    backgroundColor: "var(--color-bg-elevated)",
+    borderColor: "var(--color-border)",
+    color: "var(--color-text)",
+  },
+} as const;
+
+const paperStyles = {
+  root: {
+    background: "var(--color-bg-surface)",
+    border: "1px solid var(--color-border)",
+  },
+} as const;
+
+const compactInputStyles = {
+  input: {
+    ...fieldStyles.input,
+    fontSize: "var(--font-size-sm)",
+    minHeight: 32,
+    height: 32,
+  },
+} as const;
 
 interface DeployRow {
   name: string;
@@ -371,175 +405,176 @@ export function KsPublishMapEditor({
 
   if (ksEnvs.length === 0) {
     return (
-      <p className="template-hint">请先添加 KubeSphere 环境，再配置发布映射</p>
+      <Text size="sm" c="var(--color-text-muted)">请先添加 KubeSphere 环境，再配置发布映射</Text>
     );
   }
 
   return (
-    <div className="ks-publish-maps-section">
-      <p className="template-hint" style={{ margin: 0 }}>
+    <Stack gap="md" className="ks-publish-maps-section">
+      <Text size="sm" c="var(--color-text-muted)">
         选择环境后自动连接 → 再选命名空间列出部署。未保存过的行会按 klcj-zt 模块预填 Git 与端口；输入 Git 或选本地仓库时端口会一起带出。
-      </p>
+      </Text>
 
-      <div className="ks-map-context-bar">
-        <div className="ks-map-context-fields">
-          <div className="ks-map-context-field">
-            <label>环境</label>
-            <div className="config-select-wrapper">
-              <select
-                className="config-select"
-                value={envId}
-                disabled={connecting}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setEnvId(next);
-                  setConnected(false);
-                  setNamespace("");
-                  setNamespaces([]);
-                  setDeploys([]);
-                  setRows([]);
-                  void connect(next);
-                }}
-              >
-                {ksEnvs.map((env) => (
-                  <option key={env.id} value={env.id}>{env.name || env.id}</option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="config-select-icon" aria-hidden />
+      <Paper p="md" radius="md" styles={paperStyles}>
+        <Stack gap="md">
+          <Group align="flex-end" wrap="wrap" gap="md">
+            <Select
+              label="环境"
+              value={envId}
+              disabled={connecting}
+              onChange={(next) => {
+                if (!next) return;
+                setEnvId(next);
+                setConnected(false);
+                setNamespace("");
+                setNamespaces([]);
+                setDeploys([]);
+                setRows([]);
+                void connect(next);
+              }}
+              data={ksEnvs.map((env) => ({
+                value: env.id,
+                label: env.name || env.id,
+              }))}
+              styles={fieldStyles}
+              style={{ flex: "1 1 160px", minWidth: 160 }}
+            />
+            <Select
+              label="命名空间"
+              value={namespace || null}
+              disabled={connecting || namespaces.length === 0}
+              onChange={(next) => setNamespace(next ?? "")}
+              placeholder="选择命名空间"
+              data={namespaces.map((ns) => ({ value: ns, label: ns }))}
+              styles={fieldStyles}
+              style={{ flex: "1 1 160px", minWidth: 160 }}
+            />
+          </Group>
+
+          <Group gap="sm" wrap="wrap">
+            <Button
+              variant="light"
+              color="cyan"
+              size="sm"
+              disabled={connecting || !envId}
+              onClick={() => void connect()}
+              title="连接失败或命名空间过期时手动重连"
+              leftSection={
+                connecting ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />
+              }
+            >
+              {connecting ? "连接中…" : "重新连接"}
+            </Button>
+            <Button
+              variant="light"
+              color="cyan"
+              size="sm"
+              disabled={fillLoading || rows.length === 0}
+              onClick={() => void fillGitFromLastRepo()}
+              leftSection={
+                fillLoading ? <Loader2 size={14} className="spin" /> : <FolderOpen size={14} />
+              }
+            >
+              空行填入当前仓库
+            </Button>
+            <Button
+              variant="filled"
+              color="cyan"
+              size="sm"
+              disabled={!connected || !namespace || rows.length === 0}
+              onClick={() => void saveNamespaceMaps()}
+              leftSection={<Save size={14} />}
+            >
+              保存本命名空间
+            </Button>
+          </Group>
+
+          {statusText && (
+            <Text size="sm" c="var(--color-text-muted)" className="ks-map-status">
+              {statusText}
+            </Text>
+          )}
+
+          {loadingDeploys && (
+            <Group gap="xs">
+              <Loader2 size={14} className="spin" />
+              <Text size="sm" c="var(--color-text-muted)">加载部署中…</Text>
+            </Group>
+          )}
+
+          {rows.length > 0 && (
+            <div className="ks-map-grid-wrap">
+              <table className="ks-map-grid">
+                <thead>
+                  <tr>
+                    <th>部署</th>
+                    <th>容器</th>
+                    <th>角色</th>
+                    <th>端口</th>
+                    <th>Git 远程地址</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.deployment}>
+                      <td className="ks-map-grid-deploy">{row.deployment}</td>
+                      <td className="ks-map-grid-container">{row.container || "—"}</td>
+                      <td>
+                        <Select
+                          size="xs"
+                          value={row.role}
+                          onChange={(value) => {
+                            if (value) {
+                              updateRow(row.deployment, {
+                                role: value as KsPublishMapRole,
+                              });
+                            }
+                          }}
+                          data={ROLES.map((r) => ({ value: r.value, label: r.label }))}
+                          styles={compactInputStyles}
+                          comboboxProps={{ withinPortal: true }}
+                        />
+                      </td>
+                      <td>
+                        <TextInput
+                          size="xs"
+                          value={row.expose_port}
+                          placeholder="9613"
+                          onChange={(e) =>
+                            updateRow(row.deployment, { expose_port: e.currentTarget.value })}
+                          styles={compactInputStyles}
+                          style={{ width: 72 }}
+                        />
+                      </td>
+                      <td>
+                        <TextInput
+                          size="xs"
+                          value={row.git_url}
+                          placeholder="git@host:group/repo.git"
+                          onChange={(e) =>
+                            updateRow(row.deployment, { git_url: e.currentTarget.value })}
+                          styles={compactInputStyles}
+                          style={{ minWidth: 200 }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-          <div className="ks-map-context-field">
-            <label>命名空间</label>
-            <div className="config-select-wrapper">
-              <select
-                className="config-select"
-                value={namespace}
-                disabled={connecting || namespaces.length === 0}
-                onChange={(e) => setNamespace(e.target.value)}
-                title={
-                  connecting
-                    ? "连接中…"
-                    : namespaces.length === 0
-                      ? "请先连接环境以加载命名空间"
-                      : undefined
-                }
-              >
-                {!namespace && <option value="">选择命名空间</option>}
-                {namespaces.map((ns) => (
-                  <option key={ns} value={ns}>{ns}</option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="config-select-icon" aria-hidden />
-            </div>
-          </div>
-        </div>
-        <div className="ks-map-context-actions">
-          <button
-            type="button"
-            className="config-add-env-btn"
-            disabled={connecting || !envId}
-            onClick={() => void connect()}
-            title="连接失败或命名空间过期时手动重连"
-          >
-            {connecting ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
-            {connecting ? "连接中…" : "重新连接"}
-          </button>
-          <button
-            type="button"
-            className="config-add-env-btn"
-            disabled={fillLoading || rows.length === 0}
-            onClick={() => void fillGitFromLastRepo()}
-          >
-            {fillLoading ? <Loader2 size={14} className="spin" /> : <FolderOpen size={14} />}
-            空行填入当前仓库
-          </button>
-          <button
-            type="button"
-            className="config-add-env-btn ks-map-save-btn"
-            disabled={!connected || !namespace || rows.length === 0}
-            onClick={() => void saveNamespaceMaps()}
-          >
-            <Save size={14} />
-            保存本命名空间
-          </button>
-        </div>
-      </div>
+          )}
 
-      {statusText && <p className="template-hint ks-map-status">{statusText}</p>}
-
-      {loadingDeploys && (
-        <p className="template-hint"><Loader2 size={14} className="spin" /> 加载部署中…</p>
-      )}
-
-      {rows.length > 0 && (
-        <div className="ks-map-grid-wrap">
-          <table className="ks-map-grid">
-            <thead>
-              <tr>
-                <th>部署</th>
-                <th>容器</th>
-                <th>角色</th>
-                <th>端口</th>
-                <th>Git 远程地址</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.deployment}>
-                  <td className="ks-map-grid-deploy">{row.deployment}</td>
-                  <td className="ks-map-grid-container">{row.container || "—"}</td>
-                  <td>
-                    <div className="config-select-wrapper config-select-wrapper--compact">
-                      <select
-                        className="config-select config-select--compact"
-                        value={row.role}
-                        onChange={(e) =>
-                          updateRow(row.deployment, {
-                            role: e.target.value as KsPublishMapRole,
-                          })}
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r.value} value={r.value}>{r.label}</option>
-                        ))}
-                      </select>
-                      <ChevronDown size={14} className="config-select-icon" aria-hidden />
-                    </div>
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      className="ks-map-port-input"
-                      value={row.expose_port}
-                      placeholder="9613"
-                      inputMode="numeric"
-                      onChange={(e) =>
-                        updateRow(row.deployment, { expose_port: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      className="ks-map-git-input"
-                      value={row.git_url}
-                      placeholder="git@host:group/repo.git"
-                      onChange={(e) =>
-                        updateRow(row.deployment, { git_url: e.target.value })}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {connected && !loadingDeploys && namespace && rows.length === 0 && (
-        <p className="template-hint">该命名空间暂无 Deployment</p>
-      )}
+          {connected && !loadingDeploys && namespace && rows.length === 0 && (
+            <Text size="sm" c="var(--color-text-muted)">该命名空间暂无 Deployment</Text>
+          )}
+        </Stack>
+      </Paper>
 
       {otherMaps.length > 0 && (
-        <>
-          <p className="template-hint ks-map-other-title">其他命名空间已保存的映射</p>
+        <Stack gap="xs">
+          <Text size="sm" c="var(--color-text-muted)" className="ks-map-other-title">
+            其他命名空间已保存的映射
+          </Text>
           <div className="ks-env-list">
             {otherMaps.map((map) => (
               <div key={map.id} className="ks-env-row">
@@ -566,8 +601,8 @@ export function KsPublishMapEditor({
               </div>
             ))}
           </div>
-        </>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }

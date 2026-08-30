@@ -6,7 +6,7 @@
   padding: 10px 12px;
   background: rgba(15, 52, 96, 0.3);
   border-radius: 10px;
-  border: 1px solid rgba(100, 255, 218, 0.1);
+  border: 1px solid var(--color-border);
 }
 
 .progress-info {
@@ -18,15 +18,15 @@
 
 .progress-message {
   font-size: 12px;
-  color: #ccd6f6;
+  color: var(--color-text);
   font-weight: 500;
 }
 
 .progress-percent {
   font-size: 12px;
   font-weight: 700;
-  color: #5eead4;
-  text-shadow: 0 0 10px rgba(100, 255, 218, 0.5);
+  color: var(--color-primary-hover);
+  text-shadow: 0 0 10px var(--color-primary-muted);
 }
 
 .progress-track {
@@ -40,10 +40,10 @@
 .progress-fill,
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #5eead4 0%, #48c9b0 100%);
+  background: linear-gradient(90deg, var(--color-primary-hover) 0%, var(--color-success) 100%);
   border-radius: 4px;
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 10px rgba(100, 255, 218, 0.5);
+  box-shadow: 0 0 10px var(--color-primary-muted);
   position: relative;
   overflow: hidden;
 }
@@ -70,7 +70,7 @@
   background: rgba(10, 10, 26, 0.8);
   border-radius: 12px;
   padding: 14px;
-  border: 1px solid rgba(100, 255, 218, 0.12);
+  border: 1px solid var(--color-border);
   box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
   transition: all 0.3s ease;
   max-height: 420px;
@@ -78,17 +78,17 @@
 }
 
 .log-panel.success {
-  border-color: rgba(100, 255, 218, 0.4);
+  border-color: var(--color-primary-muted);
   box-shadow:
     inset 0 2px 8px rgba(0, 0, 0, 0.4),
-    0 0 20px rgba(100, 255, 218, 0.15);
+    0 0 20px var(--color-primary-muted);
   background: linear-gradient(135deg, rgba(10, 10, 26, 0.9), rgba(15, 52, 96, 0.3));
 }
 
 .log-panel pre {
   font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
   font-size: 12px;
-  color: #a8b2d1;
+  color: var(--color-text-muted);
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
@@ -103,19 +103,19 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(100, 255, 218, 0.06);
-  border: 1px solid rgba(100, 255, 218, 0.2);
+  background: var(--color-primary-muted);
+  border: 1px solid var(--color-primary-muted);
   border-radius: 8px;
   padding: 6px 12px;
-  color: #5eead4;
+  color: var(--color-primary-hover);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .log-toggle-btn:hover {
-  background: rgba(100, 255, 218, 0.12);
-  border-color: rgba(100, 255, 218, 0.4);
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary-muted);
 }
 
 .success-message {
@@ -125,10 +125,10 @@
 }
 
 .success-icon {
-  color: #5eead4;
+  color: var(--color-primary-hover);
   flex-shrink: 0;
   margin-top: 1px;
-  filter: drop-shadow(0 0 8px rgba(100, 255, 218, 0.5));
+  filter: drop-shadow(0 0 8px var(--color-primary-muted));
 }
 
 .image-url-row {
@@ -137,16 +137,16 @@
   gap: 8px;
   margin-top: 6px;
   padding: 8px 12px;
-  background: rgba(100, 255, 218, 0.08);
-  border: 1px solid rgba(100, 255, 218, 0.25);
+  background: var(--color-primary-muted);
+  border: 1px solid var(--color-primary-muted);
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(100, 255, 218, 0.1);
+  box-shadow: 0 2px 8px var(--color-primary-muted);
   transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .image-url-row.copied {
   background: rgba(14, 138, 110, 0.35);
-  border-color: #5eead4;
+  border-color: var(--color-primary-hover);
   box-shadow:
     0 0 0 2px rgba(94, 234, 212, 0.2),
     0 0 20px rgba(94, 234, 212, 0.3),
@@ -155,22 +155,22 @@
 }
 
 .image-url-row.copied .image-url-value {
-  color: #86fcdc;
+  color: var(--color-primary-hover);
 }
 
 .image-url-row.copied .path-link-label {
-  color: #5eead4;
+  color: var(--color-primary-hover);
 }
 
 @keyframes row-flash {
-  0% { background: rgba(14, 138, 110, 0.6); border-color: #5eead4; }
-  100% { background: rgba(14, 138, 110, 0.35); border-color: #5eead4; }
+  0% { background: rgba(14, 138, 110, 0.6); border-color: var(--color-primary-hover); }
+  100% { background: rgba(14, 138, 110, 0.35); border-color: var(--color-primary-hover); }
 }
 
 .image-url-label {
   font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
   font-size: 11px;
-  color: #8892b0;
+  color: var(--color-text-muted);
   white-space: nowrap;
   font-weight: 600;
 }
@@ -178,7 +178,7 @@
 .image-url-value {
   font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
   font-size: 11px;
-  color: #5eead4;
+  color: var(--color-primary-hover);
   word-break: break-all;
   flex: 1;
   user-select: all;
@@ -187,10 +187,10 @@
 
 .copy-btn {
   padding: 5px 10px;
-  border: 1px solid #5eead4;
+  border: 1px solid var(--color-primary-hover);
   border-radius: 6px;
   background: transparent;
-  color: #5eead4;
+  color: var(--color-primary-hover);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -202,14 +202,14 @@
 }
 
 .copy-btn:hover {
-  background: rgba(100, 255, 218, 0.2);
+  background: var(--color-primary-muted);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(100, 255, 218, 0.3);
+  box-shadow: 0 4px 12px var(--color-primary-muted);
 }
 
 .copy-btn.copied {
-  background: #0e8a6e;
-  border-color: #5eead4;
+  background: var(--color-success);
+  border-color: var(--color-primary-hover);
   color: #fff;
   box-shadow:
     0 0 0 3px rgba(94, 234, 212, 0.25),
@@ -218,7 +218,7 @@
 }
 
 .copy-btn.copied:hover {
-  background: #109e7d;
+  background: var(--color-success);
   transform: translateY(-1px);
   box-shadow:
     0 0 0 3px rgba(94, 234, 212, 0.3),

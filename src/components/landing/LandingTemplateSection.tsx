@@ -96,7 +96,7 @@ export function LandingTemplateSection({
                     <Text size="sm" fw={600} style={{ fontFamily: 'var(--mantine-font-family-monospace)' }}>
                       {category}
                     </Text>
-                    <Badge variant="light" color="gray" size="xs">{dirs.length} 个</Badge>
+                    <Badge variant="light" color="blue" size="xs">{dirs.length} 个</Badge>
                   </Group>
                 </Accordion.Control>
                 <Accordion.Panel>

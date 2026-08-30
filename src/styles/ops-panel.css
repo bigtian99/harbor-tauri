@@ -1,0 +1,24 @@
+/* 运营面板次要按钮：与隐私协议页一致，提高对比度 */
+
+.ops-btn-secondary,
+.landing-panel .ops-btn-secondary,
+.privacy-panel .privacy-btn-secondary {
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-border-strong) !important;
+  background: var(--color-bg-base) !important;
+  font-weight: 600;
+}
+
+.ops-btn-secondary:hover:not(:disabled),
+.landing-panel .ops-btn-secondary:hover:not(:disabled),
+.privacy-panel .privacy-btn-secondary:hover:not(:disabled) {
+  background: var(--color-primary-subtle) !important;
+  border-color: var(--color-primary-muted) !important;
+  color: var(--color-primary-hover) !important;
+}
+
+.ops-btn-secondary:disabled,
+.landing-panel .ops-btn-secondary:disabled {
+  opacity: 0.45;
+  color: var(--color-text-muted) !important;
+}

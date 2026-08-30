@@ -1,9 +1,59 @@
 /* config.css — split from App.css (OPT-011), lines 1027-1081 */
 
+.config-shell {
+  width: 100%;
+  max-width: 100%;
+}
+
 .config-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+  min-height: 100%;
+}
+
+.config-tabs-list {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--color-bg-base);
+}
+
+.config-save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding: 10px 0 2px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--color-bg-base) 28%
+  );
+  border-top: 1px solid var(--color-border);
+}
+
+.config-save-btn {
+  background: var(--color-primary) !important;
+  color: #fff !important;
+  border: none !important;
+}
+
+.config-save-btn:hover {
+  background: var(--color-primary-hover) !important;
+  color: #fff !important;
+}
+
+.config-save-btn[data-saved] {
+  background: var(--color-success) !important;
+  color: #fff !important;
+}
+
+.config-save-btn[data-saved]:hover {
+  background: var(--color-success) !important;
+  filter: brightness(1.05);
 }
 
 .config-subtabs {
@@ -11,9 +61,9 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 6px;
-  background: rgba(15, 22, 41, 0.55);
-  border: 1px solid rgba(100, 255, 218, 0.12);
-  border-radius: 10px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .config-subtab {
@@ -24,21 +74,21 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: #8892b0;
+  color: var(--color-text-muted);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .config-subtab:hover:not(.active) {
-  color: #e0e0e0;
-  background: rgba(100, 255, 218, 0.06);
+  color: var(--color-text);
+  background: var(--color-primary-muted);
 }
 
 .config-subtab.active {
-  color: #5eead4;
-  background: rgba(100, 255, 218, 0.15);
-  border-color: rgba(100, 255, 218, 0.35);
+  color: var(--color-primary-hover);
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary-muted);
 }
 
 .config-tab-panel {
@@ -47,8 +97,8 @@
   gap: 14px;
   padding: 16px;
   border-radius: 12px;
-  border: 1px solid rgba(100, 255, 218, 0.12);
-  background: rgba(15, 52, 96, 0.18);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
 }
 
 .config-tab-panel .config-tip {
@@ -70,17 +120,17 @@
   gap: 6px;
   flex-shrink: 0;
   padding: 6px 12px;
-  border: 1px solid rgba(100, 255, 218, 0.28);
+  border: 1px solid var(--color-primary-muted);
   border-radius: 6px;
-  background: rgba(100, 255, 218, 0.08);
-  color: #5eead4;
+  background: var(--color-primary-muted);
+  color: var(--color-primary-hover);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .config-add-env-btn:hover {
-  background: rgba(100, 255, 218, 0.16);
+  background: var(--color-primary-muted);
 }
 
 .bt-temp-login-row {
@@ -106,9 +156,9 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid rgba(100, 255, 218, 0.12);
-  border-radius: 8px;
-  background: rgba(15, 22, 41, 0.35);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
 }
 
 .ks-env-row-main {
@@ -122,13 +172,13 @@
 .ks-env-name {
   font-size: 13px;
   font-weight: 700;
-  color: #e2e8f0;
+  color: var(--color-text);
 }
 
 .ks-env-console,
 .ks-env-user {
   font-size: 12px;
-  color: #8892b0;
+  color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -146,28 +196,28 @@
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid rgba(100, 255, 218, 0.18);
+  border: 1px solid var(--color-primary-muted);
   border-radius: 6px;
   background: transparent;
-  color: #8892b0;
+  color: var(--color-text-muted);
   cursor: pointer;
 }
 
 .ks-env-row-actions button:hover {
-  color: #ccd6f6;
-  background: rgba(100, 255, 218, 0.1);
+  color: var(--color-text);
+  background: var(--color-primary-muted);
 }
 
 .ks-env-row-actions button.danger:hover {
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-error);
+  border-color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
 
 .ks-publish-maps-section {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid rgba(100, 255, 218, 0.1);
+  border-top: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -180,9 +230,9 @@
   border-radius: 4px;
   font-size: 11px;
   font-weight: 700;
-  color: #5eead4;
-  background: rgba(100, 255, 218, 0.12);
-  border: 1px solid rgba(100, 255, 218, 0.22);
+  color: var(--color-primary-hover);
+  background: var(--color-primary-muted);
+  border: 1px solid var(--color-primary-muted);
   vertical-align: middle;
 }
 
@@ -195,9 +245,9 @@
   width: 100%;
   padding: 10px 36px 10px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(100, 255, 218, 0.15);
-  background: rgba(15, 52, 96, 0.4);
-  color: #e0e0e0;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
   font-size: 13px;
   line-height: 1.4;
   outline: none;
@@ -209,16 +259,14 @@
 }
 
 .config-select:hover:not(:disabled) {
-  border-color: rgba(100, 255, 218, 0.3);
-  background: rgba(15, 52, 96, 0.6);
+  border-color: var(--color-primary-muted);
+  background: var(--color-bg-card);
 }
 
 .config-select:focus {
-  border-color: #5eead4;
-  background: rgba(15, 52, 96, 0.7);
-  box-shadow:
-    0 0 0 3px rgba(100, 255, 218, 0.12),
-    0 4px 16px rgba(100, 255, 218, 0.15);
+  border-color: var(--color-primary-hover);
+  background: var(--color-bg-elevated);
+  box-shadow: 0 0 0 3px var(--color-primary-muted);
 }
 
 .config-select:disabled {
@@ -227,8 +275,8 @@
 }
 
 .config-select option {
-  background: #0f1629;
-  color: #e0e0e0;
+  background: var(--color-bg-base);
+  color: var(--color-text);
 }
 
 .config-select-icon {
@@ -236,7 +284,7 @@
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #8892b0;
+  color: var(--color-text-muted);
   pointer-events: none;
 }
 
@@ -283,12 +331,12 @@
   display: block;
   margin-bottom: 4px;
   font-size: 12px;
-  color: #8892b0;
+  color: var(--color-text-muted);
   line-height: 1.3;
 }
 
 .ks-map-save-btn {
-  background: rgba(100, 255, 218, 0.18) !important;
+  background: var(--color-primary-muted) !important;
 }
 
 .ks-map-status {
@@ -298,8 +346,8 @@
 .ks-map-grid-wrap {
   margin-top: 10px;
   overflow-x: auto;
-  border: 1px solid rgba(100, 255, 218, 0.12);
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .ks-map-grid {
@@ -311,26 +359,26 @@
 .ks-map-grid th,
 .ks-map-grid td {
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--color-border);
   text-align: left;
   vertical-align: middle;
 }
 
 .ks-map-grid th {
-  color: #8892b0;
+  color: var(--color-text-muted);
   font-weight: 600;
-  background: rgba(15, 22, 41, 0.5);
+  background: var(--color-bg-surface);
   white-space: nowrap;
 }
 
 .ks-map-grid-deploy {
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--color-text);
   white-space: nowrap;
 }
 
 .ks-map-grid-container {
-  color: #8892b0;
+  color: var(--color-text-muted);
   font-family: ui-monospace, monospace;
   font-size: 11px;
   white-space: nowrap;
@@ -340,10 +388,10 @@
   width: 100%;
   min-width: 200px;
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(100, 255, 218, 0.15);
-  background: rgba(15, 52, 96, 0.35);
-  color: #e0e0e0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
   font-size: 12px;
   outline: none;
 }
@@ -352,10 +400,10 @@
   width: 72px;
   min-width: 64px;
   padding: 8px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(100, 255, 218, 0.15);
-  background: rgba(15, 52, 96, 0.35);
-  color: #e0e0e0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
   font-size: 12px;
   font-family: ui-monospace, monospace;
   text-align: center;
@@ -364,8 +412,8 @@
 
 .ks-map-git-input:focus,
 .ks-map-port-input:focus {
-  border-color: #5eead4;
-  box-shadow: 0 0 0 2px rgba(100, 255, 218, 0.1);
+  border-color: var(--color-primary-hover);
+  box-shadow: 0 0 0 2px var(--color-primary-muted);
 }
 
 .ks-map-other-title {
@@ -382,7 +430,7 @@
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 20px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--color-border);
 }
 
 .ks-env-modal-cancel,
@@ -395,19 +443,18 @@
 }
 
 .ks-env-modal-cancel {
-  border: 1px solid rgba(136, 146, 176, 0.35);
+  border: 1px solid var(--color-border-strong);
   background: transparent;
-  color: #8892b0;
+  color: var(--color-text-muted);
 }
 
 .ks-env-modal-ok {
-  border: 1px solid rgba(100, 255, 218, 0.35);
-  background: rgba(100, 255, 218, 0.15);
-  color: #5eead4;
+  border: 1px solid var(--color-primary-muted);
+  background: var(--color-primary-muted);
+  color: var(--color-primary-hover);
 }
 
 .ks-env-modal-ok:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
-

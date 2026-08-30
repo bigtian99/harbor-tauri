@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { notifications } from "@mantine/notifications";
-import { Stack, Box } from "@mantine/core";
+import { Stack } from "@mantine/core";
 import type { TemplateInfo } from "../types";
 import { isTauriRuntime } from "../types";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
@@ -11,6 +11,7 @@ import { LandingChannelForm } from "./landing/LandingChannelForm";
 import { LandingFtpSection } from "./landing/LandingFtpSection";
 import { LandingPreview } from "./landing/LandingPreview";
 import { LandingTemplateSection } from "./landing/LandingTemplateSection";
+import "../styles/ops-panel.css";
 
 export type { LandingPanelProps } from "./landing/types";
 
@@ -148,8 +149,8 @@ export function LandingPanel({
   const hasFtpResults = Object.keys(ftpUploadResults).length > 0;
 
   return (
-    <Box style={{ padding: "32px 40px" }}>
-      <Stack gap="md">
+    <>
+      <Stack gap="md" className="landing-panel">
         <LandingChannelForm
           landingIds={landingIds}
           landingMode={landingMode}
@@ -202,6 +203,6 @@ export function LandingPanel({
         previewOverlay={previewOverlay}
         onClosePreviewOverlay={closePreviewOverlay}
       />
-    </Box>
+    </>
   );
 }
