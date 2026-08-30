@@ -86,20 +86,33 @@ export const appTheme = createTheme({
             },
           },
           /* 主操作：实心主色 + 白字 */
-          "&[data-variant='filled']": {
+          "&[data-variant='filled']:not(:disabled):not([data-disabled])": {
             border: "none",
             color: "#fff",
             "--button-color": "#fff",
             boxShadow: "var(--glow-primary)",
-            "&:hover:not(:disabled)": {
+            "&:hover": {
               filter: "brightness(1.08)",
               color: "#fff",
               "--button-color": "#fff",
               boxShadow: "0 0 28px rgba(59, 158, 255, 0.32)",
             },
           },
-          "&[data-variant='filled'] .mantine-Button-label, &[data-variant='filled'] .mantine-Button-section": {
+          "&[data-variant='filled']:not(:disabled):not([data-disabled]) .mantine-Button-label, &[data-variant='filled']:not(:disabled):not([data-disabled]) .mantine-Button-section": {
             color: "#fff",
+          },
+          "&[data-variant='filled']:disabled, &[data-variant='filled'][data-disabled]": {
+            background: "var(--color-bg-elevated) !important",
+            color: "var(--color-text-muted) !important",
+            "--button-color": "var(--color-text-muted)",
+            border: "1px solid var(--color-border-strong)",
+            boxShadow: "none",
+            opacity: 0.55,
+            cursor: "not-allowed",
+            filter: "none",
+          },
+          "&[data-variant='filled']:disabled .mantine-Button-label, &[data-variant='filled'][data-disabled] .mantine-Button-label, &[data-variant='filled']:disabled .mantine-Button-section, &[data-variant='filled'][data-disabled] .mantine-Button-section": {
+            color: "var(--color-text-muted) !important",
           },
           /* 轻强调：浅色底 */
           "&[data-variant='light']": {

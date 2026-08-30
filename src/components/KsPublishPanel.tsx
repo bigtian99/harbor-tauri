@@ -6,11 +6,12 @@ import {
   Checkbox, Group, Stack, Divider, ScrollArea, Box, Loader, Pagination, SimpleGrid, Tabs, Autocomplete, ActionIcon,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { RefreshCw, Download, Rocket, Container as ContainerIcon, Search, History, Plus, Copy, Pencil, Package, ScrollText, Maximize2, Minimize2, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw, Download, Rocket, Search, History, Plus, Copy, Pencil, Package, ScrollText, Maximize2, Minimize2, ChevronDown, ChevronUp } from "lucide-react";
 import type { HarborConfig, KsPublishMap } from "../types";
 import { isTauriRuntime } from "../types";
 import { pickKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
+import { KubeSphereIcon } from "./icons/BrandIcons";
 import {
   KsBatchConfirmModal,
   KsBatchProgressModal,
@@ -1261,7 +1262,7 @@ export function KsPublishPanel({
         <Card shadow="sm" radius="md" withBorder>
           <Group justify="space-between" mb="md" wrap="nowrap">
             <Group gap={8} wrap="wrap">
-              <ContainerIcon size={20} color="#329dce" />
+              <KubeSphereIcon size={20} color="#329dce" />
               <Title order={4}>KubeSphere 镜像发布</Title>
               {connecting && <Loader size={15} />}
               {connecting && (

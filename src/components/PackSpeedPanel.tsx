@@ -324,8 +324,8 @@ export function PackSpeedPanel({
             label="优先级"
             value={priority}
             onChange={setPriority}
-            min={0}
             step={1}
+            allowNegative
             placeholder="0"
             styles={fieldStyles}
           />

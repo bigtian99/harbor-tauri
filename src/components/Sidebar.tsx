@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import type { TabType } from "../types";
 import { isOpsTab } from "../opsNavigation";
-import { BaotaIcon } from "./icons/BrandIcons";
+import { BaotaIcon, KubeSphereIcon } from "./icons/BrandIcons";
 
 interface SidebarProps {
   activeTab: TabType;
@@ -176,7 +176,7 @@ export function Sidebar({
     { tab: "packSpeed", icon: <Zap size={18} />, label: "打包加速" },
   ];
   const publishItems: NavItem[] = [
-    { tab: "ksPublish", icon: <Container size={18} />, label: "KubeSphere 发布" },
+    { tab: "ksPublish", icon: <KubeSphereIcon size={18} />, label: "KubeSphere 发布" },
   ];
 
   const filterOps = (items: NavItem[]) =>

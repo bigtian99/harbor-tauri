@@ -20,6 +20,25 @@ export function DockerIcon({ size = 14, ...props }: IconProps) {
   );
 }
 
+/**
+ * KubeSphere 官方图形标（@kubed/icons KubesphereLogoFill），跟随 currentColor。
+ * https://github.com/kubesphere/kube-design
+ */
+export function KubeSphereIcon({ size = 14, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      fill="currentColor"
+      aria-hidden
+      {...props}
+    >
+      <path d="M23.979 2L5 13.008v22.075L23.979 46V29.343l-9.133-5.296 9.133-5.297V2zM28.767 4.72l9.7 5.627-9.7 5.626V4.72zM38.468 37.745l-9.701 5.63V32.122l9.701 5.623zM43 35.041L24.046 24.047 43 13.055v21.986z" />
+    </svg>
+  );
+}
+
 type BaotaIconProps = Omit<HTMLAttributes<HTMLSpanElement>, "children"> & {
   size?: number;
 };

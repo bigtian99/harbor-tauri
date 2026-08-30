@@ -56,16 +56,18 @@ export const panelPrimaryButtonStyles = {
     fontWeight: 700,
     border: "none",
     boxShadow: "0 1px 0 rgba(255,255,255,0.14) inset, 0 8px 20px rgba(59, 158, 255, 0.22)",
-    "&:hover:not(:disabled)": {
+    "&:hover:not(:disabled):not([data-disabled])": {
       background: "var(--color-primary-hover)",
       color: "#fff",
     },
-    "&:disabled": {
-      background: "var(--color-bg-base)",
-      color: "var(--color-text-muted)",
-      border: "1px solid var(--color-border-strong)",
-      boxShadow: "none",
-      opacity: 1,
+    "&:disabled, &[data-disabled]": {
+      background: "var(--color-bg-elevated) !important",
+      backgroundColor: "var(--color-bg-elevated) !important",
+      color: "var(--color-text-muted) !important",
+      border: "1px solid var(--color-border-strong) !important",
+      boxShadow: "none !important",
+      opacity: 0.55,
+      cursor: "not-allowed",
     },
   },
   section: {

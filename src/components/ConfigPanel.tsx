@@ -17,7 +17,7 @@ import {
 import {
   Settings, CheckCircle, AlertCircle, FolderOpen, Archive,
   Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink, Trash2,
-  CloudUpload, Bell, Plus, Pencil, Copy,
+  Bell, Plus, Pencil, Copy,
 } from "lucide-react";
 import { showSystemAlert } from "../systemAlert";
 import type { HarborConfig, KsEnvironment } from "../types";
@@ -33,6 +33,7 @@ import {
   deriveMavenLocalRepo,
   isDerivedMavenLocalRepo,
 } from "../utils/mavenPaths";
+import { BaotaIcon, KubeSphereIcon } from "./icons/BrandIcons";
 import { openReleasePage } from "../utils/releasePage";
 import { KsPublishMapEditor } from "./KsPublishMapEditor";
 
@@ -69,9 +70,9 @@ const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { key: "connection", label: "Harbor 连接", icon: <Server size={14} /> },
   { key: "jar", label: "JAR 打包", icon: <Package size={14} /> },
   { key: "frontend", label: "前端打包", icon: <Globe size={14} /> },
-  { key: "bt", label: "宝塔部署", icon: <CloudUpload size={14} /> },
+  { key: "bt", label: "宝塔部署", icon: <BaotaIcon size={14} /> },
   { key: "output", label: "输出设置", icon: <FolderOutput size={14} /> },
-  { key: "ks", label: "KubeSphere", icon: <CloudUpload size={14} /> },
+  { key: "ks", label: "KubeSphere", icon: <KubeSphereIcon size={14} /> },
   { key: "about", label: "关于", icon: <Info size={14} /> },
 ];
 
