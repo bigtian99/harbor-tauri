@@ -311,10 +311,29 @@ pub async fn detect_spring_profiles(repo_path: String, branch: String) -> Result
 #[tauri::command]
 pub fn cancel_build() -> Result<(), String> {
     CANCEL_FLAG.store(true, Ordering::SeqCst);
-    // 杀掉当前运行的子进程
+    crate::diag::diag_log(
+        "build",
+        "cancel_build: 已置取消标志（覆盖 Maven/npm/Docker build·push/FTP/Harbor）",
+    );
+    // 杀掉当前运行的子进程（mvn / npm / docker build|push）
     if let Some(pid) = *CURRENT_PID.lock().unwrap() {
         crate::diag::diag_log("build", &format!("🛑 取消构建，终止进程 PID={}", pid));
-        let _ = silent_command("kill").arg(pid.to_string()).output();
+        #[cfg(unix)]
+        {
+            let _ = silent_command("kill")
+                .args(["-TERM", &pid.to_string()])
+                .output();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let _ = silent_command("kill")
+                .args(["-KILL", &pid.to_string()])
+                .output();
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = silent_command("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .output();
+        }
     }
     Ok(())
 }

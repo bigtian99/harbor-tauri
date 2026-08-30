@@ -1450,6 +1450,7 @@ fn normalize_health_path(raw: Option<&str>) -> Result<String, String> {
 /// 生成完整 Deployment JSON（创建与预览共用模板）
 /// `config_map`：对齐 KubeSphere——对该 ConfigMap 每个 key 生成
 /// `env[].valueFrom.configMapKeyRef`（不是 envFrom 整表引用）
+/// `config_map_keys`：若提供则不再从集群读取 CM（跨环境复制 / dry-run 时目标尚无 CM）
 fn build_deployment_json(
     namespace: &str,
     name: &str,
@@ -1459,6 +1460,7 @@ fn build_deployment_json(
     replicas: u32,
     envs: &[String],
     config_map: Option<&str>,
+    config_map_keys: Option<&[String]>,
     health_path: Option<&str>,
 ) -> Result<serde_json::Value, String> {
     let name = require_rfc1123_name("部署", name)?;
@@ -1475,13 +1477,25 @@ fn build_deployment_json(
 
     // 1) 配置字典：每个 key → configMapKeyRef（与 KS 控制台一致）
     if let Some(cm) = config_map.map(str::trim).filter(|s| !s.is_empty()) {
-        let keys = fetch_configmap_keys(namespace, cm)?;
+        let keys: Vec<String> = if let Some(provided) = config_map_keys {
+            provided
+                .iter()
+                .map(|k| k.trim().to_string())
+                .filter(|k| !k.is_empty())
+                .collect()
+        } else {
+            fetch_configmap_keys(namespace, cm)?
+        };
         if keys.is_empty() {
             return Err(format!("配置字典「{cm}」没有 data key，无法引用"));
         }
         crate::diag::diag_log(
             "kubesphere",
-            &format!("build_deployment_json configMapKeyRef cm={cm} keys={}", keys.len()),
+            &format!(
+                "build_deployment_json configMapKeyRef cm={cm} keys={} provided={}",
+                keys.len(),
+                config_map_keys.is_some()
+            ),
         );
         for key in keys {
             // SW_AGENT_NAME 固定取部署名称，不走配置字典
@@ -1596,20 +1610,23 @@ pub async fn ks_create_deployment(
     replicas: Option<u32>,
     envs: Option<Vec<String>>,
     config_map: Option<String>,
+    config_map_keys: Option<Vec<String>>,
     health_path: Option<String>,
     dry_run: Option<bool>,
 ) -> Result<String, String> {
+    // config_map_keys：若提供则不再从目标命名空间读 ConfigMap（跨环境复制 / dry-run）
     ks_blocking(move || {
     let cm = config_map.and_then(|s| {
         let t = s.trim().to_string();
         if t.is_empty() { None } else { Some(t) }
     });
     let health = health_path.as_deref();
+    let keys = config_map_keys.as_ref().map(|v| v.as_slice());
     crate::diag::diag_log(
         "kubesphere",
         &format!(
-            "ks_create_deployment ns={} name={} port={} healthPath={:?} dryRun={} configMap={:?}",
-            namespace, name, port.unwrap_or(8080), health, dry_run.unwrap_or(false), cm
+            "ks_create_deployment ns={} name={} port={} healthPath={:?} dryRun={} configMap={:?} keysProvided={}",
+            namespace, name, port.unwrap_or(8080), health, dry_run.unwrap_or(false), cm, keys.is_some()
         ),
     );
     let deployment = build_deployment_json(
@@ -1619,6 +1636,7 @@ pub async fn ks_create_deployment(
         replicas.unwrap_or(1),
         &envs.unwrap_or_default(),
         cm.as_deref(),
+        keys,
         health,
     )?;
     let ns = urlencoding(&namespace);
@@ -1796,6 +1814,56 @@ pub async fn ks_create_configmap(
     .await
 }
 
+/// 覆盖 ConfigMap data（GET 当前对象 → 替换 data → PUT）
+#[tauri::command]
+pub async fn ks_replace_configmap(
+    namespace: String,
+    name: String,
+    data: Vec<String>,
+) -> Result<String, String> {
+    ks_blocking(move || {
+        let ns = urlencoding(&namespace);
+        let n = urlencoding(&name);
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!("ks_replace_configmap ns={namespace} name={name} keys={}", data.len()),
+        );
+        let (status, mut cur) =
+            ks_api("GET", &format!("/api/v1/namespaces/{ns}/configmaps/{n}"), None)?;
+        if status != 200 {
+            return Err(format!("读取 ConfigMap 失败 HTTP {status}"));
+        }
+        let built = build_configmap_json(&namespace, &name, &data)?;
+        let new_data = built
+            .get("data")
+            .cloned()
+            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+        if let Some(obj) = cur.as_object_mut() {
+            obj.insert("data".into(), new_data);
+        }
+        let (put_status, resp) = ks_api_raw(
+            "PUT",
+            &format!("/api/v1/namespaces/{ns}/configmaps/{n}"),
+            Some(cur.to_string()),
+            Some("application/json"),
+        )?;
+        if put_status != 200 && put_status != 201 {
+            let msg = resp
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("未知错误");
+            crate::diag::diag_log(
+                "kubesphere",
+                &format!("ks_replace_configmap fail HTTP {put_status}: {msg}"),
+            );
+            return Err(format!("覆盖 ConfigMap 失败 HTTP {put_status}: {msg}"));
+        }
+        crate::diag::diag_log("kubesphere", &format!("ks_replace_configmap ok name={name}"));
+        Ok(format!("已覆盖 ConfigMap：{name}"))
+    })
+    .await
+}
+
 /// YAML 模式创建 ConfigMap（粘贴完整 YAML）
 #[tauri::command]
 pub async fn ks_create_configmap_yaml(
@@ -1861,6 +1929,7 @@ pub async fn ks_preview_deployment(
         replicas.unwrap_or(1),
         &envs.unwrap_or_default(),
         cm.as_deref(),
+        None,
         health_path.as_deref(),
     )?;
     let yaml = serde_yaml::to_string(&deployment).map_err(|e| format!("YAML 生成失败: {e}"))?;
@@ -2159,6 +2228,7 @@ pub async fn ks_update_deployment(
     replicas: Option<u32>,
     envs: Option<Vec<String>>,
     config_map: Option<String>,
+    config_map_keys: Option<Vec<String>>,
     health_path: Option<String>,
     container: Option<String>,
 ) -> Result<UpdateResult, String> {
@@ -2171,15 +2241,17 @@ pub async fn ks_update_deployment(
         .filter(|s| !s.is_empty())
         .unwrap_or("container-main")
         .to_string();
+    let keys = config_map_keys.as_ref().map(|v| v.as_slice());
     crate::diag::diag_log(
         "kubesphere",
         &format!(
-            "ks_update_deployment ns={} name={} port={} healthPath={:?} configMap={:?}",
+            "ks_update_deployment ns={} name={} port={} healthPath={:?} configMap={:?} keysProvided={}",
             namespace,
             name,
             port.unwrap_or(8080),
             health_path,
-            config_map
+            config_map,
+            keys.is_some()
         ),
     );
 
@@ -2208,6 +2280,7 @@ pub async fn ks_update_deployment(
         replicas.unwrap_or(1),
         &envs.unwrap_or_default(),
         config_map.as_deref(),
+        keys,
         health_path.as_deref(),
     )?;
     let built_container = built
@@ -2452,6 +2525,7 @@ mod integration {
             Some(1),
             Some(vec!["TZ=Asia/Shanghai".into(), "REDIS_PASSWORD=xxx".into()]),
             Some("klcj-ad-service".into()),
+            None,
             Some("/actuator/health".into()),
             Some(true),
         ).expect("create dryRun failed");

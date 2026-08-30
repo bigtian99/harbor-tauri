@@ -182,16 +182,21 @@ pub(crate) fn finish_package(params: FinishPackageParams<'_>) -> PackageFromBran
     let (dockerfile_path, dockerfile_context) = detect_dockerfile_and_maybe_cleanup(app, ctx);
 
     let config = load_config_sync().unwrap_or_default();
-    let bt_deploy_summary = maybe_deploy_test_jars(
-        app,
-        &config,
-        &spring_profile,
-        &ctx.repo_name,
-        &final_artifact_path,
-        &backend_final_path,
-        project_type,
-        &build_script,
-    );
+    let bt_deploy_summary = if crate::utils::CANCEL_FLAG.load(std::sync::atomic::Ordering::SeqCst) {
+        crate::diag::diag_log("build", "构建已取消，跳过宝塔部署");
+        Some("🛑 已取消，跳过宝塔部署".to_string())
+    } else {
+        maybe_deploy_test_jars(
+            app,
+            &config,
+            &spring_profile,
+            &ctx.repo_name,
+            &final_artifact_path,
+            &backend_final_path,
+            project_type,
+            &build_script,
+        )
+    };
 
     let mut log = log;
     if let Some(ref summary) = bt_deploy_summary {

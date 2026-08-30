@@ -194,6 +194,9 @@ pub async fn build_and_push(
     .map_err(|e| format!("构建线程异常: {}", e))?;
 
     let build_output = build_result?;
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        return Err("构建已取消".to_string());
+    }
     if !build_output.status.success() {
         let stderr = String::from_utf8_lossy(&build_output.stderr);
         let stdout = String::from_utf8_lossy(&build_output.stdout);
@@ -204,6 +207,9 @@ pub async fn build_and_push(
     }
 
     // 步骤3: docker login（进程内同账号只真正 login 一次）
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        return Err("构建已取消".to_string());
+    }
     emit(&app, 55, "🔐 登录 Harbor 镜像仓库...", "push");
     let did_login = docker_login_harbor(
         config.harbor_url.clone(),
@@ -215,36 +221,12 @@ pub async fn build_and_push(
         emit(&app, 58, "🔐 复用已有 Harbor 登录", "push");
     }
 
-    // 步骤4: docker push（大镜像可能数分钟无输出；心跳避免 UI 误以为卡住）
-    emit(
-        &app,
-        75,
-        "📤 推送镜像到 Harbor（JAR 等大镜像可能需几分钟）...",
-        "push",
-    );
-    let stop_hb = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let stop_hb_flag = stop_hb.clone();
-    let app_hb = app.clone();
-    let label_hb = label.clone();
-    let hb = std::thread::spawn(move || {
-        let mut waited = 0u32;
-        while !stop_hb_flag.load(Ordering::SeqCst) {
-            std::thread::sleep(std::time::Duration::from_secs(15));
-            if stop_hb_flag.load(Ordering::SeqCst) {
-                break;
-            }
-            waited += 15;
-            let msg = format!("📤 仍在推送 Harbor…已等待约 {waited} 秒");
-            let text = match &label_hb {
-                Some(l) => format!("[{l}] {msg}"),
-                None => msg,
-            };
-            emit_progress(&app_hb, 78, &text, "push");
-        }
-    });
-    let push_result = docker_push_image(full_image.clone()).await;
-    stop_hb.store(true, Ordering::SeqCst);
-    let _ = hb.join();
+    // 步骤4: docker push（流式解析层进度，类似 FTP）
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        return Err("构建已取消".to_string());
+    }
+    let push_result =
+        docker_push_image(app.clone(), full_image.clone(), label.clone(), 75).await;
     push_result?;
 
     // 步骤5: 推送成功后删除本地镜像，避免本机堆积历史 tag（失败不影响结果）
@@ -329,6 +311,9 @@ pub async fn push_local_image(
     .map_err(|e| format!("标签线程异常: {}", e))??;
 
     // 步骤2: docker login（进程内同账号只真正 login 一次）
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        return Err("操作已取消".to_string());
+    }
     emit_progress(&app, 35, "🔐 登录 Harbor 镜像仓库...", "push");
     let did_login = docker_login_harbor(
         config.harbor_url.clone(),
@@ -341,8 +326,10 @@ pub async fn push_local_image(
     }
 
     // 步骤3: docker push
-    emit_progress(&app, 60, "📤 推送镜像到 Harbor...", "push");
-    docker_push_image(full_image.clone()).await?;
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        return Err("操作已取消".to_string());
+    }
+    docker_push_image(app.clone(), full_image.clone(), None, 60).await?;
 
     // 步骤4: 清理 Harbor 标签副本，不删除原始本地镜像
     emit_progress(&app, 90, "🧹 清理本地标签...", "cleanup");

@@ -217,6 +217,12 @@ interface KsBatchProgressModalProps {
   summary: KsBatchSummary | null;
   onClose: () => void;
   onCancelBuild: () => void;
+  /** 默认「批量打包并发布」 */
+  title?: string;
+  /** 副标题行：分支 · 命名空间 · N 个部署；传 null 隐藏 */
+  metaLine?: string | null;
+  /** 运行中是否显示「取消构建」；默认 true */
+  showCancel?: boolean;
 }
 
 export function KsBatchProgressModal({
@@ -229,6 +235,9 @@ export function KsBatchProgressModal({
   summary,
   onClose,
   onCancelBuild,
+  title = "批量打包并发布",
+  metaLine,
+  showCancel = true,
 }: KsBatchProgressModalProps) {
   const logViewportRef = useRef<HTMLDivElement>(null);
 
@@ -276,28 +285,17 @@ export function KsBatchProgressModal({
               </ThemeIcon>
               <Stack gap={2}>
                 <Text fw={700} size="md" lh={1.2}>
-                  批量打包并发布
+                  {title}
                 </Text>
                 <Group gap="xs">
                   <Badge variant="dot" color={statusColor} size="sm">
                     {statusLabel}
                   </Badge>
-                  {meta && (
+                  {(metaLine !== null) && (metaLine || meta) && (
                     <>
                       <Text size="xs" c="dimmed">
-                        {meta.branch}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        ·
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {meta.namespace}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        ·
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {meta.deployNames.length} 个部署
+                        {metaLine
+                          ?? `${meta?.branch ?? ""} · ${meta?.namespace ?? ""} · ${meta?.deployNames.length ?? 0} 个部署`}
                       </Text>
                     </>
                   )}
@@ -384,7 +382,7 @@ export function KsBatchProgressModal({
         </Box>
 
         <Group justify="flex-end" gap="sm" className="ks-batch-progress-footer">
-          {running && (
+          {running && showCancel && (
             <Button
               size="sm"
               variant="light"

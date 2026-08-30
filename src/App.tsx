@@ -568,6 +568,9 @@ function App() {
             config={app.config}
             configReady={app.configLoaded}
             onLastEnvChange={(id) => app.setConfig((prev) => ({ ...prev, ks_last_env_id: id }))}
+            onPublishMapsChange={(maps) =>
+              app.setConfig((prev) => ({ ...prev, ks_publish_maps: maps }))
+            }
           />
         )}
         {activeTab === "config" && (

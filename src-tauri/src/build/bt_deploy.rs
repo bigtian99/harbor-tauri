@@ -1,10 +1,9 @@
 //! test 打包后：FTP 覆盖宝塔 Java 项目 JAR 并 restart_project。
 
-use crate::landing::run_ftp_upload_dir_auth_with_progress;
 use crate::landing::run_ftp_upload_dir_auth_with_progress_cancel;
-use crate::landing::run_ftp_upload_file_with_progress;
 use crate::landing::run_ftp_upload_file_with_progress_cancel;
 use crate::models::{HarborConfig, PackageProjectType};
+use crate::utils::CANCEL_FLAG;
 use md5::{Digest, Md5};
 use serde::Serialize;
 use serde_json::Value;
@@ -547,7 +546,7 @@ fn deploy_one_jar(
             let file_name_for_cb = file_name.clone();
             let app_for_cb = app.clone();
             let mut last_pct_bucket: u32 = 0;
-            let on_progress = |sent: u64, total: u64| {
+            let mut on_progress = |sent: u64, total: u64| {
                 if total == 0 {
                     return;
                 }
@@ -569,17 +568,24 @@ fn deploy_one_jar(
                 );
                 crate::build::emit_progress(&app_for_cb, bar, msg, "build");
             };
+            let mut on_status_opt: Option<&mut dyn FnMut(&str)> = None;
 
-            if let Err(e) = run_ftp_upload_file_with_progress(
+            if let Err(e) = run_ftp_upload_file_with_progress_cancel(
                 &path,
                 &project.project_jar,
                 &config.bt_ftp_host,
                 &config.bt_ftp_user,
                 &config.bt_ftp_pass,
                 "build",
-                Some(on_progress),
+                Some(&mut on_progress),
+                &mut on_status_opt,
+                Some(&CANCEL_FLAG),
             ) {
-                let msg = format!("❌ FTP 上传失败 {}: {}", file_name, e);
+                let msg = if CANCEL_FLAG.load(Ordering::SeqCst) || e.contains("取消") {
+                    format!("🛑 已取消 FTP 上传 {}", file_name)
+                } else {
+                    format!("❌ FTP 上传失败 {}: {}", file_name, e)
+                };
                 crate::diag::diag_log("build", &msg);
                 return msg;
             }
@@ -634,6 +640,10 @@ pub(crate) fn maybe_deploy_test_jars(
     project_type: PackageProjectType,
     build_script: &str,
 ) -> Option<String> {
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        crate::diag::diag_log("build", "构建已取消，跳过宝塔 FTP 部署");
+        return Some("🛑 已取消，跳过宝塔部署".to_string());
+    }
     if !config.bt_auto_deploy_test {
         crate::diag::diag_log("build", "bt_auto_deploy_test=false，跳过宝塔部署");
         return None;
@@ -764,6 +774,9 @@ pub(crate) fn maybe_deploy_test_jars(
 }
 
 fn deploy_frontend_dist(app: &AppHandle, config: &HarborConfig, dist_path: &str) -> String {
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        return "🛑 已取消，跳过前端 FTP 上传".to_string();
+    }
     let remote = if config.bt_frontend_remote_dir.trim().is_empty() {
         "/www/wwwroot/pcm.shengyeshudong.cn".to_string()
     } else {
@@ -803,7 +816,7 @@ fn deploy_frontend_dist(app: &AppHandle, config: &HarborConfig, dist_path: &str)
         crate::build::emit_progress(&app_for_cb, bar, msg, "build");
     };
 
-    match run_ftp_upload_dir_auth_with_progress(
+    match run_ftp_upload_dir_auth_with_progress_cancel(
         Path::new(dist_path),
         &remote,
         &config.bt_ftp_host,
@@ -811,6 +824,7 @@ fn deploy_frontend_dist(app: &AppHandle, config: &HarborConfig, dist_path: &str)
         &config.bt_ftp_pass,
         "build",
         Some(on_progress),
+        Some(&CANCEL_FLAG),
     ) {
         Ok(()) => {
             let msg = format!("✅ 前端 dist 已上传到 {}", remote);
@@ -819,7 +833,11 @@ fn deploy_frontend_dist(app: &AppHandle, config: &HarborConfig, dist_path: &str)
             msg
         }
         Err(e) => {
-            let msg = format!("❌ 前端 dist FTP 上传失败: {}", e);
+            let msg = if CANCEL_FLAG.load(Ordering::SeqCst) || e.contains("取消") {
+                "🛑 已取消前端 FTP 上传".to_string()
+            } else {
+                format!("❌ 前端 dist FTP 上传失败: {}", e)
+            };
             crate::diag::diag_log("build", &msg);
             crate::build::emit_progress(app, 96, msg.clone(), "build");
             msg
@@ -833,6 +851,9 @@ fn deploy_jars_with_panel(
     repo_name: &str,
     jars: &[String],
 ) -> Result<String, String> {
+    if CANCEL_FLAG.load(Ordering::SeqCst) {
+        return Ok("🛑 已取消，跳过 JAR FTP 部署".to_string());
+    }
     crate::build::emit_progress(
         app,
         90,
@@ -878,7 +899,12 @@ fn deploy_jars_with_panel(
 
     let lines: Vec<String> = jars
         .iter()
-        .map(|jar| deploy_one_jar(app, &client, config, &projects, jar, repo_name))
+        .map(|jar| {
+            if CANCEL_FLAG.load(Ordering::SeqCst) {
+                return format!("🛑 已取消，跳过 {}", jar);
+            }
+            deploy_one_jar(app, &client, config, &projects, jar, repo_name)
+        })
         .collect();
     Ok(lines.join("\n"))
 }

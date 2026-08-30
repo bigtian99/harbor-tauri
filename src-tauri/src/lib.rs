@@ -48,6 +48,7 @@ use history::{
 use kubesphere::{
     ks_create_deployment, ks_list_deployment_revisions, ks_list_deployments, ks_list_namespaces,
     ks_create_configmap, ks_create_configmap_yaml, ks_get_configmap, ks_list_configmaps,
+    ks_replace_configmap,
     ks_connect, ks_get_deployment_edit, ks_get_pod_logs, ks_login, ks_logout, ks_preview_configmap,
     ks_preview_deployment, ks_update_deployment, ks_update_image,
 };
@@ -109,6 +110,7 @@ pub fn run() {
             ks_get_configmap,
             ks_create_configmap,
             ks_create_configmap_yaml,
+            ks_replace_configmap,
             ks_preview_configmap,
             ks_logout,
             load_config,

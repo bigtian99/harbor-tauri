@@ -7,7 +7,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { RefreshCw, Download, Rocket, Container as ContainerIcon, Search, History, Plus, Copy, Pencil, Package, ScrollText, Maximize2, Minimize2, ChevronDown, ChevronUp } from "lucide-react";
-import type { HarborConfig } from "../types";
+import type { HarborConfig, KsPublishMap } from "../types";
 import { isTauriRuntime } from "../types";
 import { pickKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
@@ -18,6 +18,11 @@ import {
   type KsBatchSummary,
 } from "./KsBatchPackModal";
 import {
+  KsBatchCloneConfirmModal,
+  type KsBatchCloneConfirmMeta,
+  type KsBatchCloneConfirmValues,
+} from "./KsBatchCloneModal";
+import {
   detectCpuCores,
   KS_BATCH_CONCURRENCY_AUTO,
   loadKsBatchConcurrencyPref,
@@ -27,6 +32,7 @@ import {
   saveKsBatchConcurrencyPref,
   type KsBatchConcurrencyPref,
 } from "../utils/ksBatchPackPublish";
+import { runKsBatchCloneToEnv } from "../utils/ksBatchCloneDeploy";
 import {
   defaultKsBatchBranch,
   loadKsBatchBranchHistory,
@@ -265,11 +271,14 @@ export function KsPublishPanel({
   config,
   configReady = true,
   onLastEnvChange,
+  onPublishMapsChange,
 }: {
   config: HarborConfig;
   /** 配置已从磁盘加载完成；false 时不要自动连接，避免 reload 后空配置误报「未配置环境」 */
   configReady?: boolean;
   onLastEnvChange?: (id: string) => void;
+  /** 批量复制后写回发布映射 */
+  onPublishMapsChange?: (maps: KsPublishMap[]) => void;
 }) {
   const { confirm } = useConfirmDialog();
   const envs = resolveKsEnvironments(config);
@@ -297,6 +306,15 @@ export function KsPublishPanel({
     () => loadKsBatchConcurrencyPref(),
   );
   const [batchRunning, setBatchRunning] = useState(false);
+  const [cloneConfirmOpen, setCloneConfirmOpen] = useState(false);
+  const [cloneMeta, setCloneMeta] = useState<KsBatchCloneConfirmMeta | null>(null);
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneRunning, setCloneRunning] = useState(false);
+  const [cloneProgress, setCloneProgress] = useState(0);
+  const [cloneMessage, setCloneMessage] = useState("");
+  const [cloneLog, setCloneLog] = useState("");
+  const [cloneSummary, setCloneSummary] = useState<KsBatchSummary | null>(null);
+  const [cloneProgressMeta, setCloneProgressMeta] = useState<KsBatchMeta | null>(null);
   const [batchLog, setBatchLog] = useState("");
   const [batchProgress, setBatchProgress] = useState(0);
   const [batchMessage, setBatchMessage] = useState("");
@@ -538,7 +556,7 @@ export function KsPublishPanel({
   };
 
   // 自动刷新：批量弹窗打开或执行中暂停，避免后台刷新拖死 UI
-  const batchUiActive = batchConfirmOpen || batchOpen || batchRunning;
+  const batchUiActive = batchConfirmOpen || batchOpen || batchRunning || cloneConfirmOpen || cloneOpen || cloneRunning;
   useEffect(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (autoRefresh && connected && namespace && !batchUiActive) {
@@ -943,6 +961,79 @@ export function KsPublishPanel({
       void load({ silent: true });
     } finally {
       setBatchRunning(false);
+    }
+  };
+
+  const beginBatchClone = () => {
+    if (!envId || !namespace || selectedDeploys.length === 0) return;
+    startTransition(() => {
+      setCloneMeta({
+        sourceEnvId: envId,
+        sourceEnvName: selectedEnv?.name ?? envId,
+        sourceNamespace: namespace,
+        deployNames: selectedDeploys.map((d) => d.name),
+      });
+      setCloneConfirmOpen(true);
+    });
+  };
+
+  const closeCloneConfirm = () => {
+    setCloneConfirmOpen(false);
+    // 确认弹窗会连目标环境拉命名空间，关闭后切回当前环境
+    if (envId) void connect(envId);
+  };
+
+  const startBatchClone = async (values: KsBatchCloneConfirmValues) => {
+    if (!cloneMeta || !envId || !namespace) return;
+    setCloneConfirmOpen(false);
+    const targetEnv = pickKsEnvironment(envs, values.targetEnvId);
+    setCloneProgressMeta({
+      branch: `${cloneMeta.sourceEnvName} → ${targetEnv?.name ?? values.targetEnvId}`,
+      namespace: `${cloneMeta.sourceNamespace} → ${values.targetNamespace}`,
+      envName: targetEnv?.name ?? values.targetEnvId,
+      deployNames: cloneMeta.deployNames,
+    });
+    setCloneOpen(true);
+    setCloneRunning(true);
+    setCloneSummary(null);
+    setCloneLog("");
+    setCloneProgress(0);
+    setCloneMessage("准备复制…");
+
+    try {
+      const summary = await runKsBatchCloneToEnv({
+        config,
+        sourceEnvId: cloneMeta.sourceEnvId,
+        sourceNamespace: cloneMeta.sourceNamespace,
+        targetEnvId: values.targetEnvId,
+        targetNamespace: values.targetNamespace,
+        deployNames: cloneMeta.deployNames,
+        conflict: values.conflict,
+        copyConfigMap: values.copyConfigMap,
+        copyPublishMaps: values.copyPublishMaps,
+        dryRun: values.dryRun,
+        appendLog: (line) => setCloneLog((prev) => (prev ? `${prev}\n${line}` : line)),
+        onProgress: (pct, msg) => {
+          setCloneProgress((prev) => Math.max(prev, pct));
+          setCloneMessage(msg);
+        },
+        onMapsSaved: onPublishMapsChange,
+      });
+      setCloneSummary({
+        success: summary.success,
+        failed: summary.failed,
+        skipped: summary.skipped,
+      });
+      notifications.show({
+        color: summary.failed > 0 ? "orange" : "green",
+        title: values.dryRun ? "预检完成" : "复制完成",
+        message: `成功 ${summary.success} · 失败 ${summary.failed} · 跳过 ${summary.skipped}`,
+        autoClose: 5000,
+      });
+      // 已切回源会话；刷新当前列表
+      void load({ silent: true });
+    } finally {
+      setCloneRunning(false);
     }
   };
 
@@ -1469,12 +1560,30 @@ export function KsPublishPanel({
                       disabled={
                         checkedNames.size === 0
                         || batchRunning
+                        || cloneRunning
                         || !batchBranch.trim()
                       }
                       loading={batchRunning}
                       onClick={beginBatchPack}
                     >
                       批量打包并发布{checkedNames.size > 0 ? ` (${checkedNames.size})` : ""}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="filled"
+                      color="teal"
+                      leftSection={<Copy size={13} />}
+                      disabled={
+                        !connected
+                        || !namespace
+                        || checkedNames.size === 0
+                        || batchRunning
+                        || cloneRunning
+                      }
+                      loading={cloneRunning}
+                      onClick={beginBatchClone}
+                    >
+                      复制到其他环境{checkedNames.size > 0 ? ` (${checkedNames.size})` : ""}
                     </Button>
                   </Group>
                 </Group>
@@ -2265,6 +2374,35 @@ export function KsPublishPanel({
         onClose={() => setBatchOpen(false)}
         onCancelBuild={() => void invoke("cancel_build").catch(() => {})}
       />
+      )}
+      {cloneConfirmOpen && cloneMeta && (
+        <KsBatchCloneConfirmModal
+          opened={cloneConfirmOpen}
+          config={config}
+          meta={cloneMeta}
+          onClose={closeCloneConfirm}
+          onStart={(values) => void startBatchClone(values)}
+        />
+      )}
+      {(cloneOpen || cloneRunning) && (
+        <KsBatchProgressModal
+          opened={cloneOpen}
+          meta={cloneProgressMeta}
+          running={cloneRunning}
+          progress={cloneProgress}
+          message={cloneMessage}
+          log={cloneLog}
+          summary={cloneSummary}
+          title="批量复制到其他环境"
+          metaLine={
+            cloneProgressMeta
+              ? `${cloneProgressMeta.branch} · ${cloneProgressMeta.namespace} · ${cloneProgressMeta.deployNames.length} 个部署`
+              : null
+          }
+          onClose={() => setCloneOpen(false)}
+          onCancelBuild={() => {}}
+          showCancel={false}
+        />
       )}
       <Modal
         opened={podLogOpen}
