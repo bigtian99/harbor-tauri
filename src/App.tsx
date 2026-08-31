@@ -230,6 +230,8 @@ function App() {
     <AppShell
       className="app"
       padding={0}
+      transitionDuration={250}
+      transitionTimingFunction="cubic-bezier(0.4, 0, 0.2, 1)"
       navbar={getAppShellNavbarConfig(app.sidebarCollapsed)}
       styles={{
         root: {

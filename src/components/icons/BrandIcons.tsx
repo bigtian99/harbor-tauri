@@ -4,6 +4,44 @@ import btLogoUrl from "../../assets/bt-logo.png";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
+/**
+ * 应用品牌标「码头工坊」：罐体 + 上升箭头 + 底部波浪。
+ * 图形寓意「打包 → 镜像出海 → 推送入港」；工坊涵盖构建、发布与运营全家桶。
+ * 渐变底随主题 --color-primary → --color-accent。
+ */
+export function BrandMark({ size = 28, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      aria-hidden
+      {...props}
+    >
+      <defs>
+        <linearGradient id="brandmark-gradient" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="var(--color-primary)" />
+          <stop offset="1" stopColor="var(--color-accent)" />
+        </linearGradient>
+      </defs>
+      <rect width="32" height="32" rx="8" fill="url(#brandmark-gradient)" />
+      <g
+        fill="none"
+        stroke="#ffffff"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 8.8h8" />
+        <path d="M12.3 12.2v5.4a3.7 3.7 0 0 0 3.7 3.7 3.7 3.7 0 0 0 3.7-3.7v-5.4" />
+        <path d="M16 18.8v-3.4" />
+        <path d="M14.4 17 16 15.4l1.6 1.6" />
+        <path d="M9.4 25.8c1.5-1.5 3-1.5 4.4 0s2.9 1.5 4.4 0 2.9-1.5 4.4 0" />
+      </g>
+    </svg>
+  );
+}
+
 /** Docker 官方鲸鱼（Simple Icons），跟随 currentColor */
 export function DockerIcon({ size = 14, ...props }: IconProps) {
   return (

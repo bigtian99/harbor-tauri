@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ActionIcon,
   AppShell,
@@ -12,7 +12,6 @@ import {
   Tooltip,
 } from "@mantine/core";
 import {
-  Container,
   Upload,
   Rocket,
   Settings,
@@ -31,7 +30,7 @@ import {
 } from "lucide-react";
 import type { TabType } from "../types";
 import { isOpsTab } from "../opsNavigation";
-import { BaotaIcon, KubeSphereIcon } from "./icons/BrandIcons";
+import { BaotaIcon, BrandMark, KubeSphereIcon } from "./icons/BrandIcons";
 
 interface SidebarProps {
   activeTab: TabType;
@@ -99,58 +98,43 @@ function NavItemLink({
   collapsed: boolean;
   onTabChange: (tab: TabType) => void;
 }) {
-  const link = (
-    <NavLink
-      className="sidebar-nav-link"
-      label={collapsed ? undefined : item.label}
-      leftSection={item.icon}
-      active={activeTab === item.tab}
-      onClick={() => onTabChange(item.tab)}
-      color="blue"
-      variant="light"
-      styles={navStyles}
-    />
-  );
-  if (!collapsed) return link;
   return (
-    <Tooltip label={item.label} position="right" withArrow openDelay={200}>
-      {link}
+    <Tooltip label={item.label} position="right" withArrow openDelay={200} disabled={!collapsed}>
+      <NavLink
+        className="sidebar-nav-link"
+        label={item.label}
+        leftSection={item.icon}
+        active={activeTab === item.tab}
+        onClick={() => onTabChange(item.tab)}
+        color="blue"
+        variant="light"
+        styles={navStyles}
+      />
     </Tooltip>
   );
 }
 
 function SectionLabel({ label, collapsed }: { label: string; collapsed: boolean }) {
-  if (collapsed) {
-    return (
-      <Box
-        mx="auto"
-        my={6}
-        style={{
-          width: 14,
-          height: 1,
-          background: "var(--color-border-strong)",
-          opacity: 0.8,
-        }}
-      />
-    );
-  }
   return (
-    <Text
-      className="sidebar-section-label"
-      px="sm"
-      pt={10}
-      pb={4}
-      style={{
-        fontSize: 11,
-        fontWeight: 600,
-        letterSpacing: "0.08em",
-        textTransform: "uppercase",
-        opacity: 0.85,
-        userSelect: "none",
-      }}
-    >
-      {label}
-    </Text>
+    <Box className="sidebar-section-wrap" data-collapsed={collapsed || undefined}>
+      <Text
+        className="sidebar-section-label"
+        px="sm"
+        pt={10}
+        pb={4}
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          opacity: 0.85,
+          userSelect: "none",
+        }}
+      >
+        {label}
+      </Text>
+      <Box className="sidebar-section-divider" mx="auto" my={6} />
+    </Box>
   );
 }
 
@@ -199,6 +183,24 @@ export function Sidebar({
     if (!sidebarCollapsed) setBtFlyout(false);
   }, [sidebarCollapsed]);
 
+  // 折叠态宝塔 flyout：悬浮展开，鼠标在目标与弹层之间移动不闪关
+  const btFlyoutCloseTimer = useRef<number | null>(null);
+  const cancelBtFlyoutClose = () => {
+    if (btFlyoutCloseTimer.current !== null) {
+      window.clearTimeout(btFlyoutCloseTimer.current);
+      btFlyoutCloseTimer.current = null;
+    }
+  };
+  const scheduleBtFlyoutClose = () => {
+    cancelBtFlyoutClose();
+    btFlyoutCloseTimer.current = window.setTimeout(() => setBtFlyout(false), 140);
+  };
+  const openBtFlyout = () => {
+    cancelBtFlyoutClose();
+    setBtFlyout(true);
+  };
+  useEffect(() => cancelBtFlyoutClose, []);
+
   const showBuild = itemsBuild.length > 0 || showBtGroup;
   const showOps = itemsOps.length > 0;
   const showPublish = itemsPublish.length > 0;
@@ -211,6 +213,7 @@ export function Sidebar({
       leftSection={icon}
       active={activeTab === tab}
       onClick={() => {
+        cancelBtFlyoutClose();
         setBtFlyout(false);
         onTabChange(tab);
       }}
@@ -245,6 +248,7 @@ export function Sidebar({
 
         {/* 品牌 */}
         <AppShell.Section
+          className="sidebar-brand-section"
           px={sidebarCollapsed ? 0 : 14}
           py={14}
           style={{
@@ -257,41 +261,25 @@ export function Sidebar({
             wrap="nowrap"
             justify={sidebarCollapsed ? "center" : "flex-start"}
             align="center"
+            w={sidebarCollapsed ? "100%" : undefined}
           >
-            <Box
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 28,
-                height: 28,
-                borderRadius: 7,
-                background: "linear-gradient(135deg, var(--color-primary-muted), var(--color-accent-muted))",
-                boxShadow: "var(--glow-primary)",
-                flexShrink: 0,
-              }}
-            >
-              <Container size={16} color="var(--color-primary-hover)" strokeWidth={2.25} />
+            <BrandMark size={28} style={{ flexShrink: 0 }} />
+            <Box className="sidebar-brand-text">
+              <Text fw={700} style={{ color: "var(--color-text)", letterSpacing: "0.04em", fontSize: 15 }}>
+                码头工坊
+              </Text>
+              <Text
+                style={{
+                  fontSize: 10,
+                  letterSpacing: "0.1em",
+                  color: "var(--color-text-muted)",
+                  opacity: 0.75,
+                  marginTop: 3,
+                }}
+              >
+                构建 · 发布 · 运营
+              </Text>
             </Box>
-            {!sidebarCollapsed && (
-              <Box style={{ minWidth: 0, lineHeight: 1.15 }}>
-                <Text fw={700} style={{ color: "var(--color-text)", letterSpacing: "0.06em", fontSize: 15 }}>
-                  ShipForge
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: "var(--color-text-muted)",
-                    opacity: 0.75,
-                    marginTop: 3,
-                  }}
-                >
-                  Harbor · Build
-                </Text>
-              </Box>
-            )}
           </Group>
         </AppShell.Section>
 
@@ -327,23 +315,41 @@ export function Sidebar({
                             className={`sidebar-nav-link${isBtActive ? " sidebar-nav-link--section-on" : ""}`}
                             leftSection={<BaotaIcon size={18} />}
                             active={false}
-                            onClick={() => setBtFlyout((o) => !o)}
+                            onMouseEnter={openBtFlyout}
+                            onMouseLeave={scheduleBtFlyoutClose}
+                            onClick={openBtFlyout}
                             color="gray"
                             variant="subtle"
                             styles={navStyles}
                             aria-label="宝塔"
                             aria-current={isBtActive ? "true" : undefined}
+                            aria-expanded={btFlyout}
                           />
                         </Tooltip>
                       </Popover.Target>
                       <Popover.Dropdown
                         p={6}
+                        onMouseEnter={cancelBtFlyoutClose}
+                        onMouseLeave={scheduleBtFlyoutClose}
                         style={{
                           background: "var(--color-bg-surface)",
                           border: "1px solid var(--color-border)",
                           minWidth: 160,
                         }}
                       >
+                        <Text
+                          px="sm"
+                          pb={4}
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            letterSpacing: "0.08em",
+                            color: "var(--color-text-muted)",
+                            userSelect: "none",
+                          }}
+                        >
+                          宝塔
+                        </Text>
                         <Stack gap={2}>{btChildren}</Stack>
                       </Popover.Dropdown>
                     </Popover>
@@ -409,19 +415,7 @@ export function Sidebar({
             }}
           >
             <Stack gap={2}>
-              {sidebarCollapsed ? (
-                <Tooltip label="系统日志" position="right" withArrow>
-                  <NavLink
-                    className="sidebar-nav-link"
-                    leftSection={<ScrollText size={18} />}
-                    onClick={onOpenLog}
-                    color="gray"
-                    variant="subtle"
-                    styles={navStyles}
-                    aria-label="系统日志"
-                  />
-                </Tooltip>
-              ) : (
+              <Tooltip label="系统日志" position="right" withArrow disabled={!sidebarCollapsed}>
                 <NavLink
                   className="sidebar-nav-link"
                   label="系统日志"
@@ -430,8 +424,9 @@ export function Sidebar({
                   color="gray"
                   variant="subtle"
                   styles={navStyles}
+                  aria-label="系统日志"
                 />
-              )}
+              </Tooltip>
               <NavItemLink
                 item={{ tab: "config", icon: <Settings size={18} />, label: "设置" }}
                 activeTab={activeTab}

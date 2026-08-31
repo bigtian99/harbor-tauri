@@ -66,6 +66,37 @@ body {
 .app-sidebar {
   overflow: visible !important;
   z-index: 200 !important;
+  transition-property: transform, top, height, width !important;
+}
+
+/* 主内容区随侧栏宽度联动过渡 */
+.app .content.mantine-AppShell-main {
+  transition-property: padding-inline-start, padding-inline-end, padding-top, padding-bottom !important;
+  transition-duration: var(--app-shell-transition-duration, 250ms) !important;
+  transition-timing-function: var(--app-shell-transition-timing-function, ease) !important;
+}
+
+.sidebar-brand-section {
+  overflow: hidden;
+  transition: padding-inline var(--app-shell-transition-duration, 250ms)
+    var(--app-shell-transition-timing-function, ease);
+}
+
+.sidebar-brand-text {
+  min-width: 0;
+  line-height: 1.15;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 160px;
+  opacity: 1;
+  transition:
+    max-width var(--app-shell-transition-duration, 250ms) var(--app-shell-transition-timing-function, ease),
+    opacity calc(var(--app-shell-transition-duration, 250ms) * 0.8) ease;
+}
+
+.app-sidebar[data-collapsed] .sidebar-brand-text {
+  max-width: 0;
+  opacity: 0;
 }
 
 /* 折叠钮：整颗在侧栏右侧，左缘贴齐右边线（不骑进菜单） */
@@ -90,11 +121,15 @@ body {
   box-shadow: 2px 1px 6px rgba(0, 0, 0, 0.35);
 }
 
-.sidebar-toggle:hover {
-  color: var(--color-primary-hover) !important;
-  background: var(--color-bg-card) !important;
-  border-color: var(--color-primary) !important;
+.sidebar-toggle:hover,
+.sidebar-toggle:focus-visible,
+.sidebar-toggle:active {
+  background: var(--color-bg-elevated) !important;
+  border: 1px solid var(--color-border-strong) !important;
   border-left: none !important;
+  color: var(--color-text-muted) !important;
+  outline: none !important;
+  box-shadow: 2px 1px 6px rgba(0, 0, 0, 0.35);
 }
 
 /* 输入框：恢复聚焦高亮（勿写死 border，否则盖掉 --input-bd-focus） */
@@ -197,6 +232,47 @@ body {
   color: var(--color-primary-hover);
 }
 
+/* Mantine 按钮：图标与文字间距、文字底部裁切（text-box-trim） */
+[data-mantine-color-scheme] .mantine-Button-root {
+  line-height: 1.35;
+}
+
+[data-mantine-color-scheme] .mantine-Button-inner {
+  gap: 6px;
+}
+
+[data-mantine-color-scheme] .mantine-Button-section[data-position="left"] {
+  margin-inline-end: 0;
+}
+
+[data-mantine-color-scheme] .mantine-Button-section[data-position="right"] {
+  margin-inline-start: 0;
+}
+
+[data-mantine-color-scheme] .mantine-Button-label {
+  overflow: visible;
+  line-height: 1.35;
+  text-box-trim: none;
+  text-box-edge: auto;
+}
+
+[data-mantine-color-scheme] .mantine-Button-section {
+  flex-shrink: 0;
+}
+
+/* Badge / Tabs 等同理：带 section 时留足间距 */
+[data-mantine-color-scheme] .mantine-Badge-section[data-position="left"] {
+  margin-inline-end: 6px;
+}
+
+[data-mantine-color-scheme] .mantine-Tabs-tab .mantine-Tabs-tabSection[data-position="left"] {
+  margin-inline-end: 6px;
+}
+
+[data-mantine-color-scheme] .mantine-NavLink-section[data-position="left"] {
+  margin-inline-end: 8px;
+}
+
 /* 危险操作（停止/删除）保持红系可读 */
 [data-mantine-color-scheme] button[data-variant="filled"][data-color="red"],
 [data-mantine-color-scheme] button[data-variant="light"][data-color="red"] {
@@ -261,6 +337,83 @@ body {
 .app-sidebar .sidebar-section-label {
   color: color-mix(in srgb, var(--color-primary) 55%, var(--color-text-muted)) !important;
   letter-spacing: 0.08em;
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    max-width var(--app-shell-transition-duration, 250ms) var(--app-shell-transition-timing-function, ease),
+    opacity calc(var(--app-shell-transition-duration, 250ms) * 0.8) ease;
+}
+
+.app-sidebar[data-collapsed] .sidebar-section-label {
+  max-width: 0;
+  opacity: 0;
+  padding: 0 !important;
+}
+
+.app-sidebar .sidebar-section-wrap {
+  min-height: 20px;
+}
+
+.app-sidebar .sidebar-section-divider {
+  width: 14px;
+  height: 1px;
+  background: var(--color-border-strong);
+  opacity: 0;
+  transform: scaleX(0.6);
+  transition:
+    opacity var(--app-shell-transition-duration, 250ms) var(--app-shell-transition-timing-function, ease),
+    transform var(--app-shell-transition-duration, 250ms) var(--app-shell-transition-timing-function, ease);
+}
+
+.app-sidebar[data-collapsed] .sidebar-section-divider {
+  opacity: 0.8;
+  transform: scaleX(1);
+}
+
+/* 折叠态：品牌区与导航图标水平居中 */
+.app-sidebar[data-collapsed] .sidebar-brand-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.app-sidebar[data-collapsed] .sidebar-nav-link {
+  justify-content: center;
+}
+
+.app-sidebar[data-collapsed] .sidebar-nav-link .mantine-NavLink-section[data-position="left"] {
+  margin-inline-end: 0 !important;
+}
+
+.app-sidebar[data-collapsed] .mantine-Tooltip-root {
+  display: block;
+  width: 100%;
+}
+
+.app-sidebar[data-collapsed] .mantine-Popover-target {
+  display: block;
+  width: 100%;
+}
+
+.app-sidebar .sidebar-nav-link .mantine-NavLink-label {
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 140px;
+  opacity: 1;
+  transition:
+    max-width var(--app-shell-transition-duration, 250ms) var(--app-shell-transition-timing-function, ease),
+    opacity calc(var(--app-shell-transition-duration, 250ms) * 0.8) ease;
+}
+
+.app-sidebar[data-collapsed] .sidebar-nav-link .mantine-NavLink-label {
+  max-width: 0;
+  opacity: 0;
+}
+
+.app-sidebar[data-collapsed] .sidebar-nav-link .mantine-NavLink-body {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* 历史记录：锁住 AppShell.Main 滚动，只让面板内列表滚 */
