@@ -12,6 +12,7 @@ import { isTauriRuntime } from "../types";
 import { pickKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { KubeSphereIcon } from "./icons/BrandIcons";
+import { panelAccentButtonStyles, panelFieldStyles, panelPaperStyles, panelPrimaryButtonStyles } from "../theme/panelStyles";
 import {
   KsBatchConfirmModal,
   KsBatchProgressModal,
@@ -74,6 +75,10 @@ import {
   buildRevisionDurationMap,
 } from "./ksPublish/utils";
 import { DeployRow } from "./ksPublish/DeployRow";
+
+function KsRefreshIcon({ size = 13, spinning }: { size?: number; spinning?: boolean }) {
+  return <RefreshCw size={size} className={spinning ? "ks-refresh-spin" : undefined} />;
+}
 
 export function KsPublishPanel({
   config,
@@ -1202,8 +1207,11 @@ export function KsPublishPanel({
     }
   };
 
-  const exportCsv = () => {
-    if (filtered.length === 0) return;
+  const exportCsv = async () => {
+    if (filtered.length === 0) {
+      notifications.show({ color: "yellow", message: "当前无数据可导出" });
+      return;
+    }
     const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = [
       ["状态", "部署", "别名", "容器", "端口", "镜像", "就绪", "版本"].map(esc).join(","),
@@ -1211,12 +1219,44 @@ export function KsPublishPanel({
         return [d.status.label, d.name, d.alias ?? "", d.containers.join("/"), (d.ports ?? []).join("/"), d.image, d.status.detail.split(" · ")[0], d.revision].map(esc).join(",");
       }),
     ].join("\r\n");
-    const blob = new Blob(["\ufeff" + rows], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `deployments-status-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
+    const content = `\ufeff${rows}`;
+    const defaultName = `deployments-status-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.csv`;
+
+    if (!isTauriRuntime()) {
+      const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = defaultName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      notifications.show({ color: "teal", message: `已下载 ${defaultName}`, autoClose: 2500 });
+      return;
+    }
+
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const path = await save({
+      defaultPath: defaultName,
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
+    if (!path) return;
+
+    try {
+      const saved = await invoke<string>("write_text_file", { path, content });
+      notifications.show({
+        color: "teal",
+        title: "导出完成",
+        message: saved,
+        autoClose: 4000,
+        onClick: () => {
+          void invoke("open_directory", { path: saved }).catch(() => {});
+        },
+        style: { cursor: "pointer" },
+      });
+    } catch (e) {
+      notifications.show({ color: "red", title: "导出 CSV 失败", message: String(e) });
+    }
   };
 
   /** 列表「修改」：弹框与创建 Deployment 同款表单 */
@@ -1259,60 +1299,65 @@ export function KsPublishPanel({
   return (
     <>
       <Stack gap="md" className="ks-publish-panel">
-        <Card shadow="sm" radius="md" withBorder>
-          <Group justify="space-between" mb="md" wrap="nowrap">
-            <Group gap={8} wrap="wrap">
-              <KubeSphereIcon size={20} color="#329dce" />
-              <Title order={4}>KubeSphere 镜像发布</Title>
-              {connecting && <Loader size={15} />}
+        <Card shadow="sm" radius="md" withBorder styles={panelPaperStyles}>
+          <Stack gap="md">
+            <Group justify="space-between" wrap="wrap" gap="sm">
+              <Group gap={8}>
+                <KubeSphereIcon size={20} color="#329dce" />
+                <Title order={4}>KubeSphere 镜像发布</Title>
+              </Group>
               {connecting && (
-                <Text size="xs" c="dimmed">
-                  {statusText || "正在连接…"}
-                </Text>
+                <Group gap={6}>
+                  <Loader size={14} />
+                  <Text size="sm" c="dimmed">{statusText || "正在连接…"}</Text>
+                </Group>
               )}
-              {connected && selectedEnv && (
-                <Badge color="green" variant="light" size="xs">已连接 {selectedEnv.name}</Badge>
+              {connected && selectedEnv && !connecting && (
+                <Badge color="green" variant="dot" size="sm">已连接 {selectedEnv.name}</Badge>
               )}
-              {!connected && !connecting && statusText && <Text size="xs" c="red">{statusText}</Text>}
+              {!connected && !connecting && statusText && (
+                <Text size="sm" c="red">{statusText}</Text>
+              )}
             </Group>
-          </Group>
-          <SimpleGrid cols={connected ? 2 : 1} spacing="md" className="ks-form-2col">
-            <Group align="flex-end" gap="sm" wrap="nowrap" grow>
+
+            <Group align="flex-end" wrap="wrap" gap="md" className="ks-publish-toolbar">
               <Select
-                style={{ flex: 1 }}
                 label="环境"
-                description="KubeSphere 控制台环境"
                 data={envs.map((env) => ({ value: env.id, label: env.name || env.id }))}
                 value={envId}
                 onChange={switchEnv}
                 placeholder={envs.length ? "选择环境" : "请先在设置中添加环境"}
                 disabled={connecting || envs.length === 0}
+                styles={panelFieldStyles}
+                style={{ flex: "1 1 200px", minWidth: 200 }}
               />
-              <Button
-                size="sm"
-                variant="default"
-                leftSection={<RefreshCw size={14} />}
-                loading={connecting}
-                disabled={envs.length === 0 || !envId}
-                onClick={() => void connect(envId)}
-                title="重新连接当前环境"
-              >
-                重新连接
-              </Button>
-            </Group>
-            {connected && (
               <Select
                 label="命名空间"
-                description="当前集群命名空间"
                 data={namespaces}
                 value={namespace}
                 onChange={(v) => setNamespace(v)}
                 searchable
                 clearable
-                placeholder="选择命名空间"
+                placeholder={connected ? "选择命名空间" : "连接后可选"}
+                disabled={!connected || connecting}
+                styles={panelFieldStyles}
+                style={{ flex: "1 1 200px", minWidth: 200 }}
               />
-            )}
-          </SimpleGrid>
+              <Button
+                variant={connected ? "light" : "filled"}
+                color="blue"
+                leftSection={<RefreshCw size={14} />}
+                loading={connecting}
+                disabled={envs.length === 0 || !envId}
+                onClick={() => void connect(envId)}
+                title={connected ? "连接失败或会话过期时手动重连" : "连接所选环境"}
+                styles={connected ? undefined : panelPrimaryButtonStyles}
+                style={{ flex: "0 0 auto" }}
+              >
+                {connecting ? "连接中…" : connected ? "重新连接" : "连接"}
+              </Button>
+            </Group>
+          </Stack>
         </Card>
 
         {connected && (
@@ -1331,68 +1376,84 @@ export function KsPublishPanel({
                     <Title order={5}>📋 全部部署状态</Title>
                     {lastRefresh && <Text size="xs" c="dimmed">最近刷新 {lastRefresh}</Text>}
                   </Group>
-                  <Group gap="sm" wrap="wrap">
-                    <Checkbox label="自动刷新" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.currentTarget.checked)} size="xs" />
-                    <Select
-                      value={refreshSec}
-                      onChange={(v) => setRefreshSec(v ?? "30")}
-                      data={["10", "30", "60"]}
-                      w={76}
-                      size="xs"
-                      disabled={!autoRefresh}
-                    />
-                    <Button size="xs" variant="default" leftSection={<RefreshCw size={13} />} loading={loading || connecting} onClick={handleRefreshOrReconnect}>
-                      {connected ? "刷新" : "重新连接"}
-                    </Button>
-                    <Button size="xs" variant="default" leftSection={<Plus size={13} />} onClick={() => setCreateOpen(true)}>
-                      创建部署
-                    </Button>
-                    <Button size="xs" variant="default" leftSection={<Download size={13} />} onClick={exportCsv}>
-                      导出 CSV
-                    </Button>
-                    <Autocomplete
-                      size="xs"
-                      w={180}
-                      placeholder="分支（可点选历史）"
-                      data={batchBranchSuggestions}
-                      value={batchBranch}
-                      onChange={setBatchBranch}
-                      disabled={batchRunning}
-                      aria-label="批量打包目标分支"
-                    />
-                    <Button
-                      size="xs"
-                      variant="filled"
-                      color="blue"
-                      leftSection={<Package size={13} />}
-                      disabled={
-                        checkedNames.size === 0
-                        || batchRunning
-                        || cloneRunning
-                        || !batchBranch.trim()
-                      }
-                      loading={batchRunning}
-                      onClick={beginBatchPack}
-                    >
-                      批量打包并发布{checkedNames.size > 0 ? ` (${checkedNames.size})` : ""}
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="filled"
-                      color="teal"
-                      leftSection={<Copy size={13} />}
-                      disabled={
-                        !connected
-                        || !namespace
-                        || checkedNames.size === 0
-                        || batchRunning
-                        || cloneRunning
-                      }
-                      loading={cloneRunning}
-                      onClick={beginBatchClone}
-                    >
-                      复制到其他环境{checkedNames.size > 0 ? ` (${checkedNames.size})` : ""}
-                    </Button>
+                  <Group gap="sm" wrap="wrap" className="ks-publish-actions">
+                    <Group gap={6} wrap="wrap" className="ks-publish-actions-util">
+                      <Checkbox label="自动刷新" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.currentTarget.checked)} size="xs" />
+                      <Select
+                        value={refreshSec}
+                        onChange={(v) => setRefreshSec(v ?? "30")}
+                        data={["10", "30", "60"]}
+                        w={76}
+                        size="xs"
+                        disabled={!autoRefresh}
+                      />
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="gray"
+                        leftSection={<KsRefreshIcon spinning={loading} />}
+                        disabled={loading || connecting}
+                        onClick={handleRefreshOrReconnect}
+                      >
+                        {connected ? "刷新" : "重新连接"}
+                      </Button>
+                      <Button size="xs" variant="light" color="blue" leftSection={<Plus size={13} />} onClick={() => setCreateOpen(true)}>
+                        创建部署
+                      </Button>
+                      <Button size="xs" variant="subtle" color="gray" leftSection={<Download size={13} />} onClick={() => void exportCsv()}>
+                        导出 CSV
+                      </Button>
+                    </Group>
+                    <Divider orientation="vertical" className="ks-publish-actions-divider" />
+                    <Group gap={6} wrap="wrap" className="ks-publish-actions-batch">
+                      <Autocomplete
+                        size="xs"
+                        w={180}
+                        placeholder="分支（可点选历史）"
+                        data={batchBranchSuggestions}
+                        value={batchBranch}
+                        onChange={setBatchBranch}
+                        disabled={batchRunning}
+                        aria-label="批量打包目标分支"
+                      />
+                      <Button
+                        size="xs"
+                        variant="filled"
+                        color="blue"
+                        className="ks-btn-batch-primary"
+                        leftSection={<Package size={13} />}
+                        disabled={
+                          checkedNames.size === 0
+                          || batchRunning
+                          || cloneRunning
+                          || !batchBranch.trim()
+                        }
+                        loading={batchRunning}
+                        onClick={beginBatchPack}
+                        styles={panelPrimaryButtonStyles}
+                      >
+                        批量打包并发布{checkedNames.size > 0 ? ` (${checkedNames.size})` : ""}
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="default"
+                        color="green"
+                        className="ks-btn-batch-clone"
+                        leftSection={<Copy size={13} />}
+                        disabled={
+                          !connected
+                          || !namespace
+                          || checkedNames.size === 0
+                          || batchRunning
+                          || cloneRunning
+                        }
+                        loading={cloneRunning}
+                        onClick={beginBatchClone}
+                        styles={panelAccentButtonStyles}
+                      >
+                        复制到其他环境{checkedNames.size > 0 ? ` (${checkedNames.size})` : ""}
+                      </Button>
+                    </Group>
                   </Group>
                 </Group>
                 {checkedNames.size > 0 && (
@@ -1578,9 +1639,14 @@ export function KsPublishPanel({
                       <Group gap={6}>
                         <History size={14} />
                         <Text size="sm" fw={600}>历史版本（ReplicaSet）</Text>
-                        {revsLoading && <Loader size={12} />}
                       </Group>
-                      <Button size="xs" variant="subtle" onClick={() => void loadRevisions()}>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        leftSection={<KsRefreshIcon spinning={revsLoading} />}
+                        disabled={revsLoading}
+                        onClick={() => void loadRevisions()}
+                      >
                         刷新历史
                       </Button>
                     </Group>
@@ -1733,10 +1799,17 @@ export function KsPublishPanel({
               <Text size="xs" c="dimmed">共 {cms.length} 个</Text>
             </Group>
             <Group gap="sm">
-              <Button size="xs" variant="default" leftSection={<RefreshCw size={13} />} loading={cmLoading} onClick={() => void loadCms()}>
+              <Button
+                size="xs"
+                variant="subtle"
+                color="gray"
+                leftSection={<KsRefreshIcon spinning={cmLoading} />}
+                disabled={cmLoading}
+                onClick={() => void loadCms()}
+              >
                 刷新
               </Button>
-              <Button size="xs" variant="default" leftSection={<Plus size={13} />} onClick={() => { setCmMode("form"); setCmForm({ name: "", data: "" }); setCmYaml(""); setCmPreview(""); setCmOpen(true); }}>
+              <Button size="xs" variant="light" color="blue" leftSection={<Plus size={13} />} onClick={() => { setCmMode("form"); setCmForm({ name: "", data: "" }); setCmYaml(""); setCmPreview(""); setCmOpen(true); }}>
                 新建 ConfigMap
               </Button>
             </Group>
@@ -2296,8 +2369,8 @@ export function KsPublishPanel({
                 <Button
                   size="xs"
                   variant="default"
-                  leftSection={<RefreshCw size={13} />}
-                  loading={podLogLoading}
+                  leftSection={<KsRefreshIcon spinning={podLogLoading} />}
+                  disabled={podLogLoading}
                   onClick={() => {
                     if (podLogPod) void loadPodLogs(podLogPod, podLogContainer, podLogPrevious);
                   }}

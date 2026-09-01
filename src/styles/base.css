@@ -440,6 +440,91 @@ body {
   padding-bottom: 48px;
 }
 
+@keyframes ks-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ks-refresh-spin {
+  animation: ks-refresh-spin 0.8s linear infinite;
+}
+
+.ks-publish-toolbar {
+  width: 100%;
+}
+
+.ks-publish-toolbar .mantine-Button-root {
+  margin-bottom: 1px;
+}
+
+/* 工具栏按钮层级：工具 / 批量 两组，主 CTA 与次要描边区分 */
+.ks-publish-actions {
+  align-items: center;
+}
+
+.ks-publish-actions-divider {
+  align-self: stretch;
+  height: auto;
+  min-height: 28px;
+  border-color: var(--color-border-strong);
+}
+
+.ks-publish-actions-util .mantine-Button-root[data-variant="subtle"] {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.ks-publish-actions-util .mantine-Button-root[data-variant="light"][data-color="blue"] {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-hover);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+.ks-publish-actions-util .mantine-Button-root[data-variant="light"][data-color="blue"]:hover:not(:disabled) {
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary);
+}
+
+.ks-btn-batch-primary:not([data-disabled]) {
+  font-weight: 700;
+}
+
+.ks-btn-batch-primary[data-disabled] {
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-bg-elevated)) !important;
+  color: color-mix(in srgb, var(--color-primary-hover) 70%, var(--color-text-muted)) !important;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 45%, var(--color-border-strong)) !important;
+  box-shadow: none !important;
+  opacity: 0.72;
+}
+
+.ks-btn-batch-clone:not([data-disabled]) {
+  font-weight: 600;
+}
+
+.ks-btn-batch-clone[data-disabled] {
+  background: transparent !important;
+  border: 1px dashed color-mix(in srgb, var(--color-success) 35%, var(--color-border-strong)) !important;
+  color: color-mix(in srgb, var(--color-success) 55%, var(--color-text-muted)) !important;
+  box-shadow: none !important;
+  opacity: 0.68;
+}
+
+/* 表格行内操作：图标按钮，悬停才显色 */
+.ks-publish-panel .mantine-Table-root .mantine-ActionIcon-root {
+  color: var(--color-text-muted);
+  opacity: 0.72;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.ks-publish-panel .mantine-Table-root .mantine-Table-tr:hover .mantine-ActionIcon-root {
+  opacity: 1;
+  color: var(--color-primary-hover);
+}
+
 /* 两列表单：统一宽度 + 预留 description 行高，避免右列输入框错位 */
 .ks-form-2col {
   align-items: start;
