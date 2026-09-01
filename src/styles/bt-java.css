@@ -127,40 +127,4 @@
   }
 }
 
-.bt-java-progress-track {
-  height: 12px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: rgba(10, 10, 26, 0.65);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
-}
-
-.bt-java-progress-bar {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--color-primary-hover) 0%, var(--color-success) 100%);
-  box-shadow: 0 0 10px var(--color-primary-muted);
-  /* 平滑追进度：时长略大于 FTP 回调间隔，看起来是连续涨而不是一截一截跳 */
-  transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: width;
-  position: relative;
-  overflow: hidden;
-}
-
-.bt-java-progress-bar--active::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.28) 50%,
-    transparent 100%
-  );
-  animation: bt-java-progress-shimmer 1.6s infinite;
-}
-
-@keyframes bt-java-progress-shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
+/* Java 项目列表：拖拽 JAR 投放提示 — 进度条样式见 progress.css */

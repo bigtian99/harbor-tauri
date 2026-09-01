@@ -150,6 +150,38 @@ pub(crate) fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> 
     Ok(())
 }
 
+/// 将文本写入用户指定路径（导出 CSV / 日志等）。
+#[tauri::command]
+pub async fn write_text_file(path: String, content: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || write_text_file_sync(path, content))
+        .await
+        .map_err(|e| format!("写入文件任务异常: {e}"))?
+}
+
+fn write_text_file_sync(path: String, content: String) -> Result<String, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("路径为空".to_string());
+    }
+    let out = PathBuf::from(path);
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+        }
+    }
+    fs::write(&out, content.as_bytes())
+        .map_err(|e| format!("写入失败 {}: {e}", out.display()))?;
+    crate::diag::diag_log(
+        "utils",
+        &format!(
+            "write_text_file path={} bytes={}",
+            out.display(),
+            content.len()
+        ),
+    );
+    Ok(out.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{docker_json_string, render_template, strip_ansi_codes};

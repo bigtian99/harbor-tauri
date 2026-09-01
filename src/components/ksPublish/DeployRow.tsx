@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Table, Badge, Button, Checkbox, Group, Text } from "@mantine/core";
+import { Table, Badge, ActionIcon, Checkbox, Group, Text, Tooltip } from "@mantine/core";
 import { Pencil } from "lucide-react";
 import type { DeployInfo } from "./types";
 import { STATUS_DOT, STATUS_COLOR } from "./types";
@@ -50,18 +50,18 @@ export const DeployRow = memo(function DeployRow({
       </Table.Td>
       <Table.Td>{s.detail.split(" · ")[0]}{s.old && <Text span size="xs" c="dimmed">{s.old}</Text>}</Table.Td>
       <Table.Td>{d.revision}</Table.Td>
-      <Table.Td>
-        <Button
-          size="compact-xs"
-          variant="light"
-          leftSection={<Pencil size={12} />}
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(d);
-          }}
-        >
-          修改
-        </Button>
+      <Table.Td onClick={(e) => e.stopPropagation()}>
+        <Tooltip label="修改镜像" withArrow openDelay={300}>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            aria-label={`修改 ${d.name}`}
+            onClick={() => onEdit(d)}
+          >
+            <Pencil size={14} />
+          </ActionIcon>
+        </Tooltip>
       </Table.Td>
     </Table.Tr>
   );

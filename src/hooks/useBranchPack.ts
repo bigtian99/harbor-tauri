@@ -246,6 +246,8 @@ export function useBranchPack(deps: UseBranchPackDeps) {
         home_valid: boolean;
         source: string;
         env_home: string;
+        bundled_available: boolean;
+        bundled_home: string;
       }>("resolve_maven_settings", { config });
 
       if (info.home_valid && info.effective_home.trim()) {
@@ -255,8 +257,12 @@ export function useBranchPack(deps: UseBranchPackDeps) {
       const details = [
         "优先读取环境变量 MAVEN_HOME / M2_HOME；",
         "也可在「系统设置 → JAR 打包」手动指定 Maven Home 与本地仓库。",
-        "本地仓库默认由 Home 带出为 {home}/repository。",
+        "发版安装包已内置 Maven + JDK 时，未配置会自动使用内置工具。",
+        "内置 Maven 的本地仓库位于 ~/.config/jarporter/maven-repository。",
       ];
+      if (info.bundled_available) {
+        details.push(`安装包内置 Maven：${info.bundled_home || "（路径解析中）"}`);
+      }
       if (info.env_home) {
         details.push(`当前环境变量: ${info.env_home}（目录无效或不含 bin/mvn）`);
       }

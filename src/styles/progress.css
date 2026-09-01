@@ -1,68 +1,178 @@
-/* progress.css — split from App.css (OPT-011), lines 838-1026 */
+/* progress.css — 统一进度条视觉（Mantine + 原生 DOM） */
 
+@keyframes jp-progress-shimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(220%); }
+}
+
+@keyframes jp-progress-indeterminate {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(260%); }
+}
+
+@keyframes jp-progress-pulse {
+  0%, 100% { opacity: 1; filter: brightness(1); }
+  50% { opacity: 0.82; filter: brightness(1.12); }
+}
+
+/* —— 原生 / 自定义进度条轨道 —— */
+.jp-progress-track,
+.progress-track,
+.update-progress-track,
+.bt-java-progress-track,
+.merge-progress-track {
+  position: relative;
+  height: var(--progress-size-sm);
+  border-radius: var(--progress-radius);
+  overflow: hidden;
+  background: var(--progress-track-bg);
+  border: 1px solid var(--progress-track-border);
+  box-shadow: var(--progress-track-shadow);
+}
+
+.jp-progress-track--lg,
+.bt-java-progress-track {
+  height: var(--progress-size-md);
+}
+
+/* —— 填充条 —— */
+.jp-progress-bar,
+.progress-fill,
+.progress-bar,
+.update-progress-bar,
+.bt-java-progress-bar,
+.merge-progress-bar {
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: var(--progress-fill-gradient);
+  box-shadow: var(--progress-fill-glow);
+  transition: width var(--progress-transition);
+  will-change: width;
+  position: relative;
+  overflow: hidden;
+}
+
+.jp-progress-bar--active::after,
+.progress-fill::after,
+.progress-bar::after,
+.bt-java-progress-bar--active::after,
+.update-progress-bar:not(.update-progress-bar--indeterminate):not(.update-progress-bar--pulse)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.38) 48%,
+    transparent 100%
+  );
+  transform: translateX(-120%);
+  animation: jp-progress-shimmer 2.1s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.update-progress-bar--indeterminate {
+  position: absolute;
+  inset-block: 0;
+  width: 38% !important;
+  animation: jp-progress-indeterminate 1.35s ease-in-out infinite;
+}
+
+.update-progress-bar--pulse {
+  animation: jp-progress-pulse 1.25s ease-in-out infinite;
+}
+
+.update-progress-bar--pulse::after,
+.update-progress-bar--indeterminate::after {
+  display: none;
+}
+
+/* —— Mantine Progress（theme classNames + styles 双保险） —— */
+.jp-progress-mantine {
+  --progress-size-xs: 6px;
+  --progress-size-sm: 8px;
+  --progress-size-md: 10px;
+  --progress-size-lg: 12px;
+  min-height: var(--progress-size-sm);
+}
+
+.jp-progress-mantine-section {
+  position: relative;
+  overflow: hidden;
+}
+
+.jp-progress-mantine-section:where([data-striped]) {
+  background-image: none !important;
+}
+
+.jp-progress-mantine > div {
+  position: relative;
+  overflow: hidden;
+}
+
+.jp-progress-mantine > div::after,
+.jp-progress-mantine-section::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.34) 50%,
+    transparent 100%
+  );
+  transform: translateX(-120%);
+  animation: jp-progress-shimmer 2.1s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* —— 进度区块容器 —— */
 .build-progress,
 .progress-section {
   margin-top: 12px;
-  padding: 10px 12px;
-  background: rgba(15, 52, 96, 0.3);
-  border-radius: 10px;
-  border: 1px solid var(--color-border);
+  padding: 12px 14px;
+  background: linear-gradient(
+    145deg,
+    rgba(20, 28, 45, 0.72) 0%,
+    rgba(12, 18, 32, 0.52) 100%
+  );
+  border-radius: 12px;
+  border: 1px solid var(--progress-track-border);
+  backdrop-filter: blur(6px);
 }
 
 .progress-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  gap: 12px;
 }
 
 .progress-message {
   font-size: 12px;
   color: var(--color-text);
   font-weight: 500;
+  line-height: 1.45;
+  min-width: 0;
 }
 
 .progress-percent {
   font-size: 12px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--color-primary-hover);
-  text-shadow: 0 0 10px var(--color-primary-muted);
+  text-shadow: 0 0 12px rgba(59, 158, 255, 0.35);
+  flex-shrink: 0;
 }
 
-.progress-track {
-  height: 6px;
-  background: rgba(10, 10, 26, 0.6);
-  border-radius: 3px;
-  overflow: hidden;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+.progress-section .mantine-Group-root:first-of-type {
+  margin-bottom: 2px;
 }
 
-.progress-fill,
-.progress-bar {
-  height: 100%;
-  background: linear-gradient(90deg, var(--color-primary-hover) 0%, var(--color-success) 100%);
-  border-radius: 4px;
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 10px var(--color-primary-muted);
-  position: relative;
-  overflow: hidden;
-}
-
-.progress-fill::after,
-.progress-bar::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.3) 50%,
-    transparent 100%);
-  animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+.progress-section .mantine-Text-root:last-child {
+  font-variant-numeric: tabular-nums;
 }
 
 .log-panel {
@@ -96,26 +206,46 @@
 }
 
 .log-section {
-  margin-top: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border-strong);
+}
+
+.mantine-Button-root.log-toggle-btn {
+  align-self: flex-start;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 14px;
+  height: auto;
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-primary) 16%, transparent),
+    color-mix(in srgb, var(--color-primary) 8%, transparent)
+  );
+  color: var(--color-primary-hover);
+  box-shadow: 0 0 14px rgba(59, 158, 255, 0.14);
+}
+
+.mantine-Button-root.log-toggle-btn:hover {
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(59, 158, 255, 0.24);
+}
+
+.mantine-Button-root.log-toggle-btn .mantine-Button-section {
+  color: inherit;
 }
 
 .log-toggle-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--color-primary-muted);
-  border: 1px solid var(--color-primary-muted);
   border-radius: 8px;
-  padding: 6px 12px;
-  color: var(--color-primary-hover);
-  font-size: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.log-toggle-btn:hover {
-  background: var(--color-primary-muted);
-  border-color: var(--color-primary-muted);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
 }
 
 .success-message {
@@ -142,6 +272,55 @@
   border-radius: 8px;
   box-shadow: 0 2px 8px var(--color-primary-muted);
   transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.image-url-row--primary {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 12px 14px;
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--color-primary) 14%, var(--color-bg-elevated)),
+    color-mix(in srgb, var(--color-success) 6%, var(--color-bg-elevated))
+  );
+  border: 1px solid color-mix(in srgb, var(--color-primary) 42%, transparent);
+  box-shadow:
+    0 0 0 1px rgba(59, 158, 255, 0.1) inset,
+    0 4px 16px rgba(0, 0, 0, 0.22);
+}
+
+.image-url-row--primary .image-url-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.image-url-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-primary-hover);
+  text-shadow: 0 0 10px rgba(59, 158, 255, 0.25);
+}
+
+.image-url-title-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.image-url-row--primary .image-url-value,
+.image-url-row--primary .mantine-Text-root[data-monospace] {
+  font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text);
+  word-break: break-all;
 }
 
 .image-url-row.copied {
@@ -230,4 +409,3 @@
   40% { transform: scale(1.12); }
   100% { transform: scale(1); }
 }
-

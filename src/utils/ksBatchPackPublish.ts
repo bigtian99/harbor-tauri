@@ -78,6 +78,16 @@ interface UpdateResult {
 }
 
 const CONCURRENCY_PREF_KEY = "jarporter.ks-batch-concurrency";
+
+/** 并行打包 worktree 槽位（Deployment 名 slug） */
+export function packSlotFromDeployment(deployment: string): string {
+  return deployment
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 /** 自动模式，按 CPU / 任务数 / 不同仓库数动态算 */
 export const KS_BATCH_CONCURRENCY_AUTO = 0;
 const KS_BATCH_CONCURRENCY_MAX = 4;
@@ -186,29 +196,6 @@ async function mapPool<T>(
     }
   });
   await Promise.all(runners);
-}
-
-/** 同仓库路径串行，避免并行 worktree/git 冲突 */
-function createRepoPathGate() {
-  const tails = new Map<string, Promise<void>>();
-  return async function withRepoGate<T>(repoPath: string, fn: () => Promise<T>): Promise<T> {
-    const key = repoPath.trim();
-    const prev = tails.get(key) ?? Promise.resolve();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    tails.set(
-      key,
-      prev.then(() => gate).catch(() => gate),
-    );
-    await prev.catch(() => {});
-    try {
-      return await fn();
-    } finally {
-      release();
-    }
-  };
 }
 
 function resolveGitForDeployment(
@@ -426,7 +413,7 @@ export async function runKsBatchPackPublish(
       effective_home: string;
     }>("resolve_maven_settings", { config });
     if (!mavenInfo.home_valid || !mavenInfo.effective_home.trim()) {
-      note(summary, appendLog, "❌ Maven 未配置有效 Home，请到系统设置 → JAR 打包");
+      note(summary, appendLog, "❌ Maven 未配置有效 Home，请到系统设置 → JAR 打包，或使用发版安装包内置 Maven");
       summary.skipped += targets.length;
       return summary;
     }
@@ -464,7 +451,6 @@ export async function runKsBatchPackPublish(
   const total = targets.length;
   let finished = 0;
   let active = 0;
-  const withRepoGate = createRepoPathGate();
 
   /** 进行中用「已开始数」；完成时用「已完成数」，避免 0/1 打包中 */
   const slotCount = (phase: "running" | "done") =>
@@ -496,8 +482,7 @@ export async function runKsBatchPackPublish(
     );
 
     try {
-      const packResult = await withRepoGate(target.repoPath, () =>
-        runBranchPackageAndPush({
+      const packResult = await runBranchPackageAndPush({
           config,
           repoPath: target.repoPath,
           branchName,
@@ -510,8 +495,9 @@ export async function runKsBatchPackPublish(
           nginxLocations: target.nginxLocations,
           autoPushImage: true,
           progressLabel: target.deployment,
-        }),
-      );
+          deploymentHint: target.deployment,
+          packSlot: packSlotFromDeployment(target.deployment),
+        });
 
       if (!packResult.ok) {
         summary.failed += 1;

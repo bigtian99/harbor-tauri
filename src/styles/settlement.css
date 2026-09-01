@@ -1,5 +1,19 @@
 /* settlement.css — split from App.css (OPT-011), lines 3763-3771 */
 
+.settlement-generate-btn:not([data-disabled]) {
+  min-height: 38px;
+  font-weight: 700;
+}
+
+/* 未填完表单时：保留淡蓝主色提示，避免与「打开目录」灰按钮混淆 */
+.settlement-generate-btn[data-disabled] {
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-bg-elevated)) !important;
+  color: color-mix(in srgb, var(--color-primary-hover) 70%, var(--color-text-muted)) !important;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 45%, var(--color-border-strong)) !important;
+  box-shadow: none !important;
+  opacity: 0.72;
+}
+
 .settlement-result-list {
   display: flex;
   flex-direction: column;

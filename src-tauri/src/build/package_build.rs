@@ -24,6 +24,9 @@ pub(crate) struct BuildParams {
     pub package_with_backend: Option<bool>,
     pub maven_home: String,
     pub maven_local_repo: String,
+    /// Maven 多模块：`-pl {path} -am`
+    pub maven_pl_module: Option<String>,
+    pub maven_artifact_dir: PathBuf,
 }
 
 /// 在阻塞线程中执行 Maven 或 npm 打包（含可选并行后端）。
@@ -33,7 +36,13 @@ pub(crate) fn run_project_build(app: &AppHandle, params: BuildParams) -> Result<
 
     match params.project_type {
         PackageProjectType::Maven => {
-            let mut mvn_args = vec!["clean", "package", "-Dmaven.test.skip=true"];
+            let mut mvn_args = vec!["clean", "package"];
+            if let Some(ref pl) = params.maven_pl_module {
+                mvn_args.push("-pl");
+                mvn_args.push(pl.as_str());
+                mvn_args.push("-am");
+            }
+            mvn_args.push("-Dmaven.test.skip=true");
             let profile_arg;
             if let Some(ref profile) = params.spring_profile {
                 if !profile.trim().is_empty() {
@@ -48,7 +57,7 @@ pub(crate) fn run_project_build(app: &AppHandle, params: BuildParams) -> Result<
                 &params.maven_home,
                 &params.maven_local_repo,
             )?);
-            let artifact_path = find_maven_artifact(&params.worktree_for_build)?;
+            let artifact_path = find_maven_artifact(&params.maven_artifact_dir)?;
             Ok((artifact_path, build_script_used, logs, None))
         }
         PackageProjectType::Npm => {

@@ -189,6 +189,13 @@ pub(crate) fn resolve_maven_java_home() -> Option<PathBuf> {
         }
     }
 
+    if let Some(bundled) = crate::utils::bundled_java_home() {
+        let home = PathBuf::from(&bundled);
+        if java_bin_exists(&home) {
+            return Some(home);
+        }
+    }
+
     None
 }
 

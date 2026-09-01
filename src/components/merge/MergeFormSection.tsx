@@ -2,10 +2,8 @@ import {
   Badge,
   Button,
   Checkbox,
-  Code,
   Group,
   Paper,
-  ScrollArea,
   Stack,
   Text,
   Textarea,
@@ -20,6 +18,7 @@ import { SearchableDropdown } from "../SearchableDropdown";
 import { avatarColor, avatarInitials } from "../../avatarUrl";
 import { QuickMergeConfigModal } from "./QuickMergeConfigModal";
 import type { AuthorInfo, CommitInfo, HarborConfig, LocalMergeCheck } from "../../types";
+import { panelPrimaryButtonStyles, commitHashButtonStyles } from "../../theme/panelStyles";
 
 interface MergeFormSectionProps {
   config: HarborConfig;
@@ -83,8 +82,8 @@ interface MergeFormSectionProps {
 
 const inputStyles = {
   input: {
-    border: "1px solid var(--color-border)",
-    background: "var(--color-bg-elevated)",
+    border: "1px solid var(--color-border-strong)",
+    background: "var(--color-bg-base)",
     color: "var(--color-text)",
   },
   label: { color: "var(--color-text)", fontWeight: 600 },
@@ -92,8 +91,8 @@ const inputStyles = {
 
 const paperStyles = {
   root: {
-    background: "var(--color-bg-surface)",
-    border: "1px solid var(--color-border)",
+    background: "var(--color-bg-card)",
+    border: "1px solid var(--color-border-strong)",
   },
 } as const;
 
@@ -322,22 +321,20 @@ export function MergeFormSection({
                   <AlertTriangle size={16} /> {checkResult.message}
                 </span>
                 {checkResult.conflictFiles.length > 0 && (
-                  <ScrollArea.Autosize mah={160} type="auto">
-                    <ul className="conflict-file-list">
-                      {checkResult.conflictFiles.map((f) => (
-                        <li key={f}>
-                          <button
-                            type="button"
-                            className="conflict-file-btn"
-                            title={`查看 ${f} 在两个分支间的差异`}
-                            onClick={() => onLoadConflictDiff(f)}
-                          >
-                            <FileText size={14} /> {f}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </ScrollArea.Autosize>
+                  <ul className="conflict-file-list">
+                    {checkResult.conflictFiles.map((f) => (
+                      <li key={f}>
+                        <button
+                          type="button"
+                          className="conflict-file-btn"
+                          title={`查看 ${f} 在两个分支间的差异`}
+                          onClick={() => onLoadConflictDiff(f)}
+                        >
+                          <FileText size={14} /> {f}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             )}
@@ -439,9 +436,8 @@ export function MergeFormSection({
                     没有匹配「{diffCommitSearch}」的提交
                   </Text>
                 ) : (
-                  <ScrollArea.Autosize mah={320} type="auto">
-                    <div className="merge-diff-list">
-                      {filteredDiffCommits.map((c) => (
+                  <div className="merge-diff-list">
+                    {filteredDiffCommits.map((c) => (
                         <div
                           key={c.hash}
                           className="merge-diff-item"
@@ -459,8 +455,7 @@ export function MergeFormSection({
                           <div className="merge-diff-item-main">
                             {c.url ? (
                               <Button
-                                variant="subtle"
-                                color="cyan"
+                                variant="default"
                                 size="compact-xs"
                                 className="commit-link"
                                 title={`在浏览器中打开: ${c.hash}`}
@@ -469,12 +464,12 @@ export function MergeFormSection({
                                   openUrl(c.url!);
                                 }}
                                 rightSection={<ExternalLink size={10} />}
-                                styles={{ root: { fontFamily: "monospace", padding: "2px 6px", height: "auto", flexShrink: 0 } }}
+                                styles={commitHashButtonStyles}
                               >
                                 {c.short_hash}
                               </Button>
                             ) : (
-                              <Badge variant="light" color="cyan" className="commit-hash" title={c.hash}>
+                              <Badge variant="outline" color="gray" className="commit-hash" title={c.hash}>
                                 {c.short_hash}
                               </Badge>
                             )}
@@ -487,8 +482,7 @@ export function MergeFormSection({
                           </div>
                         </div>
                       ))}
-                    </div>
-                  </ScrollArea.Autosize>
+                  </div>
                 )}
               </>
             )}
@@ -499,7 +493,8 @@ export function MergeFormSection({
           <Stack gap="xs">
             {latestTag && (
               <Text size="xs" c="var(--color-text-muted)">
-                远程最新 tag：<Code>{latestTag}</Code>，默认 tag 为下一版本 <Code>{defaultTagName}</Code>
+                远程最新 tag：<span className="merge-inline-code">{latestTag}</span>，默认 tag 为下一版本{" "}
+                <span className="merge-inline-code">{defaultTagName}</span>
               </Text>
             )}
             <TextInput
@@ -527,7 +522,7 @@ export function MergeFormSection({
           variant="filled"
           color="blue"
           size="md"
-          className="build-btn"
+          fullWidth
           onClick={onMerge}
           disabled={!canMerge || hasNoDiff || isMerging || !sourceBranch || !targetBranch}
           title={
@@ -538,22 +533,31 @@ export function MergeFormSection({
                 : "有冲突或未检查，不允许合并"
           }
           leftSection={isMerging ? <Loader2 size={18} className="spin" /> : <GitMerge size={18} />}
+          styles={panelPrimaryButtonStyles}
+          className="merge-submit-btn"
         >
           {isMerging ? "合并中..." : `合并 ${sourceBranch || "源"} → ${targetBranch || "目标"}`}
         </Button>
 
         {sourceBranch && targetBranch && (
-          <Text size="xs" c="var(--color-text-muted)">
-            将执行（隔离 worktree，不切换当前工作区分支）：
-            <Code block mt={4}>git merge --no-ff {sourceBranch}</Code>
-            （基于 {targetBranch}）
+          <div className="merge-execute-plan">
+            <p className="merge-execute-plan-title">将执行（隔离 worktree，不切换当前工作区分支）</p>
+            <div className="merge-cmd-block">
+              <code className="merge-cmd-line">git merge --no-ff {sourceBranch}</code>
+              <span className="merge-cmd-hint">基于 {targetBranch}</span>
+            </div>
             {pushAfterMerge && (
-              <>
-                <br />合并后：<Code>git push origin HEAD:refs/heads/{(targetBranch || "").replace(/^origin\//, "")}</Code>
-              </>
+              <div className="merge-cmd-block">
+                <span className="merge-cmd-label">合并后</span>
+                <code className="merge-cmd-line">
+                  git push origin HEAD:refs/heads/{(targetBranch || "").replace(/^origin\//, "")}
+                </code>
+              </div>
             )}
-            <br />源/目标均为远程分支引用；主仓库当前分支与未提交改动不会被切换或覆盖。
-          </Text>
+            <p className="merge-execute-plan-note">
+              源/目标均为远程分支引用；主仓库当前分支与未提交改动不会被切换或覆盖。
+            </p>
+          </div>
         )}
 
         {showQuickMergeConfig && (

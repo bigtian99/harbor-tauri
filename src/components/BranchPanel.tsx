@@ -16,7 +16,7 @@ import {
 } from "@mantine/core";
 import {
   FileText, CheckCircle, Copy, Loader2, Eye, EyeOff,
-  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User
+  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User, Package
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "./SearchableDropdown";
@@ -28,7 +28,7 @@ import type {
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
-import { panelPaperStyles, panelSegmentedStyles } from "../theme/panelStyles";
+import { panelPaperStyles, panelSegmentedStyles, commitHashButtonStyles } from "../theme/panelStyles";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
 
 const inputStyles = {
@@ -275,7 +275,7 @@ export function BranchPanel({
               className="branch-commit-info"
             >
               <Group justify="space-between" mb={4}>
-                <Group gap={6}>
+                <Group gap={8}>
                   <Pin size={14} color="var(--color-text-muted)" />
                   <Text size="sm" fw={600} c="var(--color-text)">最近提交</Text>
                 </Group>
@@ -283,7 +283,7 @@ export function BranchPanel({
                   <Text size="xs" c="var(--color-text-muted)">加载中...</Text>
                 )}
               </Group>
-              <Group align="flex-start" gap="sm" mb={4}>
+              <Group align="flex-start" gap="md" mb={4}>
                 {lastCommit.url ? (
                   <Button
                     variant="subtle"
@@ -293,7 +293,7 @@ export function BranchPanel({
                     title={`在浏览器中打开: ${lastCommit.hash}`}
                     onClick={() => openUrl(lastCommit.url!)}
                     rightSection={<ExternalLink size={12} />}
-                    styles={{ root: { fontFamily: "monospace", padding: "2px 6px", height: "auto" } }}
+                    styles={commitHashButtonStyles}
                   >
                     {lastCommit.short_hash}
                   </Button>
@@ -513,7 +513,7 @@ export function BranchPanel({
             <Text size="sm" c="var(--color-text)">{progressMessage}</Text>
             <Text size="sm" c="var(--color-primary-hover)" fw={600}>{progress}%</Text>
           </Group>
-          <Progress value={progress} size="sm" radius="xl" />
+          <Progress value={progress} />
         </Stack>
       )}
 
@@ -529,67 +529,69 @@ export function BranchPanel({
               branchImageResults.map((item) => {
                 const isCopied = copied === item.image;
                 return (
-                  <Group
+                  <Stack
                     key={`${item.role}-${item.image}`}
-                    wrap="nowrap"
-                    align="center"
-                    gap="xs"
-                    className={`path-link-item image-url-row ${isCopied ? "copied" : ""}`}
+                    gap={0}
+                    className={`path-link-item image-url-row image-url-row--primary ${isCopied ? "copied" : ""}`}
                   >
-                    <Text size="xs" c="var(--color-text-muted)" className="path-link-label">
-                      {item.label}
-                    </Text>
+                    <Group className="image-url-row-head" wrap="nowrap">
+                      <Text className="image-url-title">
+                        <Package size={14} className="image-url-title-icon" />
+                        {item.label}
+                      </Text>
+                      <Button
+                        size="compact-sm"
+                        variant={isCopied ? "filled" : "light"}
+                        color={isCopied ? "teal" : "cyan"}
+                        className={`copy-btn ${isCopied ? "copied" : ""}`}
+                        onClick={() => onCopyImage(item.image)}
+                        title={item.copyLabel}
+                        leftSection={isCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                      >
+                        {isCopied ? "已复制" : item.copyLabel}
+                      </Button>
+                    </Group>
                     <Text
                       size="sm"
                       c="var(--color-text)"
-                      style={{ flex: 1, fontFamily: "monospace", wordBreak: "break-all" }}
+                      className="image-url-value"
                       title={item.image}
                     >
                       {item.image}
                     </Text>
-                    <Button
-                      size="compact-sm"
-                      variant={isCopied ? "filled" : "light"}
-                      color={isCopied ? "teal" : "gray"}
-                      className={`copy-btn ${isCopied ? "copied" : ""}`}
-                      onClick={() => onCopyImage(item.image)}
-                      title={item.copyLabel}
-                      leftSection={isCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
-                    >
-                      {isCopied ? "已复制" : item.copyLabel}
-                    </Button>
-                  </Group>
+                  </Stack>
                 );
               })
             ) : branchFullImage && (
-              <Group
-                wrap="nowrap"
-                align="flex-start"
-                gap="xs"
-                className={`path-link-item image-url-row ${branchFallbackCopied ? "copied" : ""}`}
+              <Stack
+                gap={0}
+                className={`path-link-item image-url-row image-url-row--primary ${branchFallbackCopied ? "copied" : ""}`}
               >
-                <Text size="xs" c="var(--color-text-muted)" className="path-link-label">
-                  完整镜像
-                </Text>
-                <Stack gap={2} style={{ flex: 1 }}>
+                <Group className="image-url-row-head" wrap="nowrap">
+                  <Text className="image-url-title">
+                    <Package size={14} className="image-url-title-icon" />
+                    完整镜像
+                  </Text>
+                  <Button
+                    size="compact-sm"
+                    variant={branchFallbackCopied ? "filled" : "light"}
+                    color={branchFallbackCopied ? "teal" : "cyan"}
+                    className={`copy-btn ${branchFallbackCopied ? "copied" : ""}`}
+                    onClick={() => onCopyImage(branchFallbackCopyText)}
+                    title="复制镜像地址"
+                    leftSection={branchFallbackCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                  >
+                    {branchFallbackCopied ? "已复制" : "复制"}
+                  </Button>
+                </Group>
+                <Stack gap={2}>
                   {branchFullImage.split('\n').map((line, i) => (
-                    <Text key={i} size="sm" c="var(--color-text)" style={{ fontFamily: "monospace" }} title={line}>
+                    <Text key={i} size="sm" className="image-url-value" c="var(--color-text)" title={line}>
                       {line}
                     </Text>
                   ))}
                 </Stack>
-                <Button
-                  size="compact-sm"
-                  variant={branchFallbackCopied ? "filled" : "light"}
-                  color={branchFallbackCopied ? "teal" : "gray"}
-                  className={`copy-btn ${branchFallbackCopied ? "copied" : ""}`}
-                  onClick={() => onCopyImage(branchFallbackCopyText)}
-                  title="复制镜像地址"
-                  leftSection={branchFallbackCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
-                >
-                  {branchFallbackCopied ? "已复制" : "复制"}
-                </Button>
-              </Group>
+              </Stack>
             )}
             <Group gap="xs" wrap="nowrap" className="path-link-item">
               <Group gap={6} className="path-link-label">
@@ -680,12 +682,13 @@ export function BranchPanel({
       {log && (
         <Stack gap="xs" className="log-section">
           <Button
-            variant="subtle"
-            size="compact-sm"
+            variant="light"
+            color="cyan"
+            size="sm"
             className="log-toggle-btn"
             onClick={() => setShowBuildLog(!showBuildLog)}
             title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
-            leftSection={showBuildLog ? <EyeOff size={14} /> : <Eye size={14} />}
+            leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}
           >
             {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
           </Button>
@@ -791,7 +794,7 @@ export function BranchPanel({
                           title={`在浏览器中打开: ${commit.hash}`}
                           onClick={() => openUrl(commit.url!)}
                           rightSection={<ExternalLink size={10} />}
-                          styles={{ root: { fontFamily: "monospace", padding: "2px 6px", height: "auto" } }}
+                          styles={commitHashButtonStyles}
                         >
                           {commit.short_hash}
                         </Button>

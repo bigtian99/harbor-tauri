@@ -7,6 +7,8 @@ use crate::build::{begin_cancellable_operation, emit_progress};
 use crate::config_cmd::load_config_sync;
 use crate::models::{PackageFromBranchResult, PackageProjectType};
 
+use crate::utils::resolve_maven_module;
+
 #[tauri::command]
 pub async fn package_from_branch(
     app: tauri::AppHandle,
@@ -18,6 +20,8 @@ pub async fn package_from_branch(
     package_manager: Option<String>,
     spring_profile: Option<String>,
     package_with_backend: Option<bool>,
+    deployment_hint: Option<String>,
+    pack_slot: Option<String>,
 ) -> Result<PackageFromBranchResult, String> {
     let _cancel_guard = begin_cancellable_operation();
     let project_type = PackageProjectType::from_string(project_type)?;
@@ -26,14 +30,68 @@ pub async fn package_from_branch(
         return Err("请输入目标分支".to_string());
     }
 
-    let ctx = prepare_worktree(&app, &repo_path, &branch, &frontend_dir).await?;
+    crate::diag::diag_log(
+        "build",
+        &format!(
+            "package_from_branch repo={} branch={} deployment_hint={:?} pack_slot={:?}",
+            repo_path, branch, deployment_hint, pack_slot
+        ),
+    );
+
+    let ctx = prepare_worktree(
+        &app,
+        &repo_path,
+        &branch,
+        &frontend_dir,
+        &pack_slot,
+    )
+    .await?;
 
     emit_progress(&app, 35, "🧪 校验项目类型...", "build");
     validate_project_in_worktree(project_type, &ctx)?;
 
+    let (maven_pl_module, maven_artifact_dir) = if matches!(project_type, PackageProjectType::Maven) {
+        let hint = deployment_hint.as_deref();
+        match resolve_maven_module(&ctx.worktree_path, hint)? {
+            Some(m) => {
+                let msg = format!(
+                    "☕ Maven 模块: {} (artifactId={}, deployment={})",
+                    if m.rel_path.is_empty() {
+                        "根目录".to_string()
+                    } else {
+                        m.rel_path.clone()
+                    },
+                    m.artifact_id,
+                    hint.unwrap_or("-")
+                );
+                crate::diag::diag_log("build", &format!("resolve_maven_module ok {msg}"));
+                emit_progress(&app, 48, &msg, "build");
+                let artifact_dir = if m.rel_path.is_empty() {
+                    ctx.worktree_path.clone()
+                } else {
+                    ctx.worktree_path.join(&m.rel_path)
+                };
+                let pl = if m.rel_path.is_empty() {
+                    None
+                } else {
+                    Some(m.rel_path)
+                };
+                (pl, artifact_dir)
+            }
+            None => (None, ctx.worktree_path.clone()),
+        }
+    } else {
+        (None, ctx.worktree_path.clone())
+    };
+
     let package_message = match project_type {
-        PackageProjectType::Maven => "☕ 执行 Maven 打包...".to_string(),
-        // ponytail: 别写 install——多数情况走缓存，文案会误导
+        PackageProjectType::Maven => {
+            if let Some(ref pl) = maven_pl_module {
+                format!("☕ 执行 Maven 打包 (-pl {pl} -am)...")
+            } else {
+                "☕ 执行 Maven 打包...".to_string()
+            }
+        }
         PackageProjectType::Npm => "📦 准备前端依赖...".to_string(),
     };
     emit_progress(&app, 50, package_message, "build");
@@ -55,7 +113,7 @@ pub async fn package_from_branch(
             || !crate::utils::maven_home_looks_valid(&maven_home)
         {
             return Err(
-                "未配置有效的 Maven Home（也未检测到 MAVEN_HOME/M2_HOME）。请到「系统设置 → JAR 打包」填写 Maven 安装目录后再打包。"
+                "未配置有效的 Maven Home（也未检测到 MAVEN_HOME/M2_HOME 或安装包内置 Maven）。请到「系统设置 → JAR 打包」填写 Maven 安装目录后再打包。"
                     .to_string(),
             );
         }
@@ -94,6 +152,8 @@ pub async fn package_from_branch(
                 package_with_backend: package_with_backend_clone,
                 maven_home,
                 maven_local_repo,
+                maven_pl_module,
+                maven_artifact_dir,
             },
         )
     })

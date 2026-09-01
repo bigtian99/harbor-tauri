@@ -197,7 +197,7 @@ export function UploadPanel({
               <Text size="xs" c="var(--color-text-muted)">{progressMessage}</Text>
               <Text size="xs" fw={600} c="var(--color-text-muted)">{progress}%</Text>
             </Group>
-            <Progress value={progress} animated color="blue" size="xs" />
+            <Progress value={progress} />
             <Button
               variant="subtle"
               color="red"
@@ -213,51 +213,47 @@ export function UploadPanel({
       )}
 
       {fullImage && (
-        <Paper p="sm" radius="md" withBorder styles={panelPaperStyles}>
-          <Group gap="sm" wrap="nowrap" align="flex-start">
-            <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-              <Text size="xs" c="dimmed" fw={600}>完整镜像</Text>
-              <Text
-                size="sm"
-                ff="monospace"
-                c="var(--color-text)"
-                style={{ wordBreak: "break-all", lineHeight: 1.4 }}
-              >
-                {fullImage.split("\n").map((line, i) => (
-                  <span key={i} style={{ display: "block" }} title={line}>{line}</span>
-                ))}
-              </Text>
-            </Stack>
+        <div className={`image-url-row image-url-row--primary ${fullImageCopied ? "copied" : ""}`}>
+          <Group className="image-url-row-head" wrap="nowrap">
+            <Text className="image-url-title">
+              <Package size={14} className="image-url-title-icon" />
+              完整镜像
+            </Text>
             <Button
-              size="xs"
-              variant={fullImageCopied ? "light" : "default"}
-              color={fullImageCopied ? "teal" : "gray"}
+              size="compact-sm"
+              variant={fullImageCopied ? "filled" : "light"}
+              color={fullImageCopied ? "teal" : "cyan"}
               className={`copy-btn ${fullImageCopied ? "copied" : ""}`}
               onClick={() => onCopyImage(fullImageCopyText)}
               title="复制镜像地址"
               leftSection={
                 fullImageCopied
-                  ? <CheckCircle size={13} />
-                  : <Copy size={13} />
+                  ? <CheckCircle size={14} />
+                  : <Copy size={14} />
               }
             >
               {fullImageCopied ? "已复制" : "复制"}
             </Button>
           </Group>
-        </Paper>
+          <Text size="sm" className="image-url-value" c="var(--color-text)" style={{ wordBreak: "break-all", lineHeight: 1.45 }}>
+            {fullImage.split("\n").map((line, i) => (
+              <span key={i} style={{ display: "block" }} title={line}>{line}</span>
+            ))}
+          </Text>
+        </div>
       )}
 
       {log && (
         <Stack gap={4} className="log-section">
           <Button
             type="button"
-            variant="subtle"
-            color="gray"
-            size="compact-xs"
+            variant="light"
+            color="cyan"
+            size="sm"
+            className="log-toggle-btn"
             onClick={() => setShowBuildLog(!showBuildLog)}
             title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
-            leftSection={showBuildLog ? <EyeOff size={12} /> : <Eye size={12} />}
-            style={{ alignSelf: "flex-start" }}
+            leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}
           >
             {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
           </Button>

@@ -509,7 +509,7 @@ export function PushImagePanel({
               <Text size="xs" c="var(--color-text-muted)">{progressMessage}</Text>
               <Text size="xs" fw={600} c="var(--color-text-muted)">{progress}%</Text>
             </Group>
-            <Progress value={progress} animated color="cyan" size="xs" />
+            <Progress value={progress} />
           </Paper>
         )}
 
@@ -530,26 +530,31 @@ export function PushImagePanel({
             className="path-links"
             style={{ marginTop: 4, border: "none", background: "transparent", padding: 0 }}
           >
-            <div className={`path-link-item image-url-row ${copied === fullImage ? "copied" : ""}`}>
-              <span className="path-link-label">完整镜像:</span>
+            <div className={`path-link-item image-url-row image-url-row--primary ${copied === fullImage ? "copied" : ""}`}>
+              <div className="image-url-row-head">
+                <span className="image-url-title">
+                  <Package size={14} className="image-url-title-icon" />
+                  完整镜像
+                </span>
+                <Button
+                  size="compact-sm"
+                  variant={copied === fullImage ? "filled" : "light"}
+                  color={copied === fullImage ? "teal" : "cyan"}
+                  className={`copy-btn ${copied === fullImage ? "copied" : ""}`}
+                  onClick={() => onCopyImage(fullImage)}
+                  title="复制镜像地址"
+                  leftSection={
+                    copied === fullImage
+                      ? <CheckCircle size={14} />
+                      : <Copy size={14} />
+                  }
+                >
+                  {copied === fullImage ? "已复制" : "复制"}
+                </Button>
+              </div>
               <span className="image-url-value">
                 <span style={{ display: "block" }} title={fullImage}>{fullImage}</span>
               </span>
-              <Button
-                size="xs"
-                variant={copied === fullImage ? "filled" : "default"}
-                color={copied === fullImage ? "teal" : "gray"}
-                className={`copy-btn ${copied === fullImage ? "copied" : ""}`}
-                onClick={() => onCopyImage(fullImage)}
-                title="复制镜像地址"
-                leftSection={
-                  copied === fullImage
-                    ? <CheckCircle size={14} />
-                    : <Copy size={14} />
-                }
-              >
-                {copied === fullImage ? "已复制" : "复制"}
-              </Button>
             </div>
           </div>
         )}
@@ -558,12 +563,13 @@ export function PushImagePanel({
           <Stack gap="xs" className="log-section push-log-section">
             <Button
               type="button"
-              variant="default"
-              color="gray"
-              size="xs"
+              variant="light"
+              color="cyan"
+              size="sm"
+              className="log-toggle-btn"
               onClick={() => setShowBuildLog(!showBuildLog)}
               title={showBuildLog ? "隐藏推送日志" : "展开推送日志"}
-              leftSection={showBuildLog ? <EyeOff size={14} /> : <Eye size={14} />}
+              leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}
             >
               {showBuildLog ? "隐藏推送日志" : "展开推送日志"}
             </Button>

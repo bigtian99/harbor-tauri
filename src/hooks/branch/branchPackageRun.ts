@@ -36,6 +36,10 @@ export interface BranchPackageRunParams {
   autoPushImage: boolean;
   /** 传给 build_and_push 的 progressLabel */
   progressLabel?: string;
+  /** K8s Deployment 名，多模块 Maven 自动匹配子模块 */
+  deploymentHint?: string;
+  /** 并行打包 worktree 槽位（同 Git 多服务） */
+  packSlot?: string;
 }
 
 export interface BranchPackageRunResult {
@@ -85,6 +89,8 @@ export async function runBranchPackageAndPush(
     imageTag,
     autoPushImage,
     progressLabel,
+    deploymentHint,
+    packSlot,
   } = params;
 
   const emptyArtifacts = {
@@ -141,6 +147,8 @@ export async function runBranchPackageAndPush(
           ? springProfile.trim()
           : null,
       packageWithBackend: branchProjectType === "npm" ? packageWithBackend : false,
+      deploymentHint: deploymentHint?.trim() || null,
+      packSlot: packSlot?.trim() || null,
     });
   } catch (e) {
     return {

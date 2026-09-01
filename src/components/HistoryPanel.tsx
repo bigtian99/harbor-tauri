@@ -634,7 +634,7 @@ export function HistoryPanel({
                     <Text size="sm" c="var(--color-text)">{progressMessage || "推送中..."}</Text>
                     <Text size="sm" c="var(--color-text-muted)" fw={600}>{progress}%</Text>
                   </Group>
-                  <Progress value={progress} color="cyan" size="sm" radius="xl" />
+                  <Progress value={progress} />
                 </Stack>
               )}
               {isBuilding && onCancelBuild && (
@@ -651,13 +651,13 @@ export function HistoryPanel({
               {log && setShowBuildLog && renderLog && (
                 <Stack gap="xs" className="log-section">
                   <Button
-                    variant="subtle"
-                    color="gray"
-                    size="compact-sm"
+                    variant="light"
+                    color="cyan"
+                    size="sm"
                     className="log-toggle-btn"
                     onClick={() => setShowBuildLog(!showBuildLog)}
                     title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
-                    leftSection={showBuildLog ? <EyeOff size={14} /> : <Eye size={14} />}
+                    leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}
                   >
                     {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
                   </Button>

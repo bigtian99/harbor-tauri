@@ -28,17 +28,57 @@ pub(crate) fn derive_maven_local_repo(maven_home: &str) -> String {
 }
 
 /// 解析最终使用的 Maven Home / 本地仓库。
-/// 优先级：配置显式值 > 环境变量 > 空；本地仓库未填时由 Home 推导。
+/// 优先级：配置显式值 > 环境变量 > 内置 bundle-tools > 空；本地仓库未填时由 Home 推导。
 pub(crate) fn resolve_maven_paths(config_home: &str, config_local_repo: &str) -> (String, String) {
     let mut home = config_home.trim().to_string();
     if home.is_empty() {
         home = maven_home_from_env();
     }
+    if home.is_empty() || !maven_home_looks_valid(&home) {
+        if let Some(bundled) = crate::utils::bundled_maven_home() {
+            if maven_home_looks_valid(&bundled) {
+                home = bundled;
+            }
+        }
+    }
     let mut local = config_local_repo.trim().to_string();
     if local.is_empty() && !home.is_empty() {
-        local = derive_maven_local_repo(&home);
+        if crate::utils::is_bundled_maven_home(&home) {
+            local = crate::utils::default_bundled_maven_local_repo();
+        } else {
+            local = derive_maven_local_repo(&home);
+        }
     }
     (home, local)
+}
+
+/// 判断 Maven Home 来源（供设置页展示）。
+pub(crate) fn maven_home_source(config_home: &str, effective_home: &str) -> &'static str {
+    let cfg = config_home.trim();
+    if !cfg.is_empty() && maven_home_looks_valid(cfg) {
+        return "config";
+    }
+    let env = maven_home_from_env();
+    if !env.is_empty() && paths_equal_lossy(&env, effective_home) && maven_home_looks_valid(&env) {
+        return "env";
+    }
+    if crate::utils::is_bundled_maven_home(effective_home) {
+        return "bundled";
+    }
+    if maven_home_looks_valid(effective_home) {
+        return "path";
+    }
+    "none"
+}
+
+fn paths_equal_lossy(a: &str, b: &str) -> bool {
+    a.trim() == b.trim()
+        || Path::new(a.trim())
+            .canonicalize()
+            .ok()
+            .zip(Path::new(b.trim()).canonicalize().ok())
+            .map(|(x, y)| x == y)
+            .unwrap_or(false)
 }
 
 pub(crate) fn maven_home_looks_valid(home: &str) -> bool {

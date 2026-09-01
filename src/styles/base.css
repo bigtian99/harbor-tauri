@@ -750,10 +750,8 @@ body {
   font-variant-numeric: tabular-nums;
   min-width: 3.2em;
   text-align: right;
-}
-
-.ks-batch-progress-bar-mantine {
-  --progress-section-color: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
+  color: var(--color-primary-hover);
+  text-shadow: 0 0 12px rgba(59, 158, 255, 0.35);
 }
 
 .ks-batch-log-section {

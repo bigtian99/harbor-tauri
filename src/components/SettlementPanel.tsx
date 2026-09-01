@@ -27,7 +27,7 @@ import {
 
 import type { SettlementGenerateResult } from "../types";
 import { isTauriRuntime } from "../types";
-import { panelFieldStyles, panelPaperStyles } from "../theme/panelStyles";
+import { panelFieldStyles, panelPaperStyles, panelPrimaryButtonStyles } from "../theme/panelStyles";
 import "../styles/ops-panel.css";
 
 type PathPickerProps = {
@@ -264,6 +264,8 @@ export function SettlementPanel() {
                 onClick={handleGenerate}
                 variant="filled"
                 color="blue"
+                className="settlement-generate-btn"
+                styles={panelPrimaryButtonStyles}
               >
                 生成结算单
               </Button>
@@ -289,7 +291,7 @@ export function SettlementPanel() {
                       {progress.percent}%
                     </Text>
                   </Group>
-                  <Progress value={progress.percent} animated color="blue" size="sm" />
+                  <Progress value={progress.percent} />
                   {progress.total > 0 && (
                     <Text size="xs" c="var(--color-text-muted)">
                       账号进度 {progress.current}/{progress.total}

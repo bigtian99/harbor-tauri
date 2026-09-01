@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ShipForge",
+        "title": "码头工坊",
         "width": 1100,
         "height": 800,
         "minWidth": 960,
@@ -44,7 +44,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../templates/**/*"
+      "../templates/**/*",
+      "resources/bundle-tools/**/*"
     ]
   }
 }

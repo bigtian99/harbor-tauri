@@ -71,8 +71,20 @@ export const appTheme = createTheme({
       /* 关闭 autoContrast：亮蓝底不要黑字，统一白字 */
       defaultProps: { size: "sm", variant: "default", autoContrast: false },
       styles: {
+        inner: {
+          gap: 6,
+        },
+        section: {
+          flexShrink: 0,
+        },
+        label: {
+          overflow: "visible",
+          lineHeight: 1.35,
+          textBoxTrim: "none",
+        },
         root: {
           fontWeight: 600,
+          lineHeight: 1.35,
           transition: "background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease",
           /* 次要：灰底描边 */
           "&[data-variant='default']": {
@@ -299,10 +311,28 @@ export const appTheme = createTheme({
       },
     },
     Progress: {
+      defaultProps: {
+        size: "sm",
+        radius: "xl",
+        transitionDuration: 420,
+      },
+      classNames: {
+        root: "jp-progress-mantine",
+        section: "jp-progress-mantine-section",
+      },
       styles: {
-        root: { background: "var(--color-bg-elevated)" },
+        root: {
+          background: "var(--progress-track-bg)",
+          border: "1px solid var(--progress-track-border)",
+          boxShadow: "var(--progress-track-shadow)",
+          overflow: "hidden",
+          minHeight: 8,
+        },
         section: {
-          background: "linear-gradient(90deg, var(--color-primary), var(--color-accent))",
+          background: "var(--progress-fill-gradient)",
+          boxShadow: "var(--progress-fill-glow)",
+          transition: "var(--progress-transition)",
+          borderRadius: "inherit",
         },
       },
     },

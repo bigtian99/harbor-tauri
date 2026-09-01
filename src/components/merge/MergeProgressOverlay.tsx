@@ -60,9 +60,6 @@ export function MergeProgressOverlay({
             </Text>
             <Progress
               value={Math.max(progress, 8)}
-              color="cyan"
-              size="sm"
-              radius="xl"
               w="100%"
               mt="xs"
             />

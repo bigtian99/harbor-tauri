@@ -2,7 +2,8 @@ use crate::diag::diag_log;
 use crate::models::{HarborConfig, LEGACY_CONFIG_DIR};
 use crate::utils::{
     config_path_for, derive_maven_local_repo, get_config_path, maven_home_from_env,
-    maven_home_looks_valid, normalize_config, resolve_maven_paths,
+    maven_home_looks_valid, maven_home_source, normalize_config, resolve_maven_paths,
+    bundled_java_home, bundled_maven_home, bundled_tools_available,
 };
 use serde::Serialize;
 use std::fs;
@@ -44,7 +45,12 @@ pub struct MavenSettingsInfo {
     /// 最终生效的本地仓库（显式配置或由 Home 推导的 repository）
     pub effective_local_repo: String,
     pub home_valid: bool,
-    pub source: String, // config | env | none
+    pub source: String, // config | env | bundled | path | none
+    /// 安装包内置 Maven Home（未配置时可能作为 effective_home）
+    pub bundled_home: String,
+    /// 安装包内置 JDK Home（mvn 执行时优先 JAVA_HOME，否则可能用此项）
+    pub bundled_java_home: String,
+    pub bundled_available: bool,
 }
 
 /// 供前端在打包前检查 / 设置页展示环境变量探测结果。
@@ -57,19 +63,16 @@ pub fn resolve_maven_settings(config: Option<HarborConfig>) -> Result<MavenSetti
     let env_home = maven_home_from_env();
     let (effective_home, effective_local_repo) =
         resolve_maven_paths(&cfg.maven_home, &cfg.maven_local_repo);
-    let source = if !cfg.maven_home.trim().is_empty() {
-        "config"
-    } else if !env_home.is_empty() {
-        "env"
-    } else {
-        "none"
-    };
+    let source = maven_home_source(&cfg.maven_home, &effective_home).to_string();
     let home_valid = maven_home_looks_valid(&effective_home);
+    let bundled_home = bundled_maven_home().unwrap_or_default();
+    let bundled_java = bundled_java_home().unwrap_or_default();
+    let bundled_available = bundled_tools_available();
     diag_log(
         "config",
         &format!(
-            "resolve_maven_settings source={} home={} repo={} valid={}",
-            source, effective_home, effective_local_repo, home_valid
+            "resolve_maven_settings source={} home={} repo={} valid={} bundled={}",
+            source, effective_home, effective_local_repo, home_valid, bundled_available
         ),
     );
     Ok(MavenSettingsInfo {
@@ -78,7 +81,10 @@ pub fn resolve_maven_settings(config: Option<HarborConfig>) -> Result<MavenSetti
         effective_home,
         effective_local_repo,
         home_valid,
-        source: source.to_string(),
+        source,
+        bundled_home,
+        bundled_java_home: bundled_java,
+        bundled_available,
     })
 }
 

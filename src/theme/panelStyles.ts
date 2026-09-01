@@ -61,12 +61,12 @@ export const panelPrimaryButtonStyles = {
       color: "#fff",
     },
     "&:disabled, &[data-disabled]": {
-      background: "var(--color-bg-elevated) !important",
-      backgroundColor: "var(--color-bg-elevated) !important",
-      color: "var(--color-text-muted) !important",
-      border: "1px solid var(--color-border-strong) !important",
+      background: "color-mix(in srgb, var(--color-primary) 14%, var(--color-bg-elevated)) !important",
+      backgroundColor: "color-mix(in srgb, var(--color-primary) 14%, var(--color-bg-elevated)) !important",
+      color: "color-mix(in srgb, var(--color-primary-hover) 70%, var(--color-text-muted)) !important",
+      border: "1px dashed color-mix(in srgb, var(--color-primary) 45%, var(--color-border-strong)) !important",
       boxShadow: "none !important",
-      opacity: 0.55,
+      opacity: 0.72,
       cursor: "not-allowed",
     },
   },
@@ -75,5 +75,44 @@ export const panelPrimaryButtonStyles = {
   },
   label: {
     color: "inherit",
+  },
+} as const;
+
+/** 次要强调：翠绿描边（复制/克隆等，与主蓝 CTA 区分） */
+export const panelAccentButtonStyles = {
+  root: {
+    background: "transparent",
+    border: "1px solid color-mix(in srgb, var(--color-success) 55%, transparent)",
+    color: "var(--color-success)",
+    fontWeight: 600,
+    "&:hover:not(:disabled):not([data-disabled])": {
+      background: "var(--color-success-muted)",
+      borderColor: "var(--color-success)",
+      color: "#6ee7b7",
+    },
+    "&:disabled, &[data-disabled]": {
+      background: "transparent !important",
+      border: "1px dashed color-mix(in srgb, var(--color-success) 35%, var(--color-border-strong)) !important",
+      color: "color-mix(in srgb, var(--color-success) 55%, var(--color-text-muted)) !important",
+      boxShadow: "none !important",
+      opacity: 0.68,
+      cursor: "not-allowed",
+    },
+  },
+  section: { color: "inherit" },
+  label: { color: "inherit" },
+} as const;
+
+/** 提交 hash 链接按钮：勿用 padding 简写，否则会盖掉 Mantine 对 section 的内边距 */
+export const commitHashButtonStyles = {
+  root: {
+    fontFamily: "monospace",
+    flexShrink: 0,
+  },
+  label: {
+    lineHeight: 1.35,
+  },
+  section: {
+    marginInlineStart: 4,
   },
 } as const;

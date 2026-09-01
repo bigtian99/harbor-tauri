@@ -1,4 +1,6 @@
+mod bundled_tools;
 mod config_io;
+mod maven_modules;
 mod maven_paths;
 mod npm_cache;
 mod paths_fs;
@@ -10,7 +12,9 @@ use std::sync::Mutex;
 pub(crate) static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
 pub(crate) static CURRENT_PID: Mutex<Option<u32>> = Mutex::new(None);
 
+pub(crate) use bundled_tools::{init_bundled_tools, *};
 pub(crate) use config_io::*;
+pub(crate) use maven_modules::*;
 pub(crate) use maven_paths::*;
 pub(crate) use npm_cache::*;
 pub(crate) use paths_fs::*;

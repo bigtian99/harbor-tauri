@@ -48,14 +48,20 @@
   flex-shrink: 0;
 }
 
-.commit-link {
+/* 原生按钮 / 链接；Mantine Button 走 .mantine-Button-root.commit-link */
+button.commit-link:not(.mantine-Button-root),
+a.commit-link {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
   border: none;
   background: var(--color-primary-muted);
   transition: all 0.2s ease;
+}
+
+.mantine-Button-root.commit-link {
+  vertical-align: middle;
 }
 
 .commit-link:hover {

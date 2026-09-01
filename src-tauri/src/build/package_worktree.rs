@@ -4,7 +4,7 @@ use crate::build::emit_progress;
 use crate::config_cmd::load_config_sync;
 use crate::git::cleanup_worktree;
 use crate::models::PackageProjectType;
-use crate::utils::{cleanup_old_temp_dirs, command_output_text, repo_root_for, silent_command};
+use crate::utils::{cleanup_old_temp_dirs, command_output_text, pack_worktree_dir_with_slot, repo_root_for, silent_command};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -32,6 +32,7 @@ pub(crate) async fn prepare_worktree(
     repo_path: &str,
     branch: &str,
     frontend_dir: &Option<String>,
+    pack_slot: &Option<String>,
 ) -> Result<WorktreeContext, String> {
     // 如果是 URL，先克隆到本地缓存目录
     let repo_path_str = repo_path.trim().to_string();
@@ -58,13 +59,6 @@ pub(crate) async fn prepare_worktree(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    // 同仓库串行：抢锁失败则立刻返回，避免并行抢用同一 `_pack`
-    let pack_guard = PackRepoGuard::try_acquire(&repo_name)?;
-
-    // 生成时间戳，用于产物目录命名（源码目录固定为 `_pack`，不再带时间戳）
-    let build_timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let branch_slug = branch.replace('/', "_");
-
     // 确定基础输出目录：优先使用用户配置，为空则回退到桌面
     let output_base = if !config.artifact_output_dir.trim().is_empty() {
         PathBuf::from(&config.artifact_output_dir)
@@ -72,8 +66,17 @@ pub(crate) async fn prepare_worktree(
         dirs::desktop_dir().unwrap_or_else(|| std::env::temp_dir())
     };
 
-    // 持久打包 worktree：`{output}/{repo}/_pack`
-    let worktree_path = pack_worktree_dir(&output_base, &repo_name);
+    // 同 worktree 路径串行（不同 pack_slot 可并行）
+    let worktree_path = pack_worktree_dir_with_slot(
+        &output_base,
+        &repo_name,
+        pack_slot.as_deref(),
+    );
+    let pack_guard = PackRepoGuard::try_acquire(&worktree_path.to_string_lossy())?;
+
+    // 生成时间戳，用于产物目录命名
+    let build_timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let branch_slug = branch.replace('/', "_");
 
     // 确保父目录存在
     fs::create_dir_all(worktree_path.parent().unwrap())
@@ -200,24 +203,24 @@ pub(crate) fn validate_project_in_worktree(
 static PACK_BUSY: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 
 pub(crate) struct PackRepoGuard {
-    repo_name: String,
+    lock_key: String,
 }
 
 impl PackRepoGuard {
-    pub(crate) fn try_acquire(repo_name: &str) -> Result<Self, String> {
+    pub(crate) fn try_acquire(lock_key: &str) -> Result<Self, String> {
         let map_lock = PACK_BUSY.get_or_init(|| Mutex::new(HashMap::new()));
         let mut map = map_lock
             .lock()
             .map_err(|_| "打包目录锁异常".to_string())?;
-        let busy = map.entry(repo_name.to_string()).or_insert(false);
+        let busy = map.entry(lock_key.to_string()).or_insert(false);
         if *busy {
             return Err(format!(
-                "仓库「{repo_name}」的 _pack 正在被其他打包任务使用，请稍后再试（同仓库请串行）"
+                "打包目录「{lock_key}」正在被其他任务使用，请稍后再试"
             ));
         }
         *busy = true;
         Ok(Self {
-            repo_name: repo_name.to_string(),
+            lock_key: lock_key.to_string(),
         })
     }
 }
@@ -226,7 +229,7 @@ impl Drop for PackRepoGuard {
     fn drop(&mut self) {
         if let Some(map_lock) = PACK_BUSY.get() {
             if let Ok(mut map) = map_lock.lock() {
-                if let Some(busy) = map.get_mut(&self.repo_name) {
+                if let Some(busy) = map.get_mut(&self.lock_key) {
                     *busy = false;
                 }
             }
@@ -234,9 +237,9 @@ impl Drop for PackRepoGuard {
     }
 }
 
-/// 持久打包 worktree 路径：`{output_base}/{repo_name}/_pack`
+/// 持久打包 worktree 路径（默认槽位 `_pack`；多模块并行用 `pack_worktree_dir_with_slot`）
 pub(crate) fn pack_worktree_dir(output_base: &Path, repo_name: &str) -> PathBuf {
-    output_base.join(repo_name).join("_pack")
+    pack_worktree_dir_with_slot(output_base, repo_name, None)
 }
 
 fn is_git_worktree_dir(path: &Path) -> bool {
@@ -421,11 +424,20 @@ mod tests {
     }
 
     #[test]
-    fn pack_repo_guard_rejects_second_acquire() {
-        let g1 = PackRepoGuard::try_acquire("ut-repo-lock").unwrap();
-        assert!(PackRepoGuard::try_acquire("ut-repo-lock").is_err());
+    fn pack_repo_guard_rejects_second_acquire_same_slot() {
+        let key = "/tmp/jarporter-pack-slot-a";
+        let g1 = PackRepoGuard::try_acquire(key).unwrap();
+        assert!(PackRepoGuard::try_acquire(key).is_err());
         drop(g1);
-        assert!(PackRepoGuard::try_acquire("ut-repo-lock").is_ok());
+        assert!(PackRepoGuard::try_acquire(key).is_ok());
+    }
+
+    #[test]
+    fn pack_repo_guard_allows_different_slots() {
+        let g1 = PackRepoGuard::try_acquire("/tmp/jarporter-pack-a").unwrap();
+        let g2 = PackRepoGuard::try_acquire("/tmp/jarporter-pack-b").unwrap();
+        drop(g1);
+        drop(g2);
     }
 }
 

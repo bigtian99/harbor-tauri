@@ -24,7 +24,7 @@ export function LandingFtpSection({
           {progress}%
         </Text>
       </Group>
-      <Progress value={progress} animated color="blue" size="sm" />
+      <Progress value={progress} />
     </Paper>
   );
 }

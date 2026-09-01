@@ -350,15 +350,7 @@ export function KsBatchProgressModal({
                 {Math.round(progress)}%
               </Text>
             </Group>
-            <Progress
-              value={progress}
-              size="sm"
-              radius="xl"
-              color="cyan"
-              animated={running && progress < 100}
-              striped={running && progress < 100}
-              className="ks-batch-progress-bar-mantine"
-            />
+            <Progress value={progress} />
           </Stack>
         </Box>
 

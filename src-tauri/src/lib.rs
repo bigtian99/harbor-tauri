@@ -44,6 +44,7 @@ use history::{
     clear_build_history, delete_artifact_path, delete_build_record, get_build_history,
     save_build_record, update_build_record_image, update_build_record_push,
 };
+use utils::{init_bundled_tools, write_text_file};
 
 use kubesphere::{
     ks_create_deployment, ks_list_deployment_revisions, ks_list_deployments, ks_list_namespaces,
@@ -84,6 +85,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             diag::init(app.handle());
+            init_bundled_tools(app.handle());
             landing::init_bundled_templates_dir(app.handle());
             // 初始化 SQLite 数据库
             if let Err(e) = db::init_db() {
@@ -168,6 +170,7 @@ pub fn run() {
             read_diagnostic_log,
             list_diagnostic_log_dates,
             export_diagnostic_log,
+            write_text_file,
             write_diagnostic_log,
             ensure_preview_server_started,
             stop_preview_server,

@@ -2,6 +2,18 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
+const downloadScript = join(process.cwd(), "scripts", "download-bundle-tools.mjs");
+if (existsSync(downloadScript) && process.env.SKIP_BUNDLE_TOOLS !== "1") {
+  const dl = spawnSync(process.execPath, [downloadScript], { stdio: "inherit" });
+  if (dl.status !== 0) {
+    process.exit(dl.status ?? 1);
+  }
+}
+
 const [target, ...restArgs] = process.argv.slice(2);
 const args = ["build"];
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   ActionIcon,
@@ -143,6 +144,31 @@ export function ConfigPanel({
     () => loadBtTempLoginOpenPref(),
   );
   const flushKsMapsRef = useRef<(() => void) | null>(null);
+
+  const [mavenProbe, setMavenProbe] = useState<{
+    source: string;
+    effective_home: string;
+    effective_local_repo: string;
+    bundled_available: boolean;
+    bundled_home: string;
+    bundled_java_home: string;
+    home_valid: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void invoke<{
+      source: string;
+      effective_home: string;
+      effective_local_repo: string;
+      bundled_available: boolean;
+      bundled_home: string;
+      bundled_java_home: string;
+      home_valid: boolean;
+    }>("resolve_maven_settings", { config })
+      .then(setMavenProbe)
+      .catch(() => setMavenProbe(null));
+  }, [config.maven_home, config.maven_local_repo]);
 
   const handleSaveConfig = () => {
     flushKsMapsRef.current?.();
@@ -465,8 +491,8 @@ export function ConfigPanel({
                 }
                 value={config.maven_home ?? ""}
                 onChange={(e) => applyMavenHome(e.currentTarget.value)}
-                placeholder="优先读 MAVEN_HOME / M2_HOME；例如 /Users/daijunxiong/app/apache-maven-3.9.9"
-                description="优先读取环境变量 MAVEN_HOME / M2_HOME；也可在此手动指定。填写后会自动带上 conf/settings.xml"
+                placeholder="留空则依次尝试：环境变量 → 安装包内置 Maven"
+                description="优先读取 MAVEN_HOME / M2_HOME；发版安装包未填写时会自动使用内置 Maven + JDK。填写后会自动带上 conf/settings.xml"
                 rightSectionWidth={90}
                 rightSection={
                   <Button
@@ -493,6 +519,21 @@ export function ConfigPanel({
                 }
                 styles={fieldStyles}
               />
+              {mavenProbe && (
+                <Text size="xs" c={mavenProbe.home_valid ? "var(--color-success)" : "var(--color-text-muted)"}>
+                  {mavenProbe.home_valid ? (
+                    <>
+                      当前生效（{mavenProbe.source === "bundled" ? "安装包内置" : mavenProbe.source}
+                      ）：{mavenProbe.effective_home}
+                      {mavenProbe.effective_local_repo ? ` · 仓库 ${mavenProbe.effective_local_repo}` : ""}
+                    </>
+                  ) : mavenProbe.bundled_available ? (
+                    <>安装包内置 Maven/JDK 已就绪，留空配置将自动使用（{mavenProbe.bundled_home}）</>
+                  ) : (
+                    <>未检测到有效 Maven；发版包需构建时下载 bundle-tools</>
+                  )}
+                </Text>
+              )}
               <TextInput
                 label={
                   <Group gap={6}>
@@ -502,8 +543,8 @@ export function ConfigPanel({
                 }
                 value={config.maven_local_repo ?? ""}
                 onChange={(e) => onConfigChange("maven_local_repo", e.currentTarget.value)}
-                placeholder="默认由 Maven Home 带出：{home}/repository"
-                description='选择 Maven Home 后会自动带出 {"{home}/repository"}；也可单独改。留空且无 Home 时走 ~/.m2/repository'
+                placeholder="内置 Maven 默认 ~/.config/jarporter/maven-repository"
+                description='手动指定 Home 时默认 {"{home}/repository"}；使用安装包内置 Maven 时仓库在配置目录下，可单独修改'
                 rightSectionWidth={90}
                 rightSection={
                   <Button
@@ -847,7 +888,7 @@ export function ConfigPanel({
             <Paper p="lg" radius="md" withBorder style={sectionCardStyle}>
               <Stack gap="sm" align="center">
                 <Text size="xl" fw={700} c="var(--color-text)">
-                  JarPorter
+                  码头工坊
                 </Text>
                 <Text size="sm" c="var(--color-text-muted)">
                   当前版本 <Text span fw={600} c="var(--color-primary)">v{appVersion || "—"}</Text>
