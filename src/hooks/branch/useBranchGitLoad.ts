@@ -136,15 +136,13 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
       });
       if (isStaleBranchLoad(branchLoadRequestId)) return;
       setNpmScripts(scripts);
-      const autoSelected = preferNpmBuildScript(
-        branchForScript || branchName,
-        scripts,
+      setSelectedBuildScript((current) =>
+        preferNpmBuildScript(branchForScript || branchName, scripts, current),
       );
-      setSelectedBuildScript(autoSelected);
     } catch {
       if (isStaleBranchLoad(branchLoadRequestId)) return;
       setNpmScripts([]);
-      setSelectedBuildScript("");
+      // 拉取失败时保留已选手输值，避免把自定义命令清掉
     } finally {
       if (!isStaleBranchLoad(branchLoadRequestId)) {
         updateLoading("scripts", false);

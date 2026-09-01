@@ -34,7 +34,7 @@ export function buildScriptAfterMerge(targetBranch: string): string {
 
 /**
  * 按目标分支挑选 npm 构建脚本：rc-master → build:prod，其它 → build:test。
- * 首选脚本不存在时才回退当前值或通用 build。
+ * 首选脚本不存在时保留当前值（含手输），再回退通用 build。
  */
 export function preferNpmBuildScript(
   branch: string,
@@ -43,9 +43,10 @@ export function preferNpmBuildScript(
 ): string {
   const preferred = buildScriptAfterMerge(branch);
   if (scripts.includes(preferred)) return preferred;
-  if (current && scripts.includes(current)) return current;
+  const trimmed = current.trim();
+  if (trimmed) return trimmed;
   const generic = ["build", "compile", "dist"];
-  return generic.find((s) => scripts.includes(s)) || scripts[0] || current || preferred;
+  return generic.find((s) => scripts.includes(s)) || scripts[0] || preferred;
 }
 
 /** 合并确认框追加提示 */

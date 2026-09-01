@@ -94,8 +94,7 @@ export function useBranchCommits(deps: UseBranchCommitsDeps) {
     } catch (e) {
       if (isStaleBranchLoad(branchLoadRequestId)) return;
       console.error("[Commit List] 获取失败:", e);
-      setCommitList([]);
-      setCommitListTotal(0);
+      // 保留已有列表，避免翻页/搜索时闪成空
     } finally {
       if (!isStaleBranchLoad(branchLoadRequestId)) {
         updateLoading("commitList", false);

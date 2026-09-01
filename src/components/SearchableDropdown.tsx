@@ -76,6 +76,8 @@ export function SearchableDropdown({
 
   const handleInputFocus = () => {
     if (!disabled) {
+      // 聚焦时带入当前值，便于在已有脚本上继续手改
+      setSearchTerm(value || "");
       setIsOpen(true);
     }
   };
@@ -106,15 +108,17 @@ export function SearchableDropdown({
         onBlur={handleInputBlur}
         onKeyDown={handleKeyDown}
         placeholder={loading ? "加载中..." : placeholder}
-        disabled={disabled || loading}
+        disabled={disabled}
         autoComplete="off"
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}
       />
-      {isOpen && !disabled && !loading && (
+      {isOpen && !disabled && (
         <div ref={listRef} className="searchable-dropdown-list">
-          {filteredOptions.length > 0 ? (
+          {loading && filteredOptions.length === 0 && !searchTerm ? (
+            <div className="searchable-dropdown-empty">加载中...</div>
+          ) : filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <div
                 key={option}

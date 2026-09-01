@@ -38,6 +38,34 @@
   flex-shrink: 0;
 }
 
+.branch-commit-history-btn.mantine-Button-root,
+.mantine-Button-root.branch-commit-history-btn {
+  flex-shrink: 0;
+  font-weight: 650;
+  font-size: 12px;
+  height: 28px;
+  padding-inline: 8px 6px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent) !important;
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent) !important;
+  color: var(--color-primary-hover) !important;
+}
+
+.branch-commit-history-btn.mantine-Button-root:hover,
+.mantine-Button-root.branch-commit-history-btn:hover {
+  border-color: var(--color-primary) !important;
+  background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
+  color: #fff !important;
+}
+
+.branch-commit-history-count.mantine-Badge-root {
+  min-width: 22px;
+  height: 18px;
+  padding-inline: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
 .path-links {
   display: flex;
   flex-direction: column;
@@ -46,6 +74,140 @@
   border-radius: var(--radius-md);
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
+}
+
+/* 分支打包结果：镜像主区 + 路径次区 */
+.branch-result-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+}
+
+.branch-result-card--copied {
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border-strong));
+}
+
+.branch-result-image {
+  padding: 12px 14px 14px;
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--color-primary) 16%, var(--color-bg-elevated)) 0%,
+    var(--color-bg-elevated) 72%
+  );
+}
+
+.branch-result-card--copied .branch-result-image {
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--color-success) 18%, var(--color-bg-elevated)) 0%,
+    var(--color-bg-elevated) 72%
+  );
+}
+
+.branch-result-image + .branch-result-image {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.branch-result-image-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.branch-result-image .image-url-value {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(6, 10, 20, 0.45);
+  border: 1px solid var(--color-border);
+  font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-all;
+  color: var(--color-text);
+}
+
+.branch-result-card--copied .branch-result-image .image-url-value {
+  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.08) inset;
+}
+
+.branch-result-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 10px;
+  background: rgba(0, 0, 0, 0.22);
+  border-top: 1px solid var(--color-border);
+}
+
+.branch-result-path {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.branch-result-path:hover {
+  background: rgba(120, 170, 255, 0.08);
+  color: var(--color-primary-hover);
+}
+
+.branch-result-path svg {
+  flex-shrink: 0;
+  position: relative;
+  top: 2px;
+  opacity: 0.55;
+}
+
+.branch-result-path-label {
+  flex-shrink: 0;
+  min-width: 3.2em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+  opacity: 0.85;
+}
+
+.branch-result-path-value {
+  flex: 1;
+  min-width: 0;
+  font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  word-break: break-all;
+  color: color-mix(in srgb, var(--color-text) 72%, var(--color-text-muted));
+}
+
+.branch-result-path:hover .branch-result-path-label,
+.branch-result-path:hover .branch-result-path-value {
+  color: var(--color-primary-hover);
+  opacity: 1;
+}
+
+.branch-result-path:hover svg {
+  opacity: 0.9;
 }
 
 .path-link-item {

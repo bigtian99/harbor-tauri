@@ -40,6 +40,11 @@ assert.equal(
   preferNpmBuildScript("origin/test", ["build", "build:prod"], "build:prod"),
   "build:prod",
 );
+assert.equal(
+  preferNpmBuildScript("origin/test", ["build", "build:prod"], "build:staging"),
+  "build:staging",
+  "手输脚本不在 package.json 时也应保留",
+);
 
 assert.equal(autoPushHarborForSpringProfile("test"), false);
 assert.equal(autoPushHarborForSpringProfile("TEST"), false);

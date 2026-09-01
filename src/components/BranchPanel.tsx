@@ -13,6 +13,7 @@ import {
   Stack,
   Text,
   TextInput,
+  UnstyledButton,
 } from "@mantine/core";
 import {
   FileText, CheckCircle, Copy, Loader2, Eye, EyeOff,
@@ -274,13 +275,43 @@ export function BranchPanel({
               }}
               className="branch-commit-info"
             >
-              <Group justify="space-between" mb={4}>
-                <Group gap={8}>
+              <Group justify="space-between" mb={6} wrap="nowrap" align="center">
+                <Group gap={8} wrap="nowrap">
                   <Pin size={14} color="var(--color-text-muted)" />
                   <Text size="sm" fw={600} c="var(--color-text)">最近提交</Text>
+                  {isLoadingCommit && (
+                    <Text size="xs" c="var(--color-text-muted)">加载中...</Text>
+                  )}
                 </Group>
-                {isLoadingCommit && (
-                  <Text size="xs" c="var(--color-text-muted)">加载中...</Text>
+                {commitListTotal > 0 && (
+                  <Button
+                    variant="light"
+                    color="blue"
+                    size="compact-sm"
+                    className="branch-commit-history-btn"
+                    leftSection={<List size={13} />}
+                    rightSection={
+                      <Badge
+                        size="sm"
+                        variant="filled"
+                        color="blue"
+                        className="branch-commit-history-count"
+                      >
+                        {commitListTotal}
+                      </Badge>
+                    }
+                    onClick={() => {
+                      setShowCommitListModal(true);
+                      if (commitList.length === 0) {
+                        loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter);
+                      }
+                      if (commitAuthors.length === 0) {
+                        loadCommitAuthors(repoPath, branchName);
+                      }
+                    }}
+                  >
+                    全部记录
+                  </Button>
                 )}
               </Group>
               <Group align="flex-start" gap="md" mb={4}>
@@ -313,11 +344,13 @@ export function BranchPanel({
             </Paper>
           )}
 
-          {commitListTotal > 0 && (
+          {!lastCommit && commitListTotal > 0 && (
             <Button
               variant="default"
-              size="compact-sm"
-              leftSection={<List size={14} />}
+              size="sm"
+              fullWidth
+              className="branch-commit-history-btn"
+              leftSection={<List size={15} />}
               onClick={() => {
                 setShowCommitListModal(true);
                 if (commitList.length === 0) {
@@ -351,23 +384,33 @@ export function BranchPanel({
               }}
               description={
                 frontendDir
-                  ? `已检测到前端目录: ${frontendDir}`
-                  : "选择仓库后自动检测 package.json 所在目录"
+                  ? `当前前端子目录: ${frontendDir}（可手改）`
+                  : "选择仓库后自动检测，也可直接手输相对路径"
               }
             />
           )}
 
-          {branchProjectType === "npm" && npmScripts.length > 0 && (
+          {branchProjectType === "npm" && (
             <Stack gap={6}>
               <Text size="sm" fw={600} c="var(--color-text)">构建命令</Text>
               <SearchableDropdown
                 value={selectedBuildScript}
                 options={npmScripts}
                 onChange={onSelectedBuildScriptChange}
-                placeholder="选择构建命令..."
-                disabled={isLoadingScripts}
+                placeholder={
+                  isLoadingScripts
+                    ? "加载脚本中，也可直接手输..."
+                    : npmScripts.length > 0
+                      ? "选择或手输构建命令..."
+                      : "手输 npm script，如 build:prod"
+                }
                 loading={isLoadingScripts}
               />
+              <Text size="xs" c="var(--color-text-muted)">
+                {npmScripts.length > 0
+                  ? `可从 package.json 脚本中选择，也可直接手输（当前将执行 npm run ${selectedBuildScript || "build"}）`
+                  : "未检测到 scripts 时仍可手输；将执行 npm install && npm run <命令>"}
+              </Text>
             </Stack>
           )}
 
@@ -518,151 +561,160 @@ export function BranchPanel({
       )}
 
       {showResults && (
-        <Paper p="sm" radius="md" withBorder className="path-links" styles={{
-          root: {
-            background: "var(--color-bg-elevated)",
-            borderColor: "var(--color-border)",
-          },
-        }}>
-          <Stack gap={8}>
-            {branchImageResults.length > 0 ? (
-              branchImageResults.map((item) => {
-                const isCopied = copied === item.image;
-                return (
-                  <Stack
-                    key={`${item.role}-${item.image}`}
-                    gap={0}
-                    className={`path-link-item image-url-row image-url-row--primary ${isCopied ? "copied" : ""}`}
-                  >
-                    <Group className="image-url-row-head" wrap="nowrap">
-                      <Text className="image-url-title">
-                        <Package size={14} className="image-url-title-icon" />
-                        {item.label}
+        <Paper
+          p="sm"
+          radius="md"
+          withBorder
+          className="branch-result-card"
+          styles={{
+            root: {
+              background:
+                "linear-gradient(155deg, color-mix(in srgb, var(--color-primary) 12%, var(--color-bg-elevated)), var(--color-bg-elevated))",
+              borderColor: "color-mix(in srgb, var(--color-primary) 40%, transparent)",
+            },
+          }}
+        >
+          <Stack gap="sm">
+            {branchImageResults.length > 0
+              ? branchImageResults.map((item) => {
+                  const isCopied = copied === item.image;
+                  return (
+                    <Stack key={`${item.role}-${item.image}`} gap={6}>
+                      <Group justify="space-between" wrap="nowrap" gap="sm">
+                        <Group gap={8} wrap="nowrap">
+                          <Package size={14} color="var(--color-primary)" />
+                          <Text size="sm" fw={700} c="var(--color-primary-hover)">
+                            {item.label}
+                          </Text>
+                          <Badge size="sm" variant="light" color="teal">
+                            已就绪
+                          </Badge>
+                        </Group>
+                        <Button
+                          size="compact-sm"
+                          variant={isCopied ? "filled" : "light"}
+                          color={isCopied ? "teal" : "cyan"}
+                          onClick={() => onCopyImage(item.image)}
+                          leftSection={isCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                        >
+                          {isCopied ? "已复制" : "复制"}
+                        </Button>
+                      </Group>
+                      <Text
+                        size="sm"
+                        ff="monospace"
+                        c="var(--color-text)"
+                        style={{ wordBreak: "break-all", lineHeight: 1.45 }}
+                        title={item.image}
+                      >
+                        {item.image}
                       </Text>
+                    </Stack>
+                  );
+                })
+              : branchFullImage
+                ? (
+                  <Stack gap={6}>
+                    <Group justify="space-between" wrap="nowrap" gap="sm">
+                      <Group gap={8} wrap="nowrap">
+                        <Package size={14} color="var(--color-primary)" />
+                        <Text size="sm" fw={700} c="var(--color-primary-hover)">
+                          完整镜像
+                        </Text>
+                        <Badge size="sm" variant="light" color="teal">
+                          已就绪
+                        </Badge>
+                      </Group>
                       <Button
                         size="compact-sm"
-                        variant={isCopied ? "filled" : "light"}
-                        color={isCopied ? "teal" : "cyan"}
-                        className={`copy-btn ${isCopied ? "copied" : ""}`}
-                        onClick={() => onCopyImage(item.image)}
-                        title={item.copyLabel}
-                        leftSection={isCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                        variant={branchFallbackCopied ? "filled" : "light"}
+                        color={branchFallbackCopied ? "teal" : "cyan"}
+                        onClick={() => onCopyImage(branchFallbackCopyText)}
+                        leftSection={branchFallbackCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
                       >
-                        {isCopied ? "已复制" : item.copyLabel}
+                        {branchFallbackCopied ? "已复制" : "复制"}
                       </Button>
                     </Group>
-                    <Text
-                      size="sm"
-                      c="var(--color-text)"
-                      className="image-url-value"
-                      title={item.image}
-                    >
-                      {item.image}
-                    </Text>
+                    <Stack gap={4}>
+                      {branchFullImage.split("\n").map((line, i) => (
+                        <Text
+                          key={i}
+                          size="sm"
+                          ff="monospace"
+                          c="var(--color-text)"
+                          style={{ wordBreak: "break-all", lineHeight: 1.45 }}
+                          title={line}
+                        >
+                          {line}
+                        </Text>
+                      ))}
+                    </Stack>
                   </Stack>
-                );
-              })
-            ) : branchFullImage && (
-              <Stack
-                gap={0}
-                className={`path-link-item image-url-row image-url-row--primary ${branchFallbackCopied ? "copied" : ""}`}
-              >
-                <Group className="image-url-row-head" wrap="nowrap">
-                  <Text className="image-url-title">
-                    <Package size={14} className="image-url-title-icon" />
-                    完整镜像
+                  )
+                : null}
+
+            <Stack gap={2} pt={4} style={{ borderTop: "1px dashed var(--color-border-strong)" }}>
+              {artifactPath && (
+                <UnstyledButton
+                  className="branch-result-path"
+                  onClick={() => onOpenDirectory(artifactPath)}
+                  title={artifactPath}
+                >
+                  <FileText size={13} />
+                  <Text span size="xs" fw={600} w={56}>
+                    产物
                   </Text>
-                  <Button
-                    size="compact-sm"
-                    variant={branchFallbackCopied ? "filled" : "light"}
-                    color={branchFallbackCopied ? "teal" : "cyan"}
-                    className={`copy-btn ${branchFallbackCopied ? "copied" : ""}`}
-                    onClick={() => onCopyImage(branchFallbackCopyText)}
-                    title="复制镜像地址"
-                    leftSection={branchFallbackCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
-                  >
-                    {branchFallbackCopied ? "已复制" : "复制"}
-                  </Button>
-                </Group>
-                <Stack gap={2}>
-                  {branchFullImage.split('\n').map((line, i) => (
-                    <Text key={i} size="sm" className="image-url-value" c="var(--color-text)" title={line}>
-                      {line}
-                    </Text>
-                  ))}
-                </Stack>
-              </Stack>
-            )}
-            <Group gap="xs" wrap="nowrap" className="path-link-item">
-              <Group gap={6} className="path-link-label">
-                <FileText size={14} />
-                <Text size="xs" c="var(--color-text-muted)">产物目录</Text>
-              </Group>
-              <Button
-                variant="subtle"
-                color="gray"
-                size="compact-sm"
-                className="path-link-btn"
-                onClick={() => onOpenDirectory(artifactPath)}
-                styles={{ root: { fontFamily: "monospace", height: "auto", wordBreak: "break-all", textAlign: "left" } }}
-              >
-                {artifactPath}
-              </Button>
-            </Group>
-            {backendArtifactPath && (
-              <Group gap="xs" wrap="nowrap" className="path-link-item">
-                <Group gap={6} className="path-link-label">
-                  <FileText size={14} />
-                  <Text size="xs" c="var(--color-text-muted)">后端产物</Text>
-                </Group>
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  size="compact-sm"
-                  className="path-link-btn"
+                  <Text span size="xs" ff="monospace" style={{ wordBreak: "break-all" }}>
+                    {artifactPath}
+                  </Text>
+                </UnstyledButton>
+              )}
+              {backendArtifactPath && (
+                <UnstyledButton
+                  className="branch-result-path"
                   onClick={() => onOpenDirectory(backendArtifactPath)}
-                  styles={{ root: { fontFamily: "monospace", height: "auto", wordBreak: "break-all", textAlign: "left" } }}
+                  title={backendArtifactPath}
                 >
-                  {backendArtifactPath}
-                </Button>
-              </Group>
-            )}
-            {worktreePath && (
-              <Group gap="xs" wrap="nowrap" className="path-link-item">
-                <Group gap={6} className="path-link-label">
-                  <FolderOpen size={14} />
-                  <Text size="xs" c="var(--color-text-muted)">输出目录</Text>
-                </Group>
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  size="compact-sm"
-                  className="path-link-btn"
+                  <FileText size={13} />
+                  <Text span size="xs" fw={600} w={56}>
+                    后端产物
+                  </Text>
+                  <Text span size="xs" ff="monospace" style={{ wordBreak: "break-all" }}>
+                    {backendArtifactPath}
+                  </Text>
+                </UnstyledButton>
+              )}
+              {worktreePath && (
+                <UnstyledButton
+                  className="branch-result-path"
                   onClick={() => onOpenDirectory(worktreePath)}
-                  styles={{ root: { fontFamily: "monospace", height: "auto", wordBreak: "break-all", textAlign: "left" } }}
+                  title={worktreePath}
                 >
-                  {worktreePath}
-                </Button>
-              </Group>
-            )}
-            {customDockerfile && (
-              <Group gap="xs" wrap="nowrap" className="path-link-item dockerfile-indicator">
-                <Group gap={6} className="path-link-label">
-                  <FileText size={14} />
-                  <Text size="xs" c="var(--color-text-muted)">使用项目 Dockerfile</Text>
-                </Group>
-                <Button
-                  variant="subtle"
-                  color="gray"
-                  size="compact-sm"
-                  className="path-link-btn"
+                  <FolderOpen size={13} />
+                  <Text span size="xs" fw={600} w={56}>
+                    输出
+                  </Text>
+                  <Text span size="xs" ff="monospace" style={{ wordBreak: "break-all" }}>
+                    {worktreePath}
+                  </Text>
+                </UnstyledButton>
+              )}
+              {customDockerfile && (
+                <UnstyledButton
+                  className="branch-result-path"
                   onClick={() => onOpenDirectory(customDockerfile)}
-                  styles={{ root: { fontFamily: "monospace", height: "auto", wordBreak: "break-all", textAlign: "left" } }}
+                  title={customDockerfile}
                 >
-                  {customDockerfile}
-                </Button>
-              </Group>
-            )}
+                  <FileText size={13} />
+                  <Text span size="xs" fw={600} w={56}>
+                    Dockerfile
+                  </Text>
+                  <Text span size="xs" ff="monospace" style={{ wordBreak: "break-all" }}>
+                    {customDockerfile}
+                  </Text>
+                </UnstyledButton>
+              )}
+            </Stack>
           </Stack>
         </Paper>
       )}
@@ -764,13 +816,30 @@ export function BranchPanel({
             )}
           </Group>
 
-          {isLoadingCommitList ? (
-            <Text ta="center" c="var(--color-text-muted)" py="lg">加载中...</Text>
+          {isLoadingCommitList && commitList.length === 0 ? (
+            <Group justify="center" gap="xs" py="lg" c="var(--color-text-muted)">
+              <Loader2 size={16} className="spin" />
+              <Text size="sm">加载中...</Text>
+            </Group>
           ) : commitList.length === 0 ? (
             <Text ta="center" c="var(--color-text-muted)" py="lg">暂无提交记录</Text>
           ) : (
-            <ScrollArea.Autosize mah={400} type="auto">
+            <ScrollArea.Autosize
+              mah={400}
+              type="auto"
+              style={{
+                opacity: isLoadingCommitList ? 0.55 : 1,
+                transition: "opacity 0.15s ease",
+                pointerEvents: isLoadingCommitList ? "none" : undefined,
+              }}
+            >
               <Stack gap="xs">
+                {isLoadingCommitList && (
+                  <Group justify="center" gap="xs" py={4} c="var(--color-text-muted)">
+                    <Loader2 size={14} className="spin" />
+                    <Text size="xs">加载中...</Text>
+                  </Group>
+                )}
                 {commitList.map((commit) => (
                   <Paper
                     key={commit.hash}
@@ -831,7 +900,10 @@ export function BranchPanel({
               </Text>
               <Button
                 variant="default"
-                disabled={isLoadingCommitList}
+                disabled={
+                  isLoadingCommitList
+                  || commitListPage >= Math.ceil(commitListTotal / commitListPageSize)
+                }
                 onClick={() => loadCommitList(repoPath, branchName, commitListPage + 1, commitAuthorFilter, commitMessageFilter)}
               >
                 下一页
