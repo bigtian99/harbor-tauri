@@ -326,8 +326,9 @@ export function KsPublishPanel({
     setCmLoading(true);
     try {
       setCms(await invoke<ConfigMapInfo[]>("ks_list_configmaps", { namespace }));
-    } catch {
-      /* 列表失败不阻断 */
+    } catch (e) {
+      setCms([]);
+      notifications.show({ color: "yellow", message: `加载 ConfigMap 列表失败：${e}`, autoClose: 4000 });
     } finally {
       cmInFlightRef.current = false;
       setCmLoading(false);
@@ -391,6 +392,7 @@ export function KsPublishPanel({
 
   // 切换命名空间自动加载部署（ConfigMap 等切到对应页签再拉）
   useEffect(() => {
+    setCms([]);
     if (connected && namespace) void load({ silent: false, withCms: mainTab === "config" });
     setFilterDeploy(null);
     setFilterStatus("all");
@@ -500,6 +502,11 @@ export function KsPublishPanel({
   useEffect(() => {
     if (connected && namespace && mainTab === "config") void loadCms();
   }, [connected, namespace, mainTab, loadCms]);
+
+  // 创建/编辑弹窗打开时刷新 ConfigMap（含切换命名空间后仍保持弹窗打开的场景）
+  useEffect(() => {
+    if (connected && namespace && (createOpen || editOpen)) void loadCms();
+  }, [connected, namespace, createOpen, editOpen, loadCms]);
 
   const doCreate = async (dry: boolean) => {
     const f = createForm;
@@ -1315,9 +1322,8 @@ export function KsPublishPanel({
 
   /** 打开创建弹窗时拉取 ConfigMap 列表（与编辑弹窗一致，不依赖 Config 页签） */
   const beginCreate = useCallback(() => {
-    if (namespace) void loadCms();
     setCreateOpen(true);
-  }, [namespace, loadCms]);
+  }, []);
 
   /** 列表「修改」：弹框与创建 Deployment 同款表单 */
   const beginEdit = useCallback(async (d: DeployInfo) => {
@@ -1332,7 +1338,6 @@ export function KsPublishPanel({
       port: d.ports?.[0] || 8080,
       container: d.containers?.[0] || "container-main",
     });
-    if (namespace) void loadCms();
     try {
       const info = await invoke<DeployEditInfo>("ks_get_deployment_edit", {
         namespace,
@@ -1354,7 +1359,7 @@ export function KsPublishPanel({
     } finally {
       setEditLoading(false);
     }
-  }, [namespace, loadCms]);
+  }, [namespace]);
 
   return (
     <>
