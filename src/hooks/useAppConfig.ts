@@ -144,6 +144,9 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     try {
       const snapshot = configRef.current;
       await invoke("save_config", { config: snapshot });
+      const savedConfig = withSessionConfigDefaults(await invoke<HarborConfig>("load_config"));
+      configRef.current = savedConfig;
+      setConfig(savedConfig);
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 2000);
     } catch (e) {

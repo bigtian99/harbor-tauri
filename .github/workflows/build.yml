@@ -92,6 +92,11 @@ jobs:
             pnpm install --frozen-lockfile
           )
 
+      # tauri.conf.json 声明了 resources/bundle-tools/**/*，目录为空会导致 glob 匹配失败
+      - name: Download bundled Maven and JDK
+        shell: bash
+        run: node scripts/download-bundle-tools.mjs
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

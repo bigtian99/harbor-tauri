@@ -34,10 +34,10 @@ function platformKey() {
 }
 
 function mavenArchiveUrl({ isWin }) {
-  if (isWin) {
-    return `https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.zip`;
-  }
-  return `https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz`;
+  const ext = isWin ? "zip" : "tar.gz";
+  const file = `apache-maven-${MAVEN_VERSION}-bin.${ext}`;
+  // dlcdn 仅保留最新版，旧版会 404；archive 长期可用
+  return `https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/${file}`;
 }
 
 function jdkDownloadUrl({ os, arch }) {
@@ -74,8 +74,16 @@ function mavenBinExists(dir) {
 
 function jdkBinExists(dir) {
   if (!existsSync(dir)) return false;
-  const java = process.platform === "win32" ? join(dir, "bin", "java.exe") : join(dir, "bin", "java");
-  return existsSync(java);
+  if (process.platform === "win32") {
+    return existsSync(join(dir, "bin", "java.exe"));
+  }
+  if (process.platform === "darwin") {
+    return (
+      existsSync(join(dir, "bin", "java"))
+      || existsSync(join(dir, "Contents", "Home", "bin", "java"))
+    );
+  }
+  return existsSync(join(dir, "bin", "java"));
 }
 
 function toolsReady() {
@@ -117,7 +125,19 @@ function extractMaven(archivePath, { isWin }) {
   rmSync(tmp, { recursive: true, force: true });
 }
 
-function extractJdk(archivePath, { isWin }) {
+function normalizeJdkLayout(target, { isMac }) {
+  if (!isMac) return;
+  const macHome = join(target, "Contents", "Home");
+  if (!existsSync(macHome)) return;
+  const normalized = join(OUT, "_jdk-home");
+  rmSync(normalized, { recursive: true, force: true });
+  run("mv", [macHome, normalized]);
+  rmSync(target, { recursive: true, force: true });
+  run("mv", [normalized, target]);
+}
+
+function extractJdk(archivePath, plat) {
+  const { isWin, isMac } = plat;
   const tmp = join(OUT, "_extract-jdk");
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(tmp, { recursive: true });
@@ -137,7 +157,7 @@ function extractJdk(archivePath, { isWin }) {
   const inner = join(tmp, jdkRoot);
   const target = join(OUT, "jdk");
   rmSync(target, { recursive: true, force: true });
-  if (process.platform === "win32") {
+  if (isWin) {
     run("powershell", [
       "-NoProfile",
       "-Command",
@@ -146,6 +166,7 @@ function extractJdk(archivePath, { isWin }) {
   } else {
     run("mv", [inner, target]);
   }
+  normalizeJdkLayout(target, { isMac });
   rmSync(tmp, { recursive: true, force: true });
 }
 

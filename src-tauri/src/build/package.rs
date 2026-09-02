@@ -22,6 +22,7 @@ pub async fn package_from_branch(
     package_with_backend: Option<bool>,
     deployment_hint: Option<String>,
     pack_slot: Option<String>,
+    skip_bt_deploy: Option<bool>,
 ) -> Result<PackageFromBranchResult, String> {
     let _cancel_guard = begin_cancellable_operation();
     let project_type = PackageProjectType::from_string(project_type)?;
@@ -33,8 +34,12 @@ pub async fn package_from_branch(
     crate::diag::diag_log(
         "build",
         &format!(
-            "package_from_branch repo={} branch={} deployment_hint={:?} pack_slot={:?}",
-            repo_path, branch, deployment_hint, pack_slot
+            "package_from_branch repo={} branch={} deployment_hint={:?} pack_slot={:?} skip_bt_deploy={}",
+            repo_path,
+            branch,
+            deployment_hint,
+            pack_slot,
+            skip_bt_deploy.unwrap_or(false)
         ),
     );
 
@@ -169,6 +174,7 @@ pub async fn package_from_branch(
     let package_manager_finish = package_manager.clone();
     let spring_profile_finish = spring_profile.clone();
     let package_with_backend_finish = package_with_backend.unwrap_or(false);
+    let skip_bt_deploy_finish = skip_bt_deploy.unwrap_or(false);
 
     tauri::async_runtime::spawn_blocking(move || {
         finish_package(FinishPackageParams {
@@ -184,6 +190,7 @@ pub async fn package_from_branch(
             package_manager: package_manager_finish,
             spring_profile: spring_profile_finish,
             package_with_backend: package_with_backend_finish,
+            skip_bt_deploy: skip_bt_deploy_finish,
             start_time,
         })
     })

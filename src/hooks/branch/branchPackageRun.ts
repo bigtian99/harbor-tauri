@@ -40,6 +40,8 @@ export interface BranchPackageRunParams {
   deploymentHint?: string;
   /** 并行打包 worktree 槽位（同 Git 多服务） */
   packSlot?: string;
+  /** KubeSphere 镜像发布：仅打包推镜像，不上传宝塔 */
+  skipBtDeploy?: boolean;
 }
 
 export interface BranchPackageRunResult {
@@ -91,6 +93,7 @@ export async function runBranchPackageAndPush(
     progressLabel,
     deploymentHint,
     packSlot,
+    skipBtDeploy,
   } = params;
 
   const emptyArtifacts = {
@@ -149,6 +152,7 @@ export async function runBranchPackageAndPush(
       packageWithBackend: branchProjectType === "npm" ? packageWithBackend : false,
       deploymentHint: deploymentHint?.trim() || null,
       packSlot: packSlot?.trim() || null,
+      skipBtDeploy: skipBtDeploy ?? false,
     });
   } catch (e) {
     return {

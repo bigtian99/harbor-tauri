@@ -716,6 +716,48 @@ body {
   letter-spacing: 0.01em;
 }
 
+.ks-batch-branch-select .mantine-Select-input:not([data-placeholder]) {
+  border-color: var(--color-primary-hover);
+  background: var(--color-primary-muted);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.ks-batch-branch-option {
+  width: 100%;
+}
+
+.ks-batch-branch-option-label {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+}
+
+.ks-batch-branch-option--selected .ks-batch-branch-option-label {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.ks-batch-branch-option-check {
+  flex-shrink: 0;
+  color: var(--color-primary-hover);
+}
+
+/* 下拉项（portal 内）选中 / 悬停：深色主题可读 */
+.ks-batch-branch-combobox-option[data-combobox-selected] {
+  background: var(--color-primary-muted) !important;
+  color: var(--color-text) !important;
+}
+
+.ks-batch-branch-combobox-option[data-combobox-selected] .ks-batch-branch-option-label {
+  color: var(--color-text) !important;
+}
+
+.ks-batch-branch-combobox-option[data-combobox-active] {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent) !important;
+  color: var(--color-text) !important;
+}
+
 .ks-batch-progress-modal {
   max-width: 560px !important;
   border: 1px solid var(--color-primary-muted);

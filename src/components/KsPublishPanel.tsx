@@ -16,6 +16,7 @@ import { panelAccentButtonStyles, panelFieldStyles, panelPaperStyles, panelPrima
 import {
   KsBatchConfirmModal,
   KsBatchProgressModal,
+  type KsBatchConfirmValues,
   type KsBatchMeta,
   type KsBatchSummary,
 } from "./KsBatchPackModal";
@@ -28,10 +29,13 @@ import {
   detectCpuCores,
   KS_BATCH_CONCURRENCY_AUTO,
   loadKsBatchConcurrencyPref,
+  loadKsBatchNpmScriptPref,
   prewarmKsBatchRepoIndex,
   recommendKsBatchConcurrency,
+  resolveKsBatchDeployRoles,
   runKsBatchPackPublish,
   saveKsBatchConcurrencyPref,
+  saveKsBatchNpmScriptPref,
   type KsBatchConcurrencyPref,
 } from "../utils/ksBatchPackPublish";
 import { runKsBatchCloneToEnv } from "../utils/ksBatchCloneDeploy";
@@ -40,6 +44,10 @@ import {
   loadKsBatchBranchHistory,
   rememberKsBatchBranch,
 } from "../utils/ksBatchBranchHistory";
+import {
+  buildKsBatchBranchOptionGroups,
+  loadKsBatchGitBranches,
+} from "../utils/ksBatchGitBranches";
 import {
   appendBuildProgressLog,
   normalizeBatchBranchInput,
@@ -107,10 +115,12 @@ export function KsPublishPanel({
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState<DeployInfo | null>(null);
   const [checkedNames, setCheckedNames] = useState<Set<string>>(() => new Set());
-  const [batchBranch, setBatchBranch] = useState(
-    () => defaultKsBatchBranch(config.last_branch),
-  );
+  const [batchBranch, setBatchBranch] = useState("");
   const [branchHistory, setBranchHistory] = useState(() => loadKsBatchBranchHistory());
+  const [batchGitBranches, setBatchGitBranches] = useState<string[]>([]);
+  const [batchGitRepoCount, setBatchGitRepoCount] = useState(0);
+  const [batchGitBranchesLoading, setBatchGitBranchesLoading] = useState(false);
+  const [batchGitBranchesError, setBatchGitBranchesError] = useState("");
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [batchMeta, setBatchMeta] = useState<KsBatchMeta | null>(null);
@@ -118,6 +128,7 @@ export function KsPublishPanel({
   const [batchConcurrencyPref, setBatchConcurrencyPref] = useState<KsBatchConcurrencyPref>(
     () => loadKsBatchConcurrencyPref(),
   );
+  const [batchNpmScriptPref, setBatchNpmScriptPref] = useState(() => loadKsBatchNpmScriptPref());
   const [batchRunning, setBatchRunning] = useState(false);
   const [cloneConfirmOpen, setCloneConfirmOpen] = useState(false);
   const [cloneMeta, setCloneMeta] = useState<KsBatchCloneConfirmMeta | null>(null);
@@ -425,17 +436,43 @@ export function KsPublishPanel({
     );
   }, [batchConfirmOpen, envId, namespace, config, batchMeta]);
 
-  const batchBranchSuggestions = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const b of [...branchHistory, config.last_branch?.trim() || ""]) {
-      const t = b.trim();
-      if (!t || seen.has(t)) continue;
-      seen.add(t);
-      out.push(t);
+  const batchBranchOptionGroups = useMemo(
+    () => buildKsBatchBranchOptionGroups(batchGitBranches, branchHistory),
+    [batchGitBranches, branchHistory],
+  );
+
+  const refreshBatchGitBranches = useCallback(async () => {
+    if (!envId || !namespace || !batchMeta?.deployNames.length) return;
+    if (!isTauriRuntime()) return;
+    setBatchGitBranchesLoading(true);
+    setBatchGitBranchesError("");
+    try {
+      const result = await loadKsBatchGitBranches(
+        config,
+        envId,
+        namespace,
+        batchMeta.deployNames.map((name) => ({ name, containers: [] })),
+      );
+      setBatchGitBranches(result.branches);
+      setBatchGitRepoCount(result.repoPaths.length);
+      if (result.error) {
+        setBatchGitBranchesError(result.error);
+      } else if (result.missingRepos.length > 0) {
+        setBatchGitBranchesError(result.missingRepos.join("；"));
+      }
+    } catch (e) {
+      setBatchGitBranchesError(String(e));
+      setBatchGitBranches([]);
+      setBatchGitRepoCount(0);
+    } finally {
+      setBatchGitBranchesLoading(false);
     }
-    return out;
-  }, [branchHistory, config.last_branch]);
+  }, [config, envId, namespace, batchMeta]);
+
+  useEffect(() => {
+    if (!batchConfirmOpen) return;
+    void refreshBatchGitBranches();
+  }, [batchConfirmOpen, refreshBatchGitBranches]);
 
   // 批量执行期间订阅后端 build-progress（与分支打包页同一事件源）
   useEffect(() => {
@@ -705,26 +742,36 @@ export function KsPublishPanel({
       notifications.show({ color: "yellow", message: "请在 Tauri 桌面窗口中操作" });
       return;
     }
-    const branch = normalizeBatchBranchInput(batchBranch);
-    if (!branch) {
-      notifications.show({ color: "yellow", message: "请填写目标分支" });
-      return;
-    }
 
+    const deployNames = selectedDeploys.map((d) => d.name);
     startTransition(() => {
       setBatchMeta({
-        branch,
+        branch: batchBranch.trim(),
         namespace,
         envName: selectedEnv?.name ?? envId,
-        deployNames: selectedDeploys.map((d) => d.name),
+        deployNames,
+        deployRoles: resolveKsBatchDeployRoles(config, envId, namespace, deployNames),
       });
       setBatchConfirmOpen(true);
     });
   };
 
-  const startBatchPack = async () => {
+  const startBatchPack = async (values: KsBatchConfirmValues) => {
     if (!envId || !namespace || !batchMeta) return;
-    const branch = batchMeta.branch;
+    const branch = normalizeBatchBranchInput(values.branch);
+    if (!branch) {
+      notifications.show({ color: "yellow", message: "请填写目标分支" });
+      return;
+    }
+
+    setBatchBranch(branch);
+    setBatchNpmScriptPref(values.npmScript);
+    saveKsBatchNpmScriptPref(values.npmScript);
+    setBatchMeta({
+      ...batchMeta,
+      branch,
+      npmScript: values.npmScript,
+    });
 
     setBatchConfirmOpen(false);
     setBranchHistory(rememberKsBatchBranch(branch));
@@ -745,6 +792,7 @@ export function KsPublishPanel({
         concurrency: batchConcurrencyPref === KS_BATCH_CONCURRENCY_AUTO
           ? KS_BATCH_CONCURRENCY_AUTO
           : batchConcurrencyPref,
+        npmScript: values.npmScript,
         deployments: selectedDeploys.map((d) => ({
           name: d.name,
           containers: d.containers,
@@ -1259,6 +1307,18 @@ export function KsPublishPanel({
     }
   };
 
+  const cmSelectPlaceholder = cmLoading
+    ? "正在加载 ConfigMap…"
+    : cms.length
+      ? "选择当前命名空间的 ConfigMap"
+      : "当前命名空间暂无 ConfigMap";
+
+  /** 打开创建弹窗时拉取 ConfigMap 列表（与编辑弹窗一致，不依赖 Config 页签） */
+  const beginCreate = useCallback(() => {
+    if (namespace) void loadCms();
+    setCreateOpen(true);
+  }, [namespace, loadCms]);
+
   /** 列表「修改」：弹框与创建 Deployment 同款表单 */
   const beginEdit = useCallback(async (d: DeployInfo) => {
     setSel(d);
@@ -1397,7 +1457,7 @@ export function KsPublishPanel({
                       >
                         {connected ? "刷新" : "重新连接"}
                       </Button>
-                      <Button size="xs" variant="light" color="blue" leftSection={<Plus size={13} />} onClick={() => setCreateOpen(true)}>
+                      <Button size="xs" variant="light" color="blue" leftSection={<Plus size={13} />} onClick={beginCreate}>
                         创建部署
                       </Button>
                       <Button size="xs" variant="subtle" color="gray" leftSection={<Download size={13} />} onClick={() => void exportCsv()}>
@@ -1406,16 +1466,6 @@ export function KsPublishPanel({
                     </Group>
                     <Divider orientation="vertical" className="ks-publish-actions-divider" />
                     <Group gap={6} wrap="wrap" className="ks-publish-actions-batch">
-                      <Autocomplete
-                        size="xs"
-                        w={180}
-                        placeholder="分支（可点选历史）"
-                        data={batchBranchSuggestions}
-                        value={batchBranch}
-                        onChange={setBatchBranch}
-                        disabled={batchRunning}
-                        aria-label="批量打包目标分支"
-                      />
                       <Button
                         size="xs"
                         variant="filled"
@@ -1426,7 +1476,6 @@ export function KsPublishPanel({
                           checkedNames.size === 0
                           || batchRunning
                           || cloneRunning
-                          || !batchBranch.trim()
                         }
                         loading={batchRunning}
                         onClick={beginBatchPack}
@@ -1459,9 +1508,8 @@ export function KsPublishPanel({
                 {checkedNames.size > 0 && (
                   <Text size="xs" c="blue">
                     已选 {checkedNames.size} 个部署
-                    {batchBranch.trim()
-                      ? ` · 分支 ${batchBranch.trim()}`
-                      : " · 请输入或点选历史分支"}
+                    {" · "}
+                    点击「批量打包并发布」在弹框中填写分支与构建脚本
                     {" · "}
                     <Button
                       variant="subtle"
@@ -1941,7 +1989,7 @@ export function KsPublishPanel({
           <Select
             label="引用配置字典"
             description="对齐 KubeSphere：读取该 ConfigMap 全部 key，逐项生成 env.valueFrom.configMapKeyRef"
-            placeholder={cms.length ? "选择当前命名空间的 ConfigMap" : "当前命名空间暂无 ConfigMap"}
+            placeholder={cmSelectPlaceholder}
             data={cms.map((cm) => ({
               value: cm.name,
               label: cm.alias ? `${cm.name}（${cm.alias} · ${cm.dataSize} keys）` : `${cm.name}（${cm.dataSize} keys）`,
@@ -1950,7 +1998,8 @@ export function KsPublishPanel({
             onChange={(v) => setEditForm({ ...editForm, configMap: v })}
             searchable
             clearable
-            disabled={cms.length === 0}
+            disabled={!cmLoading && cms.length === 0}
+            rightSection={cmLoading ? <Loader size={16} /> : undefined}
             nothingFoundMessage="无匹配配置字典"
           />
           <Textarea
@@ -2074,7 +2123,7 @@ export function KsPublishPanel({
           <Select
             label="引用配置字典"
             description="对齐 KubeSphere：读取该 ConfigMap 全部 key，逐项生成 env.valueFrom.configMapKeyRef"
-            placeholder={cms.length ? "选择当前命名空间的 ConfigMap" : "当前命名空间暂无 ConfigMap"}
+            placeholder={cmSelectPlaceholder}
             data={cms.map((cm) => ({
               value: cm.name,
               label: cm.alias ? `${cm.name}（${cm.alias} · ${cm.dataSize} keys）` : `${cm.name}（${cm.dataSize} keys）`,
@@ -2083,7 +2132,8 @@ export function KsPublishPanel({
             onChange={(v) => setCreateForm({ ...createForm, configMap: v })}
             searchable
             clearable
-            disabled={cms.length === 0}
+            disabled={!cmLoading && cms.length === 0}
+            rightSection={cmLoading ? <Loader size={16} /> : undefined}
             nothingFoundMessage="无匹配配置字典"
           />
           <Textarea
@@ -2233,6 +2283,13 @@ export function KsPublishPanel({
       <KsBatchConfirmModal
         opened={batchConfirmOpen}
         meta={batchMeta}
+        initialBranch={batchBranch.trim() || defaultKsBatchBranch()}
+        branchOptionGroups={batchBranchOptionGroups}
+        gitBranchesLoading={batchGitBranchesLoading}
+        gitBranchesError={batchGitBranchesError || undefined}
+        gitRepoCount={batchGitRepoCount}
+        onRefreshGitBranches={() => void refreshBatchGitBranches()}
+        initialNpmScript={batchNpmScriptPref}
         concurrencyPref={batchConcurrencyPref}
         recommendedConcurrency={batchRecommendedConcurrency}
         cpuCores={batchCpuCores}
@@ -2244,7 +2301,7 @@ export function KsPublishPanel({
           saveKsBatchConcurrencyPref(pref);
         }}
         onClose={() => setBatchConfirmOpen(false)}
-        onStart={() => void startBatchPack()}
+        onStart={(values) => void startBatchPack(values)}
       />
       )}
       {(batchOpen || batchRunning) && (

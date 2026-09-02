@@ -139,6 +139,8 @@ pub(crate) struct FinishPackageParams<'a> {
     pub package_manager: Option<String>,
     pub spring_profile: Option<String>,
     pub package_with_backend: bool,
+    /// KubeSphere 等仅改镜像发布路径：跳过宝塔 FTP/JAR 部署
+    pub skip_bt_deploy: bool,
     pub start_time: Instant,
 }
 
@@ -157,6 +159,7 @@ pub(crate) fn finish_package(params: FinishPackageParams<'_>) -> PackageFromBran
         package_manager,
         spring_profile,
         package_with_backend,
+        skip_bt_deploy,
         start_time,
     } = params;
 
@@ -182,7 +185,10 @@ pub(crate) fn finish_package(params: FinishPackageParams<'_>) -> PackageFromBran
     let (dockerfile_path, dockerfile_context) = detect_dockerfile_and_maybe_cleanup(app, ctx);
 
     let config = load_config_sync().unwrap_or_default();
-    let bt_deploy_summary = if crate::utils::CANCEL_FLAG.load(std::sync::atomic::Ordering::SeqCst) {
+    let bt_deploy_summary = if skip_bt_deploy {
+        crate::diag::diag_log("build", "skip_bt_deploy=true，跳过宝塔部署（KubeSphere 镜像发布）");
+        None
+    } else if crate::utils::CANCEL_FLAG.load(std::sync::atomic::Ordering::SeqCst) {
         crate::diag::diag_log("build", "构建已取消，跳过宝塔部署");
         Some("🛑 已取消，跳过宝塔部署".to_string())
     } else {

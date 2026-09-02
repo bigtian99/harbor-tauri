@@ -56,10 +56,19 @@ pub struct MavenSettingsInfo {
 /// 供前端在打包前检查 / 设置页展示环境变量探测结果。
 #[tauri::command]
 pub fn resolve_maven_settings(config: Option<HarborConfig>) -> Result<MavenSettingsInfo, String> {
-    let cfg = match config {
+    let disk = load_config_sync().unwrap_or_default();
+    let mut cfg = match config {
         Some(c) => c,
-        None => load_config_sync().unwrap_or_default(),
+        None => disk.clone(),
     };
+    // 内存 config 可能未含已保存的 Maven 字段（如仅改了其它项就触发检查），以磁盘为底再覆盖非空入参
+    if cfg.maven_home.trim().is_empty() && !disk.maven_home.trim().is_empty() {
+        cfg.maven_home = disk.maven_home.clone();
+    }
+    if cfg.maven_local_repo.trim().is_empty() && !disk.maven_local_repo.trim().is_empty() {
+        cfg.maven_local_repo = disk.maven_local_repo.clone();
+    }
+    let cfg = normalize_config(cfg);
     let env_home = maven_home_from_env();
     let (effective_home, effective_local_repo) =
         resolve_maven_paths(&cfg.maven_home, &cfg.maven_local_repo);

@@ -30,12 +30,13 @@ pub(crate) fn derive_maven_local_repo(maven_home: &str) -> String {
 /// 解析最终使用的 Maven Home / 本地仓库。
 /// 优先级：配置显式值 > 环境变量 > 内置 bundle-tools > 空；本地仓库未填时由 Home 推导。
 pub(crate) fn resolve_maven_paths(config_home: &str, config_local_repo: &str) -> (String, String) {
-    let mut home = config_home.trim().to_string();
+    let mut home = normalize_maven_home(config_home);
     if home.is_empty() {
-        home = maven_home_from_env();
+        home = normalize_maven_home(&maven_home_from_env());
     }
     if home.is_empty() || !maven_home_looks_valid(&home) {
         if let Some(bundled) = crate::utils::bundled_maven_home() {
+            let bundled = normalize_maven_home(&bundled);
             if maven_home_looks_valid(&bundled) {
                 home = bundled;
             }
@@ -54,8 +55,8 @@ pub(crate) fn resolve_maven_paths(config_home: &str, config_local_repo: &str) ->
 
 /// 判断 Maven Home 来源（供设置页展示）。
 pub(crate) fn maven_home_source(config_home: &str, effective_home: &str) -> &'static str {
-    let cfg = config_home.trim();
-    if !cfg.is_empty() && maven_home_looks_valid(cfg) {
+    let cfg = normalize_maven_home(config_home);
+    if !cfg.is_empty() && maven_home_looks_valid(&cfg) {
         return "config";
     }
     let env = maven_home_from_env();
@@ -81,20 +82,63 @@ fn paths_equal_lossy(a: &str, b: &str) -> bool {
             .unwrap_or(false)
 }
 
-pub(crate) fn maven_home_looks_valid(home: &str) -> bool {
+/// 纠正常见误选：bin 目录、mvn 可执行文件路径。
+pub(crate) fn normalize_maven_home(home: &str) -> String {
     let home = home.trim();
     if home.is_empty() {
+        return String::new();
+    }
+    let path = Path::new(home);
+    if path.file_name().is_some_and(|n| n == "bin") {
+        if let Some(parent) = path.parent() {
+            return parent.to_string_lossy().to_string();
+        }
+    }
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if name == "mvn" || name == "mvn.cmd" || name == "mvn.bat" {
+        if let Some(maven_home) = path.parent().and_then(|p| p.parent()) {
+            return maven_home.to_string_lossy().to_string();
+        }
+    }
+    home.to_string()
+}
+
+fn maven_bin_candidates(home: &str) -> Vec<PathBuf> {
+    let normalized = normalize_maven_home(home);
+    if normalized.is_empty() {
+        return Vec::new();
+    }
+    let root = Path::new(&normalized);
+    let mut candidates = vec![root.join("bin")];
+    if let Ok(canonical) = root.canonicalize() {
+        candidates.push(canonical.join("bin"));
+    }
+    candidates
+}
+
+pub(crate) fn maven_home_looks_valid(home: &str) -> bool {
+    let normalized = normalize_maven_home(home);
+    if normalized.is_empty() {
         return false;
     }
-    let bin = Path::new(home).join("bin");
-    #[cfg(windows)]
-    {
-        bin.join("mvn.cmd").is_file() || bin.join("mvn.bat").is_file() || bin.join("mvn").is_file()
+    for bin in maven_bin_candidates(&normalized) {
+        #[cfg(windows)]
+        {
+            if bin.join("mvn.cmd").is_file()
+                || bin.join("mvn.bat").is_file()
+                || bin.join("mvn").is_file()
+            {
+                return true;
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            if bin.join("mvn").is_file() {
+                return true;
+            }
+        }
     }
-    #[cfg(not(windows))]
-    {
-        bin.join("mvn").is_file()
-    }
+    false
 }
 
 #[cfg(test)]
@@ -119,5 +163,13 @@ mod tests {
         let (h2, r2) = resolve_maven_paths("/opt/maven", "/custom/repo");
         assert_eq!(h2, "/opt/maven");
         assert_eq!(r2, "/custom/repo");
+    }
+
+    #[test]
+    fn normalize_maven_home_from_bin_dir() {
+        assert_eq!(
+            normalize_maven_home("/opt/apache-maven-3.9.9/bin"),
+            "/opt/apache-maven-3.9.9"
+        );
     }
 }

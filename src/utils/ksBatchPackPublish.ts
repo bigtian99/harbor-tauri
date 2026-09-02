@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import { isTauriRuntime } from "../types";
 import { getRememberedBranchAdvancedSettings } from "../branchSettings";
+import { buildScriptAfterMerge, preferNpmBuildScript } from "../mergeSyncPackage";
 import {
   primaryImageForKsRole,
   runBranchPackageAndPush,
@@ -62,6 +63,8 @@ export interface KsBatchPackOptions {
   deployments: KsBatchDeployItem[];
   /** 并行度；0/省略 = 按 CPU·任务·仓库数自动算 */
   concurrency?: number;
+  /** 前端 npm 构建偏好 */
+  npmScript?: KsBatchNpmScriptPref;
   appendLog: (line: string) => void;
   onProgress: (
     pct: number,
@@ -78,6 +81,95 @@ interface UpdateResult {
 }
 
 const CONCURRENCY_PREF_KEY = "jarporter.ks-batch-concurrency";
+const NPM_SCRIPT_MODE_KEY = "jarporter.ks-batch-npm-script-mode";
+const NPM_SCRIPT_PREF_KEY = "jarporter.ks-batch-npm-script-pref";
+
+/** 前端 npm 构建脚本：自动按分支推断，或强制 prod/test/自定义 */
+export type KsBatchNpmScriptMode = "auto" | "prod" | "test" | "custom";
+
+export interface KsBatchNpmScriptPref {
+  mode: KsBatchNpmScriptMode;
+  customScript: string;
+}
+
+/** 弹框内「自定义」脚本常用候选项 */
+export const KS_BATCH_NPM_SCRIPT_PRESETS = [
+  "build:prod",
+  "build:test",
+  "build",
+  "build:dev",
+  "build:stage",
+] as const;
+
+export function loadKsBatchNpmScriptPref(): KsBatchNpmScriptPref {
+  try {
+    const raw = localStorage.getItem(NPM_SCRIPT_PREF_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { mode?: string; customScript?: string };
+      const mode = parsed.mode;
+      if (mode === "auto" || mode === "prod" || mode === "test" || mode === "custom") {
+        return { mode, customScript: parsed.customScript?.trim() ?? "" };
+      }
+    }
+    const legacy = localStorage.getItem(NPM_SCRIPT_MODE_KEY);
+    if (legacy === "prod" || legacy === "test" || legacy === "auto") {
+      return { mode: legacy, customScript: "" };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { mode: "auto", customScript: "" };
+}
+
+export function saveKsBatchNpmScriptPref(pref: KsBatchNpmScriptPref): void {
+  try {
+    localStorage.setItem(NPM_SCRIPT_PREF_KEY, JSON.stringify({
+      mode: pref.mode,
+      customScript: pref.customScript.trim(),
+    }));
+    localStorage.setItem(NPM_SCRIPT_MODE_KEY, pref.mode === "custom" ? "auto" : pref.mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** @deprecated 使用 loadKsBatchNpmScriptPref */
+export function loadKsBatchNpmScriptMode(): KsBatchNpmScriptMode {
+  return loadKsBatchNpmScriptPref().mode === "custom" ? "auto" : loadKsBatchNpmScriptPref().mode;
+}
+
+/** @deprecated 使用 saveKsBatchNpmScriptPref */
+export function saveKsBatchNpmScriptMode(mode: KsBatchNpmScriptMode): void {
+  saveKsBatchNpmScriptPref({ mode, customScript: "" });
+}
+
+/** 批量前端构建 → 强制 npm script；auto 返回 null 走分支推断 */
+export function forcedNpmScriptForBatchPref(pref: KsBatchNpmScriptPref): string | null {
+  if (pref.mode === "prod") return "build:prod";
+  if (pref.mode === "test") return "build:test";
+  if (pref.mode === "custom") return pref.customScript.trim() || null;
+  return null;
+}
+
+/** @deprecated 使用 forcedNpmScriptForBatchPref */
+export function forcedNpmScriptForBatchMode(mode: KsBatchNpmScriptMode): string | null {
+  return forcedNpmScriptForBatchPref({ mode, customScript: "" });
+}
+
+export function describeKsBatchNpmScriptPref(pref: KsBatchNpmScriptPref): string {
+  if (pref.mode === "prod") return "前端 build:prod";
+  if (pref.mode === "test") return "前端 build:test";
+  if (pref.mode === "custom") {
+    const script = pref.customScript.trim();
+    return script ? `前端 npm run ${script}` : "前端自定义脚本（未填写）";
+  }
+  return "前端脚本自动（rc-master→build:prod，其它→build:test）";
+}
+
+/** @deprecated 使用 describeKsBatchNpmScriptPref */
+export function describeKsBatchNpmScriptMode(mode: KsBatchNpmScriptMode): string {
+  return describeKsBatchNpmScriptPref({ mode, customScript: "" });
+}
 
 /** 并行打包 worktree 槽位（Deployment 名 slug） */
 export function packSlotFromDeployment(deployment: string): string {
@@ -220,6 +312,21 @@ function resolveGitForDeployment(
   return { gitUrl, role, exposePort, container };
 }
 
+/** 批量确认弹窗用：按映射/默认规则解析各部署角色（无需本地仓库） */
+export function resolveKsBatchDeployRoles(
+  config: HarborConfig,
+  envId: string,
+  namespace: string,
+  deployNames: string[],
+): Record<string, KsPublishMapRole> {
+  const maps = config.ks_publish_maps ?? [];
+  const out: Record<string, KsPublishMapRole> = {};
+  for (const name of deployNames) {
+    out[name] = resolveGitForDeployment(maps, envId, namespace, name).role;
+  }
+  return out;
+}
+
 /** 批量部署对应的 Git URL 列表（去重） */
 export function collectGitUrlsForBatchDeployments(
   config: HarborConfig,
@@ -240,6 +347,43 @@ export function collectGitUrlsForBatchDeployments(
   return out;
 }
 
+/** 批量部署对应的本地仓库路径（去重）；无法解析的部署名写入 missing */
+export async function collectKsBatchRepoPaths(
+  config: HarborConfig,
+  envId: string,
+  namespace: string,
+  deployments: KsBatchDeployItem[],
+): Promise<{ repoPaths: string[]; missing: string[] }> {
+  const maps = config.ks_publish_maps ?? [];
+  const missing: string[] = [];
+  const neededGitUrls: string[] = [];
+  for (const dep of deployments) {
+    const { gitUrl } = resolveGitForDeployment(maps, envId, namespace, dep.name);
+    if (gitUrl) neededGitUrls.push(gitUrl);
+  }
+  const repoIndex = await buildGitUrlRepoPathIndex(config, neededGitUrls);
+  const seen = new Set<string>();
+  const repoPaths: string[] = [];
+  for (const dep of deployments) {
+    const { gitUrl } = resolveGitForDeployment(maps, envId, namespace, dep.name);
+    if (!gitUrl) {
+      missing.push(`${dep.name}：未配置 Git 映射`);
+      continue;
+    }
+    const repoPath = resolveRepoPathFromIndex(gitUrl, config, repoIndex, dep.name);
+    if (!repoPath) {
+      missing.push(`${dep.name}：找不到 Git「${gitUrl}」对应的本地仓库`);
+      continue;
+    }
+    const key = repoPath.trim();
+    if (!seen.has(key)) {
+      seen.add(key);
+      repoPaths.push(key);
+    }
+  }
+  return { repoPaths, missing };
+}
+
 /** 确认弹窗打开时预热仓库索引，点开始时可秒开 */
 export async function prewarmKsBatchRepoIndex(
   config: HarborConfig,
@@ -252,12 +396,117 @@ export async function prewarmKsBatchRepoIndex(
   await buildGitUrlRepoPathIndex(config, gitUrls);
 }
 
+/** 是否复用分支打包页对该仓库的前端记忆（避免误用其它仓库的 last_frontend_dir） */
+export function pickRememberedNpmSettings(
+  config: HarborConfig,
+  repoPath: string,
+): { useRemembered: boolean; frontendDir: string; buildScript: string } {
+  const repoKey = repoPath.trim();
+  const lastRepo = config.last_repo_path?.trim() ?? "";
+  const useRemembered =
+    !!repoKey
+    && repoKey === lastRepo
+    && config.remember_branch_settings
+    && config.last_project_type === "npm";
+  return {
+    useRemembered,
+    frontendDir: useRemembered ? config.last_frontend_dir?.trim() ?? "" : "",
+    buildScript: useRemembered
+      ? config.last_build_script?.trim() || "build:prod"
+      : "",
+  };
+}
+
+async function detectFrontendDirForRepo(repoPath: string): Promise<string> {
+  if (!isTauriRuntime()) return "";
+  try {
+    const detected = await invoke<string | null>("detect_frontend_dir", { repoPath });
+    return detected?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+async function resolveNpmBuildScriptForBatch(
+  repoPath: string,
+  frontendDir: string,
+  branchName: string,
+  fallback = "",
+  forcedScript: string | null = null,
+): Promise<string> {
+  const base = forcedScript?.trim()
+    || fallback.trim()
+    || buildScriptAfterMerge(branchName);
+  if (!isTauriRuntime()) return base;
+  try {
+    const scripts = await invoke<string[]>("list_npm_scripts", {
+      repoPath,
+      frontendDir: frontendDir.trim() || null,
+    });
+    return preferNpmBuildScript(branchName, scripts, base);
+  } catch {
+    return base;
+  }
+}
+
+/** 按仓库解析前端目录与 npm 构建脚本（同仓库多部署只探测一次） */
+async function resolveBatchNpmSettings(
+  config: HarborConfig,
+  repoPath: string,
+  branchName: string,
+  npmScript: KsBatchNpmScriptPref,
+  cache: Map<string, { frontendDir: string; selectedBuildScript: string }>,
+): Promise<{ frontendDir: string; selectedBuildScript: string }> {
+  const key = repoPath.trim();
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const forcedScript = forcedNpmScriptForBatchPref(npmScript);
+  const remembered = pickRememberedNpmSettings(config, key);
+  const frontendDir = remembered.frontendDir || await detectFrontendDirForRepo(key);
+  const selectedBuildScript = forcedScript
+    ? await resolveNpmBuildScriptForBatch(
+        key,
+        frontendDir,
+        branchName,
+        "",
+        forcedScript,
+      )
+    : remembered.useRemembered && remembered.buildScript
+      ? remembered.buildScript
+      : await resolveNpmBuildScriptForBatch(
+          key,
+          frontendDir,
+          branchName,
+          remembered.buildScript,
+        );
+
+  const resolved = { frontendDir, selectedBuildScript };
+  cache.set(key, resolved);
+  return resolved;
+}
+
+function defaultExposePortForRole(
+  config: HarborConfig,
+  role: KsPublishMapRole,
+  mapOrSuggestedPort: string,
+  rememberedPort: string,
+): string {
+  if (mapOrSuggestedPort.trim()) return mapOrSuggestedPort.trim();
+  if (role === "frontend") {
+    return config.frontend_expose_port?.trim() || "80";
+  }
+  return rememberedPort || config.expose_port.trim();
+}
+
 /** 解析批量目标；无法解析本地仓库的项进入 skips */
 export async function resolveKsBatchTargets(
   config: HarborConfig,
   envId: string,
   namespace: string,
   deployments: KsBatchDeployItem[],
+  branchName = "",
+  npmScript: KsBatchNpmScriptPref = { mode: "auto", customScript: "" },
 ): Promise<{ targets: KsBatchTarget[]; skips: string[] }> {
   const maps = config.ks_publish_maps ?? [];
   const targets: KsBatchTarget[] = [];
@@ -269,6 +518,7 @@ export async function resolveKsBatchTargets(
     if (gitUrl) neededGitUrls.push(gitUrl);
   }
   const repoIndex = await buildGitUrlRepoPathIndex(config, neededGitUrls);
+  const npmSettingsCache = new Map<string, { frontendDir: string; selectedBuildScript: string }>();
 
   for (const dep of deployments) {
     const { gitUrl, role, exposePort, container } = resolveGitForDeployment(
@@ -290,17 +540,31 @@ export async function resolveKsBatchTargets(
     }
     const remembered = getRememberedBranchAdvancedSettings(config, repoPath);
     const projectType: BranchProjectType = role === "frontend" ? "npm" : "maven";
+    const npmSettings = projectType === "npm"
+      ? await resolveBatchNpmSettings(
+          config,
+          repoPath,
+          branchName,
+          npmScript,
+          npmSettingsCache,
+        )
+      : { frontendDir: "", selectedBuildScript: "" };
     targets.push({
       deployment: dep.name,
       container: container || dep.containers[0]?.trim() || "",
       gitUrl,
       role,
-      exposePort: exposePort || remembered.exposePort || config.expose_port.trim(),
+      exposePort: defaultExposePortForRole(
+        config,
+        role,
+        exposePort,
+        remembered.exposePort,
+      ),
       repoPath,
       projectType,
       springProfile: remembered.springProfile,
-      frontendDir: config.last_frontend_dir?.trim() || "",
-      selectedBuildScript: config.last_build_script?.trim() || "build:prod",
+      frontendDir: npmSettings.frontendDir,
+      selectedBuildScript: npmSettings.selectedBuildScript || "build:prod",
       packageWithBackend: false,
       nginxLocations: remembered.nginxLocations ?? [],
     });
@@ -366,6 +630,7 @@ export async function runKsBatchPackPublish(
     appendLog,
     onProgress,
   } = opts;
+  const npmScript = opts.npmScript ?? { mode: "auto", customScript: "" };
 
   const summary: KsBatchPackSummary = {
     total: deployments.length,
@@ -394,6 +659,8 @@ export async function runKsBatchPackPublish(
     envId,
     namespace,
     deployments,
+    branchName.trim(),
+    npmScript,
   );
   for (const skip of skips) {
     summary.skipped += 1;
@@ -436,6 +703,9 @@ export async function runKsBatchPackPublish(
       + `${!concurrencyPref || concurrencyPref <= 0 ? "（自动）" : ""}`
       + `，不同仓库=${uniqueRepos}，CPU≈${detectCpuCores()}，分支=${branchName.trim()}，命名空间=${namespace}`,
   );
+  if (targets.some((t) => t.projectType === "npm")) {
+    note(summary, appendLog, `  ${describeKsBatchNpmScriptPref(npmScript)}`);
+  }
 
   const ksConnectPromise = ensureKsConnected(config, envId)
     .then(() => {
@@ -475,11 +745,19 @@ export async function runKsBatchPackPublish(
     const step = i + 1;
     active += 1;
     bumpProgress("running", `${target.deployment} 打包中…`, { itemIndex: i });
+    const roleTag = target.role === "frontend" ? "前端" : "后端";
     note(
       summary,
       appendLog,
-      `[${step}/${total}] ${target.deployment} ← ${target.repoPath} (${normalizeGitUrl(target.gitUrl)})`,
+      `[${step}/${total}] ${target.deployment} (${roleTag}) ← ${target.repoPath} (${normalizeGitUrl(target.gitUrl)})`,
     );
+    if (target.projectType === "npm") {
+      note(
+        summary,
+        appendLog,
+        `  npm: dir=${target.frontendDir || "(根目录)"} script=${target.selectedBuildScript}`,
+      );
+    }
 
     try {
       const packResult = await runBranchPackageAndPush({
@@ -497,6 +775,7 @@ export async function runKsBatchPackPublish(
           progressLabel: target.deployment,
           deploymentHint: target.deployment,
           packSlot: packSlotFromDeployment(target.deployment),
+          skipBtDeploy: true,
         });
 
       if (!packResult.ok) {

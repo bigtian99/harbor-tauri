@@ -1,24 +1,41 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Autocomplete,
   Badge,
   Box,
   Button,
   Group,
+  Loader,
   Modal,
   Paper,
   Progress,
   ScrollArea,
   SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Text,
   ThemeIcon,
 } from "@mantine/core";
+import type { KsPublishMapRole } from "../types";
+import type { KsBatchBranchOptionGroup } from "../utils/ksBatchGitBranches";
+import {
+  flattenKsBatchBranchOptions,
+  normalizeKsBatchBranchOptionGroups,
+} from "../utils/ksBatchGitBranches";
+import {
+  describeKsBatchNpmScriptPref,
+  KS_BATCH_NPM_SCRIPT_PRESETS,
+  type KsBatchNpmScriptMode,
+  type KsBatchNpmScriptPref,
+} from "../utils/ksBatchPackPublish";
 import {
   CheckCircle2,
+  Check,
   GitBranch,
   Layers3,
   Package,
+  RefreshCw,
   Rocket,
   Server,
   SkipForward,
@@ -26,11 +43,30 @@ import {
   XCircle,
 } from "lucide-react";
 
+function deployRoleLabel(role: KsPublishMapRole | undefined): string {
+  if (role === "frontend") return "前端";
+  if (role === "backend") return "后端";
+  return "任意";
+}
+
+function deployRoleColor(role: KsPublishMapRole | undefined): string {
+  if (role === "frontend") return "grape";
+  if (role === "backend") return "blue";
+  return "gray";
+}
+
 export interface KsBatchMeta {
   branch: string;
   namespace: string;
   envName: string;
   deployNames: string[];
+  deployRoles?: Record<string, KsPublishMapRole>;
+  npmScript?: KsBatchNpmScriptPref;
+}
+
+export interface KsBatchConfirmValues {
+  branch: string;
+  npmScript: KsBatchNpmScriptPref;
 }
 
 export interface KsBatchSummary {
@@ -42,18 +78,33 @@ export interface KsBatchSummary {
 interface KsBatchConfirmModalProps {
   opened: boolean;
   meta: KsBatchMeta | null;
+  /** 上次批量成功使用的分支；弹框内可改，不自动混用分支打包页记忆 */
+  initialBranch: string;
+  branchOptionGroups: KsBatchBranchOptionGroup[];
+  gitBranchesLoading: boolean;
+  gitBranchesError?: string;
+  gitRepoCount: number;
+  onRefreshGitBranches: () => void;
+  initialNpmScript: KsBatchNpmScriptPref;
   /** 0 = 自动 */
   concurrencyPref: number;
   recommendedConcurrency: number;
   cpuCores: number;
   onConcurrencyPrefChange: (n: number) => void;
   onClose: () => void;
-  onStart: () => void;
+  onStart: (values: KsBatchConfirmValues) => void;
 }
 
 export function KsBatchConfirmModal({
   opened,
   meta,
+  initialBranch,
+  branchOptionGroups,
+  gitBranchesLoading = false,
+  gitBranchesError,
+  gitRepoCount = 0,
+  onRefreshGitBranches,
+  initialNpmScript,
   concurrencyPref,
   recommendedConcurrency,
   cpuCores,
@@ -61,11 +112,77 @@ export function KsBatchConfirmModal({
   onClose,
   onStart,
 }: KsBatchConfirmModalProps) {
+  const [branch, setBranch] = useState(initialBranch);
+  const [npmMode, setNpmMode] = useState<KsBatchNpmScriptMode>(initialNpmScript.mode);
+  const [npmCustom, setNpmCustom] = useState(initialNpmScript.customScript);
+
+  const safeBranchGroups = useMemo(
+    () => normalizeKsBatchBranchOptionGroups(branchOptionGroups),
+    [branchOptionGroups],
+  );
+
+  const branchSelectData = useMemo(() => {
+    if (safeBranchGroups.length > 0) return safeBranchGroups;
+    const seed = initialBranch.trim();
+    return seed ? [seed] : [];
+  }, [safeBranchGroups, initialBranch]);
+
+  const allBranchNames = useMemo(
+    () => flattenKsBatchBranchOptions(safeBranchGroups),
+    [safeBranchGroups],
+  );
+
+  const gitBranchSet = useMemo(() => {
+    const gitGroup = safeBranchGroups.find((g) => g.group.includes("仓库分支"));
+    return new Set(gitGroup?.items ?? []);
+  }, [safeBranchGroups]);
+
+  useEffect(() => {
+    if (!opened) return;
+    setNpmMode(initialNpmScript.mode);
+    setNpmCustom(initialNpmScript.customScript);
+    const preferred = initialBranch.trim();
+    if (preferred) {
+      setBranch(preferred);
+      return;
+    }
+    if (!gitBranchesLoading && allBranchNames.length > 0) {
+      setBranch(allBranchNames[0]);
+    } else {
+      setBranch("");
+    }
+  }, [opened, initialBranch, initialNpmScript, gitBranchesLoading, allBranchNames]);
+
   const count = meta?.deployNames.length ?? 0;
   const effective =
     concurrencyPref > 0
       ? Math.min(concurrencyPref, Math.max(1, count))
       : recommendedConcurrency;
+
+  const hasFrontendDeploys = useMemo(
+    () => Object.values(meta?.deployRoles ?? {}).some((r) => r === "frontend"),
+    [meta?.deployRoles],
+  );
+
+  const npmScriptPref = useMemo<KsBatchNpmScriptPref>(
+    () => ({ mode: npmMode, customScript: npmCustom }),
+    [npmMode, npmCustom],
+  );
+
+  const branchReady = branch.trim().length > 0;
+  const branchInGitList = !branch.trim() || gitBranchSet.has(branch.trim());
+  const npmReady = !hasFrontendDeploys
+    || npmMode !== "custom"
+    || npmCustom.trim().length > 0;
+  const canStart = count > 0 && branchReady && npmReady && !gitBranchesLoading;
+
+  const handleStart = () => {
+    if (!canStart) return;
+    onStart({
+      branch: branch.trim(),
+      npmScript: npmScriptPref,
+    });
+  };
 
   return (
     <Modal
@@ -97,18 +214,7 @@ export function KsBatchConfirmModal({
     >
       <Stack gap="md">
         <Paper withBorder radius="md" p="md" className="ks-batch-meta-panel">
-          <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm">
-            <Stack gap={4}>
-              <Group gap={6}>
-                <GitBranch size={14} className="ks-batch-meta-icon" />
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-                  目标分支
-                </Text>
-              </Group>
-              <Text size="sm" fw={600} className="ks-batch-meta-value">
-                {meta?.branch ?? "—"}
-              </Text>
-            </Stack>
+          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
             <Stack gap={4}>
               <Group gap={6}>
                 <Layers3 size={14} className="ks-batch-meta-icon" />
@@ -134,6 +240,120 @@ export function KsBatchConfirmModal({
           </SimpleGrid>
         </Paper>
 
+        <Stack gap={6}>
+          <Group justify="space-between" align="center" wrap="nowrap">
+            <Group gap={6}>
+              <GitBranch size={14} className="ks-batch-meta-icon" />
+              <Text size="sm" fw={600}>
+                目标分支
+              </Text>
+            </Group>
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="gray"
+              leftSection={gitBranchesLoading
+                ? <Loader size={12} />
+                : <RefreshCw size={12} />}
+              disabled={gitBranchesLoading}
+              onClick={onRefreshGitBranches}
+            >
+              拉取仓库分支
+            </Button>
+          </Group>
+          <Select
+            searchable
+            clearable
+            withCheckIcon={false}
+            classNames={{ root: "ks-batch-branch-select" }}
+            placeholder={gitBranchesLoading ? "正在拉取分支…" : "请选择目标分支"}
+            data={branchSelectData}
+            value={branch || null}
+            onChange={(v) => setBranch(v ?? "")}
+            disabled={gitBranchesLoading}
+            nothingFoundMessage="无匹配分支"
+            aria-label="批量打包目标分支"
+            comboboxProps={{
+              withinPortal: true,
+              classNames: { option: "ks-batch-branch-combobox-option" },
+            }}
+            renderOption={({ option, checked }) => (
+              <Group
+                flex="1"
+                gap="xs"
+                justify="space-between"
+                wrap="nowrap"
+                className={checked ? "ks-batch-branch-option ks-batch-branch-option--selected" : "ks-batch-branch-option"}
+              >
+                <Text span size="sm" truncate className="ks-batch-branch-option-label">
+                  {option.label}
+                </Text>
+                {checked && <Check size={14} strokeWidth={2.5} className="ks-batch-branch-option-check" />}
+              </Group>
+            )}
+          />
+          {gitBranchesError && (
+            <Text size="xs" c="red">
+              {gitBranchesError}
+            </Text>
+          )}
+          {!gitBranchesLoading && gitRepoCount > 0 && (
+            <Text size="xs" c="dimmed">
+              已从 {gitRepoCount} 个本地仓库 fetch；下拉含「最近使用」与「仓库分支」
+            </Text>
+          )}
+          {!gitBranchesLoading && branch.trim() && gitBranchSet.size > 0 && !branchInGitList && (
+            <Text size="xs" c="orange">
+              「{branch.trim()}」来自最近使用记录，请确认仓库存在该引用
+            </Text>
+          )}
+        </Stack>
+
+        {hasFrontendDeploys && (
+          <Stack gap={6}>
+            <Text size="sm" fw={600}>
+              前端 npm 构建脚本
+            </Text>
+            <SegmentedControl
+              fullWidth
+              size="xs"
+              value={npmMode}
+              onChange={(v) => {
+                const mode = (
+                  v === "prod" || v === "test" || v === "custom" ? v : "auto"
+                ) as KsBatchNpmScriptMode;
+                setNpmMode(mode);
+                if (mode === "prod") setNpmCustom("build:prod");
+                if (mode === "test") setNpmCustom("build:test");
+              }}
+              data={[
+                { label: "按分支自动", value: "auto" },
+                { label: "build:prod", value: "prod" },
+                { label: "build:test", value: "test" },
+                { label: "自定义", value: "custom" },
+              ]}
+            />
+            {npmMode === "auto" && (
+              <Text size="xs" c="dimmed">
+                rc-master 分支 → build:prod，其它分支 → build:test
+              </Text>
+            )}
+            {npmMode === "custom" && (
+              <Autocomplete
+                placeholder="输入 npm script 名，如 build:prod"
+                data={[...KS_BATCH_NPM_SCRIPT_PRESETS]}
+                value={npmCustom}
+                onChange={setNpmCustom}
+                aria-label="自定义 npm 构建脚本"
+                comboboxProps={{ withinPortal: true }}
+              />
+            )}
+            <Text size="xs" c="dimmed">
+              {describeKsBatchNpmScriptPref(npmScriptPref)}
+            </Text>
+          </Stack>
+        )}
+
         <Stack gap="xs">
           <Group justify="space-between" align="center">
             <Text size="sm" fw={600}>
@@ -149,10 +369,15 @@ export function KsBatchConfirmModal({
                 <Badge
                   key={name}
                   variant="outline"
-                  color="gray"
+                  color={deployRoleColor(meta?.deployRoles?.[name])}
                   size="md"
                   radius="sm"
                   className="ks-batch-deploy-chip"
+                  leftSection={(
+                    <Text span size="10px" fw={700} opacity={0.85}>
+                      {deployRoleLabel(meta?.deployRoles?.[name])}
+                    </Text>
+                  )}
                 >
                   {name}
                 </Badge>
@@ -197,8 +422,8 @@ export function KsBatchConfirmModal({
             leftSection={<Rocket size={16} />}
             variant="filled"
             color="blue"
-            onClick={onStart}
-            disabled={count === 0}
+            onClick={handleStart}
+            disabled={!canStart}
           >
             开始执行 ({count})
           </Button>
