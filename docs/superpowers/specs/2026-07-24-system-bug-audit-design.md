@@ -1,7 +1,7 @@
 # JarPorter 系统 Bug 排查与修复计划
 
 **日期**: 2026-07-24  
-**状态**: Wave 1–2 已实施（2026-07-24）；BUG-005 延后  
+**状态**: Wave 1–3 已实施（BUG-005 多 PID 槽 2026-09-03）  
 **方法**: systematic-debugging Phase 1–2 + 代码 diff / 测试证据  
 **非目标**: 本规格不实施 OPT-001/002（凭证 frozen）；不做无 ID 的大重构
 
@@ -57,14 +57,14 @@
 | **证据** | diff：`query` 与 `localImage` 分离；Enter 提交手输引用；选中条 `image-selected-bar` 独立展示 |
 | **验收** | 选中镜像 → 输入搜索 → 选中不变；Enter 手输新引用 → 选中更新 |
 
-### BUG-005 · npm 并行 push 取消只杀一个进程（P2 架构债）
+### BUG-005 · npm 并行 push 取消只杀一个进程（P2，已修复）
 
 | 字段 | 内容 |
 |------|------|
 | **现象** | npm 前端+后端并行 `build_and_push` 时点「取消」，可能只终止其中一个 docker build |
 | **根因** | 全局单例 `CANCEL_FLAG` + `CURRENT_PID`（`utils`），后启动进程覆盖前者 PID |
-| **证据** | `branchPackageAction.ts` 注释；`build/push.rs` / `build/mod.rs` 使用同一 PID 槽 |
-| **范围** | 仅影响并行 push + 取消组合；单路 push 不受影响 |
+| **修复** | `CURRENT_PIDS: Mutex<Vec<u32>>` + `TrackedPid` RAII；`cancel_build` 对快照内全部 PID TERM/KILL |
+| **证据** | `utils/mod.rs` 多槽 API；`process_cmd` / `push` / `push_helpers` 改用 `TrackedPid`；单测 `tracked_pids_support_parallel_register_and_cancel_snapshot` |
 
 ---
 
@@ -137,7 +137,7 @@
 | BUG-001/002 | `copyHighlight.test.ts` | 跨 Tab 复制 |
 | BUG-003 | `in_use_tests`（已有） | docker ps 对照 |
 | BUG-004 | — | 搜索/选中/Enter |
-| BUG-005 | — | 并行 push + 取消 |
+| BUG-005 | done | 多 PID 槽 + cancel 全杀 |
 
 ---
 

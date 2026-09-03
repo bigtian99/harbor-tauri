@@ -93,7 +93,7 @@ Expected: 10 tests pass（含新 copyHighlight）；build 绿
 | BUG-002 | done | 兜底行复制后按钮高亮 |
 | BUG-003 | code done | cargo test + 手动 docker |
 | BUG-004 | code done | 手动搜索/选中 |
-| BUG-005 | deferred | 文档已知限制 |
+| BUG-005 | done | 多 PID 槽；`cargo test tracked_pids` |
 
 ---
 

@@ -1,4 +1,4 @@
-use crate::utils::{command_output_text, repo_root_for, silent_command, CANCEL_FLAG, CURRENT_PID};
+use crate::utils::{command_output_text, repo_root_for, silent_command, CANCEL_FLAG, snapshot_build_pids};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -311,12 +311,16 @@ pub async fn detect_spring_profiles(repo_path: String, branch: String) -> Result
 #[tauri::command]
 pub fn cancel_build() -> Result<(), String> {
     CANCEL_FLAG.store(true, Ordering::SeqCst);
+    let pids = snapshot_build_pids();
     crate::diag::diag_log(
         "build",
-        "cancel_build: 已置取消标志（覆盖 Maven/npm/Docker build·push/FTP/Harbor）",
+        &format!(
+            "cancel_build: 已置取消标志（覆盖 Maven/npm/Docker build·push/FTP/Harbor），跟踪 PID 数={}",
+            pids.len()
+        ),
     );
-    // 杀掉当前运行的子进程（mvn / npm / docker build|push）
-    if let Some(pid) = *CURRENT_PID.lock().unwrap() {
+    // 杀掉当前运行的全部子进程（并行 push / 多模块打包时可能不止一个）
+    for pid in pids {
         crate::diag::diag_log("build", &format!("🛑 取消构建，终止进程 PID={}", pid));
         #[cfg(unix)]
         {

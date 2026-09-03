@@ -1,4 +1,4 @@
-use super::{CANCEL_FLAG, CURRENT_PID};
+use super::{CANCEL_FLAG, TrackedPid};
 use super::paths_fs::strip_ansi_codes;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -365,10 +365,7 @@ fn run_command_inner(
 
     let child = match cmd.spawn()
     {
-        Ok(c) => {
-            *CURRENT_PID.lock().unwrap() = Some(c.id());
-            c
-        }
+        Ok(c) => c,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             let full_cmd = format!("{} {}", actual_command, args.join(" "));
 
@@ -401,21 +398,17 @@ fn run_command_inner(
             };
 
             match fallback {
-                Ok(c) => {
-                    *CURRENT_PID.lock().unwrap() = Some(c.id());
-                    c
-                }
+                Ok(c) => c,
                 Err(e2) => return Err(format!("启动命令失败 {}: {}", actual_command, e2)),
             }
         }
         Err(e) => return Err(format!("启动命令失败 {}: {}", actual_command, e)),
     };
 
+    let _tracked = TrackedPid::new(child.id());
     let output = child
         .wait_with_output()
         .map_err(|e| format!("等待命令结束失败: {}", e))?;
-
-    *CURRENT_PID.lock().unwrap() = None;
 
     if check_cancel && CANCEL_FLAG.load(Ordering::SeqCst) {
         return Err("构建已取消".to_string());

@@ -10,7 +10,45 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 
 pub(crate) static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
-pub(crate) static CURRENT_PID: Mutex<Option<u32>> = Mutex::new(None);
+/// 并行构建/推送时可能同时存在多个子进程；取消时杀掉全部。
+pub(crate) static CURRENT_PIDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+pub(crate) fn track_build_pid(pid: u32) {
+    let mut guard = CURRENT_PIDS.lock().unwrap();
+    if !guard.contains(&pid) {
+        guard.push(pid);
+    }
+}
+
+pub(crate) fn untrack_build_pid(pid: u32) {
+    CURRENT_PIDS.lock().unwrap().retain(|&p| p != pid);
+}
+
+pub(crate) fn clear_build_pids() {
+    CURRENT_PIDS.lock().unwrap().clear();
+}
+
+pub(crate) fn snapshot_build_pids() -> Vec<u32> {
+    CURRENT_PIDS.lock().unwrap().clone()
+}
+
+/// spawn 后挂上，进程 wait 结束（或作用域退出）时自动从多槽注销。
+pub(crate) struct TrackedPid {
+    pid: u32,
+}
+
+impl TrackedPid {
+    pub(crate) fn new(pid: u32) -> Self {
+        track_build_pid(pid);
+        Self { pid }
+    }
+}
+
+impl Drop for TrackedPid {
+    fn drop(&mut self) {
+        untrack_build_pid(self.pid);
+    }
+}
 
 pub(crate) use bundled_tools::{init_bundled_tools, *};
 pub(crate) use config_io::*;
@@ -34,6 +72,27 @@ mod tests {
         })
     }
 
+
+    #[test]
+    fn tracked_pids_support_parallel_register_and_cancel_snapshot() {
+        super::clear_build_pids();
+        super::track_build_pid(101);
+        super::track_build_pid(202);
+        super::track_build_pid(101); // 去重
+        let snap = super::snapshot_build_pids();
+        assert_eq!(snap, vec![101, 202]);
+
+        super::untrack_build_pid(101);
+        assert_eq!(super::snapshot_build_pids(), vec![202]);
+
+        let _g = super::TrackedPid::new(303);
+        assert_eq!(super::snapshot_build_pids(), vec![202, 303]);
+        drop(_g);
+        assert_eq!(super::snapshot_build_pids(), vec![202]);
+
+        super::clear_build_pids();
+        assert!(super::snapshot_build_pids().is_empty());
+    }
 
     #[test]
     fn normalize_config_does_not_persist_ops_authorization() {

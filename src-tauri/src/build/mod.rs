@@ -21,7 +21,7 @@ pub use detect::{
 pub use package::package_from_branch;
 pub use push::{build_and_push, list_local_images, push_local_image, remove_local_image};
 
-use crate::utils::{silent_docker_command, CANCEL_FLAG, CURRENT_PID};
+use crate::utils::{silent_docker_command, CANCEL_FLAG, clear_build_pids};
 use std::process::Stdio;
 use std::sync::atomic::Ordering;
 use tauri::Emitter;
@@ -75,7 +75,7 @@ pub(crate) fn resolve_harbor_repository(image_name: &str, project: &str) -> Resu
 
 pub(crate) fn reset_cancel_flag() {
     CANCEL_FLAG.store(false, Ordering::SeqCst);
-    *CURRENT_PID.lock().unwrap() = None;
+    clear_build_pids();
 }
 
 /// 可取消构建的生命周期守卫：进入时清标志，结束（成功/失败/取消）时再清一次，

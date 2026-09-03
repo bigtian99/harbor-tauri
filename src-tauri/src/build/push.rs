@@ -12,7 +12,7 @@ use crate::docker::{
     prepare_custom_docker_context, prepare_frontend_dist_context, prepare_jar_context,
 };
 use crate::models::{ArtifactType, DockerBuildContext, NginxLocationBlock};
-use crate::utils::{silent_docker_command, CANCEL_FLAG, CURRENT_PID};
+use crate::utils::{silent_docker_command, CANCEL_FLAG, TrackedPid};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fs;
@@ -167,13 +167,11 @@ pub async fn build_and_push(
             .spawn()
             .map_err(|e| format!("启动docker build失败: {}", e))?;
 
-        *CURRENT_PID.lock().unwrap() = Some(child.id());
+        let _tracked = TrackedPid::new(child.id());
 
         let output = child
             .wait_with_output()
             .map_err(|e| format!("docker build失败: {}", e))?;
-
-        *CURRENT_PID.lock().unwrap() = None;
 
         if let Some(path) = cleanup_file {
             fs::remove_file(path).ok();
@@ -292,11 +290,10 @@ pub async fn push_local_image(
             .spawn()
             .map_err(|e| format!("启动docker tag失败: {}", e))?;
 
-        *CURRENT_PID.lock().unwrap() = Some(child.id());
+        let _tracked = TrackedPid::new(child.id());
         let output = child
             .wait_with_output()
             .map_err(|e| format!("docker tag失败: {}", e))?;
-        *CURRENT_PID.lock().unwrap() = None;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

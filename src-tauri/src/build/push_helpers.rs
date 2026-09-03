@@ -2,7 +2,7 @@
 
 use crate::build::{docker_output, emit_progress};
 use crate::models::HarborConfig;
-use crate::utils::{silent_docker_command, CANCEL_FLAG, CURRENT_PID};
+use crate::utils::{silent_docker_command, CANCEL_FLAG, TrackedPid};
 use std::collections::HashMap;
 use std::io::Write;
 use std::process::Stdio;
@@ -361,7 +361,7 @@ pub(crate) async fn docker_push_image(
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("启动docker push失败: {}", e))?;
-        *CURRENT_PID.lock().unwrap() = Some(child.id());
+        let _tracked = TrackedPid::new(child.id());
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
@@ -418,7 +418,6 @@ pub(crate) async fn docker_push_image(
         let status = child
             .wait()
             .map_err(|e| format!("docker push失败: {}", e))?;
-        *CURRENT_PID.lock().unwrap() = None;
 
         if CANCEL_FLAG.load(Ordering::SeqCst) {
             return Err("构建已取消".to_string());
