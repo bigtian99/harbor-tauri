@@ -31,6 +31,10 @@ import type { BranchImageResult } from "../branchImageResults";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
 import { panelPaperStyles, panelSegmentedStyles, commitHashButtonStyles } from "../theme/panelStyles";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
+import {
+  computeDefaultBuildCommand,
+  parseNpmScriptFromCommand,
+} from "../branchBuildCommand";
 
 const inputStyles = {
   input: {
@@ -135,6 +139,11 @@ function closeCommitModal(
   setShowCommitListModal(false);
   setCommitAuthorFilter("");
   setCommitMessageFilter("");
+}
+
+function commitNpmBuildScript(value: string, onChange: (script: string) => void) {
+  const trimmed = value.trim();
+  onChange(parseNpmScriptFromCommand(trimmed) ?? trimmed);
 }
 
 export function BranchPanel({
@@ -399,7 +408,9 @@ export function BranchPanel({
               <SearchableDropdown
                 value={selectedBuildScript}
                 options={npmScripts}
-                onChange={onSelectedBuildScriptChange}
+                commitOnInput={false}
+                onChange={(value) => commitNpmBuildScript(value, onSelectedBuildScriptChange)}
+                onBlur={(value) => commitNpmBuildScript(value, onSelectedBuildScriptChange)}
                 placeholder={
                   isLoadingScripts
                     ? "加载脚本中，也可直接手输..."
@@ -411,8 +422,8 @@ export function BranchPanel({
               />
               <Text size="xs" c="var(--color-text-muted)">
                 {npmScripts.length > 0
-                  ? `可从 package.json 脚本中选择，也可直接手输（当前将执行 npm run ${selectedBuildScript || "build"}）`
-                  : "未检测到 scripts 时仍可手输；将执行 npm install && npm run <命令>"}
+                  ? `可从 package.json 脚本中选择，也可手贴完整命令（当前将执行 ${(config.npm_package_manager || "npm").trim() || "npm"} run ${selectedBuildScript || "build"}）`
+                  : "未检测到 scripts 时仍可手输；也可粘贴 npm/pnpm run 整段命令"}
               </Text>
             </Stack>
           )}
@@ -457,18 +468,14 @@ export function BranchPanel({
             <Text size="sm" c="var(--color-text)">
               固定命令：{" "}
               <Code style={{ fontSize: 12, color: "var(--color-text)" }}>
-                {branchProjectType === "maven"
-                  ? `mvn clean package -Dmaven.test.skip=true${springProfile.trim() ? ` -Dspring.profiles.active=${springProfile.trim()}` : ""}`
-                  : `npm install && npm run ${selectedBuildScript || "build"}`}
+                {computeDefaultBuildCommand({
+                  projectType: branchProjectType,
+                  packageManager: config.npm_package_manager,
+                  buildScript: selectedBuildScript,
+                  springProfile,
+                  packageWithBackend,
+                })}
               </Code>
-              {branchProjectType === "npm" && packageWithBackend && (
-                <>
-                  <br />
-                  <Text component="span" ml="2.5em" size="sm" c="var(--color-text)">+ </Text>
-                  <Code style={{ fontSize: 12, color: "var(--color-text)" }}>mvn clean package -Dmaven.test.skip=true</Code>
-                  <Text component="span" size="xs" c="var(--color-text-muted)" ml={4}>(仓库根目录)</Text>
-                </>
-              )}
             </Text>
           </Paper>
         </Stack>

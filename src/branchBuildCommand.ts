@@ -28,8 +28,12 @@ export function parseNpmScriptFromCommand(command: string): string | null {
   const raw = command.trim();
   if (!raw) return null;
 
-  // 纯脚本名：build / build:prod
-  if (/^[\w.:/-]+$/.test(raw) && !raw.startsWith("mvn")) {
+  // 纯脚本名：build / build:prod（排除包管理器本身，避免手贴整段命令时被当成 script）
+  if (
+    /^[\w.:/-]+$/.test(raw) &&
+    !raw.startsWith("mvn") &&
+    !/^(npm|pnpm|yarn|bun)$/i.test(raw)
+  ) {
     return raw;
   }
 

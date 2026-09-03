@@ -33,6 +33,7 @@ assert.equal(
 );
 
 assert.equal(parseNpmScriptFromCommand("build:prod"), "build:prod");
+assert.equal(parseNpmScriptFromCommand("npm"), null);
 assert.equal(
   parseNpmScriptFromCommand("npm install && npm run build:test"),
   "build:test",

@@ -1,4 +1,8 @@
 import { SearchableDropdown } from "../SearchableDropdown";
+import {
+  computeDefaultBuildCommand,
+  parseMavenProfileFromCommand,
+} from "../../branchBuildCommand";
 
 export interface SpringProfileSectionProps {
   springProfile: string;
@@ -20,7 +24,15 @@ export function SpringProfileSection({
       <SearchableDropdown
         value={springProfile}
         options={springProfiles}
-        onChange={onSpringProfileChange}
+        commitOnInput={false}
+        onChange={(value) => {
+          const trimmed = value.trim();
+          onSpringProfileChange(parseMavenProfileFromCommand(trimmed) ?? trimmed);
+        }}
+        onBlur={(value) => {
+          const trimmed = value.trim();
+          onSpringProfileChange(parseMavenProfileFromCommand(trimmed) ?? trimmed);
+        }}
         placeholder={
           isLoadingProfiles
             ? "扫描中，也可直接手输..."
@@ -32,10 +44,10 @@ export function SpringProfileSection({
       />
       <p className="template-hint">
         {springProfile
-          ? `将执行: mvn clean package -Dmaven.test.skip=true -Dspring.profiles.active=${springProfile}`
+          ? `将执行: ${computeDefaultBuildCommand({ projectType: "maven", springProfile })}`
           : springProfiles.length > 0
             ? `可从已检测 profile 选择，也可手输；检测到: ${springProfiles.join(", ")}`
-            : "留空则不添加 -Dspring.profiles.active；也可直接手输自定义 profile"}
+            : "留空则不添加 -Dspring.profiles.active；也可直接手输或粘贴 mvn 命令"}
       </p>
     </div>
   );
