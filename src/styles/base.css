@@ -288,7 +288,7 @@ body {
 .app-sidebar .sidebar-nav-link[data-active],
 .app-sidebar button[data-active].sidebar-nav-link {
   background: var(--color-primary-muted) !important;
-  color: var(--color-primary-hover) !important;
+  color: var(--color-primary) !important;
   box-shadow: none !important;
   border: none !important;
   border-left: none !important;
@@ -307,7 +307,7 @@ body {
 
 .app-sidebar .sidebar-nav-link[data-active] svg {
   opacity: 1 !important;
-  color: var(--color-primary-hover) !important;
+  color: var(--color-primary) !important;
 }
 
 /* 分组父级（宝塔）：永不整块高亮，避免与子项叠两层 */
@@ -326,10 +326,10 @@ body {
 
 /* 折叠态：当前在宝塔子页时，父图标轻微提示，不铺整块底 */
 .app-sidebar .sidebar-nav-link--section-on {
-  color: var(--color-primary-hover) !important;
+  color: var(--color-primary) !important;
 }
 .app-sidebar .sidebar-nav-link--section-on svg {
-  color: var(--color-primary-hover) !important;
+  color: var(--color-primary) !important;
   opacity: 1 !important;
 }
 
@@ -428,7 +428,7 @@ body {
   max-height: 100vh !important;
 }
 
-/* KubeSphere 发布：减小间距，仍保留侧栏偏移 + 少许留白 */
+/* 设置页：主区锁高，保存条在滚动区外，不压映射列表 */
 .content:has(.ks-publish-panel) {
   padding-block: 12px;
   padding-inline-end: 12px;

@@ -53,7 +53,7 @@ const navStyles = {
     boxShadow: "none",
     "&[data-active]": {
       background: "var(--color-primary-muted)",
-      color: "var(--color-primary-hover)",
+      color: "var(--color-primary)",
       border: "none",
       borderLeft: "none",
       boxShadow: "none",

@@ -79,10 +79,11 @@ export function useBuildProgress(deps: UseBuildProgressDeps = {}) {
       return <pre>（无过程日志）</pre>;
     }
     if (cleaned.includes("✅")) {
+      const body = cleaned.replace(/✅\s*/g, "").trim();
       return (
         <div className="success-message">
-          <CheckCircle size={20} className="success-icon" />
-          <pre>{cleaned}</pre>
+          <CheckCircle size={16} className="success-icon" aria-hidden />
+          <pre>{body}</pre>
         </div>
       );
     }

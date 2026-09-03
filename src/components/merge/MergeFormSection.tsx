@@ -9,8 +9,9 @@ import {
   Textarea,
   TextInput,
 } from "@mantine/core";
+import { useEffect, useState } from "react";
 import {
-  AlertTriangle, ArrowRight, CheckCircle, ExternalLink, FileText, FolderOpen,
+  AlertTriangle, ArrowRight, CheckCircle, ChevronDown, ChevronUp, ExternalLink, FileText, FolderOpen,
   GitBranch, GitCommit, GitMerge, Info, Loader2, RefreshCw, Search, Settings, Tag
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -157,6 +158,17 @@ export function MergeFormSection({
   onDiffCommitSearchChange,
   onOpenCommitDiff,
 }: MergeFormSectionProps) {
+  const [commitsOpen, setCommitsOpen] = useState(false);
+  const commitPreview = 2;
+  const hiddenCommitCount = Math.max(0, filteredDiffCommits.length - commitPreview);
+  const visibleCommits = commitsOpen
+    ? filteredDiffCommits
+    : filteredDiffCommits.slice(0, commitPreview);
+
+  useEffect(() => {
+    setCommitsOpen(false);
+  }, [sourceBranch, targetBranch, selectedAuthor, diffCommitSearch]);
+
   return (
     <Paper p="md" radius="md" styles={paperStyles} className="branch-card">
       <Stack gap="md">
@@ -437,7 +449,7 @@ export function MergeFormSection({
                   </Text>
                 ) : (
                   <div className="merge-diff-list">
-                    {filteredDiffCommits.map((c) => (
+                    {visibleCommits.map((c) => (
                         <div
                           key={c.hash}
                           className="merge-diff-item"
@@ -482,6 +494,20 @@ export function MergeFormSection({
                           </div>
                         </div>
                       ))}
+                    {hiddenCommitCount > 0 && (
+                      <button
+                        type="button"
+                        className="merge-diff-more"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCommitsOpen((open) => !open);
+                        }}
+                        aria-expanded={commitsOpen}
+                      >
+                        {commitsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        <span>{commitsOpen ? "收起" : `+${hiddenCommitCount}`}</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </>
@@ -518,47 +544,49 @@ export function MergeFormSection({
           </Stack>
         )}
 
-        <Button
-          variant="filled"
-          color="blue"
-          size="md"
-          fullWidth
-          onClick={onMerge}
-          disabled={!canMerge || hasNoDiff || isMerging || !sourceBranch || !targetBranch}
-          title={
-            hasNoDiff || isSameBranch
-              ? "两个分支没有差异，无需合并"
-              : canMerge
-                ? "合并并推送到目标分支"
-                : "有冲突或未检查，不允许合并"
-          }
-          leftSection={isMerging ? <Loader2 size={18} className="spin" /> : <GitMerge size={18} />}
-          styles={panelPrimaryButtonStyles}
-          className="merge-submit-btn"
-        >
-          {isMerging ? "合并中..." : `合并 ${sourceBranch || "源"} → ${targetBranch || "目标"}`}
-        </Button>
+        <div className="merge-actions">
+          <Button
+            variant="filled"
+            color="blue"
+            size="md"
+            fullWidth
+            onClick={onMerge}
+            disabled={!canMerge || hasNoDiff || isMerging || !sourceBranch || !targetBranch}
+            title={
+              hasNoDiff || isSameBranch
+                ? "两个分支没有差异，无需合并"
+                : canMerge
+                  ? "合并并推送到目标分支"
+                  : "有冲突或未检查，不允许合并"
+            }
+            leftSection={isMerging ? <Loader2 size={18} className="spin" /> : <GitMerge size={18} />}
+            styles={panelPrimaryButtonStyles}
+            className="merge-submit-btn"
+          >
+            {isMerging ? "合并中..." : `合并 ${sourceBranch || "源"} → ${targetBranch || "目标"}`}
+          </Button>
 
-        {sourceBranch && targetBranch && (
-          <div className="merge-execute-plan">
-            <p className="merge-execute-plan-title">将执行（隔离 worktree，不切换当前工作区分支）</p>
-            <div className="merge-cmd-block">
-              <code className="merge-cmd-line">git merge --no-ff {sourceBranch}</code>
-              <span className="merge-cmd-hint">基于 {targetBranch}</span>
-            </div>
-            {pushAfterMerge && (
+          {sourceBranch && targetBranch && (
+            <div className="merge-execute-plan">
+              <p className="merge-execute-plan-title">将执行（隔离 worktree，不切换当前工作区分支）</p>
               <div className="merge-cmd-block">
-                <span className="merge-cmd-label">合并后</span>
-                <code className="merge-cmd-line">
-                  git push origin HEAD:refs/heads/{(targetBranch || "").replace(/^origin\//, "")}
-                </code>
+                <code className="merge-cmd-line">git merge --no-ff {sourceBranch}</code>
+                <span className="merge-cmd-hint">基于 {targetBranch}</span>
               </div>
-            )}
-            <p className="merge-execute-plan-note">
-              源/目标均为远程分支引用；主仓库当前分支与未提交改动不会被切换或覆盖。
-            </p>
-          </div>
-        )}
+              {pushAfterMerge && (
+                <div className="merge-cmd-block">
+                  <span className="merge-cmd-label">合并后</span>
+                  <code className="merge-cmd-line">
+                    git push origin HEAD:refs/heads/{(targetBranch || "").replace(/^origin\//, "")}
+                  </code>
+                </div>
+              )}
+              <p className="merge-execute-plan-note">
+                源/目标均为远程分支引用；主仓库当前分支与未提交改动不会被切换或覆盖。
+              </p>
+            </div>
+          )}
+        </div>
 
         {showQuickMergeConfig && (
           <QuickMergeConfigModal

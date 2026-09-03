@@ -296,6 +296,7 @@ export function ConfigPanel({
 
   return (
     <div className="config-shell">
+      <div className="config-panel-body">
       <Stack gap="md" className="config-panel">
       <Tabs
         value={activeTab}
@@ -310,7 +311,7 @@ export function ConfigPanel({
             gap: "2px 4px",
             padding: "0 0 2px",
             marginBottom: 0,
-            borderBottom: "1px solid var(--color-border)",
+            borderBottom: "none",
           },
           tab: {
             color: "var(--color-text-muted)",
@@ -330,6 +331,7 @@ export function ConfigPanel({
           },
         }}
       >
+        <div className="config-toolbar">
         <Tabs.List>
           {TABS.map(({ key, label, icon }) => (
             <Tabs.Tab key={key} value={key} leftSection={icon}>
@@ -337,6 +339,21 @@ export function ConfigPanel({
             </Tabs.Tab>
           ))}
         </Tabs.List>
+        {activeTab !== "about" && (
+          <Button
+            className="config-save-btn"
+            onClick={handleSaveConfig}
+            variant="filled"
+            color="blue"
+            data-saved={configSaved || undefined}
+            leftSection={configSaved ? <CheckCircle size={16} /> : <Settings size={16} />}
+            size="compact-sm"
+            radius="md"
+          >
+            {configSaved ? "已保存" : "保存配置"}
+          </Button>
+        )}
+        </div>
 
         <Tabs.Panel value="connection" pt="md">
           <Paper {...panelPaperProps}>
@@ -1106,23 +1123,8 @@ export function ConfigPanel({
           </Stack>
         </Tabs.Panel>
       </Tabs>
-
-      {activeTab !== "about" && (
-        <div className="config-save-bar">
-          <Button
-            className="config-save-btn"
-            onClick={handleSaveConfig}
-            variant="filled"
-            color="blue"
-            data-saved={configSaved || undefined}
-            leftSection={configSaved ? <CheckCircle size={18} /> : <Settings size={18} />}
-            size="md"
-            radius="md"
-          >
-            {configSaved ? "已保存" : "保存配置"}
-          </Button>
-        </div>
-      )}
+      </Stack>
+      </div>
 
       <Modal
         opened={!!envEditor}
@@ -1200,7 +1202,6 @@ export function ConfigPanel({
           </Stack>
         )}
       </Modal>
-      </Stack>
     </div>
   );
 }

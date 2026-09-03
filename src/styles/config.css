@@ -5,34 +5,37 @@
   max-width: 100%;
 }
 
+.config-panel-body {
+  min-width: 0;
+}
+
 .config-panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 100%;
 }
 
-.config-tabs-list {
+.config-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   position: sticky;
   top: 0;
   z-index: 4;
+  padding-bottom: 2px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-base);
 }
 
-.config-save-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  display: flex;
-  justify-content: flex-end;
-  margin-top: auto;
-  padding: 10px 0 2px;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    var(--color-bg-base) 28%
-  );
-  border-top: 1px solid var(--color-border);
+.config-tabs-list {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-toolbar .config-save-btn {
+  flex-shrink: 0;
 }
 
 .config-save-btn {

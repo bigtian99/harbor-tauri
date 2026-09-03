@@ -1014,6 +1014,34 @@ a.commit-link {
   width: fit-content;
 }
 
+.history-record-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.history-record-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 2px 8px 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.history-record-details-toggle:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
 .history-record-images {
   display: flex;
   flex-direction: column;
@@ -1220,14 +1248,10 @@ a.commit-link {
   gap: 4px;
 }
 
-.history-record-type.maven {
-  color: var(--color-warning);
-  background: rgba(245, 158, 11, 0.15);
-}
-
+.history-record-type.maven,
 .history-record-type.npm {
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.15);
+  color: inherit;
+  background: transparent;
 }
 
 .history-record-duration {

@@ -17,7 +17,7 @@ import {
 import {
   History, CheckCircle, Copy, Trash2, RefreshCw, Search,
   FolderOpen, FileText, BookOpen, BookMarked, Folder,
-  Coffee, Package, Wrench, ChevronRight, Clock, Rocket, Loader2,
+  Coffee, Package, ChevronRight, ChevronDown, ChevronUp, Clock, Rocket, Loader2,
   XCircle, Eye, EyeOff,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -69,12 +69,6 @@ const badgeStatus = {
     fontWeight: 600,
   },
 } as const;
-
-function typeBadgeColor(label: string): string {
-  if (label === "后端") return "orange";
-  if (label === "前端+后端") return "grape";
-  return "teal"; // 前端
-}
 
 interface HistoryPanelProps {
   buildHistory: BuildRecord[];
@@ -137,6 +131,99 @@ function RecordCard({
   const images = record.image_tag ? parseHistoryImageTags(record.image_tag) : [];
   const labeled = record.package_with_backend && images.length > 1;
   const isMaven = record.project_type.toLowerCase() === "maven";
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const DETAIL_PREVIEW = 2;
+
+  const imageRows = images.map((img, i) => (
+    <HoverTip tip={img} key={`img-${img}-${i}`} className="history-record-image-wrap">
+      <div className="history-record-image history-record-detail-row">
+        <span
+          className="history-record-brand-icon history-record-brand-icon--docker"
+          title={labeled ? (i === 0 ? "前端镜像" : "后端镜像") : "Docker 镜像"}
+        >
+          <DockerIcon size={14} />
+        </span>
+        <span className="history-record-image-text">
+          {labeled ? `${i === 0 ? "前端" : "后端"}: ${img}` : img}
+        </span>
+        <button
+          type="button"
+          className="history-record-copy-btn"
+          title={labeled ? (i === 0 ? "复制前端镜像" : "复制后端镜像") : "复制镜像地址"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCopyImage(img);
+          }}
+        >
+          <Copy size={12} />
+        </button>
+      </div>
+    </HoverTip>
+  ));
+
+  const pathRows = [
+    <div key="path-artifact" className="history-record-path history-record-detail-row">
+      {isMaven && !record.backend_artifact_path ? (
+        <span className="history-record-brand-icon history-record-brand-icon--baota" title="产物 (JAR)">
+          <BaotaIcon size={14} />
+        </span>
+      ) : (
+        <span className="history-record-brand-icon" title={record.backend_artifact_path ? "前端产物" : "产物"}>
+          <Folder size={14} />
+        </span>
+      )}
+      <HoverTip tip={record.artifact_path} className="history-record-path-link-wrap">
+        <button
+          type="button"
+          className="history-record-path-link"
+          onClick={() => onOpenArtifact(record.artifact_path)}
+        >
+          {record.artifact_path}
+        </button>
+      </HoverTip>
+      <button
+        type="button"
+        className="history-record-path-open"
+        onClick={() => onOpenArtifact(record.artifact_path)}
+        title="打开目录"
+      >
+        <FolderOpen size={12} />
+      </button>
+    </div>,
+  ];
+  if (record.backend_artifact_path) {
+    pathRows.push(
+      <div key="path-backend" className="history-record-path history-record-detail-row">
+        <span
+          className="history-record-brand-icon history-record-brand-icon--baota"
+          title="后端产物 (JAR) · 宝塔可部署"
+        >
+          <BaotaIcon size={14} />
+        </span>
+        <HoverTip tip={record.backend_artifact_path} className="history-record-path-link-wrap">
+          <button
+            type="button"
+            className="history-record-path-link"
+            onClick={() => onOpenArtifact(record.backend_artifact_path!)}
+          >
+            {record.backend_artifact_path}
+          </button>
+        </HoverTip>
+        <button
+          type="button"
+          className="history-record-path-open"
+          onClick={() => onOpenArtifact(record.backend_artifact_path!)}
+          title="打开目录"
+        >
+          <FolderOpen size={12} />
+        </button>
+      </div>,
+    );
+  }
+
+  const detailRows = [...imageRows, ...pathRows];
+  const hiddenCount = Math.max(0, detailRows.length - DETAIL_PREVIEW);
+  const visibleRows = detailsOpen ? detailRows : detailRows.slice(0, DETAIL_PREVIEW);
 
   return (
     <Paper
@@ -199,25 +286,25 @@ function RecordCard({
             >
               {record.timestamp}
             </Badge>
-            <Badge variant="light" color="blue" size="xs" styles={badgeBase} title="分支">
+            <Badge variant="light" color="gray" size="xs" styles={badgeBase} title="分支">
               {record.branch}
             </Badge>
             <Badge
               variant="light"
-              color={typeBadgeColor(typeLabel)}
+              color="gray"
               size="xs"
               className={`history-record-type ${record.project_type.toLowerCase()}`}
               styles={badgeBase}
             >
               {typeLabel}
             </Badge>
-            <Badge variant="light" color="yellow" size="xs" styles={badgeBase} title="耗时">
+            <Badge variant="light" color="gray" size="xs" styles={badgeBase} title="耗时">
               {(record.duration_ms / 1000).toFixed(1)}s
             </Badge>
             {!isMaven && record.package_manager && (
               <Badge
                 variant="light"
-                color="violet"
+                color="gray"
                 size="xs"
                 leftSection={<Package size={8} />}
                 title="包管理器"
@@ -229,7 +316,7 @@ function RecordCard({
             {(isMaven || record.package_with_backend) && record.spring_profile && (
               <Badge
                 variant="light"
-                color="cyan"
+                color="gray"
                 size="xs"
                 leftSection={<Coffee size={8} />}
                 title="Spring Profile"
@@ -238,22 +325,10 @@ function RecordCard({
                 {record.spring_profile}
               </Badge>
             )}
-            {record.package_with_backend && (
-              <Badge
-                variant="light"
-                color="orange"
-                size="xs"
-                leftSection={<Wrench size={8} />}
-                title="包含后端"
-                styles={badgeBase}
-              >
-                含后端
-              </Badge>
-            )}
             {!isMaven && record.frontend_dir && (
               <Badge
                 variant="light"
-                color="teal"
+                color="gray"
                 size="xs"
                 leftSection={<Folder size={8} />}
                 title="前端目录"
@@ -263,97 +338,26 @@ function RecordCard({
               </Badge>
             )}
           </Group>
-          {images.length > 0 && (
-            <div className="history-record-images">
-              {images.map((img, i) => (
-                <HoverTip tip={img} key={`${img}-${i}`} className="history-record-image-wrap">
-                  <div className="history-record-image history-record-detail-row">
-                    <span
-                      className="history-record-brand-icon history-record-brand-icon--docker"
-                      title={labeled ? (i === 0 ? "前端镜像" : "后端镜像") : "Docker 镜像"}
-                    >
-                      <DockerIcon size={14} />
-                    </span>
-                    <span className="history-record-image-text">
-                      {labeled ? `${i === 0 ? "前端" : "后端"}: ${img}` : img}
-                    </span>
-                    <button
-                      type="button"
-                      className="history-record-copy-btn"
-                      title={labeled ? (i === 0 ? "复制前端镜像" : "复制后端镜像") : "复制镜像地址"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCopyImage(img);
-                      }}
-                    >
-                      <Copy size={12} />
-                    </button>
-                  </div>
-                </HoverTip>
-              ))}
+          {detailRows.length > 0 && (
+            <div className="history-record-details">
+              <div className="history-record-images">{visibleRows}</div>
+              {hiddenCount > 0 && (
+                <button
+                  type="button"
+                  className="history-record-details-toggle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsOpen((open) => !open);
+                  }}
+                  title={detailsOpen ? "收起" : `还有 ${hiddenCount} 条`}
+                  aria-expanded={detailsOpen}
+                >
+                  {detailsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  <span>{detailsOpen ? "收起" : `+${hiddenCount}`}</span>
+                </button>
+              )}
             </div>
           )}
-          <div className="history-record-paths">
-            <div className="history-record-path history-record-detail-row">
-              {isMaven && !record.backend_artifact_path ? (
-                <span className="history-record-brand-icon history-record-brand-icon--baota" title="产物 (JAR)">
-                  <BaotaIcon size={14} />
-                </span>
-              ) : record.backend_artifact_path ? (
-                <span className="history-record-brand-icon" title="前端产物">
-                  <Folder size={14} />
-                </span>
-              ) : (
-                <span className="history-record-brand-icon" title="产物">
-                  <Folder size={14} />
-                </span>
-              )}
-              <HoverTip tip={record.artifact_path} className="history-record-path-link-wrap">
-                <button
-                  type="button"
-                  className="history-record-path-link"
-                  onClick={() => onOpenArtifact(record.artifact_path)}
-                >
-                  {record.artifact_path}
-                </button>
-              </HoverTip>
-              <button
-                type="button"
-                className="history-record-path-open"
-                onClick={() => onOpenArtifact(record.artifact_path)}
-                title="打开目录"
-              >
-                <FolderOpen size={12} />
-              </button>
-            </div>
-            {record.backend_artifact_path && (
-              <div className="history-record-path history-record-detail-row">
-                <span
-                  className="history-record-brand-icon history-record-brand-icon--baota"
-                  title="后端产物 (JAR) · 宝塔可部署"
-                >
-                  <BaotaIcon size={14} />
-                </span>
-                <HoverTip tip={record.backend_artifact_path} className="history-record-path-link-wrap">
-                  <button
-                    type="button"
-                    className="history-record-path-link"
-                    onClick={() => onOpenArtifact(record.backend_artifact_path!)}
-                  >
-                    {record.backend_artifact_path}
-                  </button>
-                </HoverTip>
-                <button
-                  type="button"
-                  className="history-record-path-open"
-                  onClick={() => onOpenArtifact(record.backend_artifact_path!)}
-                  title="打开目录"
-                >
-                  <FolderOpen size={12} />
-                </button>
-              </div>
-            )}
-          </div>
         </Stack>
         <Group gap={2} wrap="nowrap" className="history-record-actions">
           {onPushJar && historyCanPushJar(record) && (
@@ -662,11 +666,13 @@ export function HistoryPanel({
                     {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
                   </Button>
                   {showBuildLog && (
-                    <ScrollArea.Autosize mah={300} type="auto">
-                      <div className={`log-panel ${log.includes("✅") ? "success" : ""}`}>
-                        {renderLog(log)}
-                      </div>
-                    </ScrollArea.Autosize>
+                    log.includes("✅") ? (
+                      <div className="log-panel success">{renderLog(log)}</div>
+                    ) : (
+                      <ScrollArea.Autosize mah={300} type="auto">
+                        <div className="log-panel">{renderLog(log)}</div>
+                      </ScrollArea.Autosize>
+                    )
                   )}
                 </Stack>
               )}

@@ -48,17 +48,18 @@ export const panelFieldStyles = {
   },
 } as const;
 
-/** 主操作按钮：亮蓝底 + 白字（暗色主题常规 CTA） */
+/** 主操作按钮：沉蓝实心底，避免冰蓝在暗面上发飘 */
 export const panelPrimaryButtonStyles = {
   root: {
-    background: "var(--color-primary)",
-    color: "#fff",
-    fontWeight: 700,
-    border: "none",
-    boxShadow: "0 1px 0 rgba(255,255,255,0.14) inset, 0 8px 20px rgba(59, 158, 255, 0.22)",
+    background: "var(--color-primary-solid)",
+    color: "#f8fbff",
+    fontWeight: 650,
+    border: "1px solid color-mix(in srgb, var(--color-primary-hover) 28%, transparent)",
+    boxShadow: "0 1px 0 rgba(255,255,255,0.08) inset, 0 6px 16px rgba(13, 40, 80, 0.28)",
     "&:hover:not(:disabled):not([data-disabled])": {
-      background: "var(--color-primary-hover)",
+      background: "var(--color-primary-solid-hover)",
       color: "#fff",
+      borderColor: "color-mix(in srgb, var(--color-primary-hover) 40%, transparent)",
     },
     "&:disabled, &[data-disabled]": {
       background: "color-mix(in srgb, var(--color-primary) 14%, var(--color-bg-elevated)) !important",

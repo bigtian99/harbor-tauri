@@ -8,7 +8,7 @@ const navActiveStyles = {
     "--nav-icon-opacity": "0.6",
     "&[data-active]": {
       background: "var(--color-primary-muted)",
-      color: "var(--color-primary-hover)",
+      color: "var(--color-primary)",
       border: "none",
       borderLeft: "none",
       boxShadow: "none",
@@ -99,15 +99,17 @@ export const appTheme = createTheme({
           },
           /* 主操作：实心主色 + 白字 */
           "&[data-variant='filled']:not(:disabled):not([data-disabled])": {
-            border: "none",
+            border: "1px solid color-mix(in srgb, var(--color-primary-hover) 22%, transparent)",
             color: "#fff",
             "--button-color": "#fff",
-            boxShadow: "var(--glow-primary)",
+            background: "var(--color-primary-solid)",
+            boxShadow: "0 1px 0 rgba(255,255,255,0.08) inset, 0 6px 16px rgba(13, 40, 80, 0.28)",
             "&:hover": {
-              filter: "brightness(1.08)",
+              background: "var(--color-primary-solid-hover)",
+              filter: "none",
               color: "#fff",
               "--button-color": "#fff",
-              boxShadow: "0 0 28px rgba(59, 158, 255, 0.32)",
+              boxShadow: "0 1px 0 rgba(255,255,255,0.1) inset, 0 8px 18px rgba(13, 40, 80, 0.32)",
             },
           },
           "&[data-variant='filled']:not(:disabled):not([data-disabled]) .mantine-Button-label, &[data-variant='filled']:not(:disabled):not([data-disabled]) .mantine-Button-section": {

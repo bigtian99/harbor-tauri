@@ -1,9 +1,11 @@
 :root {
   /* 丰富暗色：靛蓝底 + 天蓝主色 + 琥珀/翠绿点缀 */
   --color-primary: #3b9eff;
-  --color-primary-hover: #7ec8ff;
-  --color-primary-muted: rgba(59, 158, 255, 0.28);
-  --color-primary-subtle: rgba(59, 158, 255, 0.14);
+  --color-primary-hover: #5eb0f5;
+  --color-primary-solid: #1a6fd4;
+  --color-primary-solid-hover: #2b82e6;
+  --color-primary-muted: rgba(59, 158, 255, 0.22);
+  --color-primary-subtle: rgba(59, 158, 255, 0.12);
   --color-accent: #a78bfa;
   --color-accent-muted: rgba(167, 139, 250, 0.18);
   --color-bg-base: #0a0e17;
@@ -14,8 +16,8 @@
   --color-border-strong: rgba(120, 170, 255, 0.22);
   --color-text: #eef3ff;
   --color-text-muted: #93a4c3;
-  --color-success: #34d399;
-  --color-success-muted: rgba(52, 211, 153, 0.18);
+  --color-success: #4ec9a8;
+  --color-success-muted: rgba(78, 201, 168, 0.10);
   --color-warning: #fbbf24;
   --color-warning-muted: rgba(251, 191, 36, 0.18);
   --color-error: #f87171;
@@ -25,7 +27,7 @@
   --font-size-sm: 12px;
   --sidebar-width: 220px;
   --sidebar-width-collapsed: 56px;
-  --glow-primary: 0 0 24px rgba(59, 158, 255, 0.18);
+  --glow-primary: 0 0 16px rgba(26, 111, 212, 0.16);
   /* 进度条统一视觉 */
   --progress-size-xs: 6px;
   --progress-size-sm: 8px;
@@ -38,8 +40,8 @@
     90deg,
     #1565c0 0%,
     var(--color-primary) 28%,
-    var(--color-primary-hover) 62%,
-    var(--color-success) 100%
+    var(--color-primary-hover) 70%,
+    var(--color-primary-solid-hover) 100%
   );
   --progress-fill-glow: 0 0 16px rgba(59, 158, 255, 0.42), 0 1px 0 rgba(255, 255, 255, 0.14) inset;
   --progress-transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -58,8 +60,8 @@
   --mantine-color-dark-7: #101826;
   --mantine-color-dark-8: #0a0e17;
   --mantine-color-dark-9: #060910;
-  --mantine-primary-color-filled: var(--color-primary);
-  --mantine-primary-color-filled-hover: var(--color-primary-hover);
+  --mantine-primary-color-filled: var(--color-primary-solid);
+  --mantine-primary-color-filled-hover: var(--color-primary-solid-hover);
   --mantine-primary-color-light: var(--color-primary-muted);
   --mantine-primary-color-light-hover: rgba(59, 158, 255, 0.36);
   --mantine-primary-color-light-color: var(--color-primary-hover);
