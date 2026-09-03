@@ -1,4 +1,4 @@
-use crate::models::{FtpUploadItem, FtpUploadResult};
+use crate::models::{FtpUploadItem, FtpUploadResult, HarborConfig};
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, TcpStream};
@@ -8,10 +8,37 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::Emitter;
 
-const FTP_HOST: &str = "120.77.204.231";
-const FTP_USER: &str = "admin";
-const FTP_PASS: &str = "pcm520..";
-const FTP_BASE_DIR: &str = "common.tiankongshuyu.fun";
+/// 落地页 FTP 凭证：必须从配置读取，源码不写死明文密码。
+pub(crate) fn require_landing_ftp(
+    config: &HarborConfig,
+) -> Result<(String, String, String, String), String> {
+    let host = config.landing_ftp_host.trim().to_string();
+    let user = config.landing_ftp_user.trim().to_string();
+    let pass = config.landing_ftp_pass.trim().to_string();
+    let base = config.landing_ftp_base_dir.trim().to_string();
+    if host.is_empty() || user.is_empty() || pass.is_empty() {
+        return Err(
+            "请先在设置 → 连接 中配置落地页 FTP 主机、用户和密码后再上传".to_string(),
+        );
+    }
+    Ok((host, user, pass, base))
+}
+
+/// 隐私协议 FTP：主机可单独配；用户/密码复用落地页 FTP。
+pub(crate) fn require_privacy_ftp(
+    config: &HarborConfig,
+) -> Result<(String, String, String), String> {
+    let host = config.privacy_ftp_host.trim().to_string();
+    let user = config.landing_ftp_user.trim().to_string();
+    let pass = config.landing_ftp_pass.trim().to_string();
+    if host.is_empty() || user.is_empty() || pass.is_empty() {
+        return Err(
+            "请先在设置 → 连接 中配置隐私 FTP 主机，以及落地页 FTP 用户/密码后再操作"
+                .to_string(),
+        );
+    }
+    Ok((host, user, pass))
+}
 
 // ========== FTP 上传功能 ==========
 
@@ -22,10 +49,6 @@ struct FtpClient {
 }
 
 impl FtpClient {
-    fn connect(host: &str) -> Result<Self, String> {
-        Self::connect_with(host, FTP_USER, FTP_PASS)
-    }
-
     fn connect_with(host: &str, user: &str, pass: &str) -> Result<Self, String> {
         use std::net::ToSocketAddrs;
         let sock_addr = (host, 21u16)
@@ -581,15 +604,21 @@ where
     Ok(())
 }
 
-/// 使用原生 FTP 协议上传目录（带重试）
-pub(crate) fn run_ftp_upload(local_dir: &Path, remote_dir: &str) -> Result<(), String> {
-    run_ftp_upload_with(
-        local_dir,
-        remote_dir,
-        FTP_HOST,
-        Some(FTP_BASE_DIR),
-        "landing",
-    )
+/// 使用配置中的落地页 FTP 上传目录（带重试）
+pub(crate) fn run_ftp_upload(
+    local_dir: &Path,
+    remote_dir: &str,
+    host: &str,
+    user: &str,
+    pass: &str,
+    base_dir: &str,
+) -> Result<(), String> {
+    let base = if base_dir.trim().is_empty() {
+        None
+    } else {
+        Some(base_dir.trim())
+    };
+    run_ftp_upload_with(local_dir, remote_dir, host, user, pass, base, "landing")
 }
 
 /// 从 FTP 下载远端目录下的单个文件到本地路径（隐私协议预览等复用）
@@ -598,6 +627,8 @@ pub(crate) fn run_ftp_download_file_with(
     remote_file: &str,
     local_path: &Path,
     host: &str,
+    user: &str,
+    pass: &str,
     base_dir: Option<&str>,
     log_module: &str,
 ) -> Result<(), String> {
@@ -606,7 +637,7 @@ pub(crate) fn run_ftp_download_file_with(
 
     for attempt in 1..=max_retries {
         match (|| -> Result<(), String> {
-            let mut client = FtpClient::connect(host)?;
+            let mut client = FtpClient::connect_with(host, user, pass)?;
             if let Some(base) = base_dir {
                 if !base.trim().is_empty() {
                     client.cwd(base).ok();
@@ -1022,11 +1053,13 @@ where
     Ok(())
 }
 
-/// 可指定 host / 可选站点基目录的 FTP 上传（隐私协议等复用）
+/// 可指定 host / 账号 / 可选站点基目录的 FTP 上传（隐私协议等复用）
 pub(crate) fn run_ftp_upload_with(
     local_dir: &Path,
     remote_dir: &str,
     host: &str,
+    user: &str,
+    pass: &str,
     base_dir: Option<&str>,
     log_module: &str,
 ) -> Result<(), String> {
@@ -1034,7 +1067,7 @@ pub(crate) fn run_ftp_upload_with(
     let mut last_error = String::new();
 
     for attempt in 1..=max_retries {
-        match run_ftp_upload_once(local_dir, remote_dir, host, base_dir, log_module) {
+        match run_ftp_upload_once(local_dir, remote_dir, host, user, pass, base_dir, log_module) {
             Ok(()) => return Ok(()),
             Err(e) => {
                 crate::diag::diag_log(log_module, &format!("⚠️ 上传失败 (第{}次): {}", attempt, e));
@@ -1058,10 +1091,12 @@ fn run_ftp_upload_once(
     local_dir: &Path,
     remote_dir: &str,
     host: &str,
+    user: &str,
+    pass: &str,
     base_dir: Option<&str>,
     log_module: &str,
 ) -> Result<(), String> {
-    let mut client = FtpClient::connect(host)?;
+    let mut client = FtpClient::connect_with(host, user, pass)?;
     if let Some(base) = base_dir {
         if !base.trim().is_empty() {
             client.cwd(base).ok();
@@ -1079,6 +1114,19 @@ pub async fn upload_landing_to_ftp(
     items: Vec<FtpUploadItem>,
 ) -> Result<Vec<FtpUploadResult>, String> {
     use std::sync::{Arc, Mutex};
+
+    let config = crate::config_cmd::load_config_sync()?;
+    let (ftp_host, ftp_user, ftp_pass, ftp_base) = require_landing_ftp(&config)?;
+    crate::diag::diag_log(
+        "landing",
+        &format!(
+            "upload_landing_to_ftp: host={} user={} base={} count={}",
+            ftp_host,
+            ftp_user,
+            if ftp_base.is_empty() { "(root)" } else { &ftp_base },
+            items.len()
+        ),
+    );
 
     let total = items.len();
 
@@ -1108,6 +1156,10 @@ pub async fn upload_landing_to_ftp(
         let item_clone = item.clone();
         let total_clone = total;
         let completed_clone = completed.clone();
+        let host = ftp_host.clone();
+        let user = ftp_user.clone();
+        let pass = ftp_pass.clone();
+        let base = ftp_base.clone();
 
         let handle = std::thread::spawn(move || {
             let local_dir = PathBuf::from(&item_clone.local_dir);
@@ -1135,9 +1187,20 @@ pub async fn upload_landing_to_ftp(
 
             crate::diag::diag_log("landing", &format!("📤 上传: {}", item_clone.remote_dir));
 
-            let result = match run_ftp_upload(&local_dir, &item_clone.remote_dir) {
+            let result = match run_ftp_upload(
+                &local_dir,
+                &item_clone.remote_dir,
+                &host,
+                &user,
+                &pass,
+                &base,
+            ) {
                 Ok(()) => {
-                    let url = format!("https://{}/{}/", FTP_BASE_DIR, &item_clone.remote_dir);
+                    let url = if base.is_empty() {
+                        format!("https://{}/{}/", host, &item_clone.remote_dir)
+                    } else {
+                        format!("https://{}/{}/", base, &item_clone.remote_dir)
+                    };
                     crate::diag::diag_log("landing", &format!("✅ 上传成功: {}", url));
                     FtpUploadResult {
                         id: item_clone.id.clone(),
@@ -1157,22 +1220,20 @@ pub async fn upload_landing_to_ftp(
                 }
             };
 
-            // 更新完成计数和进度
             let mut c = completed_clone.lock().unwrap();
             *c += 1;
-            let progress = ((*c as f64 / total_clone as f64) * 100.0) as i32;
-            let current = *c;
+            let done = *c;
+            let progress = ((done as f64 / total_clone as f64) * 100.0) as i32;
             drop(c);
             app_clone
                 .emit(
                     "build-progress",
                     serde_json::json!({
                         "percent": progress,
-                        "message": format!("📤 [{}/{}] 完成", current, total_clone),
+                        "message": format!("📤 [{}/{}] 完成", done, total_clone),
                     }),
                 )
                 .ok();
-
             result
         });
         handles.push(Some(handle));
@@ -1200,40 +1261,44 @@ pub async fn upload_landing_to_ftp(
 
 #[cfg(test)]
 mod tests {
-    use super::{ftp_relative_path_from_panel, parse_pasv_response};
+    use super::{
+        ftp_relative_path_from_panel, parse_pasv_response, require_landing_ftp, require_privacy_ftp,
+    };
+    use crate::models::HarborConfig;
+
+    const CONTROL_HOST: &str = "ftp.example.com";
 
     #[test]
     fn parse_pasv_response_extracts_host_and_port() {
         // 192.168.1.2: 20*256+80 = 5200 — private host is rewritten to control host
         let (host, port) = parse_pasv_response(
             "227 Entering Passive Mode (192,168,1,2,20,80).",
-            super::FTP_HOST,
+            CONTROL_HOST,
         )
         .unwrap();
         assert_eq!(port, 5200);
         // private IP → 使用控制连接主机
-        assert_eq!(host, super::FTP_HOST);
+        assert_eq!(host, CONTROL_HOST);
     }
 
     #[test]
     fn parse_pasv_response_keeps_public_host() {
         let (host, port) =
-            parse_pasv_response("227 Entering Passive Mode (8,8,8,8,1,2).", super::FTP_HOST)
-                .unwrap();
+            parse_pasv_response("227 Entering Passive Mode (8,8,8,8,1,2).", CONTROL_HOST).unwrap();
         assert_eq!(host, "8.8.8.8");
         assert_eq!(port, 256 + 2);
     }
 
     #[test]
     fn parse_pasv_response_rejects_short_payload() {
-        let err = parse_pasv_response("227 bad", super::FTP_HOST).unwrap_err();
+        let err = parse_pasv_response("227 bad", CONTROL_HOST).unwrap_err();
         assert!(err.contains("无法解析"), "{err}");
     }
 
     #[test]
     fn parse_pasv_response_rejects_zero_port() {
-        let err = parse_pasv_response("227 Entering Passive Mode (1,2,3,4,0,0).", super::FTP_HOST)
-            .unwrap_err();
+        let err =
+            parse_pasv_response("227 Entering Passive Mode (1,2,3,4,0,0).", CONTROL_HOST).unwrap_err();
         assert!(err.contains("端口无效"), "{err}");
     }
 
@@ -1251,5 +1316,23 @@ mod tests {
             ftp_relative_path_from_panel("anime/foo.jar"),
             "anime/foo.jar"
         );
+    }
+
+    #[test]
+    fn require_landing_ftp_rejects_empty_creds() {
+        let err = require_landing_ftp(&HarborConfig::default()).unwrap_err();
+        assert!(err.contains("落地页 FTP"), "{err}");
+    }
+
+    #[test]
+    fn require_privacy_ftp_reuses_landing_user_pass() {
+        let mut cfg = HarborConfig::default();
+        cfg.privacy_ftp_host = "60.0.0.1".into();
+        cfg.landing_ftp_user = "admin".into();
+        cfg.landing_ftp_pass = "secret".into();
+        let (host, user, pass) = require_privacy_ftp(&cfg).unwrap();
+        assert_eq!(host, "60.0.0.1");
+        assert_eq!(user, "admin");
+        assert_eq!(pass, "secret");
     }
 }

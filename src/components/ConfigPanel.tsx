@@ -374,6 +374,55 @@ export function ConfigPanel({
               />
             </Stack>
           </Paper>
+          <Paper {...panelPaperProps} mt="md">
+            <Stack gap="md">
+              <Text size="sm" fw={600} c="var(--color-text)">
+                落地页 / 隐私协议 FTP
+              </Text>
+              <Text size="xs" c="var(--color-text-muted)">
+                账号密码不再写进程序。落地页上传与隐私协议共用用户/密码；隐私主机可单独填写。
+              </Text>
+              <TextInput
+                label="落地页 FTP 主机"
+                value={config.landing_ftp_host ?? ""}
+                onChange={(e) => onConfigChange("landing_ftp_host", e.currentTarget.value)}
+                placeholder="FTP 主机 IP 或域名"
+                styles={fieldStyles}
+              />
+              <TextInput
+                label="落地页 FTP 用户"
+                value={config.landing_ftp_user ?? ""}
+                onChange={(e) => onConfigChange("landing_ftp_user", e.currentTarget.value)}
+                placeholder="FTP 用户名"
+                styles={fieldStyles}
+              />
+              <PasswordInput
+                label="落地页 FTP 密码"
+                value={config.landing_ftp_pass ?? ""}
+                onChange={(e) => onConfigChange("landing_ftp_pass", e.currentTarget.value)}
+                placeholder="FTP 密码"
+                visible={showPassword}
+                onVisibilityChange={() => onTogglePassword()}
+                styles={fieldStyles}
+              />
+              <TextInput
+                label="落地页站点根目录"
+                value={config.landing_ftp_base_dir ?? ""}
+                onChange={(e) => onConfigChange("landing_ftp_base_dir", e.currentTarget.value)}
+                placeholder="例如: common.example.com（可留空）"
+                description="上传后公开 URL 用此主机名拼 https://根目录/渠道/"
+                styles={fieldStyles}
+              />
+              <TextInput
+                label="隐私协议 FTP 主机"
+                value={config.privacy_ftp_host ?? ""}
+                onChange={(e) => onConfigChange("privacy_ftp_host", e.currentTarget.value)}
+                placeholder="与落地页不同机时填写"
+                description="用户/密码复用上方落地页 FTP 账号"
+                styles={fieldStyles}
+              />
+            </Stack>
+          </Paper>
         </Tabs.Panel>
 
         <Tabs.Panel value="ks" pt="md">

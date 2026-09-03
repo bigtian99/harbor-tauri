@@ -237,7 +237,8 @@ pub struct HarborConfig {
     pub bt_ftp_host: String,
     #[serde(default = "default_bt_ftp_user")]
     pub bt_ftp_user: String,
-    #[serde(default = "default_bt_ftp_pass")]
+    /// 不设默认明文密码；新装需在设置中填写。
+    #[serde(default)]
     pub bt_ftp_pass: String,
     #[serde(default = "default_true")]
     pub bt_auto_deploy_test: bool,
@@ -250,6 +251,18 @@ pub struct HarborConfig {
     /// JAR basename → 宝塔 Java 项目 id（同名 JAR 多项目时强制消歧）
     #[serde(default = "default_bt_jar_project_ids")]
     pub bt_jar_project_ids: HashMap<String, String>,
+    /// 落地页 FTP（上传）— 源码不写死账号密码
+    #[serde(default)]
+    pub landing_ftp_host: String,
+    #[serde(default)]
+    pub landing_ftp_user: String,
+    #[serde(default)]
+    pub landing_ftp_pass: String,
+    #[serde(default)]
+    pub landing_ftp_base_dir: String,
+    /// 隐私协议 FTP 主机；用户/密码复用落地页 FTP 账号
+    #[serde(default)]
+    pub privacy_ftp_host: String,
     /// 旧版单环境字段，加载时迁入 ks_environments
     #[serde(default = "default_ks_console")]
     pub ks_console: String,
@@ -354,11 +367,16 @@ impl Default for HarborConfig {
             bt_panel_insecure: true,
             bt_ftp_host: default_bt_ftp_host(),
             bt_ftp_user: default_bt_ftp_user(),
-            bt_ftp_pass: default_bt_ftp_pass(),
+            bt_ftp_pass: String::new(),
             bt_auto_deploy_test: true,
             bt_auto_deploy_profile: default_bt_auto_deploy_profile(),
             bt_frontend_remote_dir: default_bt_frontend_remote_dir(),
             bt_jar_project_ids: default_bt_jar_project_ids(),
+            landing_ftp_host: String::new(),
+            landing_ftp_user: String::new(),
+            landing_ftp_pass: String::new(),
+            landing_ftp_base_dir: String::new(),
+            privacy_ftp_host: String::new(),
             ks_console: default_ks_console(),
             ks_username: String::new(),
             ks_password: String::new(),
@@ -384,10 +402,6 @@ fn default_bt_ftp_host() -> String {
 
 fn default_bt_ftp_user() -> String {
     "admin".to_string()
-}
-
-fn default_bt_ftp_pass() -> String {
-    "pcm520..".to_string()
 }
 
 fn default_bt_auto_deploy_profile() -> String {

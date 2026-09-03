@@ -88,7 +88,7 @@ pnpm release
 - **预览服务器只读不改文件**：它只读取与 FTP 上传相同的文件，**绝不能为预览改写 index.html 或资源**——否则会污染上传内容。需修改 HTML 时，只在 `generate_landing_pages` 的生成阶段改。
 - **预览服务器有意不下发 CSP**：让预览页与真实部署一致（内联脚本、远程字体都加载）。仅绑 `127.0.0.1`、仅响应 GET/HEAD、有路径穿越防护（canonicalize + starts_with）。
 - **CSP**：`tauri.conf.json` 的 `frame-src` / `img-src` 已放开 `http://127.0.0.1:*` 与 `http://localhost:*` 以容纳预览 iframe。
-- **FTP 凭证**：`landing.rs` 顶部硬编码了 FTP host/user/pass（历史遗留）。新增上传逻辑时尽量改走配置，不要在别处再复制一份硬编码。
+- **FTP 凭证**：落地页 / 隐私协议 FTP 走配置（`landing_ftp_*`、`privacy_ftp_host`），源码不写明文密码。宝塔 FTP 密码同样无默认明文。
 
 ## Tauri Plugins
 

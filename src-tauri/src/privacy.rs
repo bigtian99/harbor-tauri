@@ -1,6 +1,8 @@
 //! 隐私协议 HTML 上传（运营）：FTP 到 common.tiankongshuyu.cn，本地持久化历史。
 
-use crate::landing::{landing_temp_root, run_ftp_download_file_with, run_ftp_upload_with};
+use crate::landing::{
+    landing_temp_root, require_privacy_ftp, run_ftp_download_file_with, run_ftp_upload_with,
+};
 use crate::models::APP_CONFIG_DIR;
 use crate::preview_server::ensure_preview_server_started;
 use serde::{Deserialize, Serialize};
@@ -9,10 +11,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const PRIVACY_FTP_HOST: &str = "60.205.155.142";
-const PRIVACY_PUBLIC_BASE: &str = "http://common.tiankongshuyu.cn";
 /// 隐私 FTP 登录后的站点根主机名。逻辑 `remote_dir` 含此前缀，实际 CWD 需剥掉。
+/// 公开域名（非账号密码）；连接主机/账号走用户配置。
 const PRIVACY_FTP_SITE_HOST: &str = "common.tiankongshuyu.cn";
+const PRIVACY_PUBLIC_BASE: &str = "http://common.tiankongshuyu.cn";
 const HISTORY_FILE: &str = "privacy_uploads.json";
 const HISTORY_MAX: usize = 200;
 
@@ -287,11 +289,15 @@ pub async fn preview_privacy_ftp(
             target.remote_dir
         ),
     );
+    let config = crate::config_cmd::load_config_sync()?;
+    let (ftp_host, ftp_user, ftp_pass) = require_privacy_ftp(&config)?;
     run_ftp_download_file_with(
         &ftp_path,
         "index.html",
         &local_index,
-        PRIVACY_FTP_HOST,
+        &ftp_host,
+        &ftp_user,
+        &ftp_pass,
         None,
         "ops",
     )?;
@@ -360,11 +366,15 @@ pub async fn download_privacy_ftp(
         ),
     );
 
+    let config = crate::config_cmd::load_config_sync()?;
+    let (ftp_host, ftp_user, ftp_pass) = require_privacy_ftp(&config)?;
     run_ftp_download_file_with(
         &ftp_path,
         "index.html",
         &dest,
-        PRIVACY_FTP_HOST,
+        &ftp_host,
+        &ftp_user,
+        &ftp_pass,
         None,
         "ops",
     )?;
@@ -436,6 +446,13 @@ pub async fn upload_privacy_html(
         );
     }
 
+    let config = crate::config_cmd::load_config_sync()?;
+    let (ftp_host, ftp_user, ftp_pass) = require_privacy_ftp(&config)?;
+    crate::diag::diag_log(
+        "ops",
+        &format!("privacy FTP host={} user={}", ftp_host, ftp_user),
+    );
+
     let mut results = Vec::new();
     for path_str in paths {
         let source = PathBuf::from(&path_str);
@@ -500,7 +517,7 @@ pub async fn upload_privacy_html(
             "ops",
             &format!(
                 "privacy FTP host={} logical_dir={} ftp_cwd={}",
-                PRIVACY_FTP_HOST,
+                ftp_host,
                 remote_dir,
                 if ftp_path.is_empty() { "." } else { &ftp_path }
             ),
@@ -513,7 +530,15 @@ pub async fn upload_privacy_html(
             let dest = tmp_root.join("index.html");
             fs::copy(&source, &dest).map_err(|e| format!("复制 HTML 失败: {e}"))?;
 
-            run_ftp_upload_with(&tmp_root, &ftp_path, PRIVACY_FTP_HOST, None, "ops")?;
+            run_ftp_upload_with(
+                &tmp_root,
+                &ftp_path,
+                &ftp_host,
+                &ftp_user,
+                &ftp_pass,
+                None,
+                "ops",
+            )?;
             Ok((remote_dir.clone(), public_url.clone()))
         })();
 

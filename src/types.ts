@@ -72,6 +72,13 @@ export interface HarborConfig {
   bt_frontend_remote_dir?: string;
   /** JAR 文件名 → 宝塔项目 id（同名 JAR 消歧） */
   bt_jar_project_ids?: Record<string, string>;
+  /** 落地页 FTP（上传）；密码不设默认值 */
+  landing_ftp_host?: string;
+  landing_ftp_user?: string;
+  landing_ftp_pass?: string;
+  landing_ftp_base_dir?: string;
+  /** 隐私协议 FTP 主机；用户/密码复用落地页 FTP */
+  privacy_ftp_host?: string;
   /** @deprecated 已迁移到 ks_environments，读配置时兼容旧字段 */
   ks_console?: string;
   /** @deprecated 已迁移到 ks_environments */
