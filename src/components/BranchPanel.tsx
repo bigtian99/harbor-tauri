@@ -170,7 +170,10 @@ export function BranchPanel({
     })
   );
   const branchDisplayNames = Object.keys(branchDisplayMap);
-  const currentBranchDisplay = branchDisplayMap[branchName] || branchName;
+  const currentBranchDisplay =
+    Object.entries(branchDisplayMap).find(([, full]) => full === branchName)?.[0]
+    || (branchName.includes("/") ? branchName.substring(branchName.indexOf("/") + 1) : branchName)
+    || branchName;
   const branchFallbackCopied =
     branchImageResults.length === 0 && branchFullImage
       ? isCopyHighlighted(copied, branchFullImage)

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { filterSearchableDropdownOptions } from "../searchableDropdownFilter";
 
 interface SearchableDropdownProps {
   value: string;
@@ -25,11 +26,14 @@ export function SearchableDropdown({
 }: SearchableDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterBySearch, setFilterBySearch] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const filteredOptions = options.filter((option) =>
-    option.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredOptions = filterSearchableDropdownOptions(
+    options,
+    searchTerm,
+    filterBySearch,
   );
 
   useEffect(() => {
@@ -42,6 +46,7 @@ export function SearchableDropdown({
       ) {
         setIsOpen(false);
         setSearchTerm("");
+        setFilterBySearch(false);
       }
     }
 
@@ -53,11 +58,13 @@ export function SearchableDropdown({
     onChange(option);
     setIsOpen(false);
     setSearchTerm("");
+    setFilterBySearch(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setSearchTerm(newValue);
+    setFilterBySearch(true);
     if (commitOnInput) {
       onChange(newValue);
     }
@@ -71,13 +78,15 @@ export function SearchableDropdown({
       onChange(searchTerm);
       setIsOpen(false);
       setSearchTerm("");
+      setFilterBySearch(false);
     }
   };
 
   const handleInputFocus = () => {
     if (!disabled) {
-      // 聚焦时带入当前值，便于在已有脚本上继续手改
+      // 聚焦时带入当前值便于手改，但不按选中值过滤，否则分支等长名单只剩当前项
       setSearchTerm(value || "");
+      setFilterBySearch(false);
       setIsOpen(true);
     }
   };
@@ -88,6 +97,7 @@ export function SearchableDropdown({
       const finalValue = inputRef.current?.value ?? value;
       setIsOpen(false);
       setSearchTerm("");
+      setFilterBySearch(false);
       if (onBlur) {
         onBlur(finalValue);
       }
