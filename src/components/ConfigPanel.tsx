@@ -674,7 +674,7 @@ export function ConfigPanel({
                 label="面板地址"
                 value={config.bt_panel_url ?? ""}
                 onChange={(e) => onConfigChange("bt_panel_url", e.currentTarget.value)}
-                placeholder="https://47.107.51.228:10163"
+                placeholder="https://面板地址:端口"
                 styles={fieldStyles}
               />
               <PasswordInput
@@ -761,8 +761,8 @@ export function ConfigPanel({
                 label="前端 dist 上传目录"
                 value={config.bt_frontend_remote_dir ?? ""}
                 onChange={(e) => onConfigChange("bt_frontend_remote_dir", e.currentTarget.value)}
-                placeholder="/www/wwwroot/pcm.shengyeshudong.cn"
-                description="上传 dist 内文件（不套一层 dist 目录）；默认 pcm.shengyeshudong.cn"
+                placeholder="/www/wwwroot/example.com"
+                description="上传 dist 内文件（不套一层 dist 目录）"
                 styles={fieldStyles}
               />
               <Checkbox
@@ -775,7 +775,7 @@ export function ConfigPanel({
                 label="FTP 主机"
                 value={config.bt_ftp_host ?? ""}
                 onChange={(e) => onConfigChange("bt_ftp_host", e.currentTarget.value)}
-                placeholder="47.107.51.228"
+                placeholder="FTP 主机"
                 styles={fieldStyles}
               />
               <TextInput
@@ -1154,7 +1154,7 @@ export function ConfigPanel({
                 ...envEditor,
                 draft: { ...envEditor.draft, console: e.currentTarget.value },
               })}
-              placeholder="例如: http://192.168.31.254:30880"
+              placeholder="例如: http://kubesphere:30880"
               styles={fieldStyles}
             />
             <TextInput

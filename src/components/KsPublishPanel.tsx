@@ -220,7 +220,7 @@ export function KsPublishPanel({
       setConnected(false);
       return;
     }
-    const consoleUrl = env.console || "http://192.168.31.254:30880";
+    const consoleUrl = env.console || "";
     const username = env.username || "admin";
     const password = env.password || "";
     if (!consoleUrl.trim() || !username.trim() || !password) {

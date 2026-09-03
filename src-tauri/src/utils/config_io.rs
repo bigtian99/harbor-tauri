@@ -37,10 +37,6 @@ pub(crate) fn normalize_config(mut config: HarborConfig) -> HarborConfig {
         config.frontend_nginx_template = DEFAULT_FRONTEND_NGINX_TEMPLATE.to_string();
     }
     config.ops_authorization = None;
-    // 旧配置缺字段时补上同名 JAR 消歧默认项（不覆盖用户已写的键）
-    for (jar, id) in crate::models::HarborConfig::default().bt_jar_project_ids {
-        config.bt_jar_project_ids.entry(jar).or_insert(id);
-    }
     // Maven：配置为空时用环境变量 MAVEN_HOME/M2_HOME 预填；本地仓库空则由 Home 推导
     if config.maven_home.trim().is_empty() {
         let env_home = crate::utils::maven_home_from_env();
@@ -63,7 +59,7 @@ fn migrate_ks_environments(config: &mut HarborConfig) {
                 id: "legacy".to_string(),
                 name: "dev".to_string(),
                 console: if config.ks_console.trim().is_empty() {
-                    crate::models::HarborConfig::default().ks_console
+                    String::new()
                 } else {
                     config.ks_console.clone()
                 },

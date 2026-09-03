@@ -51,4 +51,5 @@ test("pickKsEnvironment falls back when last id is missing", () => {
   assert.equal(pickKsEnvironment(envs, "prod")?.id, "prod");
   assert.equal(pickKsEnvironment(envs, "gone")?.id, "dev");
   assert.equal(createKsEnvironment([]).name, "dev");
+  assert.equal(createKsEnvironment([]).console, "");
 });

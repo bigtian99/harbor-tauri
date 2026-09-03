@@ -1,6 +1,6 @@
 import type { HarborConfig, KsEnvironment } from "../types";
 
-const DEFAULT_KS_CONSOLE = "http://192.168.31.254:30880";
+const DEFAULT_KS_CONSOLE = "";
 const SUGGESTED_NAMES = ["dev", "test", "prod"];
 
 export function resolveKsEnvironments(config: HarborConfig): KsEnvironment[] {

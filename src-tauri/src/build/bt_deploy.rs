@@ -777,11 +777,10 @@ fn deploy_frontend_dist(app: &AppHandle, config: &HarborConfig, dist_path: &str)
     if CANCEL_FLAG.load(Ordering::SeqCst) {
         return "🛑 已取消，跳过前端 FTP 上传".to_string();
     }
-    let remote = if config.bt_frontend_remote_dir.trim().is_empty() {
-        "/www/wwwroot/pcm.shengyeshudong.cn".to_string()
-    } else {
-        config.bt_frontend_remote_dir.trim().to_string()
-    };
+    let remote = config.bt_frontend_remote_dir.trim().to_string();
+    if remote.is_empty() {
+        return "ℹ️ 未配置前端 dist 上传目录，跳过 FTP 上传".to_string();
+    }
     crate::build::emit_progress(
         app,
         90,
@@ -2141,7 +2140,7 @@ mod tests {
 
     #[test]
     fn request_token_matches_official_demo() {
-        let secret = "4vKENa5oEo8ZoNBuN7Rt6QGtlgB0Bo5i";
+        let secret = "demo-api-sk";
         let now = "1700000000";
         let expected_inner = hex_md5(secret.as_bytes());
         let expected = hex_md5(format!("{}{}", now, expected_inner).as_bytes());

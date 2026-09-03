@@ -227,13 +227,13 @@ pub struct HarborConfig {
     // 历史打包记录
     pub build_history: Vec<BuildRecord>,
     // 宝塔 test 部署（仅 Java JAR）
-    #[serde(default = "default_bt_panel_url")]
+    #[serde(default)]
     pub bt_panel_url: String,
     #[serde(default)]
     pub bt_panel_secret: String,
     #[serde(default = "default_true")]
     pub bt_panel_insecure: bool,
-    #[serde(default = "default_bt_ftp_host")]
+    #[serde(default)]
     pub bt_ftp_host: String,
     #[serde(default = "default_bt_ftp_user")]
     pub bt_ftp_user: String,
@@ -246,10 +246,10 @@ pub struct HarborConfig {
     #[serde(default = "default_bt_auto_deploy_profile")]
     pub bt_auto_deploy_profile: String,
     /// 前端 test 打包 dist 内容上传目录（面板路径或相对 FTP 根）
-    #[serde(default = "default_bt_frontend_remote_dir")]
+    #[serde(default)]
     pub bt_frontend_remote_dir: String,
     /// JAR basename → 宝塔 Java 项目 id（同名 JAR 多项目时强制消歧）
-    #[serde(default = "default_bt_jar_project_ids")]
+    #[serde(default)]
     pub bt_jar_project_ids: HashMap<String, String>,
     /// 落地页 FTP（上传）— 源码不写死账号密码
     #[serde(default)]
@@ -264,7 +264,7 @@ pub struct HarborConfig {
     #[serde(default)]
     pub privacy_ftp_host: String,
     /// 旧版单环境字段，加载时迁入 ks_environments
-    #[serde(default = "default_ks_console")]
+    #[serde(default)]
     pub ks_console: String,
     #[serde(default)]
     pub ks_username: String,
@@ -362,22 +362,22 @@ impl Default for HarborConfig {
             custom_docker_extras_dir: String::new(),
             // 历史打包记录默认为空
             build_history: Vec::new(),
-            bt_panel_url: default_bt_panel_url(),
+            bt_panel_url: String::new(),
             bt_panel_secret: String::new(),
             bt_panel_insecure: true,
-            bt_ftp_host: default_bt_ftp_host(),
+            bt_ftp_host: String::new(),
             bt_ftp_user: default_bt_ftp_user(),
             bt_ftp_pass: String::new(),
             bt_auto_deploy_test: true,
             bt_auto_deploy_profile: default_bt_auto_deploy_profile(),
-            bt_frontend_remote_dir: default_bt_frontend_remote_dir(),
-            bt_jar_project_ids: default_bt_jar_project_ids(),
+            bt_frontend_remote_dir: String::new(),
+            bt_jar_project_ids: HashMap::new(),
             landing_ftp_host: String::new(),
             landing_ftp_user: String::new(),
             landing_ftp_pass: String::new(),
             landing_ftp_base_dir: String::new(),
             privacy_ftp_host: String::new(),
-            ks_console: default_ks_console(),
+            ks_console: String::new(),
             ks_username: String::new(),
             ks_password: String::new(),
             ks_environments: Vec::new(),
@@ -392,35 +392,12 @@ fn default_true() -> bool {
     true
 }
 
-fn default_bt_panel_url() -> String {
-    "https://47.107.51.228:10163".to_string()
-}
-
-fn default_bt_ftp_host() -> String {
-    "47.107.51.228".to_string()
-}
-
 fn default_bt_ftp_user() -> String {
     "admin".to_string()
 }
 
 fn default_bt_auto_deploy_profile() -> String {
     "test".to_string()
-}
-
-fn default_bt_frontend_remote_dir() -> String {
-    "/www/wwwroot/pcm.shengyeshudong.cn".to_string()
-}
-
-fn default_ks_console() -> String {
-    "http://192.168.31.254:30880".to_string()
-}
-
-fn default_bt_jar_project_ids() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    // tksy-admin / 中台：同名 JAR 有多条时固定打到 id=19（pcm2）
-    m.insert("tksy-backend-1.0.0.jar".to_string(), "19".to_string());
-    m
 }
 
 // ========== 落地页生成相关数据结构 ==========
