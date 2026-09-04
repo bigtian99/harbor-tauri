@@ -275,4 +275,4 @@ if (!isTauriRuntime()) { showToast("请在桌面端操作"); return; }
 
 ## CI/CD
 
-GitHub Actions workflow (`build.yml`) builds for macOS (ARM64 + x64) and Windows x64 on tag push (`v*`); branch push only smokes macOS ARM64. Uses pnpm 9, Node 22, and Rust stable.
+GitHub Actions workflow (`build.yml`) builds macOS ARM64 (full) and Windows x64 (full + OPS) on tag push (`v*`); branch push only smokes macOS ARM64. Uses pnpm 9, Node 22, and Rust stable.

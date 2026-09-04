@@ -17,14 +17,14 @@ on:
 permissions:
   contents: write
 
-# 同分支连推会叠 6 个 matrix；取消进行中的旧跑。tag 发版不取消。
+# 同分支连推会叠 matrix；取消进行中的旧跑。tag 发版不取消。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
-    # 分支 push 只打 macOS ARM 冒烟；tag / 手动触发打 macOS + Windows（含 OPS）。
+    # 分支 push 只打 macOS ARM 冒烟；tag / 手动触发加打 Windows 完整版与 Windows OPS。
     if: |
       matrix.smoke ||
       github.event_name == 'workflow_dispatch' ||
@@ -33,30 +33,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # bundles: 空 = 平台默认。不打 Linux（无 Ubuntu 用户）。
+          # 不打：macOS x64、Linux、macOS ARM OPS。
           - platform: 'macos-latest'
             target: 'aarch64-apple-darwin'
             label: 'macOS ARM64'
             ops: false
             bundles: ''
             smoke: true
-          - platform: 'macos-latest'
-            target: 'x86_64-apple-darwin'
-            label: 'macOS x64'
-            ops: false
-            bundles: ''
-            smoke: false
           - platform: 'windows-latest'
             target: 'x86_64-pc-windows-msvc'
             label: 'Windows x64'
             ops: false
             bundles: 'nsis'
-            smoke: false
-          - platform: 'macos-latest'
-            target: 'aarch64-apple-darwin'
-            label: 'macOS ARM64 OPS'
-            ops: true
-            bundles: ''
             smoke: false
           - platform: 'windows-latest'
             target: 'x86_64-pc-windows-msvc'
