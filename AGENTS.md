@@ -204,4 +204,4 @@ templates_log("list_template_infos ok"); // ≡ diag_log("templates", ...)
 
 ## CI/CD
 
-GitHub Actions workflow (`build.yml`) builds for macOS (ARM64 + x64), Linux x64, and Windows x64 on tag push (`v*`). Uses pnpm 9, Node 20, and Rust stable.
+GitHub Actions workflow (`build.yml`) builds for macOS (ARM64 + x64) and Windows x64 on tag push (`v*`); branch push only smokes macOS ARM64. Uses pnpm 9, Node 22, and Rust stable.
