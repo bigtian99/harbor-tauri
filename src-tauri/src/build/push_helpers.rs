@@ -41,6 +41,61 @@ fn harbor_session_key(harbor_url: &str, username: &str, password: &str) -> Strin
     format!("{harbor_url}\0{username}\0{password}")
 }
 
+fn harbor_login_host(raw: &str) -> String {
+    let s = raw.trim().trim_end_matches('/');
+    s.strip_prefix("https://")
+        .or_else(|| s.strip_prefix("http://"))
+        .unwrap_or(s)
+        .trim_end_matches('/')
+        .to_string()
+}
+
+fn docker_login_harbor_sync(
+    harbor_url: String,
+    username: String,
+    password: String,
+    skip_if_session: bool,
+) -> Result<bool, String> {
+    let host = harbor_login_host(&harbor_url);
+    let session_key = harbor_session_key(&host, &username, &password);
+    let mut session = HARBOR_LOGIN_SESSION
+        .lock()
+        .map_err(|_| "Harbor 登录锁异常".to_string())?;
+    if skip_if_session && session.as_ref() == Some(&session_key) {
+        crate::diag::diag_log(
+            "docker",
+            &format!("跳过 docker login（会话内已登录）: {host}"),
+        );
+        return Ok(false);
+    }
+
+    let mut child = silent_docker_command()
+        .args(["login", &host, "-u", &username, "--password-stdin"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("启动 docker login 失败: {e}"))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(password.as_bytes())
+            .map_err(|e| e.to_string())?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("docker login 失败: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("docker login 失败:\n{stderr}"));
+    }
+
+    *session = Some(session_key);
+    crate::diag::diag_log("docker", &format!("docker login 成功: {host}"));
+    Ok(true)
+}
+
 /// `docker login` Harbor（password-stdin）。
 /// 返回 `true` 表示本次真正执行了 login；`false` 表示本进程已登录过同一账号，直接跳过。
 pub(crate) async fn docker_login_harbor(
@@ -48,51 +103,39 @@ pub(crate) async fn docker_login_harbor(
     username: String,
     password: String,
 ) -> Result<bool, String> {
-    let session_key = harbor_session_key(&harbor_url, &username, &password);
-
-    let login_result: Result<bool, String> = tauri::async_runtime::spawn_blocking(move || {
-        // 持锁贯穿「查会话 → login → 记会话」，并行推时只会有一个真正 login
-        let mut session = HARBOR_LOGIN_SESSION
-            .lock()
-            .map_err(|_| "Harbor 登录锁异常".to_string())?;
-        if session.as_ref() == Some(&session_key) {
-            crate::diag::diag_log(
-                "docker",
-                &format!("跳过 docker login（会话内已登录）: {}", harbor_url),
-            );
-            return Ok(false);
-        }
-
-        let mut child = silent_docker_command()
-            .args(["login", &harbor_url, "-u", &username, "--password-stdin"])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("启动docker login失败: {}", e))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(password.as_bytes())
-                .map_err(|e| e.to_string())?;
-        }
-
-        let output = child
-            .wait_with_output()
-            .map_err(|e| format!("docker login失败: {}", e))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("docker login失败:\n{}", stderr));
-        }
-
-        *session = Some(session_key);
-        crate::diag::diag_log("docker", &format!("docker login 成功: {}", harbor_url));
-        Ok(true)
+    tauri::async_runtime::spawn_blocking(move || {
+        docker_login_harbor_sync(harbor_url, username, password, true)
     })
     .await
-    .map_err(|e| format!("登录线程异常: {}", e))?;
+    .map_err(|e| format!("登录线程异常: {e}"))?
+}
 
-    login_result
+/// 用当前表单账号强制 `docker login`，只验证能否登录。
+#[tauri::command]
+pub async fn test_harbor_connection(
+    harbor_url: String,
+    username: String,
+    password: String,
+) -> Result<String, String> {
+    let url = harbor_url.trim().to_string();
+    let user = username.trim().to_string();
+    crate::diag::diag_log(
+        "docker",
+        &format!(
+            "test_harbor_connection host={} user={}",
+            harbor_login_host(&url),
+            user
+        ),
+    );
+    if url.is_empty() || user.is_empty() || password.is_empty() {
+        return Err("请填写 Harbor 地址、用户名和密码".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        docker_login_harbor_sync(url, user, password, false)?;
+        Ok("登录成功".to_string())
+    })
+    .await
+    .map_err(|e| format!("登录线程异常: {e}"))?
 }
 
 /// 解析 Docker 尺寸字符串：`1.024kB` / `45.23MB` / `1.2GB`
@@ -486,5 +529,14 @@ mod push_progress_tests {
         assert_eq!(known, 2);
         assert!(total > 0);
         assert!(pct > 0);
+    }
+
+    #[test]
+    fn harbor_login_host_strips_scheme() {
+        assert_eq!(
+            harbor_login_host("https://dockerhub.kubekey.local/"),
+            "dockerhub.kubekey.local"
+        );
+        assert_eq!(harbor_login_host("harbor.example.com"), "harbor.example.com");
     }
 }

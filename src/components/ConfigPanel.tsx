@@ -18,7 +18,7 @@ import {
 import {
   Settings, CheckCircle, AlertCircle, FolderOpen, Archive,
   Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink, Trash2,
-  Bell, Plus, Pencil, Copy,
+  Bell, Plus, Pencil, Copy, Plug,
 } from "lucide-react";
 import { showSystemAlert } from "../systemAlert";
 import type { HarborConfig, KsEnvironment } from "../types";
@@ -144,6 +144,8 @@ export function ConfigPanel({
     () => loadBtTempLoginOpenPref(),
   );
   const flushKsMapsRef = useRef<(() => void) | null>(null);
+  const [harborLoginTesting, setHarborLoginTesting] = useState(false);
+  const [harborLoginMsg, setHarborLoginMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const [mavenProbe, setMavenProbe] = useState<{
     source: string;
@@ -173,6 +175,27 @@ export function ConfigPanel({
   const handleSaveConfig = () => {
     flushKsMapsRef.current?.();
     void onSaveConfig();
+  };
+
+  const handleTestHarborLogin = async () => {
+    if (!isTauriRuntime()) {
+      setHarborLoginMsg({ type: "err", text: "请在桌面端测试登录" });
+      return;
+    }
+    setHarborLoginTesting(true);
+    setHarborLoginMsg(null);
+    try {
+      const msg = await invoke<string>("test_harbor_connection", {
+        harborUrl: config.harbor_url,
+        username: config.username,
+        password: config.password,
+      });
+      setHarborLoginMsg({ type: "ok", text: msg });
+    } catch (e) {
+      setHarborLoginMsg({ type: "err", text: String(e) });
+    } finally {
+      setHarborLoginTesting(false);
+    }
   };
 
   const gitRecordCount =
@@ -339,20 +362,6 @@ export function ConfigPanel({
             </Tabs.Tab>
           ))}
         </Tabs.List>
-        {activeTab !== "about" && (
-          <Button
-            className="config-save-btn"
-            onClick={handleSaveConfig}
-            variant="filled"
-            color="blue"
-            data-saved={configSaved || undefined}
-            leftSection={configSaved ? <CheckCircle size={16} /> : <Settings size={16} />}
-            size="compact-sm"
-            radius="md"
-          >
-            {configSaved ? "已保存" : "保存配置"}
-          </Button>
-        )}
         </div>
 
         <Tabs.Panel value="connection" pt="md">
@@ -381,6 +390,26 @@ export function ConfigPanel({
                 onVisibilityChange={() => onTogglePassword()}
                 styles={fieldStyles}
               />
+              <Group justify="flex-end" align="center" gap="sm">
+                {harborLoginMsg && (
+                  <Text
+                    size="sm"
+                    c={harborLoginMsg.type === "ok" ? "var(--color-success)" : "var(--color-error)"}
+                    style={{ flex: 1 }}
+                  >
+                    {harborLoginMsg.text}
+                  </Text>
+                )}
+                <Button
+                  variant="default"
+                  size="compact-sm"
+                  loading={harborLoginTesting}
+                  leftSection={<Plug size={14} />}
+                  onClick={() => { void handleTestHarborLogin(); }}
+                >
+                  测试连接
+                </Button>
+              </Group>
               <TextInput
                 label="Harbor 项目"
                 value={config.project}
@@ -1125,6 +1154,22 @@ export function ConfigPanel({
       </Tabs>
       </Stack>
       </div>
+      {activeTab !== "about" && (
+        <div className="config-save-bar">
+          <Button
+            className="config-save-btn"
+            onClick={handleSaveConfig}
+            variant="filled"
+            color="blue"
+            data-saved={configSaved || undefined}
+            leftSection={configSaved ? <CheckCircle size={16} /> : <Settings size={16} />}
+            size="compact-sm"
+            radius="md"
+          >
+            {configSaved ? "已保存" : "保存配置"}
+          </Button>
+        </div>
+      )}
 
       <Modal
         opened={!!envEditor}

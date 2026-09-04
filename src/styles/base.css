@@ -416,6 +416,20 @@ body {
   overflow: hidden;
 }
 
+/* 设置页：主区锁高，保存条钉在窗口底部，表单在上方滚 */
+.content:has(.config-shell) {
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+}
+
+.content:has(.config-shell) > .config-shell {
+  flex: 1;
+  min-height: 0;
+}
+
 /* 历史记录：锁住 AppShell.Main 滚动，只让面板内列表滚 */
 .content:has(.history-panel-new) {
   padding-block: 0 !important;
