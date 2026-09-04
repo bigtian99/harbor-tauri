@@ -16,24 +16,35 @@ JarPorter（ShipForge）前端存在 **Mantine 9 + 手写 CSS** 双轨：运营/
 | 总体目标 | **D**：视觉统一 + 好维护 + 体验升级，分多期 |
 | 第一期范围 | **D**：全局外壳（侧栏、设置、换肤） |
 | 视觉力度 | **C**：明显换肤，仍暗色，不引入新 UI 库 |
-| 主色 | 由设计方定：**Zinc 暗底 + Cyan 强调**（见下） |
+| 主色 | 由设计方定：**靛蓝暗底 + 天蓝强调**（见下；已从初版 Zinc+Cyan 演进） |
 
 ## 配色规范（单一真相源）
 
+权威实现：`src/theme/tokens.css`。下表须与之同步。
+
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--color-primary` | `#06b6d4` | 主按钮、激活态、链接、进度条 |
-| `--color-primary-hover` | `#22d3ee` | hover / focus ring |
-| `--color-primary-muted` | `rgba(6, 182, 212, 0.15)` | 激活背景、选中行浅底 |
-| `--color-bg-base` | `#09090b` | 页面底、Mantine `dark[7]` |
-| `--color-bg-surface` | `#18181b` | 侧栏、卡片、Modal |
-| `--color-bg-elevated` | `#27272a` | hover、输入框底、表格斑马可选 |
-| `--color-border` | `rgba(255, 255, 255, 0.08)` | 分割线、输入框边框 |
-| `--color-text` | `#fafafa` | 主文字 |
-| `--color-text-muted` | `#a1a1aa` | 辅助说明 |
-| `--color-success` | `#10b981` | 构建成功、保存成功 |
-| `--color-warning` | `#f59e0b` | 警告通知 |
-| `--color-error` | `#ef4444` | 错误、校验失败 |
+| `--color-primary` | `#3b9eff` | 主按钮、激活态、链接、进度条 |
+| `--color-primary-hover` | `#5eb0f5` | hover / focus ring |
+| `--color-primary-solid` | `#1a6fd4` | 实心主按钮底 |
+| `--color-primary-solid-hover` | `#2b82e6` | 实心主按钮 hover |
+| `--color-primary-muted` | `rgba(59, 158, 255, 0.22)` | 激活背景、选中行浅底 |
+| `--color-primary-subtle` | `rgba(59, 158, 255, 0.12)` | 更浅强调底 |
+| `--color-accent` | `#a78bfa` | 次强调（少用） |
+| `--color-bg-base` | `#0a0e17` | 页面底 |
+| `--color-bg-surface` | `#101826` | 侧栏、Modal |
+| `--color-bg-elevated` | `#182338` | hover、抬升面 |
+| `--color-bg-card` | `#141c2b` | 卡片面 |
+| `--color-border` | `rgba(120, 170, 255, 0.12)` | 分割线、输入框边框 |
+| `--color-border-strong` | `rgba(120, 170, 255, 0.22)` | 更强边框 |
+| `--color-text` | `#eef3ff` | 主文字 |
+| `--color-text-muted` | `#93a4c3` | 辅助说明 |
+| `--color-on-primary` | `#f8fbff` | 主色上的文字 / 头像字 |
+| `--color-preview-paper` | `#ffffff` | 落地页/隐私 iframe 纸面（非 UI chrome） |
+| `--color-success` | `#4ec9a8` | 构建成功、保存成功 |
+| `--color-success-hover` | `#6ee7b7` | 成功强调 hover |
+| `--color-warning` | `#fbbf24` | 警告通知 |
+| `--color-error` | `#f87171` | 错误、校验失败 |
 | `--radius-md` | `8px` | 按钮、卡片、输入框（Mantine `radius="md"`） |
 | `--font-size-base` | `14px` | 正文 |
 | `--font-size-sm` | `12px` | 辅助、表格 meta |
@@ -42,12 +53,12 @@ JarPorter（ShipForge）前端存在 **Mantine 9 + 手写 CSS** 双轨：运营/
 
 - `body::before` 浮动光斑动画（可删或改为静态极弱纹理）
 - 径向渐变大面积背景 → 纯色 `--color-bg-base`
-- 侧栏 `backdrop-filter: blur` → 实色 `--color-bg-surface`
-- 全局霓虹 teal 硬编码（`#64ffda`、`rgba(100, 255, 218, …)`）→ 改为 token / Mantine `cyan` 色阶
+- 侧栏与弹层 `backdrop-filter: blur` → 实色暗底（无玻璃拟态）
+- 全局霓虹 teal 硬编码（`#64ffda`、`rgba(100, 255, 218, …)`）→ 改为 token / Mantine `blue`/`sky` 色阶
 
 ## 目标（第一期）
 
-1. **Design Token 中枢**：`src/theme/tokens.css` 定义 CSS 变量；`src/theme/mantine.ts` 的 `createTheme` 与 token 对齐（`primaryColor: "cyan"`，自定义 `dark` 色阶映射 zinc）。
+1. **Design Token 中枢**：`src/theme/tokens.css` 定义 CSS 变量；`src/theme/mantine.ts` 的 `createTheme` 与 token 对齐（`primaryColor: "blue"`，sky 色阶 + dusk dark 映射）。
 2. **侧栏 Mantine 化**：`Sidebar.tsx` 使用 Mantine 组件（`NavLink`、`Collapse`、`Tooltip`、`ActionIcon`），保留：折叠、宝塔子菜单（展开/收起 + 收起态 flyout）、OPS 菜单裁剪、`系统日志` + `设置` 底栏。
 3. **设置页外壳统一**：`ConfigPanel` 顶栏子 Tab 改为 Mantine `Tabs`；各子页表单控件（`TextInput`、`PasswordInput`、`Select`、`Checkbox`、`Button` 等）换 Mantine，**props 接口与保存逻辑不变**。
 4. **布局骨架**：`App.tsx` 的 `.app` / `.content` 可改为 Mantine `AppShell`（`Navbar` + `Main`），或保留 flex 结构但 class 消费 token——以实现时改动最小为准。
@@ -169,7 +180,7 @@ theme/
 
 ## 成功标准
 
-- 用户切换任意 Tab，感知为同一套暗色 Cyan 工具，而非两套产品拼接
+- 用户切换任意 Tab，感知为同一套暗色天蓝工具，而非两套产品拼接
 - 侧栏与设置页无功能回归
 - `CLAUDE.md` OPT-018 仍成立：仅 Mantine + CSS 双轨，无第三库
 - 硬编码 `#64ffda` 在 `src/` 中降至 0（或仅注释/文档提及）

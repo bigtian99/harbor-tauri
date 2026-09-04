@@ -607,7 +607,7 @@ export function BtJavaProjectsPanel() {
       notifications.show({
         title: "已下发停止",
         message: `${msg}，正在刷新状态…`,
-        color: "teal",
+        color: "blue",
         autoClose: 2500,
       });
       setProgressMessage("已下发停止，正在确认已停止…");
@@ -689,7 +689,7 @@ export function BtJavaProjectsPanel() {
       notifications.show({
         title: "已下发重启",
         message: `${msg}，正在等待端口出现…`,
-        color: "teal",
+        color: "blue",
         autoClose: 2500,
       });
       setProgressMessage("已下发重启，等待端口出现…");
@@ -993,7 +993,7 @@ export function BtJavaProjectsPanel() {
             <Text size="sm" fw={500}>
               {busyKey !== null ? "任务进度" : "最近任务"}
             </Text>
-            <Text size="sm" c="teal" style={{ flexShrink: 0 }}>
+            <Text size="sm" c="blue" style={{ flexShrink: 0 }}>
               {displayPercent}%
             </Text>
           </Group>

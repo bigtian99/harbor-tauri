@@ -231,7 +231,7 @@ export function Sidebar({
         data-collapsed={sidebarCollapsed || undefined}
         style={{
           background:
-            "linear-gradient(180deg, color-mix(in srgb, var(--color-bg-surface) 82%, #1a3a6a) 0%, var(--color-bg-surface) 40%)",
+            "linear-gradient(180deg, color-mix(in srgb, var(--color-bg-surface) 82%, var(--color-primary-solid)) 0%, var(--color-bg-surface) 40%)",
           borderRight: "1px solid var(--color-border-strong)",
         }}
       >

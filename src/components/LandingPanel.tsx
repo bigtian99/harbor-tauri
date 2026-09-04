@@ -79,7 +79,7 @@ export function LandingPanel({
         zipPath: selected as string,
       });
       const names = results.map((r) => r.dir_name).join(", ");
-      notifications.show({ message: `模板上传完成: ${names}`, color: "teal", autoClose: 3000 });
+      notifications.show({ message: `模板上传完成: ${names}`, color: "blue", autoClose: 3000 });
       await loadTemplateInfos();
     } catch (e) {
       notifications.show({ title: "上传失败", message: String(e), color: "red", autoClose: 5000 });
@@ -99,7 +99,7 @@ export function LandingPanel({
     if (!isTauriRuntime()) return;
     try {
       await invoke("delete_template_dir", { dirName });
-      notifications.show({ message: `已删除模板: ${dirName}`, color: "teal", autoClose: 3000 });
+      notifications.show({ message: `已删除模板: ${dirName}`, color: "blue", autoClose: 3000 });
       await loadTemplateInfos();
     } catch (e) {
       notifications.show({ title: "删除失败", message: String(e), color: "red", autoClose: 5000 });

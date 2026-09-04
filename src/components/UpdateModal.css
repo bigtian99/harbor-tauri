@@ -7,8 +7,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(5, 7, 20, 0.72);
-  backdrop-filter: blur(8px);
+  background: rgba(5, 7, 20, 0.78);
   animation: update-fade-in 0.2s ease;
 }
 
@@ -71,7 +70,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--color-on-primary);
   background: linear-gradient(135deg, var(--color-primary), var(--color-success));
   box-shadow: 0 8px 20px var(--color-primary-muted);
 }
@@ -321,7 +320,7 @@
 
 .update-btn--primary {
   background: linear-gradient(135deg, var(--color-primary), var(--color-success));
-  color: #fff;
+  color: var(--color-on-primary);
   box-shadow: 0 6px 16px var(--color-primary-muted);
 }
 

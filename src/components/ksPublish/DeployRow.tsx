@@ -35,7 +35,7 @@ export const DeployRow = memo(function DeployRow({
       </Table.Td>
       <Table.Td>
         <Group gap={6} wrap="nowrap">
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[s.state] ?? "#9aa5b8", display: "inline-block" }} />
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[s.state] ?? "var(--color-text-muted)", display: "inline-block" }} />
           <Badge color={STATUS_COLOR[s.state] ?? "gray"} variant="light" size="xs">{s.label}</Badge>
         </Group>
       </Table.Td>

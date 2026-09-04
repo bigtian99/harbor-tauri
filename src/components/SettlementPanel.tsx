@@ -174,7 +174,7 @@ export function SettlementPanel() {
       });
       notifications.show({
         message: `已生成 ${generated.created} 个结算单`,
-        color: "teal",
+        color: "blue",
         autoClose: 3000,
       });
     } catch (e) {
@@ -311,7 +311,7 @@ export function SettlementPanel() {
                 <Text fw={600} c="var(--color-text)">
                   生成完成
                 </Text>
-                <Badge color="teal" variant="light">
+                <Badge color="blue" variant="light">
                   {result.created} 个文件
                 </Badge>
                 <Badge color="blue" variant="light">

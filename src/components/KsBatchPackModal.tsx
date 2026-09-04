@@ -534,7 +534,7 @@ export function KsBatchProgressModal({
                 <Badge
                   leftSection={<CheckCircle2 size={12} />}
                   variant="light"
-                  color="teal"
+                  color="blue"
                   size="lg"
                   radius="sm"
                 >

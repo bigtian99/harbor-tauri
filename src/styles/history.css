@@ -2,7 +2,7 @@
 
 /* Commit info styles */
 .commit-info {
-  background: rgba(15, 52, 96, 0.5);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
   border: 1px solid var(--color-primary-muted);
   border-radius: 8px;
   padding: 12px 16px;
@@ -107,7 +107,7 @@ a.commit-link {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: rgba(15, 52, 96, 0.5);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
   border: 1px solid var(--color-primary-muted);
   border-radius: 8px;
   padding: 10px 16px;
@@ -120,7 +120,7 @@ a.commit-link {
 }
 
 .modal-trigger-btn:hover {
-  background: rgba(15, 52, 96, 0.7);
+  background: var(--color-bg-elevated);
   border-color: var(--color-primary-muted);
 }
 
@@ -152,7 +152,7 @@ a.commit-link {
 
 /* Commit list styles */
 .commit-list-section {
-  background: rgba(15, 52, 96, 0.5);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
   border: 1px solid var(--color-primary-muted);
   border-radius: 8px;
   padding: 12px 16px;
@@ -247,7 +247,7 @@ a.commit-link {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(15, 52, 96, 0.5);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
   border: 1px solid var(--color-primary-muted);
   border-radius: 8px;
   padding: 12px 16px;
@@ -259,7 +259,7 @@ a.commit-link {
 }
 
 .history-toggle:hover {
-  background: rgba(15, 52, 96, 0.7);
+  background: var(--color-bg-elevated);
 }
 
 .history-arrow {
@@ -288,7 +288,7 @@ a.commit-link {
 }
 
 .history-item {
-  background: rgba(15, 52, 96, 0.3);
+  background: color-mix(in srgb, var(--color-bg-elevated) 55%, transparent);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   margin-bottom: 10px;
@@ -379,7 +379,7 @@ a.commit-link {
   gap: 4px;
   font-size: 10px;
   color: var(--color-text);
-  background: rgba(15, 52, 96, 0.6);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
   padding: 3px 8px;
   border-radius: 12px;
   border: 1px solid var(--color-primary-muted);
@@ -421,7 +421,7 @@ a.commit-link {
   gap: 4px;
   font-size: 10px;
   padding: 4px 10px;
-  background: rgba(15, 52, 96, 0.6);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
   border-radius: 12px;
   border: 1px solid var(--color-primary-muted);
   width: fit-content;
@@ -1130,7 +1130,7 @@ a.commit-link {
 }
 
 .history-record-card {
-  background: rgba(15, 52, 96, 0.25);
+  background: color-mix(in srgb, var(--color-bg-elevated) 55%, transparent);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 16px;
@@ -1140,7 +1140,7 @@ a.commit-link {
 
 .history-record-card:hover {
   border-color: var(--color-primary-muted);
-  background: rgba(15, 52, 96, 0.35);
+  background: var(--color-primary-subtle);
 }
 
 .history-record-card.success {

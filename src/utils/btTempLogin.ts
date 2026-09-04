@@ -52,7 +52,7 @@ export async function fetchBtTempLogin(mode: BtTempLoginMode = "open"): Promise<
       notifications.show({
         title: "已复制临时登录链接",
         message: hint,
-        color: "teal",
+        color: "blue",
         autoClose: 4500,
       });
       void invoke("write_diagnostic_log", {
@@ -66,7 +66,7 @@ export async function fetchBtTempLogin(mode: BtTempLoginMode = "open"): Promise<
     notifications.show({
       title: "已打开临时登录",
       message: hint,
-      color: "teal",
+      color: "blue",
       autoClose: 4500,
     });
     void invoke("write_diagnostic_log", {

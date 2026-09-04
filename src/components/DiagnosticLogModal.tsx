@@ -60,7 +60,7 @@ function highlightLogContent(raw: string, search: string): string {
       return parts
         .map((p) =>
           p.toLowerCase() === q
-            ? `<mark style="background:rgba(94,234,212,0.35);color:var(--color-primary-hover);border-radius:2px;padding:0 1px">${p}</mark>`
+            ? `<mark style="background:var(--color-primary-muted);color:var(--color-primary-hover);border-radius:2px;padding:0 1px">${p}</mark>`
             : p,
         )
         .join("");

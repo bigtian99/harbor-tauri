@@ -128,7 +128,7 @@
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: rgba(15, 52, 96, 0.35);
+  background: var(--color-primary-subtle);
   color: var(--color-text-muted);
   font-size: 13px;
   font-weight: 700;
@@ -149,7 +149,7 @@
 .artifact-type.active {
   color: var(--color-primary-hover);
   border-color: var(--color-primary-muted);
-  background: linear-gradient(135deg, rgba(15, 52, 96, 0.85), rgba(22, 33, 62, 0.95));
+  background: linear-gradient(135deg, var(--color-bg-elevated), var(--color-bg-surface));
   box-shadow:
     0 4px 16px var(--color-primary-muted),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -165,7 +165,7 @@
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
-  background: rgba(15, 52, 96, 0.35);
+  background: var(--color-primary-subtle);
   color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 600;
@@ -182,7 +182,7 @@
 .pm-btn.active {
   color: var(--color-primary-hover);
   border-color: var(--color-primary-muted);
-  background: linear-gradient(135deg, rgba(15, 52, 96, 0.85), rgba(22, 33, 62, 0.95));
+  background: linear-gradient(135deg, var(--color-bg-elevated), var(--color-bg-surface));
   box-shadow:
     0 2px 8px var(--color-primary-muted),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -224,7 +224,7 @@
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: rgba(15, 52, 96, 0.4);
+  background: var(--color-primary-subtle);
   color: var(--color-text);
   font-size: 13px;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -242,14 +242,14 @@
 .form-group input:hover,
 .form-group textarea:hover {
   border-color: var(--color-primary-muted);
-  background: rgba(15, 52, 96, 0.6);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
 }
 
 .form-row input:focus,
 .form-group input:focus,
 .form-group textarea:focus {
   border-color: var(--color-primary-hover);
-  background: rgba(15, 52, 96, 0.7);
+  background: var(--color-bg-elevated);
   box-shadow:
     0 0 0 3px var(--color-primary-muted),
     0 4px 16px var(--color-primary-muted);
@@ -405,7 +405,7 @@
 .build-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  background: rgba(15, 52, 96, 0.5);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
 }
 
 

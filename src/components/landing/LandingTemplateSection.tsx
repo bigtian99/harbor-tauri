@@ -124,9 +124,9 @@ export function LandingTemplateSection({
                             height: 320,
                             overflow: "hidden",
                             borderRadius: 6,
-                            border: "1px solid rgba(94,234,212,0.12)",
+                            border: "1px solid var(--color-border-strong)",
                             cursor: "pointer",
-                            background: "#0a192f",
+                            background: "var(--color-bg-base)",
                           }}
                           className="tpl-root"
                           onClick={() => {
@@ -162,7 +162,7 @@ export function LandingTemplateSection({
                           {/* 放大预览按钮 */}
                           <ActionIcon
                             variant="light"
-                            color="teal"
+                            color="blue"
                             size="sm"
                             style={{
                               position: "absolute",
@@ -225,7 +225,7 @@ export function LandingTemplateSection({
         title={
           previewOverlay ? (
             <Group gap="xs">
-              <Text size="sm" fw={600} c="teal" lineClamp={1} style={{ flex: 1 }}>
+              <Text size="sm" fw={600} c="blue" lineClamp={1} style={{ flex: 1 }}>
                 {previewOverlay.title}
               </Text>
               <Button
@@ -250,7 +250,7 @@ export function LandingTemplateSection({
               height: "calc(100vh - 60px)",
               border: "none",
               display: "block",
-              background: "#fff",
+              background: "var(--color-preview-paper)",
             }}
             title={previewOverlay.title}
           />

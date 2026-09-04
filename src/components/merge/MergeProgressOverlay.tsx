@@ -68,14 +68,14 @@ export function MergeProgressOverlay({
         )}
         {phase === "success" && (
           <>
-            <ThemeIcon size={52} radius="xl" variant="light" color="teal">
+            <ThemeIcon size={52} radius="xl" variant="light" color="blue">
               <CheckCircle size={28} />
             </ThemeIcon>
             <Text fw={700} size="md" c="var(--color-text)">合并成功</Text>
             <Text size="sm" c="var(--color-text-muted)" maw={340}>
               {resultMessage}
             </Text>
-            <Button variant="filled" color="teal" onClick={onClose} mt="xs">完成</Button>
+            <Button variant="filled" color="blue" onClick={onClose} mt="xs">完成</Button>
           </>
         )}
         {phase === "error" && (

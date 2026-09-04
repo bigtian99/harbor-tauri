@@ -149,7 +149,7 @@ export function KsBatchCloneConfirmModal({
       transitionProps={{ duration: 120 }}
       title={(
         <Group gap="sm" wrap="nowrap">
-          <ThemeIcon size={36} radius="md" variant="light" color="teal">
+          <ThemeIcon size={36} radius="md" variant="light" color="blue">
             <Copy size={18} />
           </ThemeIcon>
           <Stack gap={2}>
@@ -256,7 +256,7 @@ export function KsBatchCloneConfirmModal({
           </Button>
           <Button
             variant="filled"
-            color="teal"
+            color="blue"
             disabled={!canStart}
             onClick={() => {
               if (!meta || !targetEnvId || !targetNamespace) return;

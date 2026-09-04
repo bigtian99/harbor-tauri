@@ -17,11 +17,16 @@
   --color-text: #eef3ff;
   --color-text-muted: #93a4c3;
   --color-success: #4ec9a8;
+  --color-success-hover: #6ee7b7;
   --color-success-muted: rgba(78, 201, 168, 0.10);
   --color-warning: #fbbf24;
   --color-warning-muted: rgba(251, 191, 36, 0.18);
   --color-error: #f87171;
   --color-error-muted: rgba(248, 113, 113, 0.18);
+  /* 主色上的文字 / 头像字 */
+  --color-on-primary: #f8fbff;
+  /* 落地页/隐私预览 iframe 纸面（真实页面底，非 UI chrome） */
+  --color-preview-paper: #ffffff;
   --radius-md: 8px;
   --font-size-base: 14px;
   --font-size-sm: 12px;

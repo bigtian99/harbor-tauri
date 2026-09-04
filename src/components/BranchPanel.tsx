@@ -596,7 +596,7 @@ export function BranchPanel({
                           <Text size="sm" fw={700} c="var(--color-primary-hover)">
                             {item.label}
                           </Text>
-                          <Badge size="sm" variant="light" color="teal">
+                          <Badge size="sm" variant="light" color="blue">
                             已就绪
                           </Badge>
                         </Group>
@@ -631,7 +631,7 @@ export function BranchPanel({
                         <Text size="sm" fw={700} c="var(--color-primary-hover)">
                           完整镜像
                         </Text>
-                        <Badge size="sm" variant="light" color="teal">
+                        <Badge size="sm" variant="light" color="blue">
                           已就绪
                         </Badge>
                       </Group>

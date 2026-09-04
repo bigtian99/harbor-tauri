@@ -419,7 +419,7 @@ export function BtPhpSitesPanel() {
       });
       setProgressMessage(msg);
       diagBuild(msg);
-      notifications.show({ title: "已停止", message: msg, color: "teal", autoClose: 2500 });
+      notifications.show({ title: "已停止", message: msg, color: "blue", autoClose: 2500 });
       setBusyKey(null);
       await load({ resetPage: false });
     } catch (e) {
@@ -485,7 +485,7 @@ export function BtPhpSitesPanel() {
       notifications.show({
         title: "上传完成",
         message: uploaded,
-        color: "teal",
+        color: "blue",
         autoClose: 3000,
       });
     } catch (e) {
@@ -691,7 +691,7 @@ export function BtPhpSitesPanel() {
             <Text size="sm" fw={500}>
               {busyKey !== null ? "任务进度" : "最近任务"}
             </Text>
-            <Text size="sm" c="teal" style={{ flexShrink: 0 }}>
+            <Text size="sm" c="blue" style={{ flexShrink: 0 }}>
               {displayPercent}%
             </Text>
           </Group>

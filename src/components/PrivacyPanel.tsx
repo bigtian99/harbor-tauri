@@ -129,7 +129,7 @@ export function PrivacyPanel() {
       }
       notifications.show({
         message: `已从 FTP 加载预览：${result.remote_dir}`,
-        color: "teal",
+        color: "blue",
         autoClose: 2000,
       });
     } catch (e) {
@@ -180,7 +180,7 @@ export function PrivacyPanel() {
         id: "privacy-ftp-download-done",
         title: "下载完成（点击打开所在目录）",
         message: result.local_path,
-        color: "teal",
+        color: "blue",
         autoClose: 8000,
         onClick: () => {
           void invoke("open_directory", { path: result.local_path }).catch((e) => {
@@ -266,7 +266,7 @@ export function PrivacyPanel() {
   const copyUrl = useCallback(async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
-      notifications.show({ message: "已复制链接", color: "teal", autoClose: 1500 });
+      notifications.show({ message: "已复制链接", color: "blue", autoClose: 1500 });
     } catch {
       notifications.show({ message: "复制失败", color: "red" });
     }
@@ -309,7 +309,7 @@ export function PrivacyPanel() {
     if (!isTauriRuntime()) return;
     try {
       await invoke("delete_privacy_uploads", { ids: Array.from(selectedIds) });
-      notifications.show({ message: "已删除所选记录", color: "teal" });
+      notifications.show({ message: "已删除所选记录", color: "blue" });
       await loadHistory();
     } catch (e) {
       notifications.show({ title: "删除失败", message: String(e), color: "red" });
@@ -328,7 +328,7 @@ export function PrivacyPanel() {
     if (!isTauriRuntime()) return;
     try {
       await invoke("clear_privacy_uploads");
-      notifications.show({ message: "已清空本地记录", color: "teal" });
+      notifications.show({ message: "已清空本地记录", color: "blue" });
       await loadHistory();
     } catch (e) {
       notifications.show({ title: "清空失败", message: String(e), color: "red" });
@@ -439,7 +439,7 @@ export function PrivacyPanel() {
                     height: 360,
                     border: "1px solid var(--color-border-strong)",
                     borderRadius: 8,
-                    background: "#fff",
+                    background: "var(--color-preview-paper)",
                   }}
                 />
               </Stack>

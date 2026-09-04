@@ -215,7 +215,7 @@ export function useLanding(deps: UseLandingDeps) {
     await navigator.clipboard.writeText(urls.join("\n"));
     notifications.show({
       message: `已复制 ${urls.length} 个链接`,
-      color: "teal",
+      color: "blue",
       autoClose: 2000,
     });
   }

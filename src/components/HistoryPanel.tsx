@@ -258,7 +258,7 @@ function RecordCard({
               justifyContent: "center",
               fontSize: 9,
               fontWeight: 600,
-              color: "#fff",
+              color: "var(--color-on-primary)",
               flexShrink: 0,
             }}
             title={record.author}

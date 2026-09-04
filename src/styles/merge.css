@@ -594,7 +594,7 @@
   padding: 3px 8px 3px 4px;
   border-radius: 20px;
   border: 1px solid var(--color-border);
-  background: rgba(15, 52, 96, 0.25);
+  background: color-mix(in srgb, var(--color-bg-elevated) 55%, transparent);
   color: var(--color-text);
   cursor: pointer;
   font-size: 0.8em;
@@ -673,8 +673,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(5, 7, 20, 0.72);
-  backdrop-filter: blur(4px);
+  background: rgba(5, 7, 20, 0.78);
   animation: merge-overlay-in 0.2s ease;
 }
 
@@ -683,7 +682,7 @@
   padding: 28px 24px 24px;
   border-radius: 14px;
   border: 1px solid var(--color-primary-muted);
-  background: linear-gradient(160deg, rgba(26, 31, 58, 0.98) 0%, rgba(15, 22, 41, 0.98) 100%);
+  background: linear-gradient(160deg, var(--color-bg-surface) 0%, var(--color-bg-base) 100%);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;

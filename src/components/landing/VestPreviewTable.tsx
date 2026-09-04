@@ -112,7 +112,7 @@ export function VestPreviewTable({
 
                   <Table.Td style={{ textAlign: "center" }}>
                     {genResult?.status === "success" ? (
-                      <Badge color="teal" variant="light">
+                      <Badge color="blue" variant="light">
                         成功
                       </Badge>
                     ) : genResult?.status === "error" ? (
@@ -156,7 +156,7 @@ export function VestPreviewTable({
                           <Tooltip label="预览">
                             <ActionIcon
                               variant="light"
-                              color="teal"
+                              color="blue"
                               size="sm"
                               onClick={() =>
                                 onOpenPreview(
@@ -179,13 +179,13 @@ export function VestPreviewTable({
                         <Tooltip label="复制链接">
                           <ActionIcon
                             variant="light"
-                            color="teal"
+                            color="blue"
                             size="sm"
                             onClick={() => {
                               navigator.clipboard.writeText(ftpResult.url);
                               notifications.show({
                                 message: "已复制",
-                                color: "teal",
+                                color: "blue",
                                 autoClose: 1500,
                               });
                             }}

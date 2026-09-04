@@ -72,7 +72,7 @@
   border-radius: 6px;
   padding: 6px;
   cursor: pointer;
-  color: #888;
+  color: var(--color-text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -81,7 +81,7 @@
 
 .modal-close:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  color: var(--color-on-primary);
 }
 
 .modal-body {
@@ -111,7 +111,7 @@
   left: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: #666;
+  color: var(--color-text-muted);
   pointer-events: none;
 }
 
@@ -128,7 +128,7 @@
 }
 
 .commit-search-input::placeholder {
-  color: #666;
+  color: var(--color-text-muted);
 }
 
 .commit-search-input:focus {
@@ -193,7 +193,7 @@
   padding: 10px 14px 10px 36px;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: rgba(15, 52, 96, 0.4);
+  background: var(--color-primary-subtle);
   color: var(--color-text);
   font-size: 13px;
   outline: none;
@@ -204,12 +204,12 @@
 
 .commit-author-select:hover:not(:disabled) {
   border-color: var(--color-primary-muted);
-  background: rgba(15, 52, 96, 0.6);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
 }
 
 .commit-author-select:focus {
   border-color: var(--color-primary);
-  background: rgba(15, 52, 96, 0.7);
+  background: var(--color-bg-elevated);
   box-shadow:
     0 0 0 3px var(--color-primary-muted),
     0 4px 16px var(--color-primary-muted);
@@ -270,7 +270,7 @@
   display: flex;
   gap: 12px;
   font-size: 11px;
-  color: #666;
+  color: var(--color-text-muted);
   padding-left: 58px;
 }
 
@@ -287,12 +287,12 @@
 
 .modal-pagination-info {
   font-size: 13px;
-  color: #888;
+  color: var(--color-text-muted);
 }
 
 /* Modal 内部历史记录样式 */
 .modal-history-item {
-  background: rgba(15, 52, 96, 0.25);
+  background: color-mix(in srgb, var(--color-bg-elevated) 55%, transparent);
   border: 1px solid var(--color-border);
   border-radius: 10px;
   margin-bottom: 12px;
@@ -353,7 +353,7 @@
 
 .modal-history-log pre {
   font-size: 12px;
-  color: #aaa;
+  color: var(--color-text-muted);
   white-space: pre-wrap;
   word-break: break-word;
   margin: 0;
@@ -373,14 +373,14 @@
 
 .modal-empty {
   text-align: center;
-  color: #888;
+  color: var(--color-text-muted);
   padding: 40px 20px;
   font-size: 14px;
 }
 
 .modal-loading {
   text-align: center;
-  color: #888;
+  color: var(--color-text-muted);
   padding: 40px 20px;
   font-size: 14px;
 }
@@ -428,7 +428,7 @@
 }
 
 .project-group-path {
-  color: #666;
+  color: var(--color-text-muted);
   font-size: 11px;
   margin-left: auto;
   overflow: hidden;
@@ -493,7 +493,7 @@
   border-radius: 6px;
   padding: 4px 10px;
   cursor: pointer;
-  color: #888;
+  color: var(--color-text-muted);
   font-size: 16px;
   line-height: 1;
   display: flex;
@@ -504,7 +504,7 @@
 
 .commit-modal-close:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  color: var(--color-on-primary);
 }
 
 /* 提交记录弹窗内部搜索栏紧贴 header，去掉底部多余间距 */
@@ -558,7 +558,7 @@
   padding: 0 10px;
   border-radius: 6px;
   border: 1px solid var(--color-primary-muted);
-  background: rgba(15, 52, 96, 0.42);
+  background: var(--color-primary-subtle);
   color: var(--color-primary);
   font-size: 12px;
   cursor: pointer;
@@ -567,7 +567,7 @@
 
 .commit-diff-jump-btn:hover:not(:disabled) {
   border-color: var(--color-primary-muted);
-  background: rgba(15, 52, 96, 0.72);
+  background: var(--color-bg-elevated);
 }
 
 .commit-diff-jump-btn:disabled {
@@ -585,7 +585,7 @@
 .commit-diff-summary {
   padding: 14px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 52, 96, 0.22);
+  background: color-mix(in srgb, var(--color-bg-elevated) 55%, transparent);
 }
 
 .commit-diff-summary-main {

@@ -36,8 +36,8 @@ export function TemplateCarousel({
           h={72}
           style={{
             borderRadius: 6,
-            border: "1px solid rgba(94,234,212,0.08)",
-            background: "rgba(15,52,96,0.3)",
+            border: "1px solid var(--color-border)",
+            background: "var(--color-bg-elevated)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -65,7 +65,7 @@ export function TemplateCarousel({
       {hasMultiple && (
         <ActionIcon
           variant="subtle"
-          color="teal"
+          color="sky"
           size="sm"
           onClick={(e) => {
             e.stopPropagation();
@@ -108,7 +108,7 @@ export function TemplateCarousel({
       {hasMultiple && (
         <ActionIcon
           variant="subtle"
-          color="teal"
+          color="sky"
           size="sm"
           onClick={(e) => {
             e.stopPropagation();

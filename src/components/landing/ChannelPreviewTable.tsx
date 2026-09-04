@@ -111,7 +111,7 @@ export function ChannelPreviewTable({
                         h={36}
                         style={{
                           borderRadius: 6,
-                          background: "rgba(94,234,212,0.15)",
+                          background: "var(--color-primary-muted)",
                           color: "var(--color-primary)",
                           fontSize: 14,
                           fontWeight: 700,
@@ -134,7 +134,7 @@ export function ChannelPreviewTable({
                   <Table.Td>
                     <Badge
                       variant="light"
-                      color="teal"
+                      color="blue"
                       size="sm"
                       style={{ textTransform: "none" }}
                     >
@@ -171,8 +171,8 @@ export function ChannelPreviewTable({
                             h={72}
                             style={{
                               borderRadius: 6,
-                              border: "1px solid rgba(94,234,212,0.08)",
-                              background: "rgba(15,52,96,0.3)",
+                              border: "1px solid var(--color-border)",
+                              background: "var(--color-bg-elevated)",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
@@ -207,8 +207,8 @@ export function ChannelPreviewTable({
                         h={72}
                         style={{
                           borderRadius: 6,
-                          border: "1px solid rgba(94,234,212,0.08)",
-                          background: "rgba(15,52,96,0.3)",
+                          border: "1px solid var(--color-border)",
+                          background: "var(--color-bg-elevated)",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -251,11 +251,11 @@ export function ChannelPreviewTable({
                   <Table.Td>
                     <Stack gap={2} align="center">
                       {genResult?.status === "success" && (
-                        <Group gap={6} wrap="nowrap" style={{ color: "#8ee6b8" }}>
+                        <Group gap={6} wrap="nowrap" style={{ color: "var(--color-success)" }}>
                           <Box
                             w={6}
                             h={6}
-                            style={{ borderRadius: 999, background: "#35d07f" }}
+                            style={{ borderRadius: 999, background: "var(--color-success)" }}
                           />
                           <Text size="xs" fw={600}>
                             已生成
@@ -264,11 +264,11 @@ export function ChannelPreviewTable({
                       )}
                       {genResult?.status === "error" && (
                         <Tooltip label={genResult.message}>
-                          <Group gap={6} wrap="nowrap" style={{ color: "#ff9b9b" }}>
+                          <Group gap={6} wrap="nowrap" style={{ color: "var(--color-error)" }}>
                             <Box
                               w={6}
                               h={6}
-                              style={{ borderRadius: 999, background: "#ff5d5d" }}
+                              style={{ borderRadius: 999, background: "var(--color-error)" }}
                             />
                             <Text size="xs" fw={600}>
                               失败
@@ -277,11 +277,11 @@ export function ChannelPreviewTable({
                         </Tooltip>
                       )}
                       {ftpResult?.status === "success" && (
-                        <Group gap={6} wrap="nowrap" style={{ color: "#8bbdff" }}>
+                        <Group gap={6} wrap="nowrap" style={{ color: "var(--color-primary-hover)" }}>
                           <Box
                             w={6}
                             h={6}
-                            style={{ borderRadius: 999, background: "#4d8dff" }}
+                            style={{ borderRadius: 999, background: "var(--color-primary)" }}
                           />
                           <Text size="xs" fw={600}>
                             已上传
@@ -319,7 +319,7 @@ export function ChannelPreviewTable({
                           </Tooltip>
                           <Button
                             variant="light"
-                            color="teal"
+                            color="blue"
                             size="compact-xs"
                             leftSection={<Eye size={13} />}
                             onClick={() => {

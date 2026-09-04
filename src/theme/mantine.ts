@@ -100,20 +100,20 @@ export const appTheme = createTheme({
           /* 主操作：实心主色 + 白字 */
           "&[data-variant='filled']:not(:disabled):not([data-disabled])": {
             border: "1px solid color-mix(in srgb, var(--color-primary-hover) 22%, transparent)",
-            color: "#fff",
-            "--button-color": "#fff",
+            color: "var(--color-on-primary)",
+            "--button-color": "var(--color-on-primary)",
             background: "var(--color-primary-solid)",
             boxShadow: "0 1px 0 rgba(255,255,255,0.08) inset, 0 6px 16px rgba(13, 40, 80, 0.28)",
             "&:hover": {
               background: "var(--color-primary-solid-hover)",
               filter: "none",
-              color: "#fff",
-              "--button-color": "#fff",
+              color: "var(--color-on-primary)",
+              "--button-color": "var(--color-on-primary)",
               boxShadow: "0 1px 0 rgba(255,255,255,0.1) inset, 0 8px 18px rgba(13, 40, 80, 0.32)",
             },
           },
           "&[data-variant='filled']:not(:disabled):not([data-disabled]) .mantine-Button-label, &[data-variant='filled']:not(:disabled):not([data-disabled]) .mantine-Button-section": {
-            color: "#fff",
+            color: "var(--color-on-primary)",
           },
           "&[data-variant='filled']:disabled, &[data-variant='filled'][data-disabled]": {
             background: "var(--color-bg-elevated) !important",
@@ -157,12 +157,12 @@ export const appTheme = createTheme({
           /* 渐变主 CTA */
           "&[data-variant='gradient']": {
             border: "none",
-            color: "#fff",
-            "--button-color": "#fff",
+            color: "var(--color-on-primary)",
+            "--button-color": "var(--color-on-primary)",
             boxShadow: "var(--glow-primary)",
             "&:hover:not(:disabled)": {
               filter: "brightness(1.06)",
-              color: "#fff",
+              color: "var(--color-on-primary)",
             },
           },
         },
@@ -306,7 +306,7 @@ export const appTheme = createTheme({
       styles: {
         root: {
           background:
-            "linear-gradient(165deg, color-mix(in srgb, var(--color-bg-card) 88%, #1a3a6a) 0%, var(--color-bg-card) 55%)",
+            "linear-gradient(165deg, color-mix(in srgb, var(--color-bg-card) 88%, var(--color-primary-solid)) 0%, var(--color-bg-card) 55%)",
           border: "1px solid var(--color-border-strong)",
           boxShadow: "0 8px 28px rgba(0, 0, 0, 0.28)",
         },

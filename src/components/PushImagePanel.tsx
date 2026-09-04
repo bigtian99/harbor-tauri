@@ -162,7 +162,7 @@ export function PushImagePanel({
             {!isLoadingImages && localImageOptions.length > 0 && (
               <Group gap={5} aria-label="镜像统计" wrap="nowrap">
                 <Badge
-                  color="teal"
+                  color="blue"
                   variant="light"
                   size="xs"
                   leftSection={<Package size={10} />}
@@ -345,7 +345,7 @@ export function PushImagePanel({
                                 component="span"
                                 className="image-card-badge-ready"
                                 size="xs"
-                                color="teal"
+                                color="blue"
                                 variant="light"
                               >
                                 可推送

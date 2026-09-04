@@ -27,7 +27,7 @@ export function BrandMark({ size = 28, ...props }: IconProps) {
       <rect width="32" height="32" rx="8" fill="url(#brandmark-gradient)" />
       <g
         fill="none"
-        stroke="#ffffff"
+        stroke="var(--color-on-primary)"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"

@@ -52,13 +52,13 @@ export const panelFieldStyles = {
 export const panelPrimaryButtonStyles = {
   root: {
     background: "var(--color-primary-solid)",
-    color: "#f8fbff",
+    color: "var(--color-on-primary)",
     fontWeight: 650,
     border: "1px solid color-mix(in srgb, var(--color-primary-hover) 28%, transparent)",
     boxShadow: "0 1px 0 rgba(255,255,255,0.08) inset, 0 6px 16px rgba(13, 40, 80, 0.28)",
     "&:hover:not(:disabled):not([data-disabled])": {
       background: "var(--color-primary-solid-hover)",
-      color: "#fff",
+      color: "var(--color-on-primary)",
       borderColor: "color-mix(in srgb, var(--color-primary-hover) 40%, transparent)",
     },
     "&:disabled, &[data-disabled]": {
@@ -89,7 +89,7 @@ export const panelAccentButtonStyles = {
     "&:hover:not(:disabled):not([data-disabled])": {
       background: "var(--color-success-muted)",
       borderColor: "var(--color-success)",
-      color: "#6ee7b7",
+      color: "var(--color-success-hover)",
     },
     "&:disabled, &[data-disabled]": {
       background: "transparent !important",

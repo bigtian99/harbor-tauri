@@ -78,7 +78,7 @@
   padding: 10px 16px;
   border-radius: 12px;
   border: 1px solid var(--color-primary-muted);
-  background: rgba(15, 52, 96, 0.42);
+  background: var(--color-primary-subtle);
   color: var(--color-text);
   font-weight: 700;
   font-size: 13px;
@@ -88,7 +88,7 @@
 
 .secondary-action-btn:hover:not(:disabled) {
   border-color: var(--color-primary-muted);
-  background: rgba(15, 52, 96, 0.62);
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
   color: var(--color-primary-hover);
 }
 
@@ -111,7 +111,7 @@
   padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid var(--color-primary-muted);
-  background: rgba(15, 52, 96, 0.34);
+  background: color-mix(in srgb, var(--color-bg-elevated) 55%, transparent);
   color: var(--color-text);
 }
 

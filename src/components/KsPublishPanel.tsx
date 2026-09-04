@@ -1096,7 +1096,7 @@ export function KsPublishPanel({
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      notifications.show({ color: "teal", message: `已下载 ${filename}`, autoClose: 2500 });
+      notifications.show({ color: "blue", message: `已下载 ${filename}`, autoClose: 2500 });
     } catch (e) {
       notifications.show({ color: "red", message: `下载失败：${String(e)}` });
     }
@@ -1286,7 +1286,7 @@ export function KsPublishPanel({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
-      notifications.show({ color: "teal", message: `已下载 ${defaultName}`, autoClose: 2500 });
+      notifications.show({ color: "blue", message: `已下载 ${defaultName}`, autoClose: 2500 });
       return;
     }
 
@@ -1300,7 +1300,7 @@ export function KsPublishPanel({
     try {
       const saved = await invoke<string>("write_text_file", { path, content });
       notifications.show({
-        color: "teal",
+        color: "blue",
         title: "导出完成",
         message: saved,
         autoClose: 4000,
@@ -1636,7 +1636,7 @@ export function KsPublishPanel({
               <Card shadow="sm" radius="md" withBorder>
                 <Group justify="space-between" mb="xs">
                   <Group gap={8}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[sel.status.state] ?? "#9aa5b8", display: "inline-block" }} />
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[sel.status.state] ?? "var(--color-text-muted)", display: "inline-block" }} />
                     <Title order={5}>{sel.name}</Title>
                     <Badge color={STATUS_COLOR[sel.status.state] ?? "gray"} variant="light">{sel.status.label}</Badge>
                     <Text size="sm" c="dimmed">
@@ -1654,7 +1654,7 @@ export function KsPublishPanel({
                     {sel.pods.new.map((p) => (
                       <Group key={p.name} gap={8} my={4} wrap="nowrap" justify="space-between">
                         <Group gap={8} wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[p.state] ?? "#9aa5b8", display: "inline-block", flexShrink: 0 }} />
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[p.state] ?? "var(--color-text-muted)", display: "inline-block", flexShrink: 0 }} />
                           <Text size="xs" style={{ fontFamily: "monospace" }} truncate title={p.name}>{p.name}</Text>
                           <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>{p.state === "running" ? `就绪 ${p.ready}/${p.total}` : (p.reason ?? p.state ?? p.phase)}{p.restarts ? ` · 重启${p.restarts}次` : ""}</Text>
                           <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>{fmtTime(p.startTime)}</Text>
@@ -1674,7 +1674,7 @@ export function KsPublishPanel({
                     {sel.pods.old.map((p) => (
                       <Group key={p.name} gap={8} my={4} wrap="nowrap" justify="space-between" opacity={0.85}>
                         <Group gap={8} wrap="nowrap" style={{ minWidth: 0, flex: 1 }} opacity={0.75}>
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[p.state] ?? "#9aa5b8", display: "inline-block", flexShrink: 0 }} />
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_DOT[p.state] ?? "var(--color-text-muted)", display: "inline-block", flexShrink: 0 }} />
                           <Text size="xs" style={{ fontFamily: "monospace" }} truncate title={p.name}>{p.name}</Text>
                           <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>{p.state === "running" ? `就绪 ${p.ready}/${p.total}` : (p.reason ?? p.state ?? p.phase)}{p.restarts ? ` · 重启${p.restarts}次` : ""}</Text>
                         </Group>
@@ -2446,7 +2446,7 @@ export function KsPublishPanel({
                   disabled={!podLogText}
                   onClick={() => {
                     void navigator.clipboard.writeText(podLogText).then(() => {
-                      notifications.show({ color: "teal", message: "日志已复制", autoClose: 2000 });
+                      notifications.show({ color: "blue", message: "日志已复制", autoClose: 2000 });
                     });
                   }}
                 >

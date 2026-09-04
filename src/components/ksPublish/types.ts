@@ -48,8 +48,14 @@ export const EMPTY_DEPLOY_FORM = {
 };
 
 export const STATUS_DOT: Record<string, string> = {
-  running: "#34c877", updating: "#4aa3e8", pull: "#e5484d", crash: "#e5484d",
-  creating: "#f5a623", stopped: "#71717a", pending: "#fbbf24", unknown: "#f59e0b",
+  running: "var(--color-success)",
+  updating: "var(--color-primary)",
+  pull: "var(--color-error)",
+  crash: "var(--color-error)",
+  creating: "var(--color-warning)",
+  stopped: "var(--color-text-muted)",
+  pending: "var(--color-warning)",
+  unknown: "var(--color-warning)",
 };
 export const STATUS_COLOR: Record<string, string> = {
   running: "green", updating: "blue", pull: "red", crash: "red",

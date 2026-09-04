@@ -85,13 +85,13 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .log-day-trigger:hover {
-  border-color: rgba(94, 234, 212, 0.45);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
   background: linear-gradient(180deg, var(--color-bg-elevated) 0%, var(--color-bg-elevated) 100%);
 }
 .log-day-trigger.open,
 .log-day-trigger:focus-visible {
   border-color: var(--color-primary-hover);
-  box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.14);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 .log-day-trigger-icon {
   color: var(--color-primary-hover);
@@ -132,7 +132,7 @@
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   animation: logDayIn 0.15s ease;
   scrollbar-width: thin;
-  scrollbar-color: rgba(94, 234, 212, 0.25) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-primary) 25%, transparent) transparent;
 }
 @keyframes logDayIn {
   from { opacity: 0; transform: translateY(-4px); }
@@ -155,13 +155,13 @@
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 .log-day-card:hover {
-  border-color: rgba(94, 234, 212, 0.35);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
   background: var(--color-bg-elevated);
 }
 .log-day-card.selected {
   border-color: var(--color-primary-hover);
-  background: linear-gradient(135deg, rgba(94, 234, 212, 0.12), rgba(22, 27, 34, 0.95));
-  box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.15);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), rgba(22, 27, 34, 0.95));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 15%, transparent);
 }
 .log-day-card-date {
   font-size: 13px;
@@ -219,8 +219,8 @@
 .log-viewer-download {
   display: inline-flex; align-items: center; gap: 4px;
   flex-shrink: 0;
-  background: rgba(94, 234, 212, 0.08);
-  border: 1px solid rgba(94, 234, 212, 0.25);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
   border-radius: 6px;
   color: var(--color-primary-hover);
   font-size: 12px;
@@ -229,11 +229,11 @@
   cursor: pointer;
 }
 .log-viewer-download:hover {
-  background: rgba(94, 234, 212, 0.16);
-  border-color: rgba(94, 234, 212, 0.45);
+  background: var(--color-primary-muted);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
 }
 .log-highlight {
-  background: rgba(94,234,212,0.35);
+  background: var(--color-primary-muted);
   color: var(--color-primary-hover);
   border-radius: 2px;
   padding: 0 1px;
