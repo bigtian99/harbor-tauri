@@ -108,35 +108,15 @@ jobs:
 
   build:
     needs: changes
-    # 仅 Rust/原生相关改动才打 Tauri；分支 push 只冒烟 macOS ARM。
-    if: |
-      needs.changes.outputs.rust == 'true' &&
-      (matrix.smoke ||
-       github.event_name == 'workflow_dispatch' ||
-       startsWith(github.ref, 'refs/tags/'))
+    # 仅 Rust/原生相关改动才打 Tauri。
+    # job 级 if 在 matrix 展开前求值，不能引用 matrix.*；
+    # 分支 push 只注入冒烟矩阵（macOS ARM），tag / 手动触发打全量。
+    if: needs.changes.outputs.rust == 'true'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # 不打：macOS x64、Linux、macOS ARM OPS。
-          - platform: 'macos-latest'
-            target: 'aarch64-apple-darwin'
-            label: 'macOS ARM64'
-            ops: false
-            bundles: ''
-            smoke: true
-          - platform: 'windows-latest'
-            target: 'x86_64-pc-windows-msvc'
-            label: 'Windows x64'
-            ops: false
-            bundles: 'nsis'
-            smoke: false
-          - platform: 'windows-latest'
-            target: 'x86_64-pc-windows-msvc'
-            label: 'Windows x64 OPS'
-            ops: true
-            bundles: 'nsis'
-            smoke: false
+        # 不打：macOS x64、Linux、macOS ARM OPS。
+        include: ${{ (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && fromJSON('[{"platform":"macos-latest","target":"aarch64-apple-darwin","label":"macOS ARM64","ops":false,"bundles":""},{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","label":"Windows x64","ops":false,"bundles":"nsis"},{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","label":"Windows x64 OPS","ops":true,"bundles":"nsis"}]') || fromJSON('[{"platform":"macos-latest","target":"aarch64-apple-darwin","label":"macOS ARM64","ops":false,"bundles":""}]') }}
 
     runs-on: ${{ matrix.platform }}
     name: Build ${{ matrix.label }}
