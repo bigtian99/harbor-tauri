@@ -204,4 +204,4 @@ templates_log("list_template_infos ok"); // ≡ diag_log("templates", ...)
 
 ## CI/CD
 
-GitHub Actions workflow (`build.yml`) builds macOS ARM64 (full) and Windows x64 (full + OPS) on tag push (`v*`); branch push only smokes macOS ARM64. Uses pnpm 9, Node 22, and Rust stable.
+GitHub Actions workflow (`build.yml`) builds macOS ARM64 (full) and Windows x64 (full + OPS) on tag push (`v*`). Branch push: Tauri smoke only when `src-tauri`/templates/icons/CI scripts change; frontend-only commits run `pnpm build`. Uses pnpm 9, Node 22, and Rust stable.

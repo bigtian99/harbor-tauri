@@ -23,12 +23,97 @@ concurrency:
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
+  # 分支 push：按改动分流。tag / 手动触发一律打安装包。
+  changes:
+    runs-on: ubuntu-latest
+    name: Detect changes
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Classify paths
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+            echo "release/dispatch → Tauri 全量"
+            exit 0
+          fi
+
+          BEFORE="${{ github.event.before }}"
+          SHA="${{ github.sha }}"
+          rust=false
+          frontend=false
+
+          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "无对比基线，保守跑 Tauri"
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "---- changed files ----"
+          git diff --name-only "$BEFORE" "$SHA" | tee /tmp/changed.txt
+
+          while IFS= read -r f; do
+            [[ -z "$f" ]] && continue
+            case "$f" in
+              src-tauri/*|.github/*|templates/*|icons/*|scripts/*)
+                rust=true
+                ;;
+              src/*|index.html|package.json|pnpm-lock.yaml|vite.config.ts|tsconfig.json|tsconfig.node.json|public/*)
+                frontend=true
+                ;;
+            esac
+          done < /tmp/changed.txt
+
+          echo "rust=$rust frontend=$frontend"
+          echo "rust=$rust" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' && needs.changes.outputs.rust != 'true'
+    runs-on: ubuntu-latest
+    name: Frontend check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install and build
+        shell: bash
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
   build:
-    # 分支 push 只打 macOS ARM 冒烟；tag / 手动触发加打 Windows 完整版与 Windows OPS。
+    needs: changes
+    # 仅 Rust/原生相关改动才打 Tauri；分支 push 只冒烟 macOS ARM。
     if: |
-      matrix.smoke ||
-      github.event_name == 'workflow_dispatch' ||
-      startsWith(github.ref, 'refs/tags/')
+      needs.changes.outputs.rust == 'true' &&
+      (matrix.smoke ||
+       github.event_name == 'workflow_dispatch' ||
+       startsWith(github.ref, 'refs/tags/'))
     strategy:
       fail-fast: false
       matrix:
