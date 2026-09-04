@@ -13,6 +13,10 @@ dist-ssr
 *.local
 src-tauri/resources/bundle-tools/
 
+# 误放进仓库的模板归档，勿打入安装包（可省 ~37MB）
+templates/*.zip
+templates/**/*.zip
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

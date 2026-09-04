@@ -112,13 +112,24 @@ jobs:
             pnpm install --frozen-lockfile
           )
 
+      # 缓存已瘦身的 Maven/JDK，避免每次重新下载解压（省数分钟 + 带宽）
+      - name: Cache bundle-tools
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/resources/bundle-tools
+          key: bundle-tools-${{ matrix.target }}-mvn3.9.9-jdk21-slim2
+
       # tauri.conf.json 声明了 resources/bundle-tools/**/*，目录为空会导致 glob 匹配失败
       - name: Download bundled Maven and JDK
         shell: bash
         run: |
+          # 清掉误入仓库/工作区的模板 zip，避免打进安装包
+          node scripts/prepare-bundle-resources.mjs
           node scripts/download-bundle-tools.mjs
           echo "---- bundle-tools size ----"
-          du -sh src-tauri/resources/bundle-tools/* 2>/dev/null || true
+          du -sh src-tauri/resources/bundle-tools/maven src-tauri/resources/bundle-tools/jdk 2>/dev/null || true
+          echo "---- templates size ----"
+          du -sh templates 2>/dev/null || true
           df -h . | tail -1
 
       - name: Build Tauri app
