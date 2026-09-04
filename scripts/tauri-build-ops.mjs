@@ -10,9 +10,16 @@ if (existsSync(prepareScript)) {
   }
 }
 
+// OPS 无分支/上传打包菜单，不必内置 ~180MB Maven+JDK
 const downloadScript = join(process.cwd(), "scripts", "download-bundle-tools.mjs");
-if (existsSync(downloadScript) && process.env.SKIP_BUNDLE_TOOLS !== "1") {
-  const dl = spawnSync(process.execPath, [downloadScript], { stdio: "inherit" });
+if (existsSync(downloadScript)) {
+  const dl = spawnSync(process.execPath, [downloadScript], {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      SKIP_BUNDLE_TOOLS: process.env.SKIP_BUNDLE_TOOLS || "1",
+    },
+  });
   if (dl.status !== 0) {
     process.exit(dl.status ?? 1);
   }

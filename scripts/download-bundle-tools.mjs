@@ -306,10 +306,24 @@ async function main() {
   if (process.env.SKIP_BUNDLE_TOOLS === "1") {
     console.log("SKIP_BUNDLE_TOOLS=1，跳过内置 Maven/JDK 下载");
     // 保证 resources glob 至少能匹配到占位，避免空目录
+    rmSync(OUT, { recursive: true, force: true });
     mkdirSync(OUT, { recursive: true });
-    if (!existsSync(join(OUT, ".keep"))) {
-      writeFileSync(join(OUT, ".keep"), "");
-    }
+    writeFileSync(
+      join(OUT, ".keep"),
+      "# placeholder so tauri bundle.resources glob matches\n",
+    );
+    writeFileSync(
+      join(OUT, "manifest.json"),
+      JSON.stringify(
+        {
+          skipped: true,
+          reason: "SKIP_BUNDLE_TOOLS=1",
+          builtAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
