@@ -112,29 +112,13 @@ jobs:
             pnpm install --frozen-lockfile
           )
 
-      # 完整版才缓存/下载 Maven+JDK；OPS 与 full 必须分 key，避免空包与胖包互相污染
-      - name: Cache bundle-tools
-        if: ${{ !matrix.ops }}
-        uses: actions/cache@v4
-        with:
-          path: src-tauri/resources/bundle-tools
-          key: bundle-tools-${{ matrix.target }}-mvn3.9.9-jdk21-slim2
-
-      # tauri.conf.json 声明了 resources/bundle-tools/**/*，目录为空会导致 glob 匹配失败
-      - name: Download bundled Maven and JDK
+      # 清理模板杂物；默认不下载/不内置 Maven+JDK（体积与耗时主因）
+      - name: Prepare bundle resources
         shell: bash
-        env:
-          # OPS 无本地 mvn/javac 路径，跳过内置工具（仅写 .keep 占位）
-          SKIP_BUNDLE_TOOLS: ${{ matrix.ops && '1' || '' }}
         run: |
           node scripts/prepare-bundle-resources.mjs
-          # OPS：清掉可能被 checkout/缓存带入的胖 bundle-tools，只留占位
-          if [[ "${SKIP_BUNDLE_TOOLS}" == "1" ]]; then
-            rm -rf src-tauri/resources/bundle-tools
-          fi
-          node scripts/download-bundle-tools.mjs
-          echo "---- bundle-tools size ----"
-          du -sh src-tauri/resources/bundle-tools src-tauri/resources/bundle-tools/* 2>/dev/null || true
+          # 防止本地/缓存残留的胖 bundle-tools 被误打入（已从 tauri.conf 移除 resources 声明）
+          rm -rf src-tauri/resources/bundle-tools
           echo "---- templates size ----"
           du -sh templates 2>/dev/null || true
           df -h . | tail -1

@@ -1,9 +1,11 @@
 /**
- * 为当前平台下载 Apache Maven + Eclipse Temurin JDK，打入 Tauri 安装包。
- * 输出：src-tauri/resources/bundle-tools/{maven,jdk,manifest.json}
+ * 可选：下载 Apache Maven + Eclipse Temurin JDK 到 src-tauri/resources/bundle-tools。
  *
- * 跳过：已存在有效 manifest 且目录完整（设 FORCE_BUNDLE_TOOLS=1 强制重下）
- * 瘦身：去掉 jmods/src.zip/CDS 等打包不需要的部件，显著缩小安装包与打包耗时
+ * 默认构建不再内置（用户本机通常已有 JDK/Maven）。仅当显式设置 BUNDLE_TOOLS=1 时执行下载，
+ * 且需自行把 bundle-tools 资源声明加回 tauri.conf.json 才会打进安装包。
+ *
+ * 用法：BUNDLE_TOOLS=1 pnpm bundle-tools:download
+ * 强制重下：BUNDLE_TOOLS=1 FORCE_BUNDLE_TOOLS=1 pnpm bundle-tools:download
  */
 import { spawnSync } from "node:child_process";
 import {
@@ -303,27 +305,16 @@ function writeManifest(plat) {
 }
 
 async function main() {
+  // 默认不下载：安装包依赖本机/配置里的 Maven+JDK
+  if (process.env.BUNDLE_TOOLS !== "1" && process.env.SKIP_BUNDLE_TOOLS !== "0") {
+    console.log(
+      "跳过 Maven/JDK 下载（默认不内置）。若需打入安装包：BUNDLE_TOOLS=1 pnpm bundle-tools:download",
+    );
+    return;
+  }
+
   if (process.env.SKIP_BUNDLE_TOOLS === "1") {
     console.log("SKIP_BUNDLE_TOOLS=1，跳过内置 Maven/JDK 下载");
-    // 保证 resources glob 至少能匹配到占位，避免空目录
-    rmSync(OUT, { recursive: true, force: true });
-    mkdirSync(OUT, { recursive: true });
-    writeFileSync(
-      join(OUT, ".keep"),
-      "# placeholder so tauri bundle.resources glob matches\n",
-    );
-    writeFileSync(
-      join(OUT, "manifest.json"),
-      JSON.stringify(
-        {
-          skipped: true,
-          reason: "SKIP_BUNDLE_TOOLS=1",
-          builtAt: new Date().toISOString(),
-        },
-        null,
-        2,
-      ),
-    );
     return;
   }
 

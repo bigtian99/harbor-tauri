@@ -557,8 +557,8 @@ export function ConfigPanel({
                 }
                 value={config.maven_home ?? ""}
                 onChange={(e) => applyMavenHome(e.currentTarget.value)}
-                placeholder="留空则依次尝试：环境变量 → 安装包内置 Maven"
-                description="优先读取 MAVEN_HOME / M2_HOME；发版安装包未填写时会自动使用内置 Maven + JDK。填写后会自动带上 conf/settings.xml"
+                placeholder="留空则尝试环境变量 MAVEN_HOME / M2_HOME"
+                description="本机需已安装 Maven（及 JDK）。优先读配置，其次环境变量。填写后会自动带上 conf/settings.xml"
                 rightSectionWidth={90}
                 rightSection={
                   <Button
@@ -594,9 +594,9 @@ export function ConfigPanel({
                       {mavenProbe.effective_local_repo ? ` · 仓库 ${mavenProbe.effective_local_repo}` : ""}
                     </>
                   ) : mavenProbe.bundled_available ? (
-                    <>安装包内置 Maven/JDK 已就绪，留空配置将自动使用（{mavenProbe.bundled_home}）</>
+                    <>检测到可选内置 Maven/JDK（{mavenProbe.bundled_home}），留空配置时可使用</>
                   ) : (
-                    <>未检测到有效 Maven；发版包需构建时下载 bundle-tools</>
+                    <>未检测到有效 Maven；请安装本机 Maven/JDK，或在上方填写 Maven Home</>
                   )}
                 </Text>
               )}
@@ -609,8 +609,8 @@ export function ConfigPanel({
                 }
                 value={config.maven_local_repo ?? ""}
                 onChange={(e) => onConfigChange("maven_local_repo", e.currentTarget.value)}
-                placeholder="内置 Maven 默认 ~/.config/jarporter/maven-repository"
-                description='手动指定 Home 时默认 {"{home}/repository"}；使用安装包内置 Maven 时仓库在配置目录下，可单独修改'
+                placeholder="默认 ~/.m2/repository 或 {Maven Home}/repository"
+                description='手动指定 Home 时默认 {"{home}/repository"}；也可单独修改本地仓库路径'
                 rightSectionWidth={90}
                 rightSection={
                   <Button

@@ -44,8 +44,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../templates/**/*",
-      "resources/bundle-tools/**/*"
+      "../templates/**/*"
     ]
   }
 }

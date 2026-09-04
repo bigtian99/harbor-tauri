@@ -118,7 +118,7 @@ pub async fn package_from_branch(
             || !crate::utils::maven_home_looks_valid(&maven_home)
         {
             return Err(
-                "未配置有效的 Maven Home（也未检测到 MAVEN_HOME/M2_HOME 或安装包内置 Maven）。请到「系统设置 → JAR 打包」填写 Maven 安装目录后再打包。"
+                "未配置有效的 Maven Home（也未检测到 MAVEN_HOME/M2_HOME）。请安装本机 Maven/JDK，或到「系统设置 → JAR 打包」填写 Maven 安装目录后再打包。"
                     .to_string(),
             );
         }

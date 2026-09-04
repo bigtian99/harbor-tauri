@@ -680,7 +680,7 @@ export async function runKsBatchPackPublish(
       effective_home: string;
     }>("resolve_maven_settings", { config });
     if (!mavenInfo.home_valid || !mavenInfo.effective_home.trim()) {
-      note(summary, appendLog, "❌ Maven 未配置有效 Home，请到系统设置 → JAR 打包，或使用发版安装包内置 Maven");
+      note(summary, appendLog, "❌ Maven 未配置有效 Home，请到系统设置 → JAR 打包填写 Maven 安装目录（或设置 MAVEN_HOME）");
       summary.skipped += targets.length;
       return summary;
     }
