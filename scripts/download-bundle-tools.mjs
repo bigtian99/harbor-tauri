@@ -183,6 +183,20 @@ function chmodExecutables() {
   }
 }
 
+/** 去掉打包不需要的 JDK 部件，缩小安装包（尤其 Linux deb / AppImage）。 */
+function slimJdk() {
+  const jdk = join(OUT, "jdk");
+  if (!existsSync(jdk)) return;
+  const drop = ["jmods", "lib/src.zip", "demo", "man", "sample", "samples"];
+  for (const rel of drop) {
+    const p = join(jdk, rel);
+    if (existsSync(p)) {
+      rmSync(p, { recursive: true, force: true });
+      console.log(`slim jdk: removed ${rel}`);
+    }
+  }
+}
+
 async function main() {
   if (process.env.SKIP_BUNDLE_TOOLS === "1") {
     console.log("SKIP_BUNDLE_TOOLS=1，跳过内置 Maven/JDK 下载");
@@ -208,6 +222,7 @@ async function main() {
   await download(jdkDownloadUrl(plat), jdkArchive);
   await extractJdk(jdkArchive, plat);
 
+  slimJdk();
   chmodExecutables();
 
   const manifest = {
