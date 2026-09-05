@@ -226,6 +226,11 @@ pub struct HarborConfig {
     pub custom_docker_extras_dir: String,
     // 历史打包记录
     pub build_history: Vec<BuildRecord>,
+    /// 快捷合并预设源/目标分支（前端 types.ts 已有，缺字段则每次 save 被丢弃）
+    #[serde(default)]
+    pub quick_merge_source: String,
+    #[serde(default)]
+    pub quick_merge_target: String,
     // 宝塔 test 部署（仅 Java JAR）
     #[serde(default)]
     pub bt_panel_url: String,
@@ -362,6 +367,8 @@ impl Default for HarborConfig {
             custom_docker_extras_dir: String::new(),
             // 历史打包记录默认为空
             build_history: Vec::new(),
+            quick_merge_source: String::new(),
+            quick_merge_target: String::new(),
             bt_panel_url: String::new(),
             bt_panel_secret: String::new(),
             bt_panel_insecure: true,

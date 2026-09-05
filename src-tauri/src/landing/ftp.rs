@@ -1143,12 +1143,15 @@ pub async fn upload_landing_to_ftp(
     let max_concurrent = 3;
     let completed = Arc::new(Mutex::new(0));
     let mut handles: Vec<Option<std::thread::JoinHandle<FtpUploadResult>>> = Vec::new();
+    let mut results = Vec::new();
 
     for (_idx, item) in items.iter().enumerate() {
         // 控制并发数：等待一个完成后再启动新的
         if handles.len() >= max_concurrent {
             if let Some(handle) = handles.remove(0) {
-                let _ = handle.join();
+                if let Ok(result) = handle.join() {
+                    results.push(result);
+                }
             }
         }
 
@@ -1240,7 +1243,6 @@ pub async fn upload_landing_to_ftp(
     }
 
     // 等待剩余线程完成
-    let mut results = Vec::new();
     for handle in handles.into_iter().flatten() {
         if let Ok(result) = handle.join() {
             results.push(result);

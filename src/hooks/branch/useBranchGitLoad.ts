@@ -150,7 +150,11 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
     }
   }
 
-  async function loadGitBranches(path: string, preserveBranch?: string) {
+  async function loadGitBranches(
+    path: string,
+    preserveBranch?: string,
+    projectType: BranchProjectType = branchProjectType,
+  ) {
     const requestId = nextBranchLoadRequestId();
     const nextRepoPath = path.trim();
     if (!preserveBranch) {
@@ -160,7 +164,7 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
       setLastCommit(null);
       setCommitList([]);
       setCommitListTotal(0);
-      if (branchProjectType === "npm") {
+      if (projectType === "npm") {
         setNpmScripts([]);
         setSelectedBuildScript("");
       }
@@ -184,7 +188,7 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
           ? preserveBranch
           : (branches[0]?.name ?? "");
       setBranchName(targetBranch);
-      if (branchProjectType === "maven" && targetBranch) {
+      if (projectType === "maven" && targetBranch) {
         await loadSpringProfiles(nextRepoPath, targetBranch, requestId);
       }
       if (targetBranch) {
@@ -194,7 +198,7 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
       if (branches.length === 0) {
         setLog("⚠️ 没有读取到可用分支");
       }
-      if (branchProjectType === "npm" && !isUrl) {
+      if (projectType === "npm" && !isUrl) {
         try {
           const detectedDir = await invoke<string | null>("detect_frontend_dir", {
             repoPath: nextRepoPath,

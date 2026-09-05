@@ -252,6 +252,16 @@ export function ConfigPanel({
 
   const setKsEnvs = (next: KsEnvironment[]) => {
     onConfigChange("ks_environments", next);
+    if (next.length === 0) {
+      onConfigChange("ks_console", "");
+      onConfigChange("ks_username", "");
+      onConfigChange("ks_password", "");
+      onConfigChange("ks_last_env_id", "");
+      return;
+    }
+    if (config.ks_last_env_id && !next.some((env) => env.id === config.ks_last_env_id)) {
+      onConfigChange("ks_last_env_id", next[0].id);
+    }
   };
 
   const openAddKsEnv = () => {

@@ -475,6 +475,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   }
 
   function handleRepoPathChange(value: string) {
+    if (value === repoPath) return;
     setRepoPath(value);
     if (value.trim()) {
       setImageName("");
@@ -588,8 +589,17 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     if (savedConfig.last_package_with_backend !== undefined) {
       setPackageWithBackend(savedConfig.last_package_with_backend);
     }
+    const rememberedType =
+      savedConfig.last_project_type === "npm" || savedConfig.last_project_type === "maven"
+        ? savedConfig.last_project_type
+        : undefined;
+    if (rememberedType) setBranchProjectType(rememberedType);
     if (savedConfig.last_repo_path) {
-      await loadGitBranches(savedConfig.last_repo_path, savedConfig.last_branch || undefined);
+      await loadGitBranches(
+        savedConfig.last_repo_path,
+        savedConfig.last_branch || undefined,
+        rememberedType ?? branchProjectType,
+      );
       if (savedConfig.last_branch) {
         await loadSpringProfiles(savedConfig.last_repo_path, savedConfig.last_branch);
         loadLastCommit(savedConfig.last_repo_path, savedConfig.last_branch);

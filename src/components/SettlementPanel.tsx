@@ -153,6 +153,10 @@ export function SettlementPanel() {
 
   async function handleGenerate() {
     if (!canGenerate) return;
+    if (!isTauriRuntime()) {
+      notifications.show({ message: "请在桌面端生成结算单", color: "yellow", autoClose: 3000 });
+      return;
+    }
     setIsGenerating(true);
     setResult(null);
     setProgress({ percent: 1, message: "准备生成结算单...", current: 0, total: 0 });
@@ -191,6 +195,10 @@ export function SettlementPanel() {
   async function handleOpenOutput() {
     const path = result?.output_dir || datedOutputPreview || outputBaseDir;
     if (!path) return;
+    if (!isTauriRuntime()) {
+      notifications.show({ message: "请在桌面端打开目录", color: "yellow", autoClose: 3000 });
+      return;
+    }
     try {
       await invoke("open_directory", { path });
     } catch (e) {

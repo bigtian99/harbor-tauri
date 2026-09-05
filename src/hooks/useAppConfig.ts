@@ -52,6 +52,8 @@ export function createDefaultHarborConfig(): HarborConfig {
     artifact_output_dir: "",
     custom_docker_extras_dir: "",
     build_history: [],
+    quick_merge_source: "",
+    quick_merge_target: "",
     bt_panel_url: "",
     bt_panel_secret: "",
     bt_panel_insecure: true,

@@ -141,14 +141,12 @@ export function KsPublishMapEditor({
 
   const connectSeqRef = useRef(0);
 
-  /** 环境凭证指纹：保存配置或改地址/密码后需重新连接 */
-  const envsFp = useMemo(
-    () =>
-      resolveKsEnvironments(config)
-        .map((e) => `${e.id}:${e.console}:${e.username}:${e.password}`)
-        .join("|"),
-    [config],
-  );
+  const selectedEnv = pickKsEnvironment(ksEnvs, envId);
+  /** 增删环境才整表重连；改别的环境密码不冲当前命名空间 */
+  const envIdsFp = ksEnvs.map((e) => e.id).join(",");
+  const currentCredFp = selectedEnv
+    ? `${selectedEnv.id}:${selectedEnv.console}:${selectedEnv.username}:${selectedEnv.password}`
+    : "";
 
   const connect = useCallback(async (targetEnvId?: string) => {
     const id = targetEnvId ?? envId;
@@ -240,7 +238,7 @@ export function KsPublishMapEditor({
       connectSeqRef.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [envsFp]);
+  }, [envIdsFp, currentCredFp]);
 
   const loadDeploys = useCallback(async (ns: string) => {
     if (!connected || !ns) return;

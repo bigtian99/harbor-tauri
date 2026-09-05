@@ -169,4 +169,23 @@ mod tests {
         assert_eq!(config.ks_environments[0].name, "prod");
         assert_eq!(config.ks_username, "ops");
     }
+
+    #[test]
+    fn empty_environments_without_legacy_stay_empty() {
+        let config = normalize_config(HarborConfig::default());
+        assert!(config.ks_environments.is_empty());
+        assert!(config.ks_username.is_empty());
+        assert!(config.ks_password.is_empty());
+    }
+
+    #[test]
+    fn save_roundtrip_keeps_quick_merge_branches() {
+        let mut config = HarborConfig::default();
+        config.quick_merge_source = "origin/rc-master".to_string();
+        config.quick_merge_target = "origin/master".to_string();
+        let json = serde_json::to_string(&config).expect("serialize");
+        let loaded: HarborConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(loaded.quick_merge_source, "origin/rc-master");
+        assert_eq!(loaded.quick_merge_target, "origin/master");
+    }
 }
