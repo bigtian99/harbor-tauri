@@ -8,8 +8,8 @@ import { MergeFormSection } from "./merge/MergeFormSection";
 
 export type { MergePanelProps } from "./merge/types";
 
-export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge }: MergePanelProps) {
-  const m = useMergePanel(config, onOpenDirectory, onPackageAfterMerge);
+export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge, onConfigPatch, getConfigSnapshot }: MergePanelProps) {
+  const m = useMergePanel(config, onOpenDirectory, onPackageAfterMerge, onConfigPatch);
 
   return (
     <Stack gap="sm" className="merge-panel">
@@ -105,6 +105,7 @@ export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge }: Mer
         onUseQuickMergeChange={m.setUseQuickMerge}
         onShowQuickMergeConfig={m.setShowQuickMergeConfig}
         onQuickMergeConfigSaved={m.handleQuickMergeConfigSaved}
+        getConfigSnapshot={getConfigSnapshot}
         quickMergeSource={m.quickMergeSource}
         quickMergeTarget={m.quickMergeTarget}
         onTagNameChange={m.setTagName}

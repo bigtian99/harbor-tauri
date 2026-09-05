@@ -71,3 +71,11 @@
   --mantine-primary-color-light-hover: rgba(59, 158, 255, 0.36);
   --mantine-primary-color-light-color: var(--color-primary-hover);
 }
+
+/* Button.css 用 spacing-xs 做图标右距，再加 inner gap 会过宽；间距只走 theme inner.gap */
+.mantine-Button-section[data-position="left"] {
+  margin-inline-end: 0;
+}
+.mantine-Button-section[data-position="right"] {
+  margin-inline-start: 0;
+}

@@ -33,6 +33,7 @@ export interface BranchPackageActionState {
 export interface BranchPackageActionDeps extends BranchPackageActionState {
   config: HarborConfig;
   setConfig: (value: HarborConfig | ((prev: HarborConfig) => HarborConfig)) => void;
+  getConfigSnapshot?: () => HarborConfig;
   setActiveTab: (tab: TabType) => void;
   setLog: (value: string | ((prev: string) => string)) => void;
   setIsBuilding: (value: boolean) => void;
@@ -61,6 +62,7 @@ export interface BranchPackageActionDeps extends BranchPackageActionState {
 export async function saveBranchSettings(deps: {
   config: HarborConfig;
   setConfig: BranchPackageActionDeps["setConfig"];
+  getConfigSnapshot?: () => HarborConfig;
   showToast: BranchPackageActionDeps["showToast"];
   repoPath: string;
   branchName: string;
@@ -77,6 +79,7 @@ export async function saveBranchSettings(deps: {
   const {
     config,
     setConfig,
+    getConfigSnapshot,
     showToast,
     repoPath,
     branchName,
@@ -91,12 +94,13 @@ export async function saveBranchSettings(deps: {
     nginxLocations,
   } = deps;
 
-  if (!isTauriRuntime() || !config.remember_branch_settings) return;
+  const base = getConfigSnapshot?.() ?? config;
+  if (!isTauriRuntime() || !base.remember_branch_settings) return;
   try {
-    const newHistory = prependPathHistory(config.repo_path_history, repoPath);
+    const newHistory = prependPathHistory(base.repo_path_history, repoPath);
     const updatedConfig = rememberBranchRepoSettings(
       {
-        ...config,
+        ...base,
         last_repo_path: repoPath,
         last_branch: branchName.trim(),
         last_frontend_dir: frontendDir.trim(),
@@ -116,8 +120,8 @@ export async function saveBranchSettings(deps: {
         nginxLocations,
       },
     );
-    await invoke("save_config", { config: updatedConfig });
     setConfig(updatedConfig);
+    await invoke("save_config", { config: getConfigSnapshot?.() ?? updatedConfig });
   } catch (e) {
     console.error("保存分支设置失败:", e);
     showToast(`保存分支设置失败: ${e}`);
@@ -231,6 +235,7 @@ export async function handlePackageFromBranch(
     await saveBranchSettings({
       config,
       setConfig,
+      getConfigSnapshot: deps.getConfigSnapshot,
       showToast,
       repoPath,
       branchName,

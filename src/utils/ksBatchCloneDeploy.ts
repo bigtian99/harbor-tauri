@@ -20,6 +20,8 @@ export interface KsBatchCloneSummary {
 
 export interface KsBatchCloneOptions {
   config: HarborConfig;
+  /** 局部写盘前取最新整表 */
+  getConfigSnapshot?: () => HarborConfig;
   sourceEnvId: string;
   sourceNamespace: string;
   targetEnvId: string;
@@ -154,6 +156,7 @@ export async function runKsBatchCloneToEnv(
 ): Promise<KsBatchCloneSummary> {
   const {
     config,
+    getConfigSnapshot,
     sourceEnvId,
     sourceNamespace,
     targetEnvId,
@@ -463,9 +466,10 @@ export async function runKsBatchCloneToEnv(
 
   if (mapsDirty) {
     try {
-      const nextConfig = { ...config, ks_publish_maps: maps };
-      await invoke("save_config", { config: nextConfig });
       onMapsSaved?.(maps);
+      await invoke("save_config", {
+        config: getConfigSnapshot?.() ?? { ...config, ks_publish_maps: maps },
+      });
       note(summary, appendLog, `✓ 发布映射已保存（共 ${maps.length} 条）`);
     } catch (e) {
       note(summary, appendLog, `❌ 保存发布映射失败：${String(e)}`);

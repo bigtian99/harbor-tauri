@@ -8,6 +8,7 @@ import {
   isTauriRuntime,
 } from "../types";
 import { resolveOpsInitialTab, resolveTabForOpsMode } from "../opsNavigation";
+import { notifications } from "@mantine/notifications";
 
 
 export type DiagDateInfo = {
@@ -91,10 +92,24 @@ export function useAppConfig(deps: UseAppConfigDeps) {
   const onConfigLoadedRef = useRef(onConfigLoaded);
   onConfigLoadedRef.current = onConfigLoaded;
 
-  const [config, setConfig] = useState<HarborConfig>(createDefaultHarborConfig);
+  const [config, setConfigState] = useState<HarborConfig>(createDefaultHarborConfig);
   /** 保存配置时读最新快照，避免闭包里的 config 滞后于 setConfig */
   const configRef = useRef(config);
-  configRef.current = config;
+
+  /** 对外 / 内部统一入口：同步写 configRef，避免「改完立刻 save」丢字段（如 KS 密码） */
+  const setConfig = useCallback(
+    (update: HarborConfig | ((prev: HarborConfig) => HarborConfig)) => {
+      const prev = configRef.current;
+      const next = typeof update === "function" ? update(prev) : update;
+      configRef.current = next;
+      setConfigState(next);
+    },
+    [],
+  );
+
+  /** 局部写盘前取最新整表，避免 `{...config}` 闭包快照覆盖其它字段 */
+  const getConfigSnapshot = useCallback((): HarborConfig => configRef.current, []);
+
   /** load_config 完成（成功或失败）后为 true；KS 等面板需等此标志再自动连接，避免 reload 抢跑空配置 */
   const [configLoaded, setConfigLoaded] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
@@ -127,7 +142,6 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     }
     try {
       const savedConfig = withSessionConfigDefaults(await invoke<HarborConfig>("load_config"));
-      configRef.current = savedConfig;
       setConfig(savedConfig);
       setBuildHistory(savedConfig.build_history || []);
       await onConfigLoadedRef.current?.(savedConfig);
@@ -145,16 +159,30 @@ export function useAppConfig(deps: UseAppConfigDeps) {
       return;
     }
     try {
-      const snapshot = configRef.current;
+      let snapshot = configRef.current;
       await invoke("save_config", { config: snapshot });
+
+      // 保存期间若有新编辑：再落一次最新快照，且禁止用旧 load 覆盖内存
+      if (configRef.current !== snapshot) {
+        snapshot = configRef.current;
+        await invoke("save_config", { config: snapshot });
+      }
+
       const savedConfig = withSessionConfigDefaults(await invoke<HarborConfig>("load_config"));
-      configRef.current = savedConfig;
+      if (configRef.current !== snapshot) {
+        // load 等待期间又有编辑：保留内存最新，避免冲掉
+        setConfigSaved(true);
+        setTimeout(() => setConfigSaved(false), 2000);
+        return;
+      }
       setConfig(savedConfig);
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 2000);
     } catch (e) {
-      setLog(`❌ 保存配置失败: ${e}`);
-      setActiveTab("upload");
+      const msg = String(e);
+      setLog(`❌ 保存配置失败: ${msg}`);
+      setActiveTab("config");
+      notifications.show({ color: "red", title: "保存配置失败", message: msg });
     }
   }
 
@@ -164,18 +192,16 @@ export function useAppConfig(deps: UseAppConfigDeps) {
       | HarborConfig[keyof HarborConfig]
       | ((prev: HarborConfig[keyof HarborConfig]) => HarborConfig[keyof HarborConfig]),
   ) {
-    setConfig((prev) => {
-      const next = {
-        ...prev,
-        [field]: typeof value === "function"
-          ? (value as (p: HarborConfig[keyof HarborConfig]) => HarborConfig[keyof HarborConfig])(
-            prev[field],
-          )
-          : value,
-      };
-      configRef.current = next;
-      return next;
-    });
+    // 必须同步写 configRef：添加 KS 环境后立刻 handleSaveConfig 时，
+    // React setState updater 尚未跑，否则会把无密码的旧快照落盘，命名空间永远拉不下来。
+    const prev = configRef.current;
+    const nextValue =
+      typeof value === "function"
+        ? (value as (p: HarborConfig[keyof HarborConfig]) => HarborConfig[keyof HarborConfig])(
+          prev[field],
+        )
+        : value;
+    setConfig({ ...prev, [field]: nextValue });
   }
 
   async function handleOpsAuthorizationSave(authorization: string) {
@@ -471,6 +497,7 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     loadConfig,
     handleSaveConfig,
     handleConfigChange,
+    getConfigSnapshot,
     handleOpsAuthorizationSave,
     loadBuildHistory,
     deleteBuildRecord,

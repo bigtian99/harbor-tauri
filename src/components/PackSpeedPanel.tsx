@@ -307,6 +307,8 @@ export function PackSpeedPanel({
             onChange={(event) => setIdsText(event.currentTarget.value)}
             placeholder={"10593,10594\n或一行一个 ID"}
             minRows={4}
+            autosize
+            maxRows={12}
             styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
             description={`已解析 ${ids.length} 个 ID，支持英文逗号、空格、换行分隔。`}
           />

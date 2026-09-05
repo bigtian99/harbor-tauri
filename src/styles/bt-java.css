@@ -56,9 +56,11 @@
 }
 
 .bt-java-cell-actions {
-  width: 140px;
+  width: 196px;
+  min-width: 196px;
   white-space: nowrap;
   vertical-align: middle;
+  padding-inline: 8px;
 }
 
 .bt-java-row {

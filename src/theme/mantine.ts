@@ -85,7 +85,7 @@ export const appTheme = createTheme({
       defaultProps: { size: "sm", variant: "default", autoContrast: false },
       styles: {
         inner: {
-          gap: 6,
+          gap: 2,
         },
         section: {
           flexShrink: 0,

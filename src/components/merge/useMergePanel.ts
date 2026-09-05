@@ -17,6 +17,7 @@ export function useMergePanel(
   config: HarborConfig,
   onOpenDirectory: (path: string) => void,
   onPackageAfterMerge?: (args: { repoPath: string; targetBranch: string }) => void,
+  onConfigPatch?: (patch: Partial<HarborConfig>) => void,
 ) {
   const { confirm } = useConfirmDialog();
   const [repoPath, setRepoPath] = useState("");
@@ -620,10 +621,14 @@ export function useMergePanel(
     setTagMessage("");
   }, []);
 
-  // 弹窗保存预设分支后：更新本地值；若快捷开关已开则立即填充并打 tag
+  // 弹窗保存预设分支后：更新本地值 + 写回内存 config；若快捷开关已开则立即填充并打 tag
   const handleQuickMergeConfigSaved = useCallback((source: string, target: string) => {
     setQuickMergeSource(source);
     setQuickMergeTarget(target);
+    onConfigPatch?.({
+      quick_merge_source: source,
+      quick_merge_target: target,
+    });
     if (useQuickMerge && branches.length > 0) {
       const src = branches.find((b) => b.name === source);
       const tgt = branches.find((b) => b.name === target);
@@ -631,7 +636,7 @@ export function useMergePanel(
       if (tgt) setTargetBranch(target);
       if (tgt) setTagAfterMerge(true);
     }
-  }, [useQuickMerge, branches]);
+  }, [useQuickMerge, branches, onConfigPatch]);
 
   const handleTargetBranchChange = useCallback((v: string) => {
     setTargetBranch(v);

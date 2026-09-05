@@ -276,17 +276,19 @@ export function ConfigPanel({
       name: envEditor.draft.name.trim() || envEditor.draft.name,
       console: envEditor.draft.console.trim(),
       username: envEditor.draft.username.trim(),
+      password: envEditor.draft.password ?? "",
     };
     if (!draft.name.trim() || !draft.console.trim() || !draft.username.trim() || !draft.password) {
+      void showSystemAlert("无法保存环境", "请填写环境名、控制台地址、用户名和密码");
       return;
     }
-    if (envEditor.mode === "add") {
-      setKsEnvs([...ksEnvs, draft]);
-    } else {
-      setKsEnvs(ksEnvs.map((env) => (env.id === draft.id ? draft : env)));
-    }
+    const nextEnvs =
+      envEditor.mode === "add"
+        ? [...ksEnvs, draft]
+        : ksEnvs.map((env) => (env.id === draft.id ? draft : env));
+    setKsEnvs(nextEnvs);
     closeKsEnvEditor();
-    // 立刻落盘，避免只改内存后切到发布页以为已保存、重启又丢
+    // 立刻落盘（configRef 已由 onConfigChange 同步更新，含密码）
     handleSaveConfig();
   };
 
@@ -823,7 +825,10 @@ export function ConfigPanel({
                   onConfigChange("bt_jar_project_ids", map);
                 }}
                 spellCheck={false}
+                autosize
                 minRows={4}
+                maxRows={12}
+                resize="vertical"
                 placeholder={"tksy-backend-1.0.0.jar=19"}
                 description={
                   <>
@@ -858,7 +863,10 @@ export function ConfigPanel({
                 value={config.frontend_dockerfile_template}
                 onChange={(e) => onConfigChange("frontend_dockerfile_template", e.currentTarget.value)}
                 spellCheck={false}
-                minRows={6}
+                autosize
+                minRows={10}
+                maxRows={24}
+                resize="vertical"
                 description={
                   <>
                     可用变量：{"{{BASE_IMAGE}}"}、{"{{EXPOSE_PORT}}"}、{"{{NGINX_CONF_PATH}}"}、{"{{DIST_DIR}}"}、
@@ -874,7 +882,10 @@ export function ConfigPanel({
                 value={config.frontend_nginx_template}
                 onChange={(e) => onConfigChange("frontend_nginx_template", e.currentTarget.value)}
                 spellCheck={false}
-                minRows={9}
+                autosize
+                minRows={14}
+                maxRows={28}
+                resize="vertical"
                 styles={{
                   input: { fontFamily: "var(--mantine-font-family-monospace)" },
                 }}
@@ -1063,22 +1074,25 @@ export function ConfigPanel({
             </Paper>
 
             <Paper
-              p="md"
+              p={0}
               radius="md"
               className="config-tip"
-              withBorder
-              style={{
-                background: "var(--color-primary-subtle)",
-                borderColor: "var(--color-border)",
+              styles={{
+                root: {
+                  background:
+                    "linear-gradient(135deg, var(--color-primary-muted), rgba(56, 189, 248, 0.05))",
+                  border: "1px solid var(--color-primary-muted)",
+                  boxShadow: "0 4px 16px var(--color-primary-muted)",
+                },
               }}
             >
-              <Group gap={6} mb="sm">
-                <AlertCircle size={16} className="inline-icon" />
-                <Text size="sm" fw={600} c="var(--color-text)">
+              <Group gap={6} align="center" wrap="nowrap" mb="xs">
+                <AlertCircle size={14} style={{ display: "block", flexShrink: 0 }} />
+                <Text size="sm" fw={600} lh={1.3} c="var(--color-text)">
                   配置说明
                 </Text>
               </Group>
-              <Stack gap={6} component="ul" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              <Stack gap={6} component="ul" className="config-tip-list">
                 {[
                   "配置保存后无需重复填写",
                   "Harbor 地址不需要带 https:// 前缀",
@@ -1087,13 +1101,7 @@ export function ConfigPanel({
                   "前端 dist 模式会把所选 dist 目录的内容复制为 nginx 站点根目录，不会在镜像里嵌套 dist 目录",
                   "默认 nginx.conf 的 /index.html 回退路径对应 /usr/share/nginx/html/index.html",
                 ].map((item) => (
-                  <Text key={item} component="li" size="xs" c="var(--color-text-muted)" pl="md" style={{ position: "relative" }}>
-                    <Text
-                      span
-                      style={{ position: "absolute", left: 0, color: "var(--color-text-muted)" }}
-                    >
-                      •
-                    </Text>
+                  <Text key={item} component="li" size="xs" lh={1.5} c="var(--color-text-muted)">
                     {item}
                   </Text>
                 ))}

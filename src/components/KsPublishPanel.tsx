@@ -93,6 +93,7 @@ export function KsPublishPanel({
   configReady = true,
   onLastEnvChange,
   onPublishMapsChange,
+  getConfigSnapshot,
 }: {
   config: HarborConfig;
   /** 配置已从磁盘加载完成；false 时不要自动连接，避免 reload 后空配置误报「未配置环境」 */
@@ -100,6 +101,8 @@ export function KsPublishPanel({
   onLastEnvChange?: (id: string) => void;
   /** 批量复制后写回发布映射 */
   onPublishMapsChange?: (maps: KsPublishMap[]) => void;
+  /** 局部写盘前取最新整表 */
+  getConfigSnapshot?: () => HarborConfig;
 }) {
   const { confirm } = useConfirmDialog();
   const envs = resolveKsEnvironments(config);
@@ -207,8 +210,12 @@ export function KsPublishPanel({
   const deploysFpRef = useRef("");
 
   const selectedEnv = pickKsEnvironment(envs, envId);
-  /** 环境列表指纹：新增/删除环境后需重新自动连接 */
-  const envsFp = envs.map((e) => e.id).join(",");
+  /** 环境增删：只盯 id，避免改其它环境密码把当前页冲掉 */
+  const envIdsFp = envs.map((e) => e.id).join(",");
+  /** 当前环境凭证：改地址/账号/密码后才重连 */
+  const currentCredFp = selectedEnv
+    ? `${selectedEnv.id}:${selectedEnv.console}:${selectedEnv.username}:${selectedEnv.password}`
+    : "";
 
   const connect = useCallback(async (id?: string | null) => {
     const gen = ++connectGenRef.current;
@@ -317,7 +324,7 @@ export function KsPublishPanel({
       connectGenRef.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configReady, envsFp]);
+  }, [configReady, envIdsFp, currentCredFp]);
 
   const loadCms = useCallback(async () => {
     if (!connected || !namespace) return;
@@ -871,6 +878,7 @@ export function KsPublishPanel({
     try {
       const summary = await runKsBatchCloneToEnv({
         config,
+        getConfigSnapshot,
         sourceEnvId: cloneMeta.sourceEnvId,
         sourceNamespace: cloneMeta.sourceNamespace,
         targetEnvId: values.targetEnvId,
@@ -2013,6 +2021,8 @@ export function KsPublishPanel({
             value={editForm.envs}
             onChange={(e) => setEditForm({ ...editForm, envs: e.currentTarget.value })}
             minRows={4}
+            autosize
+            maxRows={12}
             styles={{ input: { fontFamily: "monospace", fontSize: 12 } }}
             spellCheck={false}
           />
@@ -2147,6 +2157,8 @@ export function KsPublishPanel({
             value={createForm.envs}
             onChange={(e) => setCreateForm({ ...createForm, envs: e.currentTarget.value })}
             minRows={4}
+            autosize
+            maxRows={12}
             styles={{ input: { fontFamily: "monospace", fontSize: 12 } }}
             spellCheck={false}
           />

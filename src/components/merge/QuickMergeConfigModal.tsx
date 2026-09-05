@@ -7,6 +7,8 @@ import type { HarborConfig } from "../../types";
 
 interface QuickMergeConfigModalProps {
   config: HarborConfig;
+  /** 写盘前取最新整表，避免闭包 config 覆盖其它字段 */
+  getConfigSnapshot?: () => HarborConfig;
   branchNames: string[];
   initialSource: string;
   initialTarget: string;
@@ -25,6 +27,7 @@ const modalStyles = {
 
 export function QuickMergeConfigModal({
   config,
+  getConfigSnapshot,
   branchNames,
   initialSource,
   initialTarget,
@@ -46,14 +49,17 @@ export function QuickMergeConfigModal({
     }
     setIsSaving(true);
     try {
-      const updatedConfig = {
-        ...config,
-        quick_merge_source: sourceBranch.trim(),
-        quick_merge_target: targetBranch.trim(),
-      };
-      await invoke("save_config", { config: updatedConfig });
+      const source = sourceBranch.trim();
+      const target = targetBranch.trim();
+      onSaved(source, target);
+      await invoke("save_config", {
+        config: getConfigSnapshot?.() ?? {
+          ...config,
+          quick_merge_source: source,
+          quick_merge_target: target,
+        },
+      });
       notifications.show({ message: "快捷模式配置已保存", color: "green", autoClose: 2000 });
-      onSaved(sourceBranch.trim(), targetBranch.trim());
       onClose();
     } catch (e) {
       notifications.show({ title: "保存失败", message: String(e), color: "red", autoClose: 5000 });

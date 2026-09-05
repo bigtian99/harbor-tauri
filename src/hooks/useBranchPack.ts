@@ -32,6 +32,8 @@ import {
 interface UseBranchPackDeps {
   config: HarborConfig;
   setConfig: Dispatch<SetStateAction<HarborConfig>>;
+  /** 局部写盘前取最新整表（优先于闭包 config） */
+  getConfigSnapshot?: () => HarborConfig;
   setActiveTab: (tab: TabType) => void;
   setLog: (value: string | ((prev: string) => string)) => void;
   setIsBuilding: (value: boolean) => void;
@@ -69,6 +71,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   const {
     config,
     setConfig,
+    getConfigSnapshot,
     setActiveTab,
     setLog,
     setIsBuilding,
@@ -292,6 +295,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     await runPackageFromBranch({
       config,
       setConfig,
+      getConfigSnapshot,
       setActiveTab,
       setLog,
       setIsBuilding,
@@ -377,6 +381,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
       {
         config,
         setConfig,
+        getConfigSnapshot,
         setActiveTab,
         setLog,
         setIsBuilding,
@@ -435,10 +440,11 @@ export function useBranchPack(deps: UseBranchPackDeps) {
         setShowAdvancedSettings(true);
         await loadGitBranches(selectedPath);
         if (config.remember_branch_settings) {
-          const newHistory = prependPathHistory(config.repo_path_history, selectedPath);
-          const updatedConfig = { ...config, repo_path_history: newHistory };
-          await invoke("save_config", { config: updatedConfig });
+          const base = getConfigSnapshot?.() ?? config;
+          const newHistory = prependPathHistory(base.repo_path_history, selectedPath);
+          const updatedConfig = { ...base, repo_path_history: newHistory };
           setConfig(updatedConfig);
+          await invoke("save_config", { config: getConfigSnapshot?.() ?? updatedConfig });
         }
       }
     } catch (e) {
@@ -512,13 +518,12 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   }
 
   function handleRememberSettingsChange(checked: boolean) {
-    setConfig((prev) => ({ ...prev, remember_branch_settings: checked }));
+    const base = getConfigSnapshot?.() ?? config;
+    let next = { ...base, remember_branch_settings: checked };
     if (checked) {
-      const newHistory = prependPathHistory(config.repo_path_history, repoPath);
-      const updatedConfig = rememberBranchRepoSettings(
+      next = rememberBranchRepoSettings(
         {
-          ...config,
-          remember_branch_settings: true,
+          ...next,
           last_repo_path: repoPath,
           last_branch: branchName.trim(),
           last_frontend_dir: frontendDir.trim(),
@@ -529,7 +534,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
           last_package_with_backend: packageWithBackend,
           last_spring_profile: springProfile,
           last_expose_port: branchExposePort,
-          repo_path_history: newHistory,
+          repo_path_history: prependPathHistory(next.repo_path_history, repoPath),
         },
         repoPath,
         {
@@ -538,10 +543,12 @@ export function useBranchPack(deps: UseBranchPackDeps) {
           nginxLocations,
         },
       );
-      invoke("save_config", { config: updatedConfig }).then(() => {
-        setConfig(updatedConfig);
-      });
     }
+    setConfig(next);
+    if (!isTauriRuntime()) return;
+    void invoke("save_config", { config: getConfigSnapshot?.() ?? next }).catch((e) => {
+      console.error("保存分支设置失败:", e);
+    });
   }
 
   /** 清空 Git 记忆后重置分支面板本地状态。 */

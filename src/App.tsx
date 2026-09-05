@@ -74,9 +74,31 @@ function App() {
     setActiveTab("config");
   }, [setActiveTab]);
 
+  const patchHarborConfig = useCallback(
+    (patch: Partial<HarborConfig>) => {
+      app.setConfig((prev) => ({ ...prev, ...patch }));
+    },
+    [app.setConfig],
+  );
+
+  const setKsLastEnvId = useCallback(
+    (id: string) => {
+      app.setConfig((prev) => ({ ...prev, ks_last_env_id: id }));
+    },
+    [app.setConfig],
+  );
+
+  const setKsPublishMaps = useCallback(
+    (maps: NonNullable<HarborConfig["ks_publish_maps"]>) => {
+      app.setConfig((prev) => ({ ...prev, ks_publish_maps: maps }));
+    },
+    [app.setConfig],
+  );
+
   const branch = useBranchPack({
     config: app.config,
     setConfig: app.setConfig,
+    getConfigSnapshot: app.getConfigSnapshot,
     setActiveTab,
     setLog: build.setLog,
     setIsBuilding: build.setIsBuilding,
@@ -443,6 +465,8 @@ function App() {
           <MergePanel
             config={app.config}
             onOpenDirectory={openArtifactPath}
+            onConfigPatch={patchHarborConfig}
+            getConfigSnapshot={app.getConfigSnapshot}
             onPackageAfterMerge={({ repoPath, targetBranch }) => {
               void branch.packageFromMergeTarget(repoPath, targetBranch);
             }}
@@ -495,10 +519,9 @@ function App() {
           <KsPublishPanel
             config={app.config}
             configReady={app.configLoaded}
-            onLastEnvChange={(id) => app.setConfig((prev) => ({ ...prev, ks_last_env_id: id }))}
-            onPublishMapsChange={(maps) =>
-              app.setConfig((prev) => ({ ...prev, ks_publish_maps: maps }))
-            }
+            getConfigSnapshot={app.getConfigSnapshot}
+            onLastEnvChange={setKsLastEnvId}
+            onPublishMapsChange={setKsPublishMaps}
           />
         )}
         {activeTab === "config" && (

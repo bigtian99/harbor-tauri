@@ -69,6 +69,7 @@ interface MergeFormSectionProps {
   onUseQuickMergeChange: (checked: boolean) => void;
   onShowQuickMergeConfig: (show: boolean) => void;
   onQuickMergeConfigSaved: (source: string, target: string) => void;
+  getConfigSnapshot?: () => HarborConfig;
   quickMergeSource: string;
   quickMergeTarget: string;
   onTagNameChange: (value: string) => void;
@@ -131,6 +132,7 @@ export function MergeFormSection({
   onUseQuickMergeChange,
   onShowQuickMergeConfig,
   onQuickMergeConfigSaved,
+  getConfigSnapshot,
   quickMergeSource,
   quickMergeTarget,
   onTagNameChange,
@@ -573,6 +575,7 @@ export function MergeFormSection({
         {showQuickMergeConfig && (
           <QuickMergeConfigModal
             config={config}
+            getConfigSnapshot={getConfigSnapshot}
             branchNames={branchNames}
             initialSource={quickMergeSource}
             initialTarget={quickMergeTarget}
