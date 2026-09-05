@@ -77,24 +77,10 @@ const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { key: "about", label: "关于", icon: <Info size={14} /> },
 ];
 
-const fieldStyles = {
-  label: { color: "var(--color-text)", fontWeight: 600 },
-  description: { color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" },
-  input: {
-    backgroundColor: "var(--color-bg-elevated)",
-    borderColor: "var(--color-border-strong)",
-    color: "var(--color-text)",
-  },
-};
-
 const panelPaperProps = {
   p: "md" as const,
   radius: "md" as const,
   withBorder: true as const,
-  style: {
-    background: "var(--color-bg-card)",
-    borderColor: "var(--color-border)",
-  },
 };
 
 const sectionCardStyle = {
@@ -372,14 +358,12 @@ export function ConfigPanel({
                 value={config.harbor_url}
                 onChange={(e) => onConfigChange("harbor_url", e.currentTarget.value)}
                 placeholder="例如: harbor.example.com"
-                styles={fieldStyles}
               />
               <TextInput
                 label="用户名"
                 value={config.username}
                 onChange={(e) => onConfigChange("username", e.currentTarget.value)}
                 placeholder="Harbor 登录用户名"
-                styles={fieldStyles}
               />
               <PasswordInput
                 label="密码"
@@ -388,7 +372,6 @@ export function ConfigPanel({
                 placeholder="Harbor 登录密码"
                 visible={showPassword}
                 onVisibilityChange={() => onTogglePassword()}
-                styles={fieldStyles}
               />
               <Group justify="flex-end" align="center" gap="sm">
                 {harborLoginMsg && (
@@ -416,7 +399,6 @@ export function ConfigPanel({
                 onChange={(e) => onConfigChange("project", e.currentTarget.value)}
                 placeholder="例如: my-project"
                 description="推送时自动拼在镜像名前，最终地址为 harbor地址/项目名/镜像名:标签"
-                styles={fieldStyles}
               />
             </Stack>
           </Paper>
@@ -433,14 +415,12 @@ export function ConfigPanel({
                 value={config.landing_ftp_host ?? ""}
                 onChange={(e) => onConfigChange("landing_ftp_host", e.currentTarget.value)}
                 placeholder="FTP 主机 IP 或域名"
-                styles={fieldStyles}
               />
               <TextInput
                 label="落地页 FTP 用户"
                 value={config.landing_ftp_user ?? ""}
                 onChange={(e) => onConfigChange("landing_ftp_user", e.currentTarget.value)}
                 placeholder="FTP 用户名"
-                styles={fieldStyles}
               />
               <PasswordInput
                 label="落地页 FTP 密码"
@@ -449,7 +429,6 @@ export function ConfigPanel({
                 placeholder="FTP 密码"
                 visible={showPassword}
                 onVisibilityChange={() => onTogglePassword()}
-                styles={fieldStyles}
               />
               <TextInput
                 label="落地页站点根目录"
@@ -457,7 +436,6 @@ export function ConfigPanel({
                 onChange={(e) => onConfigChange("landing_ftp_base_dir", e.currentTarget.value)}
                 placeholder="例如: common.example.com（可留空）"
                 description="上传后公开 URL 用此主机名拼 https://根目录/渠道/"
-                styles={fieldStyles}
               />
               <TextInput
                 label="隐私协议 FTP 主机"
@@ -465,7 +443,6 @@ export function ConfigPanel({
                 onChange={(e) => onConfigChange("privacy_ftp_host", e.currentTarget.value)}
                 placeholder="与落地页不同机时填写"
                 description="用户/密码复用上方落地页 FTP 账号"
-                styles={fieldStyles}
               />
             </Stack>
           </Paper>
@@ -568,14 +545,12 @@ export function ConfigPanel({
                 value={config.base_image}
                 onChange={(e) => onConfigChange("base_image", e.currentTarget.value)}
                 placeholder="例如: eclipse-temurin:17-jre"
-                styles={fieldStyles}
               />
               <TextInput
                 label="JAR 暴露端口"
                 value={config.expose_port}
                 onChange={(e) => onConfigChange("expose_port", e.currentTarget.value)}
                 placeholder="例如: 8181"
-                styles={fieldStyles}
               />
               <TextInput
                 label={
@@ -612,7 +587,6 @@ export function ConfigPanel({
                     选择
                   </Button>
                 }
-                styles={fieldStyles}
               />
               {mavenProbe && (
                 <Text size="xs" c={mavenProbe.home_valid ? "var(--color-success)" : "var(--color-text-muted)"}>
@@ -665,7 +639,6 @@ export function ConfigPanel({
                     选择
                   </Button>
                 }
-                styles={fieldStyles}
               />
               <TextInput
                 label={
@@ -707,7 +680,6 @@ export function ConfigPanel({
                     选择
                   </Button>
                 }
-                styles={fieldStyles}
               />
             </Stack>
           </Paper>
@@ -721,7 +693,6 @@ export function ConfigPanel({
                 value={config.bt_panel_url ?? ""}
                 onChange={(e) => onConfigChange("bt_panel_url", e.currentTarget.value)}
                 placeholder="https://面板地址:端口"
-                styles={fieldStyles}
               />
               <PasswordInput
                 label="面板 API 密钥"
@@ -730,7 +701,6 @@ export function ConfigPanel({
                 placeholder="面板设置 → API 接口密钥"
                 visible={showPassword}
                 onVisibilityChange={() => onTogglePassword()}
-                styles={fieldStyles}
               />
               <Stack gap="xs">
                 <Text size="sm" fw={500} c="var(--color-text)">
@@ -752,7 +722,6 @@ export function ConfigPanel({
                   placeholder="test"
                   disabled={config.bt_auto_deploy_test === false}
                   onChange={(e) => onConfigChange("bt_auto_deploy_profile", e.currentTarget.value.trim())}
-                  styles={fieldStyles}
                 />
               </Stack>
               <Stack gap="xs">
@@ -809,7 +778,6 @@ export function ConfigPanel({
                 onChange={(e) => onConfigChange("bt_frontend_remote_dir", e.currentTarget.value)}
                 placeholder="/www/wwwroot/example.com"
                 description="上传 dist 内文件（不套一层 dist 目录）"
-                styles={fieldStyles}
               />
               <Checkbox
                 label="跳过面板 TLS 证书校验（自签证书）"
@@ -822,14 +790,12 @@ export function ConfigPanel({
                 value={config.bt_ftp_host ?? ""}
                 onChange={(e) => onConfigChange("bt_ftp_host", e.currentTarget.value)}
                 placeholder="FTP 主机"
-                styles={fieldStyles}
               />
               <TextInput
                 label="FTP 用户"
                 value={config.bt_ftp_user ?? ""}
                 onChange={(e) => onConfigChange("bt_ftp_user", e.currentTarget.value)}
                 placeholder="admin"
-                styles={fieldStyles}
               />
               <TextInput
                 label="FTP 密码"
@@ -837,7 +803,6 @@ export function ConfigPanel({
                 value={config.bt_ftp_pass ?? ""}
                 onChange={(e) => onConfigChange("bt_ftp_pass", e.currentTarget.value)}
                 placeholder="FTP 密码"
-                styles={fieldStyles}
               />
               <Textarea
                 label="JAR → 项目 ID 映射"
@@ -866,11 +831,7 @@ export function ConfigPanel({
                   </>
                 }
                 styles={{
-                  ...fieldStyles,
-                  input: {
-                    ...fieldStyles.input,
-                    fontFamily: "var(--mantine-font-family-monospace)",
-                  },
+                  input: { fontFamily: "var(--mantine-font-family-monospace)" },
                 }}
               />
             </Stack>
@@ -885,14 +846,12 @@ export function ConfigPanel({
                 value={config.frontend_base_image}
                 onChange={(e) => onConfigChange("frontend_base_image", e.currentTarget.value)}
                 placeholder="例如: nginx:alpine"
-                styles={fieldStyles}
               />
               <TextInput
                 label="前端暴露端口"
                 value={config.frontend_expose_port}
                 onChange={(e) => onConfigChange("frontend_expose_port", e.currentTarget.value)}
                 placeholder="例如: 80"
-                styles={fieldStyles}
               />
               <Textarea
                 label="前端 Dockerfile 模板"
@@ -907,11 +866,7 @@ export function ConfigPanel({
                   </>
                 }
                 styles={{
-                  ...fieldStyles,
-                  input: {
-                    ...fieldStyles.input,
-                    fontFamily: "var(--mantine-font-family-monospace)",
-                  },
+                  input: { fontFamily: "var(--mantine-font-family-monospace)" },
                 }}
               />
               <Textarea
@@ -921,11 +876,7 @@ export function ConfigPanel({
                 spellCheck={false}
                 minRows={9}
                 styles={{
-                  ...fieldStyles,
-                  input: {
-                    ...fieldStyles.input,
-                    fontFamily: "var(--mantine-font-family-monospace)",
-                  },
+                  input: { fontFamily: "var(--mantine-font-family-monospace)" },
                 }}
               />
             </Stack>
@@ -972,7 +923,6 @@ export function ConfigPanel({
                     选择
                   </Button>
                 }
-                styles={fieldStyles}
               />
             </Stack>
           </Paper>
@@ -1192,7 +1142,6 @@ export function ConfigPanel({
                 draft: { ...envEditor.draft, name: e.currentTarget.value },
               })}
               placeholder="dev / test / prod"
-              styles={fieldStyles}
             />
             <TextInput
               label="控制台地址"
@@ -1202,7 +1151,6 @@ export function ConfigPanel({
                 draft: { ...envEditor.draft, console: e.currentTarget.value },
               })}
               placeholder="例如: http://kubesphere:30880"
-              styles={fieldStyles}
             />
             <TextInput
               label="用户名"
@@ -1212,7 +1160,6 @@ export function ConfigPanel({
                 draft: { ...envEditor.draft, username: e.currentTarget.value },
               })}
               placeholder="KubeSphere 登录用户名"
-              styles={fieldStyles}
             />
             <PasswordInput
               label="密码"
@@ -1224,7 +1171,6 @@ export function ConfigPanel({
               placeholder="KubeSphere 登录密码"
               visible={envEditorPassword}
               onVisibilityChange={(visible) => setEnvEditorPassword(visible)}
-              styles={fieldStyles}
             />
             <Group justify="flex-end" gap="sm" mt="xs">
               <Button variant="default" onClick={closeKsEnvEditor}>

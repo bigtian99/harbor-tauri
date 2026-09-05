@@ -14,7 +14,6 @@ import { Copy, FolderOpen, Maximize2 } from "lucide-react";
 import type { LandingPageResult, FtpUploadResult } from "../../types";
 import { TemplateCarousel } from "./TemplateCarousel";
 import { getTemplateIframeSrc } from "./utils";
-import { panelPaperStyles } from "../../theme/panelStyles";
 
 interface VestPreviewTableProps {
   landingGenerated: Record<string, LandingPageResult>;
@@ -42,7 +41,7 @@ export function VestPreviewTable({
   const getTemplateIndex = (id: string) => templateIndices[id] || 0;
 
   return (
-    <Paper radius="md" styles={panelPaperStyles} style={{ overflow: "hidden" }}>
+    <Paper radius="md" style={{ overflow: "hidden" }}>
       <Box style={{ overflowX: "auto" }}>
         <Table
           highlightOnHover

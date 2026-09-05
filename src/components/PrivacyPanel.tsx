@@ -21,7 +21,6 @@ import {
 import { Copy, Download, ExternalLink, FileUp, Loader2, Shield, Trash2 } from "lucide-react";
 import { isTauriRuntime } from "../types";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
-import { panelFieldStyles } from "../theme/panelStyles";
 import "../styles/privacy.css";
 import "../styles/ops-panel.css";
 
@@ -369,7 +368,6 @@ export function PrivacyPanel() {
               onBlur={() => {
                 void refreshParse();
               }}
-              styles={panelFieldStyles}
             />
             <Group gap="sm" align="center">
               <Badge color={isOverwrite ? "orange" : "blue"} variant="light">

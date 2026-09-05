@@ -1,5 +1,4 @@
 import { Group, Text, Progress, Paper } from "@mantine/core";
-import { panelPaperStyles } from "../../theme/panelStyles";
 
 interface LandingFtpSectionProps {
   isUploadingToFtp: boolean;
@@ -15,7 +14,7 @@ export function LandingFtpSection({
   if (!isUploadingToFtp) return null;
 
   return (
-    <Paper p="sm" radius="md" styles={panelPaperStyles}>
+    <Paper p="sm" radius="md">
       <Group justify="space-between" mb={4}>
         <Text size="sm" c="var(--color-text)">
           {progressMessage}

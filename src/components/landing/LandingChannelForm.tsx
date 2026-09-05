@@ -17,12 +17,7 @@ import {
   Package,
 } from "lucide-react";
 import type { LandingMode } from "../../hooks/useLanding";
-import {
-  panelFieldStyles,
-  panelPaperStyles,
-  panelPrimaryButtonStyles,
-  panelSegmentedStyles,
-} from "../../theme/panelStyles";
+import { panelSegmentedStyles } from "../../theme/panelStyles";
 
 interface LandingChannelFormProps {
   landingIds: string;
@@ -84,7 +79,7 @@ export function LandingChannelForm({
         </Button>
       </Group>
 
-      <Paper p="lg" radius="md" styles={panelPaperStyles}>
+      <Paper p="lg" radius="md">
         <Stack gap="md">
           <SegmentedControl
             size="sm"
@@ -104,7 +99,6 @@ export function LandingChannelForm({
               placeholder="Bearer token 或 Authorization 值"
               label="Authorization"
               type="password"
-              styles={panelFieldStyles}
             />
           )}
 
@@ -113,7 +107,6 @@ export function LandingChannelForm({
             onChange={(e) => setLandingIds(e.currentTarget.value)}
             placeholder={landingMode === "vest" ? "例如: 512,513" : "例如: 154,155,156"}
             label={landingMode === "vest" ? "马甲包 IDs（逗号分隔）" : "子渠道 IDs（逗号分隔）"}
-            styles={panelFieldStyles}
           />
 
           <Group gap="sm" mt={4}>
@@ -130,7 +123,6 @@ export function LandingChannelForm({
                 onClick={onPreview}
                 variant="filled"
                 color="blue"
-                styles={panelPrimaryButtonStyles}
               >
                 预览数据
               </Button>
@@ -144,7 +136,6 @@ export function LandingChannelForm({
                 onClick={onFtpUpload}
                 variant="filled"
                 color="blue"
-                styles={panelPrimaryButtonStyles}
               >
                 上传到 FTP
               </Button>

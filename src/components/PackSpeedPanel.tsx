@@ -26,7 +26,7 @@ import { isTauriRuntime } from "../types";
 import type { BatchPackResult } from "../types";
 import type { BatchPackType } from "../opsBatchPack";
 
-import { panelPaperStyles, panelPrimaryButtonStyles, panelSegmentedStyles, panelFieldStyles } from "../theme/panelStyles";
+import { panelSegmentedStyles } from "../theme/panelStyles";
 import "../styles/ops-panel.css";
 
 interface PackSpeedPanelProps {
@@ -40,8 +40,6 @@ interface OpsAuthTokenCapturedPayload {
   ids?: string[];
   packType?: BatchPackType;
 }
-
-const fieldStyles = panelFieldStyles;
 
 export function PackSpeedPanel({
   authorization,
@@ -253,7 +251,7 @@ export function PackSpeedPanel({
 
   return (
     <Stack gap="md" className="pack-speed-panel">
-      <Paper p="md" radius="md" styles={panelPaperStyles}>
+      <Paper p="md" radius="md">
         <Stack gap="md">
           <PasswordInput
             label={
@@ -287,7 +285,6 @@ export function PackSpeedPanel({
                 自动获取
               </Button>
             }
-            styles={fieldStyles}
             description="自动获取会打开内嵌运营后台登录页；Authorization 仅本次运行内保留，不会写入本地配置。"
           />
 
@@ -310,13 +307,7 @@ export function PackSpeedPanel({
             onChange={(event) => setIdsText(event.currentTarget.value)}
             placeholder={"10593,10594\n或一行一个 ID"}
             minRows={4}
-            styles={{
-              ...fieldStyles,
-              input: {
-                ...fieldStyles.input,
-                fontFamily: 'var(--mantine-font-family-monospace)',
-              },
-            }}
+            styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
             description={`已解析 ${ids.length} 个 ID，支持英文逗号、空格、换行分隔。`}
           />
 
@@ -327,7 +318,6 @@ export function PackSpeedPanel({
             step={1}
             allowNegative
             placeholder="0"
-            styles={fieldStyles}
           />
 
           <Button
@@ -339,7 +329,6 @@ export function PackSpeedPanel({
             disabled={!canSubmit}
             loading={isSubmitting}
             leftSection={!isSubmitting ? <Rocket size={18} /> : undefined}
-            styles={panelPrimaryButtonStyles}
             className="pack-speed-submit"
           >
             {isSubmitting ? "提交中..." : getBatchPackSubmitText(batchPackType)}

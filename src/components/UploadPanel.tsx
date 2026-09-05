@@ -17,7 +17,7 @@ import {
 import type { ArtifactType } from "../types";
 import { getPathName } from "../types";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
-import { panelPaperStyles, panelSegmentedStyles } from "../theme/panelStyles";
+import { panelSegmentedStyles } from "../theme/panelStyles";
 
 interface UploadPanelProps {
   artifactType: ArtifactType;
@@ -123,7 +123,7 @@ export function UploadPanel({
         )}
       </Paper>
 
-      <Paper withBorder p="sm" radius="md" styles={panelPaperStyles}>
+      <Paper withBorder p="sm" radius="md">
         <UnstyledButton
           onClick={() => setShowImageConfig(!showImageConfig)}
           w="100%"
@@ -190,7 +190,7 @@ export function UploadPanel({
       </Button>
 
       {isBuilding && (
-        <Paper p="sm" radius="md" withBorder styles={panelPaperStyles} className="upload-progress">
+        <Paper p="sm" radius="md" withBorder className="upload-progress">
           <Stack gap={6}>
             <Group justify="space-between" gap="xs">
               <Text size="xs" c="var(--color-text-muted)">{progressMessage}</Text>
@@ -261,7 +261,6 @@ export function UploadPanel({
               className={`log-panel upload-log ${log.includes("✅") ? "success" : ""}`}
               p="xs"
               radius="md"
-              styles={panelPaperStyles}
             >
               {renderLog(log)}
             </Paper>

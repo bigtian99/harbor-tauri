@@ -16,7 +16,6 @@ import { Eye, FolderOpen } from "lucide-react";
 import type { SubChannelData, LandingPageResult, FtpUploadResult } from "../../types";
 import { TemplateCarousel } from "./TemplateCarousel";
 import { getTemplateIframeSrc } from "./utils";
-import { panelPaperStyles } from "../../theme/panelStyles";
 
 interface ChannelPreviewTableProps {
   landingPreviewData: SubChannelData[];
@@ -49,7 +48,7 @@ export function ChannelPreviewTable({
       getTemplateIframeSrc(genResult, idx, previewBaseUrl, landingOutputDir);
 
   return (
-    <Paper radius="md" styles={panelPaperStyles} style={{ overflow: "hidden" }}>
+    <Paper radius="md" style={{ overflow: "hidden" }}>
       <Box style={{ overflowX: "auto" }}>
         <Table
           highlightOnHover

@@ -27,7 +27,6 @@ import {
 
 import type { SettlementGenerateResult } from "../types";
 import { isTauriRuntime } from "../types";
-import { panelFieldStyles, panelPaperStyles, panelPrimaryButtonStyles } from "../theme/panelStyles";
 import "../styles/ops-panel.css";
 
 type PathPickerProps = {
@@ -82,7 +81,6 @@ function PathPicker({ label, value, placeholder, directory, onChange }: PathPick
       placeholder={placeholder}
       autoCapitalize="none"
       rightSectionWidth={96}
-      styles={panelFieldStyles}
       rightSection={
         <Button
           size="compact-sm"
@@ -215,7 +213,7 @@ export function SettlementPanel() {
           </div>
         </Group>
 
-        <Paper p="md" radius="md" styles={panelPaperStyles}>
+        <Paper p="md" radius="md">
           <Stack gap="md">
             <Group justify="space-between" align="center">
               <Text size="sm" c="var(--color-text-muted)">
@@ -265,7 +263,6 @@ export function SettlementPanel() {
                 variant="filled"
                 color="blue"
                 className="settlement-generate-btn"
-                styles={panelPrimaryButtonStyles}
               >
                 生成结算单
               </Button>
@@ -281,7 +278,7 @@ export function SettlementPanel() {
             </Group>
 
             {isGenerating && (
-              <Paper p="sm" radius="md" styles={panelPaperStyles}>
+              <Paper p="sm" radius="md">
                 <Stack gap={6}>
                   <Group justify="space-between" gap="sm">
                     <Text size="sm" c="var(--color-text)">
@@ -304,7 +301,7 @@ export function SettlementPanel() {
         </Paper>
 
         {result && (
-          <Paper p="md" radius="md" styles={panelPaperStyles}>
+          <Paper p="md" radius="md">
             <Stack gap="sm">
               <Group gap="xs">
                 <CheckCircle size={18} color="var(--color-success)" />
