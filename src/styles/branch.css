@@ -45,16 +45,6 @@
   font-size: 12px;
   height: 28px;
   padding-inline: 8px 6px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent) !important;
-  background: color-mix(in srgb, var(--color-primary) 14%, transparent) !important;
-  color: var(--color-primary-hover) !important;
-}
-
-.branch-commit-history-btn.mantine-Button-root:hover,
-.mantine-Button-root.branch-commit-history-btn:hover {
-  border-color: var(--color-primary) !important;
-  background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
-  color: #fff !important;
 }
 
 .branch-commit-history-count.mantine-Badge-root {

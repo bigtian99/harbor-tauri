@@ -752,11 +752,6 @@ a.commit-link {
   gap: 0;
 }
 
-.history-panel-new .history-sidebar-search .mantine-TextInput-input {
-  height: 34px;
-  min-height: 34px;
-}
-
 .history-sidebar-list {
   flex: 1;
   overflow-y: auto;

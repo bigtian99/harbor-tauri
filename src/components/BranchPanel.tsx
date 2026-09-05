@@ -298,7 +298,7 @@ export function BranchPanel({
                 {commitListTotal > 0 && (
                   <Button
                     variant="light"
-                    color="blue"
+                    color="cyan"
                     size="compact-sm"
                     className="branch-commit-history-btn"
                     leftSection={<List size={13} />}
@@ -358,8 +358,9 @@ export function BranchPanel({
 
           {!lastCommit && commitListTotal > 0 && (
             <Button
-              variant="default"
-              size="sm"
+              variant="light"
+              color="cyan"
+              size="compact-sm"
               fullWidth
               className="branch-commit-history-btn"
               leftSection={<List size={15} />}
@@ -746,7 +747,7 @@ export function BranchPanel({
             variant="light"
             color="cyan"
             size="sm"
-            className="log-toggle-btn"
+            style={{ alignSelf: "flex-start" }}
             onClick={() => setShowBuildLog(!showBuildLog)}
             title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
             leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}

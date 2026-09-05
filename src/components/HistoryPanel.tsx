@@ -658,7 +658,7 @@ export function HistoryPanel({
                     variant="light"
                     color="cyan"
                     size="sm"
-                    className="log-toggle-btn"
+                    style={{ alignSelf: "flex-start" }}
                     onClick={() => setShowBuildLog(!showBuildLog)}
                     title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
                     leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}

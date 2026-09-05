@@ -214,43 +214,6 @@
   border-top: 1px dashed var(--color-border-strong);
 }
 
-.mantine-Button-root.log-toggle-btn {
-  align-self: flex-start;
-  font-weight: 600;
-  font-size: 13px;
-  padding: 8px 14px;
-  height: auto;
-  min-height: 34px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-primary) 16%, transparent),
-    color-mix(in srgb, var(--color-primary) 8%, transparent)
-  );
-  color: var(--color-primary-hover);
-  box-shadow: 0 0 14px rgba(59, 158, 255, 0.14);
-}
-
-.mantine-Button-root.log-toggle-btn:hover {
-  background: var(--color-primary-muted);
-  border-color: var(--color-primary);
-  color: #fff;
-  box-shadow: 0 0 18px rgba(59, 158, 255, 0.24);
-}
-
-.mantine-Button-root.log-toggle-btn .mantine-Button-section {
-  color: inherit;
-}
-
-.log-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
-}
-
 .success-message {
   display: flex;
   align-items: center;

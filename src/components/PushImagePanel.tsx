@@ -565,7 +565,7 @@ export function PushImagePanel({
               variant="light"
               color="cyan"
               size="sm"
-              className="log-toggle-btn"
+              style={{ alignSelf: "flex-start" }}
               onClick={() => setShowBuildLog(!showBuildLog)}
               title={showBuildLog ? "隐藏推送日志" : "展开推送日志"}
               leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}
