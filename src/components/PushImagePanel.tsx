@@ -491,7 +491,6 @@ export function PushImagePanel({
           color="cyan"
           size="md"
           fullWidth
-          className="push-image-cta"
           onClick={onPushImage}
           disabled={isBuilding || !localImage.trim()}
           leftSection={

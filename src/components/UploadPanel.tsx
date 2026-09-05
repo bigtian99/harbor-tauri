@@ -178,7 +178,6 @@ export function UploadPanel({
         color="cyan"
         size="md"
         fullWidth
-        className="upload-primary-cta"
         onClick={onBuildAndPush}
         disabled={isBuilding || !artifactPath}
         leftSection={

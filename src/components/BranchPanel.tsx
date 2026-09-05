@@ -552,7 +552,6 @@ export function BranchPanel({
         variant="filled"
         size="md"
         fullWidth
-        className="build-btn upload-primary-cta"
         onClick={onPackageFromBranch}
         disabled={isBuilding || !repoPath || !branchName.trim()}
         leftSection={isBuilding ? <Loader2 size={18} className="spin" /> : <GitBranch size={18} />}
