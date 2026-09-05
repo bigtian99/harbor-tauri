@@ -1,4 +1,4 @@
-/** 运营/构建分区卡片统一外观 */
+/** @deprecated 仅 KsPublishPanel 暂留；新代码走 mantine.ts。KS 三期再删。 */
 export const panelPaperStyles = {
   root: {
     background: "var(--color-bg-card)",
@@ -33,7 +33,7 @@ export const panelSegmentedStyles = {
   },
 } as const;
 
-/** 输入框：比卡片更深一档，避免和 card 糊成一块 */
+/** @deprecated 仅 KsPublishPanel 暂留；新代码走 mantine.ts。KS 三期再删。 */
 export const panelFieldStyles = {
   label: { color: "var(--color-text)", fontWeight: 600, marginBottom: 6 },
   description: { color: "var(--color-text-muted)" },
@@ -48,7 +48,7 @@ export const panelFieldStyles = {
   },
 } as const;
 
-/** 主操作按钮：沉蓝实心底，避免冰蓝在暗面上发飘 */
+/** @deprecated 仅 KsPublishPanel 暂留；新代码走 mantine.ts。KS 三期再删。 */
 export const panelPrimaryButtonStyles = {
   root: {
     background: "var(--color-primary-solid)",

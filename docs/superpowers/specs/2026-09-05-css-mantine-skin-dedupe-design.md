@@ -1,7 +1,7 @@
 # 构建面板：删掉盖在 Mantine 上的重复控件皮
 
 **日期**: 2026-09-05  
-**状态**: 待实现  
+**状态**: 已实现  
 **范围**: 删除与 `mantine.ts` 重复的控件上色；布局 CSS 与 KS 发布不动  
 **前置**: `2026-08-30-ui-shell-reskin-design.md`（token + 外壳；Upload/Push/Branch/History 已用 Mantine 组件）  
 **参考**: `src/theme/mantine.ts`、`src/theme/tokens.css`、`src/theme/panelStyles.ts`、`src/styles/base.css`、`upload.css` / `branch.css` / `history.css` / `progress.css`
