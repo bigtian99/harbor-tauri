@@ -66,13 +66,6 @@ function nameHue(name: string): number {
   return h % 360;
 }
 
-const paperStyles = {
-  root: {
-    background: "var(--color-bg-card)",
-    border: "1px solid var(--color-border)",
-  },
-} as const;
-
 export function PushImagePanel({
   localImage, localImageOptions, isLoadingImages,
   imageName, imageTag,
@@ -413,7 +406,6 @@ export function PushImagePanel({
               px="sm"
               radius="md"
               withBorder
-              styles={paperStyles}
               title={localImage}
             >
               <Group gap="sm" wrap="nowrap">
@@ -444,7 +436,7 @@ export function PushImagePanel({
           )}
         </Stack>
 
-        <Paper withBorder p="md" radius="md" className="image-config-panel" styles={paperStyles}>
+        <Paper withBorder p="md" radius="md" className="image-config-panel">
           <UnstyledButton
             onClick={() => setShowImageConfig(!showImageConfig)}
             w="100%"
@@ -503,7 +495,7 @@ export function PushImagePanel({
         </Button>
 
         {isBuilding && (
-          <Paper p="sm" withBorder radius="md" className="push-progress-panel" styles={paperStyles}>
+          <Paper p="sm" withBorder radius="md" className="push-progress-panel">
             <Group justify="space-between" mb={6}>
               <Text size="xs" c="var(--color-text-muted)">{progressMessage}</Text>
               <Text size="xs" fw={600} c="var(--color-text-muted)">{progress}%</Text>

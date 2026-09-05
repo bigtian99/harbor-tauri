@@ -19,7 +19,7 @@ import { SearchableDropdown } from "../SearchableDropdown";
 import { avatarColor, avatarInitials } from "../../avatarUrl";
 import { QuickMergeConfigModal } from "./QuickMergeConfigModal";
 import type { AuthorInfo, CommitInfo, HarborConfig, LocalMergeCheck } from "../../types";
-import { panelPrimaryButtonStyles, commitHashButtonStyles } from "../../theme/panelStyles";
+import { commitHashButtonStyles } from "../../theme/panelStyles";
 
 interface MergeFormSectionProps {
   config: HarborConfig;
@@ -80,22 +80,6 @@ interface MergeFormSectionProps {
   onDiffCommitSearchChange: (value: string) => void;
   onOpenCommitDiff: (commit: CommitInfo) => void;
 }
-
-const inputStyles = {
-  input: {
-    border: "1px solid var(--color-border-strong)",
-    background: "var(--color-bg-base)",
-    color: "var(--color-text)",
-  },
-  label: { color: "var(--color-text)", fontWeight: 600 },
-} as const;
-
-const paperStyles = {
-  root: {
-    background: "var(--color-bg-card)",
-    border: "1px solid var(--color-border-strong)",
-  },
-} as const;
 
 const checkboxLabelStyles = { label: { color: "var(--color-text)" } } as const;
 
@@ -170,7 +154,7 @@ export function MergeFormSection({
   }, [sourceBranch, targetBranch, selectedAuthor, diffCommitSearch]);
 
   return (
-    <Paper p="md" radius="md" styles={paperStyles} className="branch-card">
+    <Paper p="md" radius="md" className="branch-card">
       <Stack gap="md">
         <Stack gap={4}>
           <Text size="sm" fw={600} c="var(--color-text)">Git 仓库（本地仓库目录）</Text>
@@ -440,7 +424,6 @@ export function MergeFormSection({
                       </Button>
                     ) : null
                   }
-                  styles={inputStyles}
                   className="merge-diff-search"
                 />
                 {filteredDiffCommits.length === 0 ? (
@@ -527,7 +510,7 @@ export function MergeFormSection({
               label="Tag 名称"
               value={tagName}
               onChange={(e) => onTagNameChange(e.currentTarget.value)}
-              styles={{ ...inputStyles, input: { ...inputStyles.input, fontFamily: "monospace" } }}
+              styles={{ input: { fontFamily: "monospace" } }}
             />
             <Textarea
               label="Tag 内容（可修改）"
@@ -536,7 +519,7 @@ export function MergeFormSection({
               onChange={(e) => onTagMessageChange(e.currentTarget.value)}
               minRows={4}
               autosize
-              styles={{ ...inputStyles, input: { ...inputStyles.input, fontFamily: "monospace", fontSize: "0.85em" } }}
+              styles={{ input: { fontFamily: "monospace", fontSize: "0.85em" } }}
             />
             <Text size="xs" c="var(--color-text-muted)">
               将在合并 commit 上创建此 tag 并推送 origin
@@ -560,7 +543,6 @@ export function MergeFormSection({
                   : "有冲突或未检查，不允许合并"
             }
             leftSection={isMerging ? <Loader2 size={18} className="spin" /> : <GitMerge size={18} />}
-            styles={panelPrimaryButtonStyles}
             className="merge-submit-btn"
           >
             {isMerging ? "合并中..." : `合并 ${sourceBranch || "源"} → ${targetBranch || "目标"}`}

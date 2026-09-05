@@ -30,17 +30,6 @@ import { historyCanPushJar } from "../historyJarPush.ts";
 import { parseHistoryImageTags } from "../branchImageResults";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 
-const inputStyles = {
-  input: {
-    height: 34,
-    minHeight: 34,
-    border: "1px solid var(--color-border)",
-    background: "var(--color-bg-elevated)",
-    color: "var(--color-text)",
-    fontSize: "var(--font-size-sm)",
-  },
-} as const;
-
 const sidebarPaperStyles = {
   root: {
     background: "var(--color-bg-surface)",
@@ -564,7 +553,7 @@ export function HistoryPanel({
             autoCorrect="off"
             autoComplete="off"
             spellCheck={false}
-            styles={{ ...inputStyles, input: { ...inputStyles.input, textTransform: "none" } }}
+            styles={{ input: { textTransform: "none" } }}
             className="history-sidebar-search"
           />
         </Box>

@@ -29,21 +29,12 @@ import type {
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
-import { panelPaperStyles, panelSegmentedStyles, commitHashButtonStyles } from "../theme/panelStyles";
+import { panelSegmentedStyles, commitHashButtonStyles } from "../theme/panelStyles";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
 import {
   computeDefaultBuildCommand,
   parseNpmScriptFromCommand,
 } from "../branchBuildCommand";
-
-const inputStyles = {
-  input: {
-    border: "1px solid var(--color-border)",
-    background: "var(--color-bg-elevated)",
-    color: "var(--color-text)",
-  },
-  label: { color: "var(--color-text)", fontWeight: 600 },
-} as const;
 
 interface BranchPanelProps {
   // 项目类型
@@ -215,7 +206,7 @@ export function BranchPanel({
       />
 
       {/* 仓库与分支 */}
-      <Paper p="md" radius="md" withBorder styles={panelPaperStyles} className="branch-card">
+      <Paper p="md" radius="md" withBorder className="branch-card">
         <Stack gap="sm">
           <Text className="branch-section-title">仓库与分支</Text>
 
@@ -381,7 +372,7 @@ export function BranchPanel({
       </Paper>
 
       {/* 构建选项 */}
-      <Paper p="md" radius="md" withBorder styles={panelPaperStyles} className="branch-card">
+      <Paper p="md" radius="md" withBorder className="branch-card">
         <Stack gap="sm">
           <Text className="branch-section-title">构建选项</Text>
 
@@ -391,10 +382,7 @@ export function BranchPanel({
               value={frontendDir}
               onChange={(e) => onFrontendDirChange(e.currentTarget.value)}
               placeholder="自动检测中..."
-              styles={{
-                ...inputStyles,
-                description: { color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" },
-              }}
+              styles={{ description: { color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" } }}
               description={
                 frontendDir
                   ? `当前前端子目录: ${frontendDir}（可手改）`
@@ -483,7 +471,7 @@ export function BranchPanel({
       </Paper>
 
       {/* 推送与发布 */}
-      <Paper p="md" radius="md" withBorder styles={panelPaperStyles} className="branch-card">
+      <Paper p="md" radius="md" withBorder className="branch-card">
         <Stack gap="sm">
           <Text className="branch-section-title">推送与发布</Text>
 
@@ -790,7 +778,6 @@ export function BranchPanel({
                 }
               }}
               leftSection={<Search size={15} />}
-              styles={inputStyles}
             />
             <Select
               miw={160}
@@ -802,7 +789,6 @@ export function BranchPanel({
                 loadCommitList(repoPath, branchName, 1, next, commitMessageFilter);
               }}
               leftSection={<User size={15} />}
-              styles={inputStyles}
               comboboxProps={{ withinPortal: true }}
             />
             <Button
