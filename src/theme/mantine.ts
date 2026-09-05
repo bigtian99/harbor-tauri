@@ -54,6 +54,19 @@ const duskDark = [
   "#060910",
 ] as const;
 
+const fieldChrome = {
+  label: { color: "var(--color-text)", fontWeight: 600 },
+  input: {
+    backgroundColor: "var(--color-bg-base)",
+    borderColor: "var(--color-border-strong)",
+    color: "var(--color-text)",
+    "&:focus, &:focus-within": {
+      borderColor: "var(--color-primary)",
+      boxShadow: "0 0 0 3px var(--color-primary-muted)",
+    },
+  },
+} as const;
+
 export const appTheme = createTheme({
   primaryColor: "blue",
   fontFamily:
@@ -253,54 +266,20 @@ export const appTheme = createTheme({
       }),
     },
     TextInput: {
-      styles: {
-        label: { color: "var(--color-text)", fontWeight: 600 },
-        input: {
-          backgroundColor: "var(--color-bg-base)",
-          borderColor: "var(--color-border-strong)",
-          color: "var(--color-text)",
-        },
-      },
+      styles: fieldChrome,
     },
     PasswordInput: {
-      styles: {
-        label: { color: "var(--color-text)", fontWeight: 600 },
-        input: {
-          backgroundColor: "var(--color-bg-base)",
-          borderColor: "var(--color-border-strong)",
-          color: "var(--color-text)",
-        },
-      },
+      styles: fieldChrome,
     },
     Textarea: {
-      styles: {
-        label: { color: "var(--color-text)", fontWeight: 600 },
-        input: {
-          backgroundColor: "var(--color-bg-base)",
-          borderColor: "var(--color-border-strong)",
-          color: "var(--color-text)",
-        },
-      },
+      styles: fieldChrome,
     },
     NumberInput: {
-      styles: {
-        label: { color: "var(--color-text)", fontWeight: 600 },
-        input: {
-          backgroundColor: "var(--color-bg-base)",
-          borderColor: "var(--color-border-strong)",
-          color: "var(--color-text)",
-        },
-      },
+      styles: fieldChrome,
     },
     Select: {
       defaultProps: { radius: "sm" },
-      styles: {
-        input: {
-          backgroundColor: "var(--color-bg-base)",
-          borderColor: "var(--color-border-strong)",
-          color: "var(--color-text)",
-        },
-      },
+      styles: { input: fieldChrome.input },
     },
     Paper: {
       styles: {
