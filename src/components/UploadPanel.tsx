@@ -8,7 +8,6 @@ import {
   Group,
   Paper,
   Progress,
-  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -17,7 +16,6 @@ import {
 import type { ArtifactType } from "../types";
 import { getPathName } from "../types";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
-import { panelSegmentedStyles } from "../theme/panelStyles";
 
 interface UploadPanelProps {
   artifactType: ArtifactType;
@@ -36,8 +34,7 @@ interface UploadPanelProps {
   fullImage: string;
   copied: string | null;
   onCopyImage: (imageUrl: string) => void;
-  onArtifactTypeChange: (type: ArtifactType) => void;
-  onSelectFile: () => void;
+  onSelectFile: (type?: ArtifactType) => void;
   onBuildAndPush: () => void;
   onCancelBuild: () => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -55,8 +52,7 @@ export function UploadPanel({
   artifactType, artifactPath, imageName, imageTag, exposePort,
   isDragOver, isBuilding, showImageConfig, showBuildLog,
   progress, progressMessage, log,
-  fullImage, copied, onCopyImage,
-  onArtifactTypeChange, onSelectFile, onBuildAndPush, onCancelBuild,
+  fullImage, copied, onCopyImage, onSelectFile, onBuildAndPush, onCancelBuild,
   onDragOver, onDragLeave, onDrop,
   setImageName, setImageTag, setExposePort, setShowImageConfig, setShowBuildLog,
   renderLog,
@@ -66,41 +62,12 @@ export function UploadPanel({
 
   return (
     <Stack gap="sm" className="upload-panel">
-      <SegmentedControl
-        size="sm"
-        value={artifactType}
-        onChange={(v) => onArtifactTypeChange(v as ArtifactType)}
-        data={[
-          {
-            value: "jar",
-            label: (
-              <Group gap={6} justify="center" wrap="nowrap">
-                <FileText size={13} />
-                <span>JAR 应用</span>
-              </Group>
-            ),
-          },
-          {
-            value: "frontend_dist",
-            label: (
-              <Group gap={6} justify="center" wrap="nowrap">
-                <Package size={13} />
-                <span>前端 dist</span>
-              </Group>
-            ),
-          },
-        ]}
-        styles={panelSegmentedStyles}
-      />
-
-      <Paper
-        component="div"
+      <div
         className={`drop-zone ${isDragOver ? "drag-over" : ""} ${artifactPath ? "has-file" : ""}`}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
-        onClick={onSelectFile}
-        style={{ cursor: "pointer" }}
+        onClick={artifactPath ? () => onSelectFile(artifactType) : undefined}
       >
         {artifactPath ? (
           <div className="file-info">
@@ -109,19 +76,27 @@ export function UploadPanel({
             ) : (
               <Package size={28} strokeWidth={1.5} className="file-icon" />
             )}
-            <span className="file-name">
-              {getPathName(artifactPath)}
-            </span>
+            <span className="file-name">{getPathName(artifactPath)}</span>
             <span className="file-path">{artifactPath}</span>
           </div>
         ) : (
           <div className="drop-hint">
             <Package size={32} strokeWidth={1.5} className="drop-icon" />
-            <p>{artifactType === "jar" ? "拖拽 JAR 文件到这里" : "拖拽前端 dist 目录到这里"}</p>
-            <p className="drop-sub">{artifactType === "jar" ? "或点击选择文件" : "或点击选择目录"}</p>
+            <p>拖入 JAR 文件或前端 dist 目录</p>
+            <p className="drop-sub">
+              或点选
+              {" "}
+              <button type="button" className="drop-link" onClick={() => onSelectFile("jar")}>
+                JAR 文件
+              </button>
+              {" / "}
+              <button type="button" className="drop-link" onClick={() => onSelectFile("frontend_dist")}>
+                dist 目录
+              </button>
+            </p>
           </div>
         )}
-      </Paper>
+      </div>
 
       <Paper withBorder p="sm" radius="md">
         <UnstyledButton

@@ -37,6 +37,7 @@ export function useLanding(deps: UseLandingDeps) {
   const [isUploadingToFtp, setIsUploadingToFtp] = useState(false);
   const [templateIndices, setTemplateIndices] = useState<Record<string, number>>({});
   const landingDebounceRef = useRef<number | null>(null);
+  const landingGenSeqRef = useRef(0);
 
   // 同步 opsAuthorization 到 vestAuthorization
   useEffect(() => {
@@ -47,10 +48,12 @@ export function useLanding(deps: UseLandingDeps) {
 
   // 拉取子渠道并生成落地页
   async function runSubChannelGeneration(showDoneToast: boolean) {
+    const seq = ++landingGenSeqRef.current;
     setIsFetchingPreview(true);
     setLandingPreviewData([]);
     setLandingGenerated({});
     setFtpUploadResults({});
+    setTemplateIndices({});
     setLog("");
     setProgress(0);
     try {
@@ -58,8 +61,9 @@ export function useLanding(deps: UseLandingDeps) {
         apiUrl: LANDING_API_URL,
         ids: landingIds.trim(),
       });
+      if (seq !== landingGenSeqRef.current) return;
       setLandingPreviewData(data);
-      await runGenerationAndCollect("generate_landing_pages", { templateBase: landingTemplateBase }, showDoneToast);
+      await runGenerationAndCollect("generate_landing_pages", { templateBase: landingTemplateBase }, showDoneToast, seq);
     } catch (e) {
       notifications.show({
         title: "操作失败",
@@ -75,17 +79,19 @@ export function useLanding(deps: UseLandingDeps) {
 
   // 拉取马甲包并生成落地页
   async function runVestGeneration(showDoneToast: boolean) {
+    const seq = ++landingGenSeqRef.current;
     setIsFetchingPreview(true);
     setLandingPreviewData([]);
     setLandingGenerated({});
     setFtpUploadResults({});
+    setTemplateIndices({});
     setLog("");
     setProgress(0);
     try {
       await runGenerationAndCollect("generate_vest_landing_pages", {
         templateBase: landingTemplateBase,
         authorization: vestAuthorization.trim(),
-      }, showDoneToast);
+      }, showDoneToast, seq);
     } catch (e) {
       notifications.show({
         title: "操作失败",
@@ -103,6 +109,7 @@ export function useLanding(deps: UseLandingDeps) {
     command: string,
     extraArgs: Record<string, string>,
     showDoneToast: boolean,
+    seq: number,
   ) {
     setIsGenerating(true);
     const args: Record<string, unknown> = {
@@ -112,6 +119,7 @@ export function useLanding(deps: UseLandingDeps) {
       ...extraArgs,
     };
     const results = await invoke<LandingPageResult[]>(command, args);
+    if (seq !== landingGenSeqRef.current) return;
     const map: Record<string, LandingPageResult> = {};
     for (const r of results) { map[r.id] = r; }
     setLandingGenerated(map);
@@ -160,7 +168,8 @@ export function useLanding(deps: UseLandingDeps) {
       const items: { id: string; local_dir: string; remote_dir: string }[] = Object.entries(landingGenerated)
         .filter(([, r]) => r.status === "success")
         .map(([key, r]) => {
-          const templateIdx = templateIndices[key] || 0;
+          const dirs = r.template_dirs?.length ?? 1;
+          const templateIdx = Math.min(templateIndices[key] || 0, Math.max(dirs - 1, 0));
           const localDir = `${r.output_dir}/template_${templateIdx}`;
           return {
             id: r.id,
@@ -241,11 +250,25 @@ export function useLanding(deps: UseLandingDeps) {
       if (!landingOutputDir) {
         invoke<string>("get_temp_dir").then((dir) => {
           setLandingOutputDir(dir);
-        }).catch(() => {});
+        }).catch((e) => {
+          notifications.show({
+            title: "临时目录不可用",
+            message: String(e),
+            color: "red",
+            autoClose: 5000,
+          });
+        });
       }
       invoke<{ base_url: string }>("ensure_preview_server_started").then((info) => {
         setPreviewBaseUrl((current) => current === info.base_url ? current : info.base_url);
-      }).catch(() => {});
+      }).catch((e) => {
+        notifications.show({
+          title: "预览服务未启动",
+          message: `${String(e)}（将回退资源协议，图片/字体可能空白）`,
+          color: "yellow",
+          autoClose: 6000,
+        });
+      });
     }
   }, [activeTab, landingOutputDir, landingTemplateBase]);
 
@@ -258,6 +281,7 @@ export function useLanding(deps: UseLandingDeps) {
       setLandingPreviewData([]);
       setLandingGenerated({});
       setFtpUploadResults({});
+      setTemplateIndices({});
       return;
     }
     if (landingMode === "vest" && !vestAuthorization.trim()) return;

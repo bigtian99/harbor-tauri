@@ -12,12 +12,14 @@ import { useConfirmDialog } from "../../hooks/useConfirmDialog";
 import type { MergeOverlayPhase } from "./types";
 import { isAutoMergeMessage, parseChangedLines, parseConflictBlocks, summarizeMergeError } from "./utils";
 import { mergeSyncPackageConfirmHint } from "../../mergeSyncPackage";
+import { nextRepoPathHistory, shouldApplyLoadSeq } from "../../hooks/branch/pathHistory";
 
 export function useMergePanel(
   config: HarborConfig,
   onOpenDirectory: (path: string) => void,
   onPackageAfterMerge?: (args: { repoPath: string; targetBranch: string }) => void,
   onConfigPatch?: (patch: Partial<HarborConfig>) => void,
+  getConfigSnapshot?: () => HarborConfig,
 ) {
   const { confirm } = useConfirmDialog();
   const [repoPath, setRepoPath] = useState("");
@@ -69,6 +71,7 @@ export function useMergePanel(
   const mergeAutoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCheckDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitDiffRequest = useRef(0);
+  const loadSeqRef = useRef(0);
   const commitDiffLineRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const commitDiffFileRefs = useRef<Record<number, HTMLElement | null>>({});
   // 冲突文件 diff 查看
@@ -109,36 +112,69 @@ export function useMergePanel(
     };
   }, []);
 
+  const persistResolvedRepoHistory = useCallback((localPath: string) => {
+    const base = getConfigSnapshot?.() ?? config;
+    const next = nextRepoPathHistory(base.repo_path_history, localPath);
+    if (!next) return;
+    onConfigPatch?.({ repo_path_history: next });
+    if (!isTauriRuntime()) return;
+    const snap = getConfigSnapshot?.() ?? { ...base, repo_path_history: next };
+    void invoke("save_config", { config: snap }).catch((e) => {
+      console.error("保存仓库路径历史失败:", e);
+    });
+  }, [config, getConfigSnapshot, onConfigPatch]);
+
   const loadBranches = useCallback(async (input: string) => {
     if (!isTauriRuntime() || !input.trim()) return;
+    const seq = ++loadSeqRef.current;
     setIsLoadingBranches(true);
     setCheckResult(null);
     try {
       const result = await invoke<RemoteBranchListResult>("list_remote_branches", { repoPath: input.trim() });
+      if (!shouldApplyLoadSeq(seq, loadSeqRef.current)) return;
       setResolvedRepoPath(result.repoPath);
       setBranches(result.branches);
-      // 获取远程最新版本 tag，用于默认 tag 名计算
+      persistResolvedRepoHistory(result.repoPath);
       invoke<string | null>("get_latest_tag", { repoPath: input.trim() })
-        .then((tag) => { if (tag) setLatestTag(tag); })
+        .then((tag) => {
+          if (!shouldApplyLoadSeq(seq, loadSeqRef.current)) return;
+          if (tag) setLatestTag(tag);
+        })
         .catch(() => {});
       if (result.branches.length === 0) {
         notifications.show({ message: "该仓库没有远程分支", color: "blue", autoClose: 2500 });
       }
-      // 快捷开关开启时，自动填入配置的分支
-      if (useQuickMerge && quickMergeSource && quickMergeTarget) {
-        const source = result.branches.find((b) => b.name === quickMergeSource);
-        const target = result.branches.find((b) => b.name === quickMergeTarget);
-        if (source) setSourceBranch(quickMergeSource);
-        if (target) setTargetBranch(quickMergeTarget);
+      if (useQuickMerge && (quickMergeSource || quickMergeTarget)) {
+        const source = quickMergeSource
+          ? result.branches.find((b) => b.name === quickMergeSource)
+          : true;
+        const target = quickMergeTarget
+          ? result.branches.find((b) => b.name === quickMergeTarget)
+          : true;
+        const missing: string[] = [];
+        if (quickMergeSource && !source) missing.push(quickMergeSource);
+        if (quickMergeTarget && !target) missing.push(quickMergeTarget);
+        if (missing.length > 0) {
+          notifications.show({
+            message: `快捷合并预设不在远程分支中：${missing.join("、")}`,
+            color: "yellow",
+            autoClose: 4000,
+          });
+        }
+        if (source && quickMergeSource) setSourceBranch(quickMergeSource);
+        if (target && quickMergeTarget) setTargetBranch(quickMergeTarget);
       }
     } catch (e) {
+      if (!shouldApplyLoadSeq(seq, loadSeqRef.current)) return;
       notifications.show({ title: "读取分支失败", message: String(e), color: "red", autoClose: 6000 });
       setBranches([]);
       setResolvedRepoPath("");
     } finally {
-      setIsLoadingBranches(false);
+      if (shouldApplyLoadSeq(seq, loadSeqRef.current)) {
+        setIsLoadingBranches(false);
+      }
     }
-  }, [useQuickMerge, quickMergeSource, quickMergeTarget]);
+  }, [useQuickMerge, quickMergeSource, quickMergeTarget, persistResolvedRepoHistory]);
 
   const branchNames = branches.map((b) => b.name);
   // 联动过滤：源分支下拉排除已选的目标分支，目标分支下拉排除已选的源分支，
@@ -180,13 +216,18 @@ export function useMergePanel(
   const onSelectRepo = useCallback(async () => {
     if (!isTauriRuntime()) return;
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const selected = await open({ multiple: false, directory: true });
+    const selected = await open({
+      multiple: false,
+      directory: true,
+      defaultPath: repoPath.trim() || undefined,
+      title: "选择 Git 仓库目录",
+    });
     if (selected) {
       const path = typeof selected === "string" ? selected : (selected as { path?: string }).path || "";
       setRepoPath(path);
       await loadBranches(path);
     }
-  }, [loadBranches]);
+  }, [loadBranches, repoPath]);
 
   const handleRefreshBranches = useCallback(async () => {
     await loadBranches(repoPath);
@@ -195,10 +236,12 @@ export function useMergePanel(
   // 输入框失焦后自动加载分支（选择目录已即时加载，这里覆盖手动输入路径/URL 的场景）
   const handleInputBlur = useCallback((finalValue: string) => {
     const v = finalValue.trim();
-    if (v && !isLoadingBranches && !resolvedRepoPath) {
-      loadBranches(v);
+    if (!v) return;
+    setRepoPath(v);
+    if (v !== resolvedRepoPath) {
+      void loadBranches(v);
     }
-  }, [isLoadingBranches, resolvedRepoPath, loadBranches]);
+  }, [resolvedRepoPath, loadBranches]);
 
   const handleCheck = useCallback(async () => {
     if (!isTauriRuntime() || !sourceBranch || !targetBranch) return;
@@ -632,6 +675,16 @@ export function useMergePanel(
     if (useQuickMerge && branches.length > 0) {
       const src = branches.find((b) => b.name === source);
       const tgt = branches.find((b) => b.name === target);
+      const missing: string[] = [];
+      if (source && !src) missing.push(source);
+      if (target && !tgt) missing.push(target);
+      if (missing.length > 0) {
+        notifications.show({
+          message: `快捷合并预设不在远程分支中：${missing.join("、")}`,
+          color: "yellow",
+          autoClose: 4000,
+        });
+      }
       if (src) setSourceBranch(source);
       if (tgt) setTargetBranch(target);
       if (tgt) setTagAfterMerge(true);

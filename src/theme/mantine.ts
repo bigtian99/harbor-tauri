@@ -57,12 +57,17 @@ const duskDark = [
 const fieldChrome = {
   label: { color: "var(--color-text)", fontWeight: 600 },
   input: {
-    backgroundColor: "var(--color-bg-base)",
+    backgroundColor: "var(--color-primary-subtle)",
     borderColor: "var(--color-border-strong)",
     color: "var(--color-text)",
+    "&:hover": {
+      borderColor: "var(--color-primary-muted)",
+      backgroundColor: "var(--color-primary-subtle)",
+    },
     "&:focus, &:focus-within": {
-      borderColor: "var(--color-primary)",
-      boxShadow: "0 0 0 3px var(--color-primary-muted)",
+      borderColor: "var(--color-input-focus-border)",
+      backgroundColor: "var(--color-primary-subtle)",
+      boxShadow: "var(--input-focus-ring)",
     },
   },
 } as const;
@@ -277,9 +282,22 @@ export const appTheme = createTheme({
     NumberInput: {
       styles: fieldChrome,
     },
+    Autocomplete: {
+      styles: fieldChrome,
+    },
     Select: {
       defaultProps: { radius: "sm" },
       styles: { input: fieldChrome.input },
+    },
+    Input: {
+      vars: () => ({
+        wrapper: {
+          "--input-bd-focus": "var(--color-input-focus-border)",
+        },
+        input: {
+          "--input-bd-focus": "var(--color-input-focus-border)",
+        },
+      }),
     },
     Paper: {
       styles: {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { sanitizeBranchForImageRef } from "../src/branchRef.ts";
+import { sanitizeBranchForImageRef, branchDropdownLabel } from "../src/branchRef.ts";
 
 assert.equal(
   sanitizeBranchForImageRef("origin/rc-master"),
@@ -11,5 +11,9 @@ assert.equal(sanitizeBranchForImageRef("refs/heads/develop"), "develop");
 assert.equal(sanitizeBranchForImageRef("feature/login"), "feature-login");
 assert.equal(sanitizeBranchForImageRef("  "), "local");
 assert.equal(sanitizeBranchForImageRef("rc_master"), "rc_master");
+
+assert.equal(branchDropdownLabel("origin/master", ["master", "origin/master"]), "origin/master");
+assert.equal(branchDropdownLabel("master", ["master", "origin/master"]), "master");
+assert.equal(branchDropdownLabel("origin/rc-master", ["origin/rc-master", "origin/dev"]), "rc-master");
 
 console.log("branchRef.test.ts: ok");

@@ -132,7 +132,8 @@
 }
 
 .commit-search-input:focus {
-  border-color: var(--color-primary-muted);
+  border-color: var(--color-input-focus-border);
+  box-shadow: var(--input-focus-ring);
 }
 
 .commit-search-btn {
@@ -208,11 +209,9 @@
 }
 
 .commit-author-select:focus {
-  border-color: var(--color-primary);
-  background: var(--color-bg-elevated);
-  box-shadow:
-    0 0 0 3px var(--color-primary-muted),
-    0 4px 16px var(--color-primary-muted);
+  border-color: var(--color-input-focus-border);
+  background: var(--color-input-bg);
+  box-shadow: var(--input-focus-ring);
 }
 
 .commit-author-select option {

@@ -22,7 +22,7 @@ import {
   shouldPushHarborAfterMerge,
   springProfileAfterMerge,
 } from "../mergeSyncPackage";
-import { prependPathHistory } from "./branch/pathHistory";
+import { nextRepoPathHistory, prependPathHistory } from "./branch/pathHistory";
 import { useBranchCommits } from "./branch/useBranchCommits";
 import { useBranchGitLoad } from "./branch/useBranchGitLoad";
 import {
@@ -107,7 +107,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   const [branchFullImage, setBranchFullImage] = useState("");
   const [branchImageResults, setBranchImageResults] = useState<BranchImageResult[]>([]);
   const [backendArtifactPath, setBackendArtifactPath] = useState("");
-  const [springProfile, setSpringProfile] = useState("");
+  const [springProfile, setSpringProfile] = useState("prod");
   const [springProfiles, setSpringProfiles] = useState<string[]>([]);
 
   // UI / loading
@@ -237,9 +237,12 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     }
   }
 
-  async function ensureMavenConfigured(): Promise<boolean> {
+  async function ensureMavenConfigured(
+    projectType = branchProjectType,
+    withBackend = packageWithBackend,
+  ): Promise<boolean> {
     const needsMaven =
-      branchProjectType === "maven" || (branchProjectType === "npm" && packageWithBackend);
+      projectType === "maven" || (projectType === "npm" && withBackend);
     if (!needsMaven) return true;
     if (!isTauriRuntime()) return true;
 
@@ -374,6 +377,8 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setSelectedBuildScript(nextBuildScript);
     setPackageWithBackend(nextPackageWithBackend);
 
+    if (!(await ensureMavenConfigured(nextProjectType, nextPackageWithBackend))) return;
+
     // 合并跳转只写了仓库/分支并开打，原先不拉提交；分支页提交区会空白
     void loadGitBranches(path, branch);
 
@@ -439,13 +444,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
         void restoreRememberedBranchAdvancedSettings(config, selectedPath);
         setShowAdvancedSettings(true);
         await loadGitBranches(selectedPath);
-        if (config.remember_branch_settings) {
-          const base = getConfigSnapshot?.() ?? config;
-          const newHistory = prependPathHistory(base.repo_path_history, selectedPath);
-          const updatedConfig = { ...base, repo_path_history: newHistory };
-          setConfig(updatedConfig);
-          await invoke("save_config", { config: getConfigSnapshot?.() ?? updatedConfig });
-        }
+        persistRepoHistory(selectedPath);
       }
     } catch (e) {
       setLog(`❌ 选择仓库目录失败:\n${e}`);
@@ -474,6 +473,18 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     }
   }
 
+  function persistRepoHistory(path: string) {
+    const base = getConfigSnapshot?.() ?? config;
+    const nextHist = nextRepoPathHistory(base.repo_path_history, path);
+    if (!nextHist) return;
+    const updated = { ...base, repo_path_history: nextHist };
+    setConfig(updated);
+    if (!isTauriRuntime()) return;
+    void invoke("save_config", { config: getConfigSnapshot?.() ?? updated }).catch((e) => {
+      console.error("保存仓库路径历史失败:", e);
+    });
+  }
+
   function handleRepoPathChange(value: string) {
     if (value === repoPath) return;
     setRepoPath(value);
@@ -481,6 +492,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
       setImageName("");
       void restoreRememberedBranchAdvancedSettings(config, value);
       loadGitBranches(value);
+      persistRepoHistory(value);
     } else {
       setBranchOptions([]);
       setBranchName("");
@@ -496,6 +508,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setImageName("");
     void restoreRememberedBranchAdvancedSettings(config, path);
     loadGitBranches(path);
+    persistRepoHistory(path);
   }
 
   async function handleBranchChange(value: string) {

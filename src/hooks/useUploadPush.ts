@@ -94,20 +94,14 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     }
   }
 
-  function handleArtifactTypeChange(type: ArtifactType) {
-    setArtifactType(type);
-    setArtifactPath("");
-    setLog("");
-  }
-
-  async function handleSelectFile() {
+  async function handleSelectFile(type: ArtifactType = "jar") {
     if (!isTauriRuntime()) {
       setLog("⚠️ 当前是浏览器预览环境，无法打开系统文件选择器；请在 Tauri 桌面窗口中操作");
       return;
     }
     try {
       const selected =
-        artifactType === "jar"
+        type === "jar"
           ? await open({
               multiple: false,
               filters: [{ name: "JAR Files", extensions: ["jar"] }],
@@ -119,7 +113,8 @@ export function useUploadPush(deps: UseUploadPushDeps) {
               title: "选择前端 dist 目录",
             });
       if (selected) {
-        handleArtifactPathSelected(selected as string);
+        setArtifactType(type);
+        handleArtifactPathSelected(selected as string, type);
       }
     } catch (e) {
       console.error("选择产物失败:", e);
@@ -198,6 +193,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     } catch (e) {
       console.error("加载本地镜像列表失败:", e);
       setPushLocalImageOptions([]);
+      showToast(`加载本地镜像失败: ${e}`);
     } finally {
       setPushIsLoadingImages(false);
     }
@@ -327,17 +323,17 @@ export function useUploadPush(deps: UseUploadPushDeps) {
           } else {
             setLog("⚠️ 请拖入 Git 仓库目录");
           }
-        } else if (artifactType === "jar") {
+        } else {
           const jarFile = paths.find((p) => p.toLowerCase().endsWith(".jar"));
           if (jarFile) {
+            setArtifactType("jar");
             handleArtifactPathSelected(jarFile, "jar");
+          } else if (paths[0]) {
+            setArtifactType("frontend_dist");
+            handleArtifactPathSelected(paths[0], "frontend_dist");
           } else {
-            setLog("⚠️ 请拖入 .jar 文件");
+            setLog("⚠️ 请拖入 .jar 文件或前端 dist 目录");
           }
-        } else if (paths[0]) {
-          handleArtifactPathSelected(paths[0], "frontend_dist");
-        } else {
-          setLog("⚠️ 请拖入前端 dist 目录");
         }
       } else {
         setIsDragOver(false);
@@ -348,7 +344,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       unlistenDrag.then((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, artifactType, onDropRepoPath]);
+  }, [activeTab, onDropRepoPath]);
 
   return {
     // upload
@@ -370,7 +366,6 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     handleDragEvents,
     handleSelectFile,
     handleArtifactPathSelected,
-    handleArtifactTypeChange,
     handleBuildAndPush,
     // push
     pushLocalImage,

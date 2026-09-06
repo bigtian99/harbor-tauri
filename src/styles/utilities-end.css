@@ -207,7 +207,7 @@
   background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: 6px;
   color: var(--color-text); padding: 0 10px 0 28px; font-size: 12px; outline: none;
 }
-.log-viewer-search:focus { border-color: var(--color-primary-hover); }
+.log-viewer-search:focus { border-color: var(--color-input-focus-border); box-shadow: var(--input-focus-ring); }
 .log-viewer-search::placeholder { color: var(--color-text-muted); }
 .log-viewer-search-clear {
   position: absolute; right: 4px;

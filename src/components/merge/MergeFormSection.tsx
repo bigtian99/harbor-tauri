@@ -167,6 +167,7 @@ export function MergeFormSection({
                 options={config.repo_path_history || []}
                 onChange={onRepoChange}
                 onBlur={onInputBlur}
+                commitOnInput={false}
                 placeholder="输入本地仓库路径或 Git 地址（https://... / git@...），失焦自动拉取分支"
               />
             </div>

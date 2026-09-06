@@ -95,15 +95,7 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
       });
       if (isStaleBranchLoad(branchLoadRequestId)) return;
       setSpringProfiles(profiles);
-      let appliedDefaultTest = false;
-      setSpringProfile((prev) => {
-        if (prev || !profiles.includes("test")) return prev;
-        appliedDefaultTest = true;
-        return "test";
-      });
-      if (appliedDefaultTest) {
-        setAutoPushImage(false);
-      }
+      setSpringProfile((prev) => (prev.trim() ? prev : "prod"));
     } catch (e) {
       if (isStaleBranchLoad(branchLoadRequestId)) return;
       console.error("[Spring Profiles] 检测失败:", e);

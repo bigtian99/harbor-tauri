@@ -23,6 +23,9 @@
   --color-warning-muted: rgba(251, 191, 36, 0.18);
   --color-error: #f87171;
   --color-error-muted: rgba(248, 113, 113, 0.18);
+  --color-input-bg: var(--color-primary-subtle);
+  --color-input-focus-border: var(--color-primary-hover);
+  --input-focus-ring: 0 0 0 1px var(--color-primary-hover), 0 0 0 4px var(--color-primary-muted);
   /* 主色上的文字 / 头像字 */
   --color-on-primary: #f8fbff;
   /* 落地页/隐私预览 iframe 纸面（真实页面底，非 UI chrome） */
@@ -78,4 +81,22 @@
 }
 .mantine-Button-section[data-position="right"] {
   margin-inline-start: 0;
+}
+
+/* 文本输入聚焦：亮青边框 + 光晕。排除 checkbox/radio/按钮。 */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="color"]):focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="color"]):focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible,
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-visible,
+.mantine-Input-wrapper:focus-within .mantine-Input-input,
+.mantine-PasswordInput-input:focus,
+.mantine-Textarea-input:focus,
+.mantine-PillsInput-field:focus {
+  outline: none;
+  border-color: var(--color-input-focus-border) !important;
+  box-shadow: var(--input-focus-ring) !important;
 }

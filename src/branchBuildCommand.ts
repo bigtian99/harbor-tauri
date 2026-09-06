@@ -23,6 +23,42 @@ export function computeDefaultBuildCommand(opts: {
   return frontend;
 }
 
+export const DEFAULT_SPRING_PROFILE = "prod";
+export const DEFAULT_NPM_BUILD_SCRIPT = "build";
+
+export function resetPackBuildCommand(opts: {
+  projectType: BranchProjectType;
+  packageManager?: string;
+  packageWithBackend?: boolean;
+}): { springProfile: string; buildScript: string; command: string } {
+  const springProfile =
+    opts.projectType === "maven" ? DEFAULT_SPRING_PROFILE : "";
+  const buildScript =
+    opts.projectType === "npm" ? DEFAULT_NPM_BUILD_SCRIPT : "";
+  return {
+    springProfile,
+    buildScript,
+    command: computeDefaultBuildCommand({
+      projectType: opts.projectType,
+      packageManager: opts.packageManager,
+      packageWithBackend: opts.packageWithBackend,
+      springProfile,
+      buildScript,
+    }),
+  };
+}
+
+export function isDefaultPackBuildCommand(
+  command: string,
+  opts: {
+    projectType: BranchProjectType;
+    packageManager?: string;
+    packageWithBackend?: boolean;
+  },
+): boolean {
+  return command.trim() === resetPackBuildCommand(opts).command;
+}
+
 /** 从手改命令里提取 npm script 名；认不出则返回 null */
 export function parseNpmScriptFromCommand(command: string): string | null {
   const raw = command.trim();

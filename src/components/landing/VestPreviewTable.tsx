@@ -13,7 +13,8 @@ import {
 import { Copy, FolderOpen, Maximize2 } from "lucide-react";
 import type { LandingPageResult, FtpUploadResult } from "../../types";
 import { TemplateCarousel } from "./TemplateCarousel";
-import { getTemplateIframeSrc } from "./utils";
+import { getTemplateIframeSrc, clampTemplateIndex } from "./utils";
+import { isTauriRuntime } from "../../types";
 
 interface VestPreviewTableProps {
   landingGenerated: Record<string, LandingPageResult>;
@@ -37,8 +38,6 @@ export function VestPreviewTable({
   onOpenPreview,
 }: VestPreviewTableProps) {
   if (Object.keys(landingGenerated).length === 0) return null;
-
-  const getTemplateIndex = (id: string) => templateIndices[id] || 0;
 
   return (
     <Paper radius="md" style={{ overflow: "hidden" }}>
@@ -72,7 +71,7 @@ export function VestPreviewTable({
           <Table.Tbody>
             {Object.entries(landingGenerated).map(([id, genResult]) => {
               const ftpResult = ftpUploadResults[id];
-              const currentTemplateIndex = getTemplateIndex(id);
+              const currentTemplateIndex = clampTemplateIndex(templateIndices[id], genResult);
               return (
                 <Table.Tr key={id}>
                   <Table.Td>
@@ -135,6 +134,10 @@ export function VestPreviewTable({
                               color="gray"
                               size="sm"
                               onClick={async () => {
+                                if (!isTauriRuntime()) {
+                                  notifications.show({ message: "请在桌面端打开目录", color: "yellow", autoClose: 3000 });
+                                  return;
+                                }
                                 try {
                                   await invoke("open_directory", {
                                     path: `${genResult.output_dir}/template_${currentTemplateIndex}`,
@@ -191,6 +194,13 @@ export function VestPreviewTable({
                           >
                             <Copy size={14} />
                           </ActionIcon>
+                        </Tooltip>
+                      )}
+                      {ftpResult?.status === "error" && (
+                        <Tooltip label={ftpResult.message || "上传失败"}>
+                          <Text size="xs" c="red" fw={600}>
+                            上传失败
+                          </Text>
                         </Tooltip>
                       )}
                     </Group>

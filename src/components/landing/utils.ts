@@ -1,6 +1,11 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { LandingPageResult } from "../../types";
 
+export function clampTemplateIndex(idx: number, genResult?: LandingPageResult | null): number {
+  const max = Math.max((genResult?.template_dirs?.length ?? 1) - 1, 0);
+  return Math.min(Math.max(idx || 0, 0), max);
+}
+
 /** 生成结果预览 iframe src：优先本地 HTTP 预览服务器，回退 asset 协议 */
 export function getTemplateIframeSrc(
   genResult: LandingPageResult,
@@ -8,7 +13,7 @@ export function getTemplateIframeSrc(
   previewBaseUrl: string,
   landingOutputDir: string
 ): string {
-  const idx = genResult.template_dirs && genResult.template_dirs.length > 0 ? templateIdx : 0;
+  const idx = clampTemplateIndex(templateIdx, genResult);
   const base = landingOutputDir;
   if (previewBaseUrl && base) {
     // Windows 路径分隔符是 \，后端 output_dir / landingOutputDir 在 Windows 上都是反斜杠。

@@ -1,8 +1,8 @@
+import { useRef, useState } from "react";
 import {
   Badge,
   Button,
   Checkbox,
-  Code,
   Group,
   Modal,
   Paper,
@@ -17,7 +17,7 @@ import {
 } from "@mantine/core";
 import {
   FileText, CheckCircle, Copy, Loader2, Eye, EyeOff,
-  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User, Package
+  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User, Package, RotateCcw
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "./SearchableDropdown";
@@ -29,11 +29,15 @@ import type {
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
+import { branchDropdownLabel } from "../branchRef";
 import { panelSegmentedStyles, commitHashButtonStyles } from "../theme/panelStyles";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
 import {
   computeDefaultBuildCommand,
+  isDefaultPackBuildCommand,
+  parseMavenProfileFromCommand,
   parseNpmScriptFromCommand,
+  resetPackBuildCommand,
 } from "../branchBuildCommand";
 
 interface BranchPanelProps {
@@ -163,17 +167,59 @@ export function BranchPanel({
     branchImageResults.length > 0 || !!branchFullImage,
   );
 
+  const branchNames = branchOptions.map((b) => b.name);
   const branchDisplayMap = Object.fromEntries(
-    branchOptions.map((b) => {
-      const display = b.name.includes('/') ? b.name.substring(b.name.indexOf('/') + 1) : b.name;
-      return [display, b.name];
-    })
+    branchNames.map((name) => [branchDropdownLabel(name, branchNames), name]),
   );
   const branchDisplayNames = Object.keys(branchDisplayMap);
-  const currentBranchDisplay =
-    Object.entries(branchDisplayMap).find(([, full]) => full === branchName)?.[0]
-    || (branchName.includes("/") ? branchName.substring(branchName.indexOf("/") + 1) : branchName)
-    || branchName;
+  const currentBranchDisplay = branchDropdownLabel(branchName, branchNames) || branchName;
+  const displayedBuildCommand = computeDefaultBuildCommand({
+    projectType: branchProjectType,
+    packageManager: config.npm_package_manager,
+    buildScript: selectedBuildScript,
+    springProfile,
+    packageWithBackend,
+  });
+  const [editingBuildCommand, setEditingBuildCommand] = useState(false);
+  const [buildCommandDraft, setBuildCommandDraft] = useState("");
+  const skipBuildCommandCommitRef = useRef(false);
+
+  function commitDisplayedBuildCommand(raw: string) {
+    const draft = raw.trim();
+    setEditingBuildCommand(false);
+    if (!draft) return;
+    if (branchProjectType === "maven") {
+      const profile = parseMavenProfileFromCommand(draft);
+      onSpringProfileChange(profile ?? (draft.startsWith("mvn") ? "" : draft));
+      return;
+    }
+    const script = parseNpmScriptFromCommand(draft);
+    if (script) onSelectedBuildScriptChange(script);
+    if (packageWithBackend) {
+      const profile = parseMavenProfileFromCommand(draft);
+      if (profile) onSpringProfileChange(profile);
+    }
+  }
+
+  const packCommandReset = resetPackBuildCommand({
+    projectType: branchProjectType,
+    packageManager: config.npm_package_manager,
+    packageWithBackend,
+  });
+  const packCommandIsDefault = isDefaultPackBuildCommand(displayedBuildCommand, {
+    projectType: branchProjectType,
+    packageManager: config.npm_package_manager,
+    packageWithBackend,
+  });
+
+  function applyResetPackCommand() {
+    skipBuildCommandCommitRef.current = true;
+    setEditingBuildCommand(false);
+    onSpringProfileChange(packCommandReset.springProfile);
+    if (branchProjectType === "npm") {
+      onSelectedBuildScriptChange(packCommandReset.buildScript);
+    }
+  }
   const branchFallbackCopied =
     branchImageResults.length === 0 && branchFullImage
       ? isCopyHighlighted(copied, branchFullImage)
@@ -442,31 +488,74 @@ export function BranchPanel({
             />
           )}
 
-          <Paper
-            p="sm"
-            radius="md"
-            withBorder
-            styles={{
-              root: {
-                background: "var(--color-bg-elevated)",
-                borderColor: "var(--color-border)",
-              },
-            }}
-            className="branch-command-preview"
-          >
-            <Text size="sm" c="var(--color-text)">
-              固定命令：{" "}
-              <Code style={{ fontSize: 12, color: "var(--color-text)" }}>
-                {computeDefaultBuildCommand({
-                  projectType: branchProjectType,
-                  packageManager: config.npm_package_manager,
-                  buildScript: selectedBuildScript,
-                  springProfile,
-                  packageWithBackend,
-                })}
-              </Code>
-            </Text>
-          </Paper>
+          <Stack gap={6} className="branch-command-preview">
+            <Group justify="space-between" align="center" gap="xs">
+              <Text size="sm" fw={600} c="var(--color-text)">固定命令</Text>
+              <Button
+                variant="default"
+                size="compact-sm"
+                disabled={packCommandIsDefault && !editingBuildCommand}
+                leftSection={<RotateCcw size={12} />}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={applyResetPackCommand}
+              >
+                重置
+              </Button>
+            </Group>
+            {editingBuildCommand ? (
+              <TextInput
+                autoFocus
+                value={buildCommandDraft}
+                onChange={(e) => setBuildCommandDraft(e.currentTarget.value)}
+                onBlur={(e) => {
+                  if (skipBuildCommandCommitRef.current) {
+                    skipBuildCommandCommitRef.current = false;
+                    setEditingBuildCommand(false);
+                    return;
+                  }
+                  commitDisplayedBuildCommand(e.currentTarget.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                  if (e.key === "Escape") {
+                    skipBuildCommandCommitRef.current = true;
+                    setEditingBuildCommand(false);
+                    e.currentTarget.blur();
+                  }
+                }}
+                styles={{
+                  input: {
+                    fontFamily:
+                      '"SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace',
+                    fontSize: 13,
+                    minHeight: 42,
+                  },
+                }}
+              />
+            ) : (
+              <UnstyledButton
+                w="100%"
+                className="branch-command-preview-edit"
+                onClick={() => {
+                  setBuildCommandDraft(displayedBuildCommand);
+                  setEditingBuildCommand(true);
+                }}
+              >
+                <Text
+                  ff="monospace"
+                  size="sm"
+                  c="var(--color-text)"
+                  style={{ wordBreak: "break-all", lineHeight: 1.45 }}
+                >
+                  {displayedBuildCommand}
+                </Text>
+                <Text size="xs" c="dimmed" mt={4}>点击后显示输入框，可修改</Text>
+              </UnstyledButton>
+            )}
+          </Stack>
         </Stack>
       </Paper>
 
@@ -793,6 +882,7 @@ export function BranchPanel({
             />
             <Button
               variant="default"
+              leftSection={<Search size={14} />}
               onClick={() => loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter)}
             >
               搜索

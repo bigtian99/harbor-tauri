@@ -296,22 +296,30 @@
 }
 
 .branch-command-preview {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  font-size: 12px;
+  width: 100%;
 }
 
-.branch-command-preview code {
-  color: var(--color-text);
-  font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
-  font-size: 12px;
-  word-break: break-all;
+.branch-command-preview .mantine-TextInput-input {
+  width: 100%;
+  min-height: 42px;
+  font-size: 13px;
+}
+
+.branch-command-preview-edit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 2px 0;
+}
+
+.branch-command-preview-edit:hover {
+  color: var(--color-primary-hover);
+}
+
+.branch-command-preview-edit:hover > * {
+  color: inherit;
 }
 
 .checkbox-label {
@@ -387,7 +395,7 @@
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
+  background: var(--color-primary-subtle);
   color: var(--color-text);
   font-size: 13px;
   outline: none;
@@ -396,14 +404,14 @@
 }
 
 .form-group select:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
-  background: var(--color-bg-card);
+  border-color: var(--color-primary-muted);
+  background: var(--color-primary-subtle);
 }
 
 .form-group select:focus {
-  border-color: var(--color-border-strong);
-  background: var(--color-bg-elevated);
-  box-shadow: 0 0 0 3px var(--color-primary-subtle);
+  border-color: var(--color-input-focus-border);
+  background: var(--color-input-bg);
+  box-shadow: var(--input-focus-ring);
 }
 
 .form-group select:disabled {
@@ -427,7 +435,7 @@
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
+  background: var(--color-primary-subtle);
   color: var(--color-text);
   font-size: 13px;
   outline: none;
@@ -435,14 +443,14 @@
 }
 
 .searchable-dropdown-input:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
-  background: var(--color-bg-card);
+  border-color: var(--color-primary-muted);
+  background: var(--color-primary-subtle);
 }
 
 .searchable-dropdown-input:focus {
-  border-color: var(--color-border-strong);
-  background: var(--color-bg-elevated);
-  box-shadow: 0 0 0 3px var(--color-primary-subtle);
+  border-color: var(--color-input-focus-border);
+  background: var(--color-input-bg);
+  box-shadow: var(--input-focus-ring);
 }
 
 .searchable-dropdown-input::placeholder {
@@ -455,7 +463,7 @@
   left: 0;
   right: 0;
   margin-top: 4px;
-  max-height: 200px;
+  max-height: 280px;
   overflow-y: auto;
   border-radius: 10px;
   border: 1px solid var(--color-border-strong);
@@ -487,8 +495,10 @@
   color: var(--color-text);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
   border-bottom: 1px solid var(--color-border);
+  word-break: break-all;
+  line-height: 1.4;
 }
 
 .searchable-dropdown-item:last-child {
@@ -498,6 +508,10 @@
 .searchable-dropdown-item:hover {
   background: var(--color-bg-elevated);
   color: var(--color-text);
+}
+
+.searchable-dropdown-item.highlight {
+  background: var(--color-bg-elevated);
 }
 
 .searchable-dropdown-item.selected {

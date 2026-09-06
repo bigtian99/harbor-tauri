@@ -83,9 +83,15 @@ function App() {
 
   const setKsLastEnvId = useCallback(
     (id: string) => {
-      app.setConfig((prev) => ({ ...prev, ks_last_env_id: id }));
+      const prev = app.getConfigSnapshot();
+      if (prev.ks_last_env_id === id) return;
+      app.setConfig({ ...prev, ks_last_env_id: id });
+      if (!isTauriRuntime()) return;
+      void invoke("save_config", { config: app.getConfigSnapshot() }).catch((e) => {
+        console.error("保存 KS 环境选择失败:", e);
+      });
     },
-    [app.setConfig],
+    [app.getConfigSnapshot, app.setConfig],
   );
 
   const setKsPublishMaps = useCallback(
@@ -304,7 +310,6 @@ function App() {
             fullImage={upload.uploadFullImage}
             copied={build.copied}
             onCopyImage={build.handleCopyImage}
-            onArtifactTypeChange={upload.handleArtifactTypeChange}
             onSelectFile={upload.handleSelectFile}
             onBuildAndPush={upload.handleBuildAndPush}
             onCancelBuild={build.handleCancelBuild}

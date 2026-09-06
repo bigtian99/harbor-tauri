@@ -19,6 +19,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import type { TemplateInfo } from "../../types";
+import { isTauriRuntime } from "../../types";
 import type { PreviewOverlayState, TemplateGroup } from "./types";
 import { getTemplatePreviewSrc } from "./utils";
 
@@ -233,7 +234,13 @@ export function LandingTemplateSection({
                 color="gray"
                 size="compact-xs"
                 leftSection={<ExternalLink size={14} />}
-                onClick={() => openUrl(previewOverlay.src)}
+                onClick={() => {
+                  if (!isTauriRuntime()) {
+                    window.open(previewOverlay.src, "_blank", "noopener");
+                    return;
+                  }
+                  void openUrl(previewOverlay.src);
+                }}
               >
                 外部浏览器
               </Button>

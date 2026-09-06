@@ -30,11 +30,17 @@ export function SearchableDropdown({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const [highlightIndex, setHighlightIndex] = useState(0);
+
   const filteredOptions = filterSearchableDropdownOptions(
     options,
     searchTerm,
     filterBySearch,
   );
+
+  useEffect(() => {
+    setHighlightIndex(0);
+  }, [searchTerm, filterBySearch, options]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -59,6 +65,7 @@ export function SearchableDropdown({
     setIsOpen(false);
     setSearchTerm("");
     setFilterBySearch(false);
+    onBlur?.(option);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -74,11 +81,36 @@ export function SearchableDropdown({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && allowCustomValue && searchTerm && !options.includes(searchTerm)) {
-      onChange(searchTerm);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!isOpen) {
+        setIsOpen(true);
+        return;
+      }
+      setHighlightIndex((i) => Math.min(i + 1, Math.max(filteredOptions.length - 1, 0)));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIndex((i) => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === "Escape") {
       setIsOpen(false);
       setSearchTerm("");
       setFilterBySearch(false);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const picked = filteredOptions[highlightIndex];
+      if (picked) {
+        handleSelect(picked);
+        return;
+      }
+      if (allowCustomValue && searchTerm) {
+        handleSelect(searchTerm);
+      }
     }
   };
 
@@ -129,11 +161,15 @@ export function SearchableDropdown({
           {loading && filteredOptions.length === 0 && !searchTerm ? (
             <div className="searchable-dropdown-empty">加载中...</div>
           ) : filteredOptions.length > 0 ? (
-            filteredOptions.map((option) => (
+            filteredOptions.map((option, index) => (
               <div
                 key={option}
-                className={`searchable-dropdown-item ${option === value ? "selected" : ""}`}
-                onClick={() => handleSelect(option)}
+                className={`searchable-dropdown-item ${option === value ? "selected" : ""} ${index === highlightIndex ? "highlight" : ""}`}
+                title={option}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelect(option);
+                }}
               >
                 {option}
               </div>
@@ -141,7 +177,10 @@ export function SearchableDropdown({
           ) : allowCustomValue && searchTerm ? (
             <div
               className="searchable-dropdown-item searchable-dropdown-custom"
-              onClick={() => handleSelect(searchTerm)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleSelect(searchTerm);
+              }}
             >
               使用: {searchTerm}
             </div>

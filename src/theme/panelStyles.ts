@@ -39,11 +39,12 @@ export const panelFieldStyles = {
   description: { color: "var(--color-text-muted)" },
   input: {
     color: "var(--color-text)",
-    background: "var(--color-bg-base)",
-    backgroundColor: "var(--color-bg-base)",
+    background: "var(--color-input-bg)",
+    backgroundColor: "var(--color-input-bg)",
     border: "1px solid var(--color-border-strong)",
     "&:focus, &:focus-within": {
-      borderColor: "var(--color-primary-muted)",
+      borderColor: "var(--color-input-focus-border)",
+      boxShadow: "var(--input-focus-ring)",
     },
   },
 } as const;

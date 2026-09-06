@@ -15,7 +15,8 @@ import {
 import { Eye, FolderOpen } from "lucide-react";
 import type { SubChannelData, LandingPageResult, FtpUploadResult } from "../../types";
 import { TemplateCarousel } from "./TemplateCarousel";
-import { getTemplateIframeSrc } from "./utils";
+import { getTemplateIframeSrc, clampTemplateIndex } from "./utils";
+import { isTauriRuntime } from "../../types";
 
 interface ChannelPreviewTableProps {
   landingPreviewData: SubChannelData[];
@@ -42,7 +43,6 @@ export function ChannelPreviewTable({
 }: ChannelPreviewTableProps) {
   if (landingPreviewData.length === 0) return null;
 
-  const getTemplateIndex = (id: string) => templateIndices[id] || 0;
   const iframeSrcFor =
     (genResult: LandingPageResult) => (idx: number) =>
       getTemplateIframeSrc(genResult, idx, previewBaseUrl, landingOutputDir);
@@ -86,7 +86,7 @@ export function ChannelPreviewTable({
             {landingPreviewData.map((item, idx) => {
               const genResult = landingGenerated[item.id];
               const ftpResult = ftpUploadResults[item.id];
-              const currentTemplateIndex = getTemplateIndex(item.id);
+              const currentTemplateIndex = clampTemplateIndex(templateIndices[item.id], genResult);
               return (
                 <Table.Tr key={item.id || idx}>
                   <Table.Td style={{ textAlign: "center" }}>
@@ -287,6 +287,13 @@ export function ChannelPreviewTable({
                           </Text>
                         </Group>
                       )}
+                      {ftpResult?.status === "error" && (
+                        <Tooltip label={ftpResult.message || "上传失败"}>
+                          <Text size="xs" c="red" fw={600}>
+                            上传失败
+                          </Text>
+                        </Tooltip>
+                      )}
                     </Stack>
                   </Table.Td>
 
@@ -300,6 +307,10 @@ export function ChannelPreviewTable({
                               color="gray"
                               size="sm"
                               onClick={async () => {
+                                if (!isTauriRuntime()) {
+                                  notifications.show({ message: "请在桌面端打开目录", color: "yellow", autoClose: 3000 });
+                                  return;
+                                }
                                 try {
                                   const templatePath = `${genResult.output_dir}/template_${currentTemplateIndex}`;
                                   await invoke("open_directory", { path: templatePath });

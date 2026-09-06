@@ -260,7 +260,7 @@ export function PrivacyPanel() {
     } finally {
       setIsUploading(false);
     }
-  }, [loadHistory, targetUrl, parsed]);
+  }, [loadHistory, targetUrl, parsed, confirm]);
 
   const copyUrl = useCallback(async (url: string) => {
     try {

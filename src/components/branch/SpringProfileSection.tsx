@@ -37,7 +37,7 @@ export function SpringProfileSection({
           isLoadingProfiles
             ? "扫描中，也可直接手输..."
             : springProfiles.length === 0
-              ? "手输 profile，如 test / prod（可留空）"
+              ? "手输 profile，如 test / prod（默认 prod）"
               : "选择或手输 profile..."
         }
         loading={isLoadingProfiles}
@@ -47,7 +47,7 @@ export function SpringProfileSection({
           ? `将执行: ${computeDefaultBuildCommand({ projectType: "maven", springProfile })}`
           : springProfiles.length > 0
             ? `可从已检测 profile 选择，也可手输；检测到: ${springProfiles.join(", ")}`
-            : "留空则不添加 -Dspring.profiles.active；也可直接手输或粘贴 mvn 命令"}
+            : "留空则不加 -Dspring.profiles.active；默认为 prod。也可粘贴整段 mvn 命令"}
       </p>
     </div>
   );

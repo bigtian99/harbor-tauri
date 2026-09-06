@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import {
   computeDefaultBuildCommand,
+  isDefaultPackBuildCommand,
   parseMavenProfileFromCommand,
   parseNpmScriptFromCommand,
+  resetPackBuildCommand,
 } from "../src/branchBuildCommand.ts";
 
 assert.equal(
@@ -44,6 +46,54 @@ assert.equal(
     "mvn clean package -Dmaven.test.skip=true -Dspring.profiles.active=prod",
   ),
   "prod",
+);
+
+assert.deepEqual(
+  resetPackBuildCommand({ projectType: "maven" }),
+  {
+    springProfile: "prod",
+    buildScript: "",
+    command:
+      "mvn clean package -Dmaven.test.skip=true -Dspring.profiles.active=prod",
+  },
+);
+
+assert.deepEqual(
+  resetPackBuildCommand({ projectType: "npm", packageManager: "pnpm" }),
+  {
+    springProfile: "",
+    buildScript: "build",
+    command: "pnpm install && pnpm run build",
+  },
+);
+
+assert.deepEqual(
+  resetPackBuildCommand({
+    projectType: "npm",
+    packageManager: "npm",
+    packageWithBackend: true,
+  }),
+  {
+    springProfile: "",
+    buildScript: "build",
+    command:
+      "npm install && npm run build && mvn clean package -Dmaven.test.skip=true",
+  },
+);
+
+assert.equal(
+  isDefaultPackBuildCommand(
+    "mvn clean package -Dmaven.test.skip=true -Dspring.profiles.active=prod",
+    { projectType: "maven" },
+  ),
+  true,
+);
+assert.equal(
+  isDefaultPackBuildCommand(
+    "mvn clean package -Dmaven.test.skip=true -Dspring.profiles.active=test",
+    { projectType: "maven" },
+  ),
+  false,
 );
 
 console.log("branchBuildCommand.test.ts OK");

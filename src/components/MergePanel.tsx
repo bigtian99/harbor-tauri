@@ -9,7 +9,7 @@ import { MergeFormSection } from "./merge/MergeFormSection";
 export type { MergePanelProps } from "./merge/types";
 
 export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge, onConfigPatch, getConfigSnapshot }: MergePanelProps) {
-  const m = useMergePanel(config, onOpenDirectory, onPackageAfterMerge, onConfigPatch);
+  const m = useMergePanel(config, onOpenDirectory, onPackageAfterMerge, onConfigPatch, getConfigSnapshot);
 
   return (
     <Stack gap="sm" className="merge-panel">
