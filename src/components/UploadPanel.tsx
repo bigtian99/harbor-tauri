@@ -1,5 +1,5 @@
 import {
-  Rocket, Package, FileText,
+  Rocket, Package, FileText, UploadCloud, RefreshCw,
   Loader2, Eye, EyeOff, XCircle, CheckCircle, Copy, ChevronDown,
 } from "lucide-react";
 import {
@@ -59,29 +59,66 @@ export function UploadPanel({
 }: UploadPanelProps) {
   const fullImageCopied = fullImage ? isCopyHighlighted(copied, fullImage) : false;
   const fullImageCopyText = fullImage ? normalizeCopyText(fullImage) : "";
+  const hasArtifact = Boolean(artifactPath);
 
   return (
-    <Stack gap="sm" className="upload-panel">
+    <div className="upload-shell">
+      <header className="upload-head">
+        <div className="upload-head-text">
+          <span className="upload-eyebrow">JAR / DIST → DOCKER → HARBOR</span>
+          <h1 className="upload-title">上传推送</h1>
+          <p className="upload-sub">选择构建产物，按需调整镜像参数，一键打包并推送到 Harbor 仓库</p>
+        </div>
+        <ol className="upload-steps" aria-label="构建流程">
+          <li className={`upload-step ${hasArtifact ? "done" : "active"}`}>
+            <span className="upload-step-num">{hasArtifact ? "✓" : "1"}</span>
+            <span className="upload-step-label">选择产物</span>
+          </li>
+          <li className="upload-step-line" aria-hidden />
+          <li className={`upload-step ${isBuilding || fullImage ? "done" : hasArtifact ? "active" : ""}`}>
+            <span className="upload-step-num">2</span>
+            <span className="upload-step-label">构建推送</span>
+          </li>
+        </ol>
+      </header>
+
       <div
-        className={`drop-zone ${isDragOver ? "drag-over" : ""} ${artifactPath ? "has-file" : ""}`}
+        className={`drop-zone ${isDragOver ? "drag-over" : ""} ${hasArtifact ? "has-file" : ""}`}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
-        onClick={artifactPath ? () => onSelectFile(artifactType) : undefined}
+        onClick={hasArtifact ? () => onSelectFile(artifactType) : undefined}
       >
-        {artifactPath ? (
+        {hasArtifact ? (
           <div className="file-info">
-            {artifactType === "jar" ? (
-              <FileText size={28} strokeWidth={1.5} className="file-icon" />
-            ) : (
-              <Package size={28} strokeWidth={1.5} className="file-icon" />
-            )}
-            <span className="file-name">{getPathName(artifactPath)}</span>
-            <span className="file-path">{artifactPath}</span>
+            <div className="file-badge">
+              {artifactType === "jar" ? (
+                <FileText size={24} strokeWidth={1.6} />
+              ) : (
+                <Package size={24} strokeWidth={1.6} />
+              )}
+            </div>
+            <div className="file-meta">
+              <span className="file-name">{getPathName(artifactPath)}</span>
+              <span className="file-path">{artifactPath}</span>
+            </div>
+            <span className="file-replace">
+              <RefreshCw size={12} />
+              点击更换
+            </span>
+          </div>
+        ) : isDragOver ? (
+          <div className="drop-hint">
+            <div className="drop-badge drop-badge--active">
+              <UploadCloud size={30} strokeWidth={1.6} />
+            </div>
+            <p>松开鼠标，选择该产物</p>
           </div>
         ) : (
           <div className="drop-hint">
-            <Package size={32} strokeWidth={1.5} className="drop-icon" />
+            <div className="drop-badge">
+              <UploadCloud size={30} strokeWidth={1.6} />
+            </div>
             <p>拖入 JAR 文件或前端 dist 目录</p>
             <p className="drop-sub">
               或点选
@@ -94,31 +131,31 @@ export function UploadPanel({
                 dist 目录
               </button>
             </p>
+            <div className="drop-chips">
+              <span className="drop-chip">*.jar</span>
+              <span className="drop-chip">dist/</span>
+            </div>
           </div>
         )}
       </div>
 
-      <Paper withBorder p="sm" radius="md">
+      <Paper withBorder p="sm" radius="md" className="upload-config">
         <UnstyledButton
           onClick={() => setShowImageConfig(!showImageConfig)}
           w="100%"
+          className="upload-config-toggle"
         >
           <Group gap="xs" wrap="nowrap">
             <ChevronDown
               size={14}
-              style={{
-                color: "var(--color-text-muted)",
-                transform: showImageConfig ? "rotate(0deg)" : "rotate(-90deg)",
-                transition: "transform 0.2s ease",
-                flexShrink: 0,
-              }}
+              className={`upload-config-chevron ${showImageConfig ? "open" : ""}`}
             />
             <Text size="sm" fw={600} c="var(--color-text)">镜像配置</Text>
-            <Text size="xs" c="dimmed">可选</Text>
+            <Text size="xs" c="dimmed">可选，留空走默认</Text>
           </Group>
         </UnstyledButton>
         <Collapse expanded={showImageConfig}>
-          <Stack gap="sm" mt="sm">
+          <Stack gap="sm" mt="sm" className="upload-config-fields">
             <TextInput
               size="sm"
               label="镜像名称"
@@ -153,12 +190,13 @@ export function UploadPanel({
         color="cyan"
         size="md"
         fullWidth
+        className="build-cta"
         onClick={onBuildAndPush}
         disabled={isBuilding || !artifactPath}
         leftSection={
           isBuilding
-            ? <Loader2 size={16} className="spin" />
-            : <Rocket size={16} />
+            ? <Loader2 size={17} className="spin" />
+            : <Rocket size={17} />
         }
       >
         {isBuilding ? "构建推送中..." : "构建并推送"}
@@ -242,6 +280,6 @@ export function UploadPanel({
           </Collapse>
         </Stack>
       )}
-    </Stack>
+    </div>
   );
 }

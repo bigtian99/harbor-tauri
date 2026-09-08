@@ -330,6 +330,7 @@ function App() {
             localImage={upload.pushLocalImage}
             localImageOptions={upload.pushLocalImageOptions}
             isLoadingImages={upload.pushIsLoadingImages}
+            localImagesError={upload.localImagesError}
             imageName={upload.pushImageName}
             imageTag={upload.pushImageTag}
             isBuilding={build.isBuilding}

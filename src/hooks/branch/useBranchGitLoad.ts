@@ -18,7 +18,6 @@ interface UseBranchGitLoadDeps {
   setBranchOptions: Dispatch<SetStateAction<GitBranchOption[]>>;
   setSpringProfiles: Dispatch<SetStateAction<string[]>>;
   setSpringProfile: Dispatch<SetStateAction<string>>;
-  setAutoPushImage: Dispatch<SetStateAction<boolean>>;
   setLastCommit: Dispatch<SetStateAction<LastCommitInfo | null>>;
   setCommitList: Dispatch<SetStateAction<CommitInfo[]>>;
   setCommitListTotal: Dispatch<SetStateAction<number>>;
@@ -60,7 +59,6 @@ export function useBranchGitLoad(deps: UseBranchGitLoadDeps) {
     setBranchOptions,
     setSpringProfiles,
     setSpringProfile,
-    setAutoPushImage,
     setLastCommit,
     setCommitList,
     setCommitListTotal,

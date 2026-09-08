@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useConfirmDialog } from "./useConfirmDialog";
@@ -74,6 +74,11 @@ export function useUploadPush(deps: UseUploadPushDeps) {
   const [pushFullImage, setPushFullImage] = useState("");
   const [pushLocalImageOptions, setPushLocalImageOptions] = useState<LocalImageInfo[]>([]);
   const [pushIsLoadingImages, setPushIsLoadingImages] = useState(false);
+  /** Docker daemon 不可达等：仅内联弱提示，不弹 toast */
+  const [localImagesError, setLocalImagesError] = useState("");
+  /** 加载请求代号：防抖 + 竞态守卫（快速连点重试时只认最新一次） */
+  const imagesLoadSeq = useRef(0);
+  const imagesLoadTimer = useRef<number | null>(null);
 
   const handleDragEvents = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -186,16 +191,32 @@ export function useUploadPush(deps: UseUploadPushDeps) {
 
   async function loadLocalImages() {
     if (!isTauriRuntime()) return;
-    setPushIsLoadingImages(true);
+    const seq = ++imagesLoadSeq.current;
+    // 防抖：docker 连接常在毫秒级失败/成功，瞬时置 loading 会让 UI 闪「加载中」。
+    // 延迟 250ms 才点亮 loading，短于阈值的不显示；只有真正慢的请求才有提示。
+    if (imagesLoadTimer.current !== null) window.clearTimeout(imagesLoadTimer.current);
+    imagesLoadTimer.current = window.setTimeout(() => {
+      // 只有最新请求才点亮 loading，旧请求的定时器不再生效
+      if (seq === imagesLoadSeq.current) setPushIsLoadingImages(true);
+    }, 250);
     try {
       const images = await invoke<LocalImageInfo[]>("list_local_images");
+      if (seq !== imagesLoadSeq.current) return; // 已有更新请求，丢弃旧结果
       setPushLocalImageOptions(images);
+      setLocalImagesError("");
     } catch (e) {
+      if (seq !== imagesLoadSeq.current) return;
       console.error("加载本地镜像列表失败:", e);
       setPushLocalImageOptions([]);
-      showToast(`加载本地镜像失败: ${e}`);
+      setLocalImagesError(String(e));
     } finally {
-      setPushIsLoadingImages(false);
+      if (seq === imagesLoadSeq.current) {
+        if (imagesLoadTimer.current !== null) {
+          window.clearTimeout(imagesLoadTimer.current);
+          imagesLoadTimer.current = null;
+        }
+        setPushIsLoadingImages(false);
+      }
     }
   }
 
@@ -377,6 +398,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     pushFullImage,
     pushLocalImageOptions,
     pushIsLoadingImages,
+    localImagesError,
     loadLocalImages,
     removeLocalImage,
     handlePushImage,

@@ -210,7 +210,6 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     setBranchOptions,
     setSpringProfiles,
     setSpringProfile,
-    setAutoPushImage,
     setLastCommit,
     setCommitList,
     setCommitListTotal,

@@ -21,6 +21,8 @@ interface PushImagePanelProps {
   localImage: string;
   localImageOptions: LocalImageInfo[];
   isLoadingImages: boolean;
+  /** 拉取本地镜像失败原因（Docker 不可达等），非空时显示内联弱提示 */
+  localImagesError?: string;
   imageName: string;
   imageTag: string;
   isBuilding: boolean;
@@ -67,7 +69,7 @@ function nameHue(name: string): number {
 }
 
 export function PushImagePanel({
-  localImage, localImageOptions, isLoadingImages,
+  localImage, localImageOptions, isLoadingImages, localImagesError,
   imageName, imageTag,
   isBuilding, showImageConfig, showBuildLog,
   progress, progressMessage, log,
@@ -79,6 +81,8 @@ export function PushImagePanel({
 }: PushImagePanelProps) {
   const [query, setQuery] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
+  // 重试按钮本地反馈：点击立即转圈并至少可见 500ms（防抖后 isLoadingImages 对瞬时失败不再点亮）
+  const [retrying, setRetrying] = useState(false);
 
   const filteredImages = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -121,6 +125,14 @@ export function PushImagePanel({
 
   const clearSelection = () => {
     setLocalImage("");
+  };
+
+  // 点击立即转圈，无论后端多快返回都保证最少 500ms 动画可见
+  const handleRetry = () => {
+    if (retrying) return;
+    setRetrying(true);
+    window.setTimeout(() => setRetrying(false), 500);
+    void onRefreshImages();
   };
 
   const handleRemove = async (e: React.MouseEvent, img: LocalImageInfo) => {
@@ -248,7 +260,33 @@ export function PushImagePanel({
           />
 
           <div className="image-picker-shell">
-            {isLoadingImages ? (
+            {localImagesError && localImageOptions.length === 0 ? (
+              <div className="docker-off" role="status" aria-live="polite">
+                <div className="docker-off-glow" aria-hidden />
+                <div className="docker-off-inner">
+                  <div className="docker-off-icon" aria-hidden>
+                    <Box size={24} strokeWidth={1.4} />
+                    <span className="docker-off-lamp" aria-hidden />
+                  </div>
+                  <div className="docker-off-copy">
+                    <strong>Docker 未就绪</strong>
+                    <span>无法读取本地镜像列表。启动 Docker 后重试，镜像会自动回来。</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="light"
+                    color="cyan"
+                    size="sm"
+                    className="docker-off-retry"
+                    onClick={handleRetry}
+                    disabled={retrying}
+                    leftSection={<RefreshCw size={14} className={retrying ? "spin" : undefined} />}
+                  >
+                    {retrying ? "重试中..." : "重试"}
+                  </Button>
+                </div>
+              </div>
+            ) : isLoadingImages ? (
               <div className="image-card-empty">
                 <span className="image-card-empty-icon" aria-hidden>
                   <Loader2 size={20} className="spin" />
