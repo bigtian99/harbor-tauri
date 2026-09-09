@@ -527,3 +527,8 @@
   text-align: center;
   font-style: italic;
 }
+
+/* —— 分支打包页：与上传推送页同款进场动画（复用 upload-rise keyframes，定义于 upload.css） —— */
+.branch-panel {
+  animation: upload-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}

@@ -23,3 +23,15 @@
   padding-right: 6px;
 }
 
+
+/* —— 进场动画：与 upload-rise 同款（关键帧在 upload.css 定义） —— */
+
+.settlement-panel.ops-rise {
+  animation: upload-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settlement-panel.ops-rise {
+    animation: none;
+  }
+}

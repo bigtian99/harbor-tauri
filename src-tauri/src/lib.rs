@@ -22,7 +22,7 @@ use build::{
     list_bt_php_sites, list_local_images, list_npm_scripts, open_directory, open_external_url,
     package_from_branch,
     push_local_image, remove_local_image, restart_bt_java_project, stop_bt_java_project,
-    stop_bt_php_site, test_harbor_connection, upload_and_restart_bt_java_project, upload_bt_java_jar, upload_bt_php_site,
+    stop_bt_php_site, list_harbor_projects, test_harbor_connection, upload_and_restart_bt_java_project, upload_bt_java_jar, upload_bt_php_site,
     warmup_bt_ftp,
 };
 use commit::{
@@ -151,6 +151,7 @@ pub fn run() {
             list_local_images,
             remove_local_image,
             test_harbor_connection,
+            list_harbor_projects,
             open_directory,
             save_build_record,
             get_build_history,

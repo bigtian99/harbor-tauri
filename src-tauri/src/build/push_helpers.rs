@@ -27,6 +27,44 @@ pub(crate) fn require_harbor_config(config: &HarborConfig) -> Result<(), String>
     Ok(())
 }
 
+/// 按 `harbor_env_id`（或 `harbor_last_env_id`）选中环境并 mirror 到顶层四字段。
+pub(crate) fn apply_harbor_env(
+    config: &mut HarborConfig,
+    harbor_env_id: Option<String>,
+) -> Result<(), String> {
+    if !config.harbor_environments.is_empty() {
+        let want = harbor_env_id
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| config.harbor_last_env_id.clone());
+        let env = config
+            .harbor_environments
+            .iter()
+            .find(|e| e.id == want)
+            .or_else(|| config.harbor_environments.first())
+            .cloned()
+            .ok_or_else(|| "请先配置Harbor信息".to_string())?;
+        crate::diag::diag_log(
+            "build",
+            &format!(
+                "apply_harbor_env id={} name={} url={} project={}",
+                env.id, env.name, env.harbor_url, env.project
+            ),
+        );
+        config.harbor_url = harbor_registry_host(&env.harbor_url);
+        config.username = env.username;
+        config.password = env.password;
+        config.project = env.project;
+        config.harbor_last_env_id = env.id;
+    }
+    // 旧配置顶层字段也可能带协议
+    if !config.harbor_url.is_empty() {
+        config.harbor_url = harbor_registry_host(&config.harbor_url);
+    }
+    require_harbor_config(config)
+}
+
 /// 空或 `latest` 时生成 `v.YY.MM.DD.HH.MM`，否则原样返回。
 pub(crate) fn resolve_final_tag(image_tag: String) -> String {
     if image_tag.is_empty() || image_tag == "latest" {
@@ -41,13 +79,80 @@ fn harbor_session_key(harbor_url: &str, username: &str, password: &str) -> Strin
     format!("{harbor_url}\0{username}\0{password}")
 }
 
-fn harbor_login_host(raw: &str) -> String {
+/// 去掉 http(s):// 与尾斜杠，得到 Docker registry 主机（镜像引用与 login 共用）。
+pub(crate) fn harbor_registry_host(raw: &str) -> String {
     let s = raw.trim().trim_end_matches('/');
     s.strip_prefix("https://")
         .or_else(|| s.strip_prefix("http://"))
         .unwrap_or(s)
         .trim_end_matches('/')
         .to_string()
+}
+
+fn harbor_login_host(raw: &str) -> String {
+    harbor_registry_host(raw)
+}
+
+/// 探测 Registry `/v2/` 返回的 Bearer realm 主机（忽略证书错误）。
+fn probe_registry_auth_realm_host(registry_host: &str) -> Option<String> {
+    let client = reqwest::blocking::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .ok()?;
+    for base in [
+        format!("https://{registry_host}/v2/"),
+        format!("http://{registry_host}/v2/"),
+    ] {
+        let resp = client.get(&base).send().ok()?;
+        let auth = resp
+            .headers()
+            .get(reqwest::header::WWW_AUTHENTICATE)?
+            .to_str()
+            .ok()?;
+        // Bearer realm="https://dockerhub.kubekey.local/service/token",service="harbor-registry"
+        let realm = auth
+            .split("realm=\"")
+            .nth(1)?
+            .split('"')
+            .next()?
+            .trim();
+        if realm.is_empty() {
+            continue;
+        }
+        return Some(harbor_registry_host(realm));
+    }
+    None
+}
+
+fn docker_login_failure_hint(registry_host: &str, stderr: &str) -> String {
+    if stderr.contains("x509") || stderr.contains("certificate") {
+        return format!(
+            "\n\n提示: Harbor 证书主机名与地址「{registry_host}」不匹配（常见于公网 IP 访问内网证书）。\n\
+在 Docker Desktop → Settings → Docker Engine 的 JSON 中加入后 Apply & Restart:\n\
+  \"insecure-registries\": [\"{registry_host}\"]\n\
+或改用证书里的地址登录，或让运维给 Harbor 证书加上该 IP/域名。"
+        );
+    }
+    if stderr.to_ascii_lowercase().contains("unauthorized") {
+        if let Some(realm_host) = probe_registry_auth_realm_host(registry_host) {
+            if !realm_host.eq_ignore_ascii_case(registry_host)
+                && !realm_host.is_empty()
+            {
+                return format!(
+                    "\n\n提示: 该 Harbor 的 Docker 认证地址配错了。\n\
+Registry「{registry_host}」返回的 token 地址是「{realm_host}」（常为安装时的旧域名）。\n\
+Docker login/push 会去「{realm_host}」要令牌，因而出现 unauthorized。\n\n\
+正确修法（在 Harbor 服务器上）: 把 harbor.yml 的 external_url 改为 https://{registry_host} 后重新 apply/重启。\n\
+临时绕过（会影响「{realm_host}」原解析）: 在本机 /etc/hosts 增加一行\n\
+  {registry_host}  {realm_host}\n\
+用完后请删掉该行，以免连错其它 Harbor。"
+                );
+            }
+        }
+        return "\n\n提示: 账号密码可能不正确，或该 Harbor 未授权 Docker 登录。".to_string();
+    }
+    String::new()
 }
 
 fn docker_login_harbor_sync(
@@ -88,7 +193,8 @@ fn docker_login_harbor_sync(
         .map_err(|e| format!("docker login 失败: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("docker login 失败:\n{stderr}"));
+        let hint = docker_login_failure_hint(&host, &stderr);
+        return Err(format!("docker login 失败:\n{stderr}{hint}"));
     }
 
     *session = Some(session_key);
@@ -110,7 +216,7 @@ pub(crate) async fn docker_login_harbor(
     .map_err(|e| format!("登录线程异常: {e}"))?
 }
 
-/// 用当前表单账号强制 `docker login`，只验证能否登录。
+/// 测试 Harbor：优先用 HTTP API 验账号（忽略坏证书）；再尝试 docker login 并附加结果。
 #[tauri::command]
 pub async fn test_harbor_connection(
     harbor_url: String,
@@ -119,23 +225,109 @@ pub async fn test_harbor_connection(
 ) -> Result<String, String> {
     let url = harbor_url.trim().to_string();
     let user = username.trim().to_string();
+    let pass = password;
+    let host = harbor_registry_host(&url);
     crate::diag::diag_log(
         "docker",
-        &format!(
-            "test_harbor_connection host={} user={}",
-            harbor_login_host(&url),
-            user
-        ),
+        &format!("test_harbor_connection host={host} user={user}"),
     );
-    if url.is_empty() || user.is_empty() || password.is_empty() {
+    if host.is_empty() || user.is_empty() || pass.is_empty() {
         return Err("请填写 Harbor 地址、用户名和密码".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        docker_login_harbor_sync(url, user, password, false)?;
-        Ok("登录成功".to_string())
+        let projects = list_harbor_projects_sync(&host, &user, &pass)?;
+        let api_msg = format!("Harbor 账号可用，可见项目 {} 个", projects.len());
+        match docker_login_harbor_sync(url, user, pass, false) {
+            Ok(_) => {
+                crate::diag::diag_log("docker", "test_harbor_connection api+docker ok");
+                Ok(format!("{api_msg}；Docker login 成功"))
+            }
+            Err(e) => {
+                // 证书主机名不匹配时 docker login 常失败，但不影响「账号是否正确」
+                let brief = e.lines().take(3).collect::<Vec<_>>().join(" ");
+                crate::diag::diag_log(
+                    "docker",
+                    &format!("test_harbor_connection api ok, docker fail: {brief}"),
+                );
+                Ok(format!(
+                    "{api_msg}。Docker login 失败（需把 {host} 加入 insecure-registries 才能推镜像）：{brief}"
+                ))
+            }
+        }
     })
     .await
     .map_err(|e| format!("登录线程异常: {e}"))?
+}
+
+/// 通过 Harbor HTTP API 列出当前账号可见的项目名（忽略自签/主机名不匹配证书）。
+#[tauri::command]
+pub async fn list_harbor_projects(
+    harbor_url: String,
+    username: String,
+    password: String,
+) -> Result<Vec<String>, String> {
+    let host = harbor_registry_host(&harbor_url);
+    let user = username.trim().to_string();
+    let pass = password.clone();
+    crate::diag::diag_log(
+        "docker",
+        &format!("list_harbor_projects host={host} user={user}"),
+    );
+    if host.is_empty() || user.is_empty() || pass.is_empty() {
+        return Err("请填写 Harbor 地址、用户名和密码".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || list_harbor_projects_sync(&host, &user, &pass))
+        .await
+        .map_err(|e| format!("拉取项目线程异常: {e}"))?
+}
+
+fn list_harbor_projects_sync(host: &str, username: &str, password: &str) -> Result<Vec<String>, String> {
+    let client = reqwest::blocking::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+
+    // Harbor 控制台多为 https；http 作回退
+    let candidates = [
+        format!("https://{host}/api/v2.0/projects?page_size=100"),
+        format!("http://{host}/api/v2.0/projects?page_size=100"),
+    ];
+    let mut last_err = String::from("无法连接 Harbor API");
+    for url in candidates {
+        let resp = match client.get(&url).basic_auth(username, Some(password)).send() {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = format!("请求 {url} 失败: {e}");
+                continue;
+            }
+        };
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        if !status.is_success() {
+            last_err = format!("Harbor API {status}: {}", body.chars().take(200).collect::<String>());
+            // 401/403 不必再试 http
+            if status.as_u16() == 401 || status.as_u16() == 403 {
+                break;
+            }
+            continue;
+        }
+        let projects: Vec<serde_json::Value> = serde_json::from_str(&body)
+            .map_err(|e| format!("解析项目列表失败: {e}"))?;
+        let mut names: Vec<String> = projects
+            .iter()
+            .filter_map(|p| p.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+            .filter(|s| !s.trim().is_empty())
+            .collect();
+        names.sort();
+        names.dedup();
+        crate::diag::diag_log(
+            "docker",
+            &format!("list_harbor_projects ok host={host} count={}", names.len()),
+        );
+        return Ok(names);
+    }
+    Err(last_err)
 }
 
 /// 解析 Docker 尺寸字符串：`1.024kB` / `45.23MB` / `1.2GB`
@@ -534,9 +726,13 @@ mod push_progress_tests {
     #[test]
     fn harbor_login_host_strips_scheme() {
         assert_eq!(
-            harbor_login_host("https://dockerhub.kubekey.local/"),
+            harbor_registry_host("https://dockerhub.kubekey.local/"),
             "dockerhub.kubekey.local"
         );
-        assert_eq!(harbor_login_host("harbor.example.com"), "harbor.example.com");
+        assert_eq!(
+            harbor_registry_host("http://39.108.213.95"),
+            "39.108.213.95"
+        );
+        assert_eq!(harbor_registry_host("harbor.example.com"), "harbor.example.com");
     }
 }

@@ -776,7 +776,10 @@
 /* PushImagePanel：约束列，避免大窗宽下表单被拉成超宽单列 */
 .push-image-panel {
   width: 100%;
+  max-width: 860px;
+  margin-inline: auto;
   align-items: stretch;
+  animation: upload-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .push-image-column {
@@ -1332,14 +1335,25 @@
 .docker-off {
   position: relative;
   overflow: hidden;
-  min-height: 180px;
+  min-height: 200px;
   display: grid;
   place-items: center;
-  padding: 28px 24px;
+  padding: 32px 24px;
   color: var(--color-text);
+  border-radius: 12px;
   background:
-    radial-gradient(ellipse 78% 92% at 50% 108%, rgba(59, 158, 255, 0.08), transparent 62%),
+    radial-gradient(ellipse 78% 92% at 50% 108%, rgba(59, 158, 255, 0.1), transparent 62%),
     linear-gradient(180deg, var(--color-bg-card), var(--color-bg-surface));
+}
+
+.docker-off::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(59, 158, 255, 0.45), transparent);
 }
 
 .docker-off-glow {

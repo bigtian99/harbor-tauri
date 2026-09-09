@@ -9,6 +9,8 @@ export interface MergePanelProps {
   onConfigPatch?: (patch: Partial<HarborConfig>) => void;
   /** 局部写盘前取最新整表 */
   getConfigSnapshot?: () => HarborConfig;
+  /** 同步打包会推 Harbor 时切换环境 */
+  onHarborEnvChange?: (envId: string) => void;
 }
 
 export type MergeOverlayPhase = "idle" | "running" | "success" | "error";

@@ -23,6 +23,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "./SearchableDropdown";
 import { SpringProfileSection } from "./branch/SpringProfileSection";
 import { BranchAdvancedSettings } from "./branch/BranchAdvancedSettings";
+import { HarborEnvSelect } from "./HarborEnvSelect";
 import type {
   BranchProjectType, HarborConfig,
   GitBranchOption, LastCommitInfo, CommitInfo, AuthorInfo, NginxLocationBlock
@@ -83,6 +84,7 @@ interface BranchPanelProps {
   showAdvancedSettings: boolean;
   // 配置
   config: HarborConfig;
+  onHarborEnvChange: (envId: string) => void;
   // 日志
   progress: number;
   progressMessage: string;
@@ -148,7 +150,7 @@ export function BranchPanel({
   lastCommit, isLoadingCommit, commitList, commitListTotal, showCommitListModal,
   artifactPath, backendArtifactPath, worktreePath, customDockerfile, branchHasDockerfile,
   isBuilding, autoPushImage, autoPublishKs, branchFullImage, branchImageResults, imageName, imageTag, exposePort,
-  nginxLocations, showAdvancedSettings, config,
+  nginxLocations, showAdvancedSettings, config, onHarborEnvChange,
   progress, progressMessage, log, showBuildLog, copied,
   onBranchProjectTypeChange, onRepoPathChange, onSelectRepo, onRefreshBranches,
   onBranchChange, onFrontendDirChange, onSelectedBuildScriptChange,
@@ -240,6 +242,34 @@ export function BranchPanel({
 
   return (
     <Stack gap="sm" className="branch-panel">
+      <header className="upload-head">
+        <div className="upload-head-text">
+          <span className="upload-eyebrow">BRANCH → WORKTREE → IMAGE</span>
+          <h1 className="upload-title">分支打包</h1>
+          <p className="upload-sub">从 Git 仓库拉取分支，用 worktree 隔离打包成镜像并推送</p>
+        </div>
+        <ol className="upload-steps" aria-label="分支打包流程">
+          <li className={`upload-step ${repoPath.trim() ? "done" : "active"}`}>
+            <span className="upload-step-num">{repoPath.trim() ? "✓" : "1"}</span>
+            <span className="upload-step-label">选择仓库</span>
+          </li>
+          <li className="upload-step-line" aria-hidden />
+          <li className={`upload-step ${branchName.trim() ? "done" : repoPath.trim() ? "active" : ""}`}>
+            <span className="upload-step-num">{branchName.trim() ? "✓" : "2"}</span>
+            <span className="upload-step-label">选择分支</span>
+          </li>
+          <li className="upload-step-line" aria-hidden />
+          <li
+            className={`upload-step ${
+              branchFullImage || branchImageResults.length > 0 ? "done" : isBuilding ? "active" : ""
+            }`}
+          >
+            <span className="upload-step-num">3</span>
+            <span className="upload-step-label">构建推送</span>
+          </li>
+        </ol>
+      </header>
+
       <SegmentedControl
         size="sm"
         value={branchProjectType}
@@ -583,6 +613,12 @@ export function BranchPanel({
                       : "勾选后打包成功会自动推送镜像"}
                 </Text>
               </Stack>
+              <HarborEnvSelect
+                config={config}
+                onChange={onHarborEnvChange}
+                disabled={isBuilding || !autoPushImage}
+                description="推送时使用；默认带出上次选择"
+              />
               <Stack gap={4}>
                 <Checkbox
                   label="推送后自动发布到 KubeSphere"
@@ -630,6 +666,7 @@ export function BranchPanel({
         variant="filled"
         size="md"
         fullWidth
+        className="build-cta"
         onClick={onPackageFromBranch}
         disabled={isBuilding || !repoPath || !branchName.trim()}
         leftSection={isBuilding ? <Loader2 size={18} className="spin" /> : <GitBranch size={18} />}

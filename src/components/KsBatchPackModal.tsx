@@ -17,7 +17,7 @@ import {
   Text,
   ThemeIcon,
 } from "@mantine/core";
-import type { KsPublishMapRole } from "../types";
+import type { HarborConfig, KsPublishMapRole } from "../types";
 import type { KsBatchBranchOptionGroup } from "../utils/ksBatchGitBranches";
 import {
   flattenKsBatchBranchOptions,
@@ -29,6 +29,7 @@ import {
   type KsBatchNpmScriptMode,
   type KsBatchNpmScriptPref,
 } from "../utils/ksBatchPackPublish";
+import { HarborEnvSelect } from "./HarborEnvSelect";
 import {
   CheckCircle2,
   Check,
@@ -91,6 +92,8 @@ interface KsBatchConfirmModalProps {
   recommendedConcurrency: number;
   cpuCores: number;
   onConcurrencyPrefChange: (n: number) => void;
+  config: HarborConfig;
+  onHarborEnvChange: (envId: string) => void;
   onClose: () => void;
   onStart: (values: KsBatchConfirmValues) => void;
 }
@@ -109,6 +112,8 @@ export function KsBatchConfirmModal({
   recommendedConcurrency,
   cpuCores,
   onConcurrencyPrefChange,
+  config,
+  onHarborEnvChange,
   onClose,
   onStart,
 }: KsBatchConfirmModalProps) {
@@ -239,6 +244,12 @@ export function KsBatchConfirmModal({
             </Stack>
           </SimpleGrid>
         </Paper>
+
+        <HarborEnvSelect
+          config={config}
+          onChange={onHarborEnvChange}
+          description="本批打包推送 Harbor 使用；默认带出上次选择"
+        />
 
         <Stack gap={6}>
           <Group justify="space-between" align="center" wrap="nowrap">

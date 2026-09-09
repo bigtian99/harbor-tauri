@@ -16,6 +16,8 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import type { LocalImageInfo } from "../hooks/useUploadPush";
+import type { HarborConfig } from "../types";
+import { HarborEnvSelect } from "./HarborEnvSelect";
 
 interface PushImagePanelProps {
   localImage: string;
@@ -44,6 +46,8 @@ interface PushImagePanelProps {
   setShowImageConfig: (show: boolean) => void;
   setShowBuildLog: (show: boolean) => void;
   renderLog: (text: string) => React.ReactNode;
+  config: HarborConfig;
+  onHarborEnvChange: (envId: string) => void;
 }
 
 /** 展示用：拆出仓库路径与 tag（不裁成短名） */
@@ -78,6 +82,7 @@ export function PushImagePanel({
   setLocalImage, setImageName, setImageTag,
   setShowImageConfig, setShowBuildLog,
   renderLog,
+  config, onHarborEnvChange,
 }: PushImagePanelProps) {
   const [query, setQuery] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
@@ -157,6 +162,24 @@ export function PushImagePanel({
 
   return (
     <Stack gap="md" className="upload-panel push-image-panel">
+      <header className="upload-head">
+        <div className="upload-head-text">
+          <span className="upload-eyebrow">LOCAL IMAGE → HARBOR</span>
+          <h1 className="upload-title">镜像推送</h1>
+          <p className="upload-sub">把本地已有的 Docker 镜像直接推送到 Harbor 仓库，无需重新构建</p>
+        </div>
+        <ol className="upload-steps" aria-label="推送流程">
+          <li className={`upload-step ${localImage.trim() ? "done" : "active"}`}>
+            <span className="upload-step-num">{localImage.trim() ? "✓" : "1"}</span>
+            <span className="upload-step-label">选择镜像</span>
+          </li>
+          <li className="upload-step-line" aria-hidden />
+          <li className={`upload-step ${isBuilding || fullImage ? "done" : localImage.trim() ? "active" : ""}`}>
+            <span className="upload-step-num">2</span>
+            <span className="upload-step-label">推送到 Harbor</span>
+          </li>
+        </ol>
+      </header>
       {/* 约束列：避免大窗宽下输入/按钮被拉成超宽一条 */}
       <Stack gap="md" className="push-image-column">
         <Group justify="space-between" align="center" wrap="nowrap" gap="sm" className="image-picker-header">
@@ -474,6 +497,15 @@ export function PushImagePanel({
           )}
         </Stack>
 
+        <Paper withBorder p="md" radius="md" className="image-config-panel" mb="sm">
+          <HarborEnvSelect
+            config={config}
+            onChange={onHarborEnvChange}
+            disabled={isBuilding}
+            description="推送到所选 Harbor；默认带出上次选择"
+          />
+        </Paper>
+
         <Paper withBorder p="md" radius="md" className="image-config-panel">
           <UnstyledButton
             onClick={() => setShowImageConfig(!showImageConfig)}
@@ -521,12 +553,13 @@ export function PushImagePanel({
           color="cyan"
           size="md"
           fullWidth
+          className="build-cta"
           onClick={onPushImage}
           disabled={isBuilding || !localImage.trim()}
           leftSection={
             isBuilding
-              ? <Loader2 size={18} className="spin" />
-              : <Rocket size={18} />
+              ? <Loader2 size={17} className="spin" />
+              : <Rocket size={17} />
           }
         >
           {isBuilding ? "推送中..." : "推送到 Harbor"}

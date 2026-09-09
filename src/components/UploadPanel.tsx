@@ -13,9 +13,10 @@ import {
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
-import type { ArtifactType } from "../types";
+import type { ArtifactType, HarborConfig } from "../types";
 import { getPathName } from "../types";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
+import { HarborEnvSelect } from "./HarborEnvSelect";
 
 interface UploadPanelProps {
   artifactType: ArtifactType;
@@ -46,6 +47,8 @@ interface UploadPanelProps {
   setShowImageConfig: (show: boolean) => void;
   setShowBuildLog: (show: boolean) => void;
   renderLog: (text: string) => React.ReactNode;
+  config: HarborConfig;
+  onHarborEnvChange: (envId: string) => void;
 }
 
 export function UploadPanel({
@@ -56,6 +59,7 @@ export function UploadPanel({
   onDragOver, onDragLeave, onDrop,
   setImageName, setImageTag, setExposePort, setShowImageConfig, setShowBuildLog,
   renderLog,
+  config, onHarborEnvChange,
 }: UploadPanelProps) {
   const fullImageCopied = fullImage ? isCopyHighlighted(copied, fullImage) : false;
   const fullImageCopyText = fullImage ? normalizeCopyText(fullImage) : "";
@@ -138,6 +142,15 @@ export function UploadPanel({
           </div>
         )}
       </div>
+
+      <Paper withBorder p="sm" radius="md" className="upload-config" mb="sm">
+        <HarborEnvSelect
+          config={config}
+          onChange={onHarborEnvChange}
+          disabled={isBuilding}
+          description="推送到所选 Harbor；默认带出上次选择"
+        />
+      </Paper>
 
       <Paper withBorder p="sm" radius="md" className="upload-config">
         <UnstyledButton

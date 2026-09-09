@@ -250,7 +250,15 @@ export function PackSpeedPanel({
     : "cyan";
 
   return (
-    <Stack gap="md" className="pack-speed-panel">
+    <Stack gap="md" className="pack-speed-panel ops-rise">
+      <header className="upload-head">
+        <div className="upload-head-text">
+          <span className="upload-eyebrow">PACK BOOSTER</span>
+          <h1 className="upload-title">打包加速</h1>
+          <p className="upload-sub">填入子渠道或马甲包 ID，批量提交运营后台加速打包</p>
+        </div>
+      </header>
+
       <Paper p="md" radius="md">
         <Stack gap="md">
           <PasswordInput
@@ -331,7 +339,7 @@ export function PackSpeedPanel({
             disabled={!canSubmit}
             loading={isSubmitting}
             leftSection={!isSubmitting ? <Rocket size={18} /> : undefined}
-            className="pack-speed-submit"
+            className="pack-speed-submit build-cta"
           >
             {isSubmitting ? "提交中..." : getBatchPackSubmitText(batchPackType)}
           </Button>

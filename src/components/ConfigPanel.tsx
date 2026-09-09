@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   ActionIcon,
+  Autocomplete,
   Button,
   Checkbox,
   Group,
@@ -21,10 +22,15 @@ import {
   Bell, Plus, Pencil, Copy, Plug,
 } from "lucide-react";
 import { showSystemAlert } from "../systemAlert";
-import type { HarborConfig, KsEnvironment } from "../types";
+import type { HarborConfig, HarborEnvironment, KsEnvironment } from "../types";
 import { isTauriRuntime } from "../types";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { createKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
+import {
+  createHarborEnvironment,
+  resolveHarborEnvironments,
+  withActiveHarborEnv,
+} from "../utils/harborEnvironments";
 import {
   fetchBtTempLogin,
   loadBtTempLoginOpenPref,
@@ -125,6 +131,8 @@ export function ConfigPanel({
   const [gitClearMsg, setGitClearMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [envEditor, setEnvEditor] = useState<{ mode: "add" | "edit"; draft: KsEnvironment } | null>(null);
   const [envEditorPassword, setEnvEditorPassword] = useState(false);
+  const [hbEnvEditor, setHbEnvEditor] = useState<{ mode: "add" | "edit"; draft: HarborEnvironment } | null>(null);
+  const [hbEnvEditorPassword, setHbEnvEditorPassword] = useState(false);
   const [tempLoginLoading, setTempLoginLoading] = useState(false);
   const [tempLoginOpenInBrowser, setTempLoginOpenInBrowser] = useState(
     () => loadBtTempLoginOpenPref(),
@@ -132,6 +140,9 @@ export function ConfigPanel({
   const flushKsMapsRef = useRef<(() => void) | null>(null);
   const [harborLoginTesting, setHarborLoginTesting] = useState(false);
   const [harborLoginMsg, setHarborLoginMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [harborProjects, setHarborProjects] = useState<string[]>([]);
+  const [harborProjectsLoading, setHarborProjectsLoading] = useState(false);
+  const [harborProjectsMsg, setHarborProjectsMsg] = useState<string | null>(null);
 
   const [mavenProbe, setMavenProbe] = useState<{
     source: string;
@@ -168,19 +179,59 @@ export function ConfigPanel({
       setHarborLoginMsg({ type: "err", text: "请在桌面端测试登录" });
       return;
     }
+    const draft = hbEnvEditor?.draft;
+    if (!draft) {
+      setHarborLoginMsg({ type: "err", text: "请先打开环境编辑" });
+      return;
+    }
     setHarborLoginTesting(true);
     setHarborLoginMsg(null);
     try {
       const msg = await invoke<string>("test_harbor_connection", {
-        harborUrl: config.harbor_url,
-        username: config.username,
-        password: config.password,
+        harborUrl: draft.harbor_url,
+        username: draft.username,
+        password: draft.password,
       });
+      // 账号 API 通过即算连接成功；Docker 证书问题只写在文案里
       setHarborLoginMsg({ type: "ok", text: msg });
+      void loadHarborProjects(draft);
     } catch (e) {
       setHarborLoginMsg({ type: "err", text: String(e) });
     } finally {
       setHarborLoginTesting(false);
+    }
+  };
+
+  const loadHarborProjects = async (draft?: HarborEnvironment) => {
+    const src = draft ?? hbEnvEditor?.draft;
+    if (!src) return;
+    if (!isTauriRuntime()) {
+      setHarborProjectsMsg("请在桌面端拉取项目列表");
+      return;
+    }
+    if (!src.harbor_url.trim() || !src.username.trim() || !src.password) {
+      setHarborProjectsMsg("请先填写地址、用户名和密码");
+      return;
+    }
+    setHarborProjectsLoading(true);
+    setHarborProjectsMsg(null);
+    try {
+      const list = await invoke<string[]>("list_harbor_projects", {
+        harborUrl: src.harbor_url,
+        username: src.username,
+        password: src.password,
+      });
+      setHarborProjects(list);
+      if (list.length === 0) {
+        setHarborProjectsMsg("未找到可见项目");
+      } else if (src.project.trim() && !list.includes(src.project.trim())) {
+        setHarborProjectsMsg(`当前项目「${src.project.trim()}」不在列表中，请重新选择`);
+      }
+    } catch (e) {
+      setHarborProjects([]);
+      setHarborProjectsMsg(String(e));
+    } finally {
+      setHarborProjectsLoading(false);
     }
   };
 
@@ -249,6 +300,102 @@ export function ConfigPanel({
   };
 
   const ksEnvs = resolveKsEnvironments(config);
+  const harborEnvs = resolveHarborEnvironments(config);
+
+  const setHarborEnvs = (next: HarborEnvironment[]) => {
+    onConfigChange("harbor_environments", next);
+    if (next.length === 0) {
+      onConfigChange("harbor_url", "");
+      onConfigChange("username", "");
+      onConfigChange("password", "");
+      onConfigChange("project", "");
+      onConfigChange("harbor_last_env_id", "");
+      return;
+    }
+    const lastId =
+      config.harbor_last_env_id && next.some((env) => env.id === config.harbor_last_env_id)
+        ? config.harbor_last_env_id
+        : next[0].id;
+    const mirrored = withActiveHarborEnv(
+      { ...config, harbor_environments: next, harbor_last_env_id: lastId },
+      lastId,
+    );
+    onConfigChange("harbor_last_env_id", mirrored.harbor_last_env_id ?? lastId);
+    onConfigChange("harbor_url", mirrored.harbor_url);
+    onConfigChange("username", mirrored.username);
+    onConfigChange("password", mirrored.password);
+    onConfigChange("project", mirrored.project);
+  };
+
+  const openAddHarborEnv = () => {
+    setHbEnvEditorPassword(false);
+    setHarborLoginMsg(null);
+    setHarborProjects([]);
+    setHarborProjectsMsg(null);
+    const draft = createHarborEnvironment(harborEnvs);
+    setHbEnvEditor({ mode: "add", draft });
+    if (draft.harbor_url.trim() && draft.username.trim() && draft.password) {
+      void loadHarborProjects(draft);
+    }
+  };
+
+  const openEditHarborEnv = (env: HarborEnvironment) => {
+    setHbEnvEditorPassword(false);
+    setHarborLoginMsg(null);
+    setHarborProjects([]);
+    setHarborProjectsMsg(null);
+    const draft = { ...env };
+    setHbEnvEditor({ mode: "edit", draft });
+    if (draft.harbor_url.trim() && draft.username.trim() && draft.password) {
+      void loadHarborProjects(draft);
+    }
+  };
+
+  const closeHarborEnvEditor = () => {
+    setHbEnvEditor(null);
+    setHbEnvEditorPassword(false);
+    setHarborLoginMsg(null);
+    setHarborProjects([]);
+    setHarborProjectsMsg(null);
+  };
+
+  const saveHarborEnvEditor = () => {
+    if (!hbEnvEditor) return;
+    const draft = {
+      ...hbEnvEditor.draft,
+      name: hbEnvEditor.draft.name.trim(),
+      harbor_url: hbEnvEditor.draft.harbor_url.trim()
+        .replace(/^https?:\/\//i, "")
+        .replace(/\/+$/, ""),
+      username: hbEnvEditor.draft.username.trim(),
+      password: hbEnvEditor.draft.password ?? "",
+      project: hbEnvEditor.draft.project.trim(),
+    };
+    if (!draft.name || !draft.harbor_url || !draft.username || !draft.password || !draft.project) {
+      void showSystemAlert("无法保存环境", "请填写环境名、地址、用户名、密码和项目");
+      return;
+    }
+    const nextEnvs =
+      hbEnvEditor.mode === "add"
+        ? [...harborEnvs, draft]
+        : harborEnvs.map((env) => (env.id === draft.id ? draft : env));
+    setHarborEnvs(nextEnvs);
+    closeHarborEnvEditor();
+    handleSaveConfig();
+  };
+
+  const removeHarborEnv = async (env: HarborEnvironment) => {
+    const ok = await confirm({
+      title: "删除 Harbor 环境",
+      message: `确定删除「${env.name || env.id}」？推送页将无法再选择该环境。`,
+      confirmLabel: "删除",
+      variant: "danger",
+    });
+    if (ok) {
+      setHarborEnvs(harborEnvs.filter((item) => item.id !== env.id));
+      handleSaveConfig();
+    }
+  };
 
   const setKsEnvs = (next: KsEnvironment[]) => {
     onConfigChange("ks_environments", next);
@@ -365,53 +512,69 @@ export function ConfigPanel({
         <Tabs.Panel value="connection" pt="md">
           <Paper {...panelPaperProps}>
             <Stack gap="md">
-              <TextInput
-                label="Harbor 地址"
-                value={config.harbor_url}
-                onChange={(e) => onConfigChange("harbor_url", e.currentTarget.value)}
-                placeholder="例如: harbor.example.com"
-              />
-              <TextInput
-                label="用户名"
-                value={config.username}
-                onChange={(e) => onConfigChange("username", e.currentTarget.value)}
-                placeholder="Harbor 登录用户名"
-              />
-              <PasswordInput
-                label="密码"
-                value={config.password}
-                onChange={(e) => onConfigChange("password", e.currentTarget.value)}
-                placeholder="Harbor 登录密码"
-                visible={showPassword}
-                onVisibilityChange={() => onTogglePassword()}
-              />
-              <Group justify="flex-end" align="center" gap="sm">
-                {harborLoginMsg && (
-                  <Text
-                    size="sm"
-                    c={harborLoginMsg.type === "ok" ? "var(--color-success)" : "var(--color-error)"}
-                    style={{ flex: 1 }}
-                  >
-                    {harborLoginMsg.text}
-                  </Text>
-                )}
+              <Group justify="space-between" align="center" wrap="nowrap">
+                <Text size="sm" c="var(--color-text-muted)">
+                  配置多个 Harbor 环境（开发 / 生产等）；推送页按环境切换，默认记住上次选择
+                </Text>
                 <Button
+                  size="xs"
                   variant="default"
-                  size="compact-sm"
-                  loading={harborLoginTesting}
-                  leftSection={<Plug size={14} />}
-                  onClick={() => { void handleTestHarborLogin(); }}
+                  leftSection={<Plus size={14} />}
+                  onClick={openAddHarborEnv}
+                  style={{ flexShrink: 0 }}
                 >
-                  测试连接
+                  添加环境
                 </Button>
               </Group>
-              <TextInput
-                label="Harbor 项目"
-                value={config.project}
-                onChange={(e) => onConfigChange("project", e.currentTarget.value)}
-                placeholder="例如: my-project"
-                description="推送时自动拼在镜像名前，最终地址为 harbor地址/项目名/镜像名:标签"
-              />
+              {harborEnvs.length === 0 && (
+                <Text size="sm" c="var(--color-text-muted)">
+                  还没有环境，点击「添加环境」开始配置
+                </Text>
+              )}
+              {harborEnvs.length > 0 && (
+                <Stack gap="sm">
+                  {harborEnvs.map((env) => (
+                    <Paper
+                      key={env.id}
+                      p="sm"
+                      radius="md"
+                      withBorder
+                      style={sectionCardStyle}
+                    >
+                      <Group justify="space-between" wrap="nowrap">
+                        <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
+                          <Text size="sm" fw={600} c="var(--color-text)" truncate>
+                            {env.name || env.id}
+                            {config.harbor_last_env_id === env.id ? " · 当前" : ""}
+                          </Text>
+                          <Text size="xs" c="var(--color-text-muted)" truncate>
+                            {env.harbor_url || "未填地址"}
+                            {env.project ? ` / ${env.project}` : ""}
+                          </Text>
+                        </Stack>
+                        <Group gap={4} wrap="nowrap">
+                          <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            onClick={() => openEditHarborEnv(env)}
+                            aria-label="编辑"
+                          >
+                            <Pencil size={14} />
+                          </ActionIcon>
+                          <ActionIcon
+                            variant="subtle"
+                            color="red"
+                            onClick={() => { void removeHarborEnv(env); }}
+                            aria-label="删除"
+                          >
+                            <Trash2 size={14} />
+                          </ActionIcon>
+                        </Group>
+                      </Group>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
             </Stack>
           </Paper>
           <Paper {...panelPaperProps} mt="md">
@@ -1206,6 +1369,138 @@ export function ConfigPanel({
                 onClick={saveKsEnvEditor}
               >
                 {envEditor.mode === "add" ? "添加" : "保存"}
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      <Modal
+        opened={!!hbEnvEditor}
+        onClose={closeHarborEnvEditor}
+        title={hbEnvEditor?.mode === "add" ? "添加 Harbor 环境" : "编辑 Harbor 环境"}
+        size="sm"
+        styles={{
+          content: { background: "var(--color-bg-surface)" },
+          header: { background: "var(--color-bg-surface)" },
+          title: { color: "var(--color-text)", fontWeight: 600 },
+        }}
+      >
+        {hbEnvEditor && (
+          <Stack gap="md">
+            <TextInput
+              label="环境名"
+              value={hbEnvEditor.draft.name}
+              onChange={(e) => setHbEnvEditor({
+                ...hbEnvEditor,
+                draft: { ...hbEnvEditor.draft, name: e.currentTarget.value },
+              })}
+              placeholder="开发 / 生产"
+            />
+            <TextInput
+              label="Harbor 地址"
+              value={hbEnvEditor.draft.harbor_url}
+              onChange={(e) => setHbEnvEditor({
+                ...hbEnvEditor,
+                draft: { ...hbEnvEditor.draft, harbor_url: e.currentTarget.value },
+              })}
+              placeholder="例如: harbor.example.com（不要带 http://）"
+              description="仅填主机或 IP；推送时自动拼成 主机/项目/镜像:标签"
+            />
+            <TextInput
+              label="用户名"
+              value={hbEnvEditor.draft.username}
+              onChange={(e) => setHbEnvEditor({
+                ...hbEnvEditor,
+                draft: { ...hbEnvEditor.draft, username: e.currentTarget.value },
+              })}
+              placeholder="Harbor 登录用户名"
+            />
+            <PasswordInput
+              label="密码"
+              value={hbEnvEditor.draft.password}
+              onChange={(e) => setHbEnvEditor({
+                ...hbEnvEditor,
+                draft: { ...hbEnvEditor.draft, password: e.currentTarget.value },
+              })}
+              placeholder="Harbor 登录密码"
+              visible={hbEnvEditorPassword}
+              onVisibilityChange={(visible) => setHbEnvEditorPassword(visible)}
+            />
+            <Autocomplete
+              label="Harbor 项目"
+              data={
+                harborProjects.includes(hbEnvEditor.draft.project.trim())
+                  || !hbEnvEditor.draft.project.trim()
+                  ? harborProjects
+                  : [hbEnvEditor.draft.project.trim(), ...harborProjects]
+              }
+              value={hbEnvEditor.draft.project}
+              onChange={(value) => setHbEnvEditor({
+                ...hbEnvEditor,
+                draft: { ...hbEnvEditor.draft, project: value },
+              })}
+              placeholder={harborProjectsLoading ? "拉取项目中…" : "选择或输入项目名"}
+              description="从 Harbor API 拉取；也可手动输入"
+              rightSection={
+                <ActionIcon
+                  variant="subtle"
+                  size="sm"
+                  loading={harborProjectsLoading}
+                  title="拉取项目列表"
+                  onClick={() => { void loadHarborProjects(); }}
+                  disabled={
+                    !hbEnvEditor.draft.harbor_url.trim()
+                    || !hbEnvEditor.draft.username.trim()
+                    || !hbEnvEditor.draft.password
+                  }
+                >
+                  <RefreshCw size={14} />
+                </ActionIcon>
+              }
+            />
+            {harborProjectsMsg && (
+              <Text size="xs" c="var(--color-text-muted)" mt={-8}>
+                {harborProjectsMsg}
+              </Text>
+            )}
+            <Group justify="flex-end" align="center" gap="sm">
+              {harborLoginMsg && (
+                <Text
+                  size="sm"
+                  c={harborLoginMsg.type === "ok" ? "var(--color-success)" : "var(--color-error)"}
+                  style={{ flex: 1 }}
+                >
+                  {harborLoginMsg.text}
+                </Text>
+              )}
+              <Button
+                variant="default"
+                size="compact-sm"
+                loading={harborLoginTesting}
+                leftSection={<Plug size={14} />}
+                onClick={() => { void handleTestHarborLogin(); }}
+              >
+                测试连接
+              </Button>
+            </Group>
+            <Group justify="flex-end" gap="sm" mt="xs">
+              <Button variant="default" onClick={closeHarborEnvEditor}>
+                取消
+              </Button>
+              <Button
+                variant="filled"
+                color="blue"
+                disabled={
+                  !hbEnvEditor.draft.name.trim()
+                  || !hbEnvEditor.draft.harbor_url.trim()
+                  || !hbEnvEditor.draft.username.trim()
+                  || !hbEnvEditor.draft.password
+                  || !hbEnvEditor.draft.project.trim()
+                }
+                onClick={saveHarborEnvEditor}
+              >
+                {hbEnvEditor.mode === "add" ? "添加" : "保存"}
               </Button>
             </Group>
           </Stack>

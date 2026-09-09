@@ -268,6 +268,11 @@ pub struct HarborConfig {
     /// 隐私协议 FTP 主机；用户/密码复用落地页 FTP 账号
     #[serde(default)]
     pub privacy_ftp_host: String,
+    /// 旧版单 Harbor 连接字段，加载时迁入 harbor_environments 并 mirror 活跃环境
+    #[serde(default)]
+    pub harbor_environments: Vec<HarborEnvironment>,
+    #[serde(default)]
+    pub harbor_last_env_id: String,
     /// 旧版单环境字段，加载时迁入 ks_environments
     #[serde(default)]
     pub ks_console: String,
@@ -307,6 +312,23 @@ pub struct KsPublishMap {
     /// 服务暴露端口（随 Git 映射记忆）
     #[serde(default)]
     pub expose_port: String,
+}
+
+/// Harbor 仓库环境（开发 / 生产等），与 KubeSphere 环境独立
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct HarborEnvironment {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub harbor_url: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub project: String,
 }
 
 /// KubeSphere 控制台环境（dev / test / prod 等）
@@ -384,6 +406,8 @@ impl Default for HarborConfig {
             landing_ftp_pass: String::new(),
             landing_ftp_base_dir: String::new(),
             privacy_ftp_host: String::new(),
+            harbor_environments: Vec::new(),
+            harbor_last_env_id: String::new(),
             ks_console: String::new(),
             ks_username: String::new(),
             ks_password: String::new(),

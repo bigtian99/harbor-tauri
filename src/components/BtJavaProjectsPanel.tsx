@@ -15,9 +15,8 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
-import { Coffee, Loader2, RefreshCw, RotateCcw, Search, StopCircle, Upload, XCircle } from "lucide-react";
+import { Loader2, RefreshCw, RotateCcw, Search, StopCircle, Upload, XCircle } from "lucide-react";
 import { displayBtUpdatedAt, setBtLastUpload } from "../utils/btLastUpload";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { isTauriRuntime } from "../types";
@@ -936,21 +935,14 @@ export function BtJavaProjectsPanel() {
     : (pollAttempt > 0 ? "wait_port" : busyMode);
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between" align="flex-end">
-        <div>
-          <Group gap="xs" mb={4}>
-            <Coffee size={20} />
-            <Title order={3}>Java 项目</Title>
-          </Group>
-          <Text size="sm" c="dimmed">
-            把 JAR 拖到某一行上（行内有「拖入 JAR」提示），松开即上传并重启
-            {isPolling
-              ? ` · 等待端口出现 ${pollAttempt}/${RESTART_POLL_MAX_ATTEMPTS}`
-              : ""}
-          </Text>
+    <Stack gap="md" className="bt-page-shell">
+      <header className="upload-head bt-page-head">
+        <div className="upload-head-text">
+          <span className="upload-eyebrow">BT · JAVA PROJECTS</span>
+          <h1 className="upload-title">Java 项目</h1>
+          <p className="upload-sub">管理宝塔面板的 Java 项目部署与状态，把 JAR 拖到列表行上即可上传并重启</p>
         </div>
-        <Group gap="sm" align="center">
+        <Group gap="sm" align="center" className="bt-page-head-tools">
           <Checkbox
             label="自动刷新"
             checked={autoRefresh}
@@ -976,7 +968,7 @@ export function BtJavaProjectsPanel() {
             刷新
           </Button>
         </Group>
-      </Group>
+      </header>
 
       {fileDragActive && (
         <div className="bt-java-drop-banner">

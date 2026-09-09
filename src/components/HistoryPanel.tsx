@@ -21,13 +21,14 @@ import {
   XCircle, Eye, EyeOff,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import type { BuildRecord } from "../types";
+import type { BuildRecord, HarborConfig } from "../types";
 import { getProjectName } from "../types";
 import { HoverTip } from "./HoverTip";
 import { BaotaIcon, DockerIcon } from "./icons/BrandIcons";
 import { avatarColor, avatarInitials } from "../avatarUrl";
 import { historyCanPushJar } from "../historyJarPush.ts";
 import { parseHistoryImageTags } from "../branchImageResults";
+import { HarborEnvSelect } from "./HarborEnvSelect";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 
 const sidebarPaperStyles = {
@@ -82,6 +83,8 @@ interface HistoryPanelProps {
   onCancelBuild?: () => void;
   setShowBuildLog?: (show: boolean) => void;
   renderLog?: (text: string) => ReactNode;
+  config?: HarborConfig;
+  onHarborEnvChange?: (envId: string) => void;
 }
 
 function recordTypeLabel(record: BuildRecord): string {
@@ -459,6 +462,7 @@ export function HistoryPanel({
   progress = 0, progressMessage = "", log = "", showBuildLog = false,
   onLoadHistory, onClearHistory, onDeleteRecord, onOpenArtifact, onCopyImage, onPushJar,
   onCancelBuild, setShowBuildLog, renderLog,
+  config, onHarborEnvChange,
 }: HistoryPanelProps) {
   const { confirm } = useConfirmDialog();
   const [search, setSearch] = useState(historySearch);
@@ -514,7 +518,15 @@ export function HistoryPanel({
   }, [sortedProjects, selectedProject]);
 
   return (
-    <Group align="stretch" gap={0} wrap="nowrap" className="history-panel-new" style={{ flex: 1, minHeight: 0 }}>
+    <div className="history-page-shell">
+      <header className="upload-head history-page-head">
+        <div className="upload-head-text">
+          <span className="upload-eyebrow">BUILD HISTORY</span>
+          <h1 className="upload-title">历史记录</h1>
+          <p className="upload-sub">查看历史构建记录，一键重推或复用参数</p>
+        </div>
+      </header>
+      <Group align="stretch" gap={0} wrap="nowrap" className="history-panel-new" style={{ flex: 1, minHeight: 0 }}>
       <Paper w={200} styles={sidebarPaperStyles} className="history-sidebar">
         <Group justify="space-between" px="sm" pt="sm" pb={8} className="history-sidebar-header">
           <Group gap={6}>
@@ -613,6 +625,22 @@ export function HistoryPanel({
       </Paper>
 
       <Stack flex={1} gap={0} className="history-content" style={{ minWidth: 0, minHeight: 0 }}>
+        {onPushJar && config && onHarborEnvChange && (
+          <Paper p="sm" radius={0} styles={{
+            root: {
+              background: "var(--color-bg-surface)",
+              borderBottom: "1px solid var(--color-border)",
+            },
+          }}>
+            <HarborEnvSelect
+              config={config}
+              onChange={onHarborEnvChange}
+              disabled={isBuilding}
+              size="xs"
+              description="历史记录再推 JAR 时使用；默认带出上次选择"
+            />
+          </Paper>
+        )}
         {showPushProgress && (isBuilding || Boolean(log)) && (
           <Paper p="md" radius={0} className="history-push-progress" styles={{
             root: {
@@ -775,6 +803,7 @@ export function HistoryPanel({
           </Stack>
         )}
       </Stack>
-    </Group>
+      </Group>
+    </div>
   );
 }

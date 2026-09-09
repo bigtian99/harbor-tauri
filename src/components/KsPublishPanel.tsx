@@ -92,6 +92,7 @@ export function KsPublishPanel({
   config,
   configReady = true,
   onLastEnvChange,
+  onHarborEnvChange,
   onPublishMapsChange,
   getConfigSnapshot,
 }: {
@@ -99,6 +100,8 @@ export function KsPublishPanel({
   /** 配置已从磁盘加载完成；false 时不要自动连接，避免 reload 后空配置误报「未配置环境」 */
   configReady?: boolean;
   onLastEnvChange?: (id: string) => void;
+  /** 批量打包推 Harbor 时切换环境 */
+  onHarborEnvChange?: (id: string) => void;
   /** 批量复制后写回发布映射 */
   onPublishMapsChange?: (maps: KsPublishMap[]) => void;
   /** 局部写盘前取最新整表 */
@@ -2317,6 +2320,8 @@ export function KsPublishPanel({
           setBatchConcurrencyPref(pref);
           saveKsBatchConcurrencyPref(pref);
         }}
+        config={config}
+        onHarborEnvChange={onHarborEnvChange ?? (() => {})}
         onClose={() => setBatchConfirmOpen(false)}
         onStart={(values) => void startBatchPack(values)}
       />

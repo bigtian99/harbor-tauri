@@ -14,12 +14,10 @@ import {
   Switch,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import {
   CheckCircle,
   ExternalLink,
-  FileText,
   FolderOpen,
   Loader2,
   Play,
@@ -207,19 +205,15 @@ export function SettlementPanel() {
   }
 
   return (
-    <Box className="settlement-panel">
+    <Box className="settlement-panel ops-rise">
       <Stack gap="md">
-        <Group gap="sm" align="flex-start" wrap="nowrap">
-          <FileText size={20} color="var(--color-primary)" style={{ marginTop: 2, flexShrink: 0 }} />
-          <div style={{ minWidth: 0 }}>
-            <Title order={3} c="var(--color-text)" style={{ lineHeight: 1.25 }}>
-              结算单
-            </Title>
-            <Text size="xs" c="var(--color-text-muted)" mt={4}>
-              选择渠道打款表与结算数据，生成结算单文件。
-            </Text>
+        <header className="upload-head">
+          <div className="upload-head-text">
+            <span className="upload-eyebrow">SETTLEMENT</span>
+            <h1 className="upload-title">结算单</h1>
+            <p className="upload-sub">选择渠道打款表与结算数据，按渠道拆分生成结算单文件</p>
           </div>
-        </Group>
+        </header>
 
         <Paper p="md" radius="md">
           <Stack gap="md">
@@ -270,7 +264,7 @@ export function SettlementPanel() {
                 onClick={handleGenerate}
                 variant="filled"
                 color="blue"
-                className="settlement-generate-btn"
+                className="settlement-generate-btn build-cta"
               >
                 生成结算单
               </Button>

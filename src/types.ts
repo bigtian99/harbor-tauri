@@ -16,12 +16,31 @@ export interface NginxLocationBlock {
   host: string;
 }
 
-export interface HarborConfig {
+/** Harbor 仓库环境（开发 / 生产等），与 KubeSphere 环境独立 */
+export interface HarborEnvironment {
+  id: string;
+  /** 环境名，如 开发 / 生产 */
+  name: string;
   harbor_url: string;
   username: string;
   password: string;
   /** Harbor 项目名称，镜像名不含 / 时自动作为前缀 */
   project: string;
+}
+
+export interface HarborConfig {
+  /** @deprecated 已迁移到 harbor_environments，读配置时兼容旧字段；normalize 会 mirror 活跃环境 */
+  harbor_url: string;
+  /** @deprecated 见 harbor_environments */
+  username: string;
+  /** @deprecated 见 harbor_environments */
+  password: string;
+  /** @deprecated 见 harbor_environments；镜像名不含 / 时自动作为前缀 */
+  project: string;
+  /** Harbor 多环境连接（开发 / 生产 …） */
+  harbor_environments?: HarborEnvironment[];
+  /** 推送相关页上次选中的 Harbor 环境 id */
+  harbor_last_env_id?: string;
   base_image: string;
   expose_port: string;
   frontend_base_image: string;

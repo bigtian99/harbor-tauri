@@ -20,6 +20,8 @@ import { avatarColor, avatarInitials } from "../../avatarUrl";
 import { QuickMergeConfigModal } from "./QuickMergeConfigModal";
 import type { AuthorInfo, CommitInfo, HarborConfig, LocalMergeCheck } from "../../types";
 import { commitHashButtonStyles } from "../../theme/panelStyles";
+import { HarborEnvSelect } from "../HarborEnvSelect";
+import { shouldPushHarborAfterMerge } from "../../mergeSyncPackage";
 
 interface MergeFormSectionProps {
   config: HarborConfig;
@@ -65,6 +67,7 @@ interface MergeFormSectionProps {
   onTargetBranchChange: (value: string) => void;
   onPushAfterMergeChange: (checked: boolean) => void;
   onPackageAfterMergeChange: (checked: boolean) => void;
+  onHarborEnvChange?: (envId: string) => void;
   onTagAfterMergeChange: (checked: boolean) => void;
   onUseQuickMergeChange: (checked: boolean) => void;
   onShowQuickMergeConfig: (show: boolean) => void;
@@ -128,6 +131,7 @@ export function MergeFormSection({
   onTargetBranchChange,
   onPushAfterMergeChange,
   onPackageAfterMergeChange,
+  onHarborEnvChange,
   onTagAfterMergeChange,
   onUseQuickMergeChange,
   onShowQuickMergeConfig,
@@ -252,6 +256,16 @@ export function MergeFormSection({
             onChange={(e) => onPackageAfterMergeChange(e.currentTarget.checked)}
             styles={checkboxLabelStyles}
           />
+          {packageAfterMerge && onHarborEnvChange && shouldPushHarborAfterMerge(targetBranch) && (
+            <HarborEnvSelect
+              config={config}
+              onChange={onHarborEnvChange}
+              disabled={isMerging || isChecking}
+              size="xs"
+              w={200}
+              description="将推送 Harbor"
+            />
+          )}
           <Checkbox
             color="cyan"
             label={
@@ -546,7 +560,7 @@ export function MergeFormSection({
                   : "有冲突或未检查，不允许合并"
             }
             leftSection={isMerging ? <Loader2 size={18} className="spin" /> : <GitMerge size={18} />}
-            className="merge-submit-btn"
+            className="merge-submit-btn build-cta"
           >
             {isMerging ? "合并中..." : `合并 ${sourceBranch || "源"} → ${targetBranch || "目标"}`}
           </Button>

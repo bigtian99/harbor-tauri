@@ -130,3 +130,26 @@
 }
 
 /* Java 项目列表：拖拽 JAR 投放提示 — 进度条样式见 progress.css */
+
+/* ── 宝塔页（Java 项目 / PHP 站点）：与上传推送页同款页头（复用 .upload-head 全局类，见 upload.css） ── */
+
+/* 面板根：与 upload-shell 同款进场动画（复用 upload-rise keyframes，勿重复声明） */
+.bt-page-shell {
+  animation: upload-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 页头底部强调线留呼吸空间；工具区（自动刷新/刷新）不随标题挤压换行错位 */
+.bt-page-head {
+  padding-bottom: 16px;
+}
+
+.bt-page-head-tools {
+  padding-bottom: 4px;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-page-shell {
+    animation: none;
+  }
+}

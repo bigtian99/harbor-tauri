@@ -1537,3 +1537,21 @@ a.commit-link {
   }
 }
 
+/* ── 历史记录页：与上传推送页同款页头（复用 .upload-head 全局类，见 upload.css） ──
+   布局约束：本页走 .content:has(.history-panel-new) 锁高滚动，
+   页头内嵌在面板自己的容器内，不占 AppShell 层级。 */
+
+.history-page-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  animation: upload-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 面板根 padding 为 0，页头自带内边距；底部留 14px 给强调线呼吸 */
+.history-page-head {
+  flex-shrink: 0;
+  padding: 18px 20px 14px;
+}
+

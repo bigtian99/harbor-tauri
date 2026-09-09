@@ -15,9 +15,8 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
-import { Globe, Loader2, RefreshCw, Search, StopCircle, Upload, XCircle } from "lucide-react";
+import { Loader2, RefreshCw, Search, StopCircle, Upload, XCircle } from "lucide-react";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { displayBtUpdatedAt, setBtLastUpload } from "../utils/btLastUpload";
 import { isTauriRuntime } from "../types";
@@ -637,18 +636,14 @@ export function BtPhpSitesPanel() {
   const showProgress = busyKey !== null || Boolean(progressMessage);
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between" align="flex-end">
-        <div>
-          <Group gap="xs" mb={4}>
-            <Globe size={20} />
-            <Title order={3}>PHP 项目</Title>
-          </Group>
-          <Text size="sm" c="dimmed">
-            把目录 / zip / 站点文件拖到某一行上，松开即 FTP 覆盖到该站点路径（无需重启）
-          </Text>
+    <Stack gap="md" className="bt-page-shell">
+      <header className="upload-head bt-page-head">
+        <div className="upload-head-text">
+          <span className="upload-eyebrow">BT · PHP SITES</span>
+          <h1 className="upload-title">PHP 站点</h1>
+          <p className="upload-sub">管理宝塔面板的 PHP 站点列表，拖入文件即可 FTP 覆盖到站点路径</p>
         </div>
-        <Group gap="sm" align="center">
+        <Group gap="sm" align="center" className="bt-page-head-tools">
           <Checkbox
             label="自动刷新"
             checked={autoRefresh}
@@ -674,7 +669,7 @@ export function BtPhpSitesPanel() {
             刷新
           </Button>
         </Group>
-      </Group>
+      </header>
 
       {fileDragActive && (
         <div className="bt-java-drop-banner">

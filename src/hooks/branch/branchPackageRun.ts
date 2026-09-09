@@ -18,6 +18,10 @@ import {
   isTauriRuntime,
   resolveHarborRepository,
 } from "../../types";
+import {
+  isHarborEnvReady,
+  resolveActiveHarbor,
+} from "../../utils/harborEnvironments";
 
 export interface BranchPackageRunParams {
   config: HarborConfig;
@@ -204,7 +208,8 @@ export async function runBranchPackageAndPush(
     };
   }
 
-  if (!config.harbor_url || !config.username || !config.password || !config.project) {
+  const harbor = resolveActiveHarbor(config);
+  if (!isHarborEnvReady(harbor)) {
     return {
       ok: false,
       error: "Harbor 配置不完整",
@@ -217,6 +222,8 @@ export async function runBranchPackageAndPush(
 
   const branchImageTag = buildBranchImageTag(branchName, imageTag);
   const label = progressLabel?.trim() || undefined;
+  const harborEnvId = harbor.id;
+  const harborProject = harbor.project;
 
   if (!effectiveImageName) {
     return {
@@ -236,10 +243,10 @@ export async function runBranchPackageAndPush(
         ? [frontendImageName, backendImageName]
         : [frontendImageName];
   const invalidName = namesToPush.find(
-    (name) => !resolveHarborRepository(name, config.project).ok,
+    (name) => !resolveHarborRepository(name, harborProject).ok,
   );
   if (invalidName) {
-    const err = resolveHarborRepository(invalidName, config.project);
+    const err = resolveHarborRepository(invalidName, harborProject);
     return {
       ok: false,
       error: err.ok ? "镜像名不合法" : err.error,
@@ -265,6 +272,7 @@ export async function runBranchPackageAndPush(
         exposePort: branchExposePort || null,
         nginxLocations: [],
         progressLabel: label,
+        harborEnvId,
       });
       const imgMatch = resultStr.match(/完整镜像:\s*(.+)/);
       if (imgMatch) {
@@ -294,6 +302,7 @@ export async function runBranchPackageAndPush(
         const value = await invoke<string>("build_and_push", {
           ...args,
           progressLabel: label ?? roleLabel(role),
+          harborEnvId,
         });
         const imgMatch = value.match(/完整镜像:\s*(.+)/);
         if (imgMatch) {

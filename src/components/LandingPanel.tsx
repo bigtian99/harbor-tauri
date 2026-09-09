@@ -150,7 +150,15 @@ export function LandingPanel({
 
   return (
     <>
-      <Stack gap="md" className="landing-panel">
+      <Stack gap="md" className="landing-panel ops-rise">
+        <header className="upload-head">
+          <div className="upload-head-text">
+            <span className="upload-eyebrow">LANDING PAGES</span>
+            <h1 className="upload-title">生成落地页</h1>
+            <p className="upload-sub">拉取渠道并按模板批量生成落地页，FTP 一键上传部署</p>
+          </div>
+        </header>
+
         <LandingChannelForm
           landingIds={landingIds}
           landingMode={landingMode}

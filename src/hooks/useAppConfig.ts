@@ -69,6 +69,8 @@ export function createDefaultHarborConfig(): HarborConfig {
     landing_ftp_pass: "",
     landing_ftp_base_dir: "",
     privacy_ftp_host: "",
+    harbor_environments: [],
+    harbor_last_env_id: "",
     ks_environments: [],
     ks_last_env_id: "",
     ks_publish_maps: [],

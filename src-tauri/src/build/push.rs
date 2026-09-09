@@ -1,8 +1,8 @@
 //! 镜像构建与推送 Tauri 命令：`build_and_push` / `push_local_image` / `list_local_images` / `remove_local_image`。
 
 use crate::build::push_helpers::{
-    docker_login_harbor, docker_push_image, docker_rmi_best_effort, require_harbor_config,
-    resolve_final_tag,
+    apply_harbor_env, docker_login_harbor, docker_push_image, docker_rmi_best_effort,
+    harbor_registry_host, resolve_final_tag,
 };
 use crate::build::{
     begin_cancellable_operation, docker_output, emit_progress, resolve_harbor_repository,
@@ -44,6 +44,8 @@ pub async fn build_and_push(
     nginx_locations: Vec<NginxLocationBlock>,
     // 并行推送时区分角色，如 "前端" / "后端"；进度消息会带 [标签]
     progress_label: Option<String>,
+    // 指定 Harbor 环境 id；空则用配置里的 harbor_last_env_id
+    harbor_env_id: Option<String>,
 ) -> Result<String, String> {
     let _cancel_guard = begin_cancellable_operation();
     let label = progress_label
@@ -64,7 +66,7 @@ pub async fn build_and_push(
         }
     }
     let artifact_type = ArtifactType::from_option(artifact_type)?;
-    require_harbor_config(&config)?;
+    apply_harbor_env(&mut config, harbor_env_id)?;
 
     let artifact_path = PathBuf::from(&jar_path);
     if !artifact_path.exists() {
@@ -74,7 +76,8 @@ pub async fn build_and_push(
     let final_tag = resolve_final_tag(image_tag);
     let image_name_lower = image_name.to_lowercase();
     let repository = resolve_harbor_repository(&image_name_lower, &config.project)?;
-    let full_image = format!("{}/{}:{}", config.harbor_url, repository, final_tag);
+    let registry = harbor_registry_host(&config.harbor_url);
+    let full_image = format!("{}/{}:{}", registry, repository, final_tag);
 
     // 步骤1: 准备Docker构建上下文
     emit(&app, 10, "📝 准备 Docker 构建上下文...", "build");
@@ -255,10 +258,11 @@ pub async fn push_local_image(
     local_image: String,
     image_name: String,
     image_tag: String,
+    harbor_env_id: Option<String>,
 ) -> Result<String, String> {
     let _cancel_guard = begin_cancellable_operation();
-    let config = load_config_sync()?;
-    require_harbor_config(&config)?;
+    let mut config = load_config_sync()?;
+    apply_harbor_env(&mut config, harbor_env_id)?;
 
     let local_image = local_image.trim().to_string();
     if local_image.is_empty() {
@@ -272,7 +276,8 @@ pub async fn push_local_image(
 
     let repository = resolve_harbor_repository(&image_name_lower, &config.project)?;
     let final_tag = resolve_final_tag(image_tag);
-    let full_image = format!("{}/{}:{}", config.harbor_url, repository, final_tag);
+    let registry = harbor_registry_host(&config.harbor_url);
+    let full_image = format!("{}/{}:{}", registry, repository, final_tag);
 
     // 步骤1: docker tag <local_image> <full_image>
     emit_progress(&app, 10, "🏷️ 镜像打标签...", "build");

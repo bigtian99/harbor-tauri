@@ -12,6 +12,10 @@ import {
   inferImageNameFromRef,
 } from "../types";
 import { useEffect } from "react";
+import {
+  isHarborEnvReady,
+  resolveActiveHarbor,
+} from "../utils/harborEnvironments";
 
 /** 与后端 list_local_images 对齐 */
 export type LocalImageInfo = {
@@ -140,8 +144,9 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       setLog("⚠️ 请输入镜像名称");
       return;
     }
-    if (!config.harbor_url || !config.username || !config.password || !config.project) {
-      setLog("⚠️ 请先配置Harbor信息");
+    const harbor = resolveActiveHarbor(config);
+    if (!isHarborEnvReady(harbor)) {
+      setLog("⚠️ 请先在设置中配置 Harbor 环境");
       setActiveTab("config");
       return;
     }
@@ -153,7 +158,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     setUploadFullImage("");
     const uploadPort = artifactType === "jar" ? (uploadExposePort.trim() || config.expose_port.trim()) : "";
     const uploadImageName = uploadPort ? `${imageName}-${uploadPort}` : imageName;
-    const resolvedRepo = resolveHarborRepository(uploadImageName, config.project);
+    const resolvedRepo = resolveHarborRepository(uploadImageName, harbor.project);
     if (!resolvedRepo.ok) {
       setLog(`⚠️ ${resolvedRepo.error}`);
       setIsBuilding(false);
@@ -167,6 +172,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
         artifactType,
         exposePort: uploadExposePort || null,
         nginxLocations: [],
+        harborEnvId: harbor.id,
       });
       const imgMatch = result.match(/完整镜像:\s*(.+)/);
       if (imgMatch) {
@@ -274,8 +280,9 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       setLog("⚠️ 请输入目标镜像名称");
       return;
     }
-    if (!config.harbor_url || !config.username || !config.password || !config.project) {
-      setLog("⚠️ 请先配置Harbor信息");
+    const harbor = resolveActiveHarbor(config);
+    if (!isHarborEnvReady(harbor)) {
+      setLog("⚠️ 请先在设置中配置 Harbor 环境");
       setActiveTab("config");
       return;
     }
@@ -290,6 +297,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
         localImage: pushLocalImage.trim(),
         imageName: pushImageName.trim(),
         imageTag: pushImageTag.trim() || "latest",
+        harborEnvId: harbor.id,
       });
       const imgMatch = result.match(/完整镜像:\s*(.+)/);
       if (imgMatch) {

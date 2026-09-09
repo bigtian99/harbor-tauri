@@ -22,3 +22,17 @@
   opacity: 0.45;
   color: var(--color-text-muted) !important;
 }
+
+/* —— 运营页进场动画：与 upload-rise 同款（关键帧在 upload.css 定义） —— */
+
+.landing-panel.ops-rise,
+.pack-speed-panel.ops-rise {
+  animation: upload-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-panel.ops-rise,
+  .pack-speed-panel.ops-rise {
+    animation: none;
+  }
+}

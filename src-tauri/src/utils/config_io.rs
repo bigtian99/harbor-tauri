@@ -24,6 +24,7 @@ pub(crate) fn normalize_config(mut config: HarborConfig) -> HarborConfig {
         config.ks_console = HarborConfig::default().ks_console;
     }
     migrate_ks_environments(&mut config);
+    migrate_harbor_environments(&mut config);
     if matches_default_template(
         &config.frontend_dockerfile_template,
         LEGACY_FRONTEND_DOCKERFILE_TEMPLATE,
@@ -111,6 +112,86 @@ fn migrate_ks_environments(config: &mut HarborConfig) {
     }
 }
 
+fn migrate_harbor_environments(config: &mut HarborConfig) {
+    if config.harbor_environments.is_empty() {
+        let has_legacy = !config.harbor_url.trim().is_empty()
+            || !config.username.trim().is_empty()
+            || !config.password.trim().is_empty()
+            || !config.project.trim().is_empty();
+        // 默认配置自带 harbor_url 占位，仅 url 且无账号/项目时不迁成「默认」环境
+        let meaningful = !config.username.trim().is_empty()
+            || !config.password.trim().is_empty()
+            || !config.project.trim().is_empty()
+            || (has_legacy
+                && config.harbor_url.trim() != HarborConfig::default().harbor_url.trim());
+        if meaningful {
+            config.harbor_environments.push(crate::models::HarborEnvironment {
+                id: "legacy".to_string(),
+                name: "默认".to_string(),
+                harbor_url: config.harbor_url.clone(),
+                username: config.username.clone(),
+                password: config.password.clone(),
+                project: config.project.clone(),
+            });
+        }
+    }
+    for env in &mut config.harbor_environments {
+        if env.id.trim().is_empty() {
+            env.id = format!(
+                "hb-{}",
+                env.name.trim().to_lowercase().replace(' ', "-")
+            );
+            if env.id == "hb-" {
+                env.id = "hb-env".to_string();
+            }
+        }
+        if env.name.trim().is_empty() {
+            env.name = "默认".to_string();
+        }
+    }
+    if config.harbor_last_env_id.trim().is_empty()
+        || !config
+            .harbor_environments
+            .iter()
+            .any(|e| e.id == config.harbor_last_env_id)
+    {
+        config.harbor_last_env_id = config
+            .harbor_environments
+            .first()
+            .map(|e| e.id.clone())
+            .unwrap_or_default();
+    }
+    if let Some(current) = config
+        .harbor_environments
+        .iter()
+        .find(|e| e.id == config.harbor_last_env_id)
+        .cloned()
+        .or_else(|| config.harbor_environments.first().cloned())
+    {
+        config.harbor_url = strip_harbor_scheme(&current.harbor_url);
+        config.username = current.username;
+        config.password = current.password;
+        config.project = current.project;
+        // 顺带净化列表里的地址，避免再次拼出带协议的镜像引用
+        if let Some(env) = config
+            .harbor_environments
+            .iter_mut()
+            .find(|e| e.id == current.id)
+        {
+            env.harbor_url = strip_harbor_scheme(&env.harbor_url);
+        }
+    }
+}
+
+fn strip_harbor_scheme(raw: &str) -> String {
+    let s = raw.trim().trim_end_matches('/');
+    s.strip_prefix("https://")
+        .or_else(|| s.strip_prefix("http://"))
+        .unwrap_or(s)
+        .trim_end_matches('/')
+        .to_string()
+}
+
 pub(crate) fn config_path_for(dir_name: &str) -> PathBuf {
     let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
     config_dir.join(dir_name).join("config.json")
@@ -176,6 +257,54 @@ mod tests {
         assert!(config.ks_environments.is_empty());
         assert!(config.ks_username.is_empty());
         assert!(config.ks_password.is_empty());
+        assert!(config.harbor_environments.is_empty());
+    }
+
+    #[test]
+    fn migrate_legacy_harbor_fields_into_environments() {
+        let mut config = HarborConfig::default();
+        config.harbor_url = "harbor.prod.local".to_string();
+        config.username = "admin".to_string();
+        config.password = "secret".to_string();
+        config.project = "apps".to_string();
+        config.harbor_environments.clear();
+        let config = normalize_config(config);
+        assert_eq!(config.harbor_environments.len(), 1);
+        assert_eq!(config.harbor_environments[0].name, "默认");
+        assert_eq!(config.harbor_environments[0].harbor_url, "harbor.prod.local");
+        assert_eq!(config.harbor_environments[0].project, "apps");
+        assert_eq!(config.harbor_last_env_id, config.harbor_environments[0].id);
+    }
+
+    #[test]
+    fn keep_existing_harbor_environments_and_mirror() {
+        let mut config = HarborConfig::default();
+        config.harbor_url = "old".to_string();
+        config.username = "old".to_string();
+        config.password = "oldpass".to_string();
+        config.project = "oldproj".to_string();
+        config.harbor_environments = vec![crate::models::HarborEnvironment {
+            id: "prod".to_string(),
+            name: "生产".to_string(),
+            harbor_url: "h.prod".to_string(),
+            username: "ops".to_string(),
+            password: "p".to_string(),
+            project: "prod-apps".to_string(),
+        }];
+        config.harbor_last_env_id = "prod".to_string();
+        let config = normalize_config(config);
+        assert_eq!(config.harbor_environments.len(), 1);
+        assert_eq!(config.harbor_environments[0].name, "生产");
+        assert_eq!(config.harbor_url, "h.prod");
+        assert_eq!(config.username, "ops");
+        assert_eq!(config.project, "prod-apps");
+    }
+
+    #[test]
+    fn default_placeholder_harbor_url_alone_does_not_migrate() {
+        let config = normalize_config(HarborConfig::default());
+        assert!(config.harbor_environments.is_empty());
+        assert_eq!(config.harbor_url, HarborConfig::default().harbor_url);
     }
 
     #[test]

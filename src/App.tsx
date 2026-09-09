@@ -32,6 +32,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { resolveHistoryJarPushConfig } from "./historyJarPush.ts";
 import { shouldKeepPreviewServer } from "./utils/previewLifecycle";
 import { readStoredActiveTab, writeStoredActiveTab } from "./utils/activeTabStorage";
+import {
+  isHarborEnvReady,
+  resolveActiveHarbor,
+  withActiveHarborEnv,
+} from "./utils/harborEnvironments";
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>(() => readStoredActiveTab("upload"));
@@ -89,6 +94,20 @@ function App() {
       if (!isTauriRuntime()) return;
       void invoke("save_config", { config: app.getConfigSnapshot() }).catch((e) => {
         console.error("保存 KS 环境选择失败:", e);
+      });
+    },
+    [app.getConfigSnapshot, app.setConfig],
+  );
+
+  const setHarborLastEnvId = useCallback(
+    (id: string) => {
+      const prev = app.getConfigSnapshot();
+      if (prev.harbor_last_env_id === id) return;
+      const next = withActiveHarborEnv(prev, id);
+      app.setConfig(next);
+      if (!isTauriRuntime()) return;
+      void invoke("save_config", { config: app.getConfigSnapshot() }).catch((e) => {
+        console.error("保存 Harbor 环境选择失败:", e);
       });
     },
     [app.getConfigSnapshot, app.setConfig],
@@ -204,12 +223,13 @@ function App() {
         showToast("该记录没有可推送的 JAR");
         return;
       }
-      if (!app.config.harbor_url || !app.config.username || !app.config.password || !app.config.project) {
-        showToast("请先完善 Harbor 配置");
+      const harbor = resolveActiveHarbor(app.config);
+      if (!isHarborEnvReady(harbor)) {
+        showToast("请先完善 Harbor 环境配置");
         setActiveTab("config");
         return;
       }
-      const repoCheck = resolveHarborRepository(resolved.imageName, app.config.project);
+      const repoCheck = resolveHarborRepository(resolved.imageName, harbor.project);
       if (!repoCheck.ok) {
         showToast(repoCheck.error);
         return;
@@ -231,6 +251,7 @@ function App() {
           artifactType: "jar",
           exposePort: resolved.exposePort || null,
           nginxLocations: [],
+          harborEnvId: harbor.id,
         });
         const imgMatch = result.match(/完整镜像:\s*(.+)/);
         const fullImage = imgMatch?.[1]?.trim() || `${resolved.imageName}:${resolved.imageTag}`;
@@ -322,6 +343,8 @@ function App() {
             setShowImageConfig={upload.setShowImageConfig}
             setShowBuildLog={build.setShowBuildLog}
             renderLog={build.renderLog}
+            config={app.config}
+            onHarborEnvChange={setHarborLastEnvId}
           />
         )}
 
@@ -352,6 +375,8 @@ function App() {
             setShowImageConfig={upload.setShowImageConfig}
             setShowBuildLog={build.setShowBuildLog}
             renderLog={build.renderLog}
+            config={app.config}
+            onHarborEnvChange={setHarborLastEnvId}
           />
         )}
 
@@ -391,6 +416,7 @@ function App() {
             nginxLocations={branch.nginxLocations}
             showAdvancedSettings={branch.showAdvancedSettings}
             config={app.config}
+            onHarborEnvChange={setHarborLastEnvId}
             progress={build.progress}
             progressMessage={build.progressMessage}
             log={build.log}
@@ -461,6 +487,8 @@ function App() {
             onCancelBuild={build.handleCancelBuild}
             setShowBuildLog={build.setShowBuildLog}
             renderLog={build.renderLog}
+            config={app.config}
+            onHarborEnvChange={setHarborLastEnvId}
           />
         )}
 
@@ -473,6 +501,7 @@ function App() {
             onOpenDirectory={openArtifactPath}
             onConfigPatch={patchHarborConfig}
             getConfigSnapshot={app.getConfigSnapshot}
+            onHarborEnvChange={setHarborLastEnvId}
             onPackageAfterMerge={({ repoPath, targetBranch }) => {
               void branch.packageFromMergeTarget(repoPath, targetBranch);
             }}
@@ -527,6 +556,7 @@ function App() {
             configReady={app.configLoaded}
             getConfigSnapshot={app.getConfigSnapshot}
             onLastEnvChange={setKsLastEnvId}
+            onHarborEnvChange={setHarborLastEnvId}
             onPublishMapsChange={setKsPublishMaps}
           />
         )}
