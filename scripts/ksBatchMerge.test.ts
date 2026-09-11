@@ -32,9 +32,12 @@ assert.doesNotMatch(
 );
 
 const panel = read("src/components/KsPublishPanel.tsx");
-assert.match(panel, /mergeKsBatchReposSequential/);
-assert.match(panel, /values\.mergeBeforePack/);
-assert.match(panel, /mergeRepoPaths=\{batchMergeRepoPaths\}/);
+assert.match(panel, /useKsBatchActions/);
+assert.match(panel, /mergeRepoPaths=\{batch\.batchMergeRepoPaths\}/);
+
+const batchHook = read("src/components/ksPublish/useKsBatchActions.ts");
+assert.match(batchHook, /mergeKsBatchReposSequential/);
+assert.match(batchHook, /values\.mergeBeforePack/);
 
 /** 内联验证限并发池保序 */
 async function mapPool<T, R>(
