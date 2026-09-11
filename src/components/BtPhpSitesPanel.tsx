@@ -15,12 +15,12 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
-import { Globe, Loader2, RefreshCw, Search, StopCircle, Upload, XCircle } from "lucide-react";
+import { Loader2, RefreshCw, Search, StopCircle, Upload, XCircle } from "lucide-react";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { displayBtUpdatedAt, setBtLastUpload } from "../utils/btLastUpload";
 import { isTauriRuntime } from "../types";
+import { PanelPageHeader } from "./PanelPageHeader";
 
 export interface BtPhpSiteInfo {
   id: string;
@@ -638,16 +638,11 @@ export function BtPhpSitesPanel() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-end">
-        <div>
-          <Group gap="xs" mb={4}>
-            <Globe size={20} />
-            <Title order={3}>PHP 项目</Title>
-          </Group>
-          <Text size="sm" c="dimmed">
-            把目录 / zip / 站点文件拖到某一行上，松开即 FTP 覆盖到该站点路径（无需重启）
-          </Text>
-        </div>
+      <PanelPageHeader
+        eyebrow="DIST → BAOTA PHP"
+        title="PHP 项目"
+        sub="把目录 / zip / 站点文件拖到某一行上，松开即 FTP 覆盖到该站点路径（无需重启）"
+      >
         <Group gap="sm" align="center">
           <Checkbox
             label="自动刷新"
@@ -674,7 +669,7 @@ export function BtPhpSitesPanel() {
             刷新
           </Button>
         </Group>
-      </Group>
+      </PanelPageHeader>
 
       {fileDragActive && (
         <div className="bt-java-drop-banner">

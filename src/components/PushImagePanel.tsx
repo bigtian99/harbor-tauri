@@ -16,6 +16,8 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import type { LocalImageInfo } from "../hooks/useUploadPush";
+import { isCompactSuccessLog } from "../hooks/useBuildProgress";
+import { PanelPageHeader } from "./PanelPageHeader";
 
 interface PushImagePanelProps {
   localImage: string;
@@ -157,12 +159,17 @@ export function PushImagePanel({
 
   return (
     <Stack gap="md" className="upload-panel push-image-panel">
+      <PanelPageHeader
+        eyebrow="LOCAL IMAGE → TAG → HARBOR"
+        title="镜像推送"
+        sub="选择本机 Docker 镜像，打标签并推送到 Harbor 仓库"
+      />
       {/* 约束列：避免大窗宽下输入/按钮被拉成超宽一条 */}
       <Stack gap="md" className="push-image-column">
         <Group justify="space-between" align="center" wrap="nowrap" gap="sm" className="image-picker-header">
           <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
             <Text component="h2" className="image-picker-header-title">
-              推送镜像
+              本地镜像
             </Text>
             {!isLoadingImages && localImageOptions.length > 0 && (
               <Group gap={5} aria-label="镜像统计" wrap="nowrap">
@@ -604,7 +611,7 @@ export function PushImagePanel({
             </Button>
             <Collapse expanded={showBuildLog}>
               <Paper
-                className={`log-panel ${log.includes("✅") ? "success" : ""}`}
+                className={`log-panel ${isCompactSuccessLog(log) ? "success" : ""}`}
                 p="sm"
                 radius="md"
               >

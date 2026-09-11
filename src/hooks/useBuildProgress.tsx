@@ -4,6 +4,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CheckCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { isTauriRuntime } from "../types";
+import {
+  appendBuildProgressLog,
+  isCompactSuccessLog,
+  stripFullImageLines,
+} from "../utils/buildProgressLog";
+
+export { isCompactSuccessLog } from "../utils/buildProgressLog";
 
 /** build-progress 事件载荷（OPT-033：stage 可选，缺省兼容旧后端） */
 export type BuildProgressStage =
@@ -24,16 +31,6 @@ interface BuildProgressPayload {
 interface UseBuildProgressDeps {
   /** 复制成功后的 toast；不传则静默 */
   showToast?: (message: string, duration?: number) => void;
-}
-
-/** 镜像地址只走面板上的「完整镜像」行，日志里不重复展示 */
-function stripFullImageLines(text: string): string {
-  return text
-    .split("\n")
-    .filter((line) => !/完整镜像\s*:/.test(line))
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }
 
 /**
@@ -78,7 +75,7 @@ export function useBuildProgress(deps: UseBuildProgressDeps = {}) {
     if (!cleaned) {
       return <pre>（无过程日志）</pre>;
     }
-    if (cleaned.includes("✅")) {
+    if (isCompactSuccessLog(cleaned)) {
       const body = cleaned.replace(/✅\s*/g, "").trim();
       return (
         <div className="success-message">
@@ -121,20 +118,7 @@ export function useBuildProgress(deps: UseBuildProgressDeps = {}) {
           setProgressStage(event.payload.stage);
         }
         // 累积构建/推送过程日志；FTP 百分比进度只替换上一行，避免刷屏
-        setLog((prev) => {
-          const msg = event.payload.message;
-          const isFtpPct = /^📤 FTP 上传 .+ \d+% \(/.test(msg);
-          if (!prev) return msg;
-          if (isFtpPct) {
-            const lines = prev.split("\n");
-            const last = lines[lines.length - 1] ?? "";
-            if (/^📤 FTP 上传 .+ \d+% \(/.test(last) || last.startsWith("📤 FTP 上传 ")) {
-              lines[lines.length - 1] = msg;
-              return lines.join("\n");
-            }
-          }
-          return `${prev}\n${msg}`;
-        });
+        setLog((prev) => appendBuildProgressLog(prev, event.payload.message));
       },
     );
     return () => {

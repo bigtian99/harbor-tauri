@@ -16,6 +16,29 @@ export function appendBuildProgressLog(prev: string, message: string): string {
   return `${prev}\n${msg}`;
 }
 
+/** 镜像地址只走面板上的「完整镜像」行，日志里不重复展示 */
+export function stripFullImageLines(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !/完整镜像\s*:/.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** 短成功摘要才用紧凑成功样式；过程日志（多行）保持普通 pre */
+export function isCompactSuccessLog(text: string): boolean {
+  const cleaned = stripFullImageLines(text);
+  if (!cleaned.includes("✅") || cleaned.includes("❌")) return false;
+  const lines = cleaned.split("\n").filter((l) => l.trim());
+  return lines.length <= 3 && cleaned.length < 280;
+}
+
+/** 打包结束：在过程日志后追加一行摘要，不覆盖 */
+export function appendPackageSummaryLog(prev: string, summary: string): string {
+  return [prev.trim(), summary.trim()].filter(Boolean).join("\n");
+}
+
 export function parseBatchStepLabel(label: string): { index: number; total: number } {
   const m = label.match(/^\[(\d+)\/(\d+)\]/);
   if (!m) return { index: 0, total: 1 };

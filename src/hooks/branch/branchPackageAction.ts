@@ -217,7 +217,10 @@ export async function handlePackageFromBranch(
     });
 
     if (!runResult.ok && !runResult.packageLog) {
-      setLog(`❌ 打包失败:\n${runResult.error ?? "未知错误"}`);
+      setLog((prev) => {
+        const err = `❌ 打包失败:\n${runResult.error ?? "未知错误"}`;
+        return prev.trim() ? `${prev.trim()}\n${err}` : err;
+      });
       return;
     }
 
@@ -268,7 +271,10 @@ export async function handlePackageFromBranch(
     }
 
     if (!autoPushImage) {
-      setLog(`✅ 分支打包完成\n\n${resultLog}`);
+      // 保留 build-progress 过程日志；不把 npm/mvn 原始输出盖掉软件日志
+      setLog((prev) =>
+        [prev.trim(), "✅ 分支打包完成"].filter(Boolean).join("\n"),
+      );
       setProgress(100);
       setProgressMessage("✅ 分支打包完成");
       await showSystemAlert(
@@ -283,11 +289,18 @@ export async function handlePackageFromBranch(
 
     if (runResult.pushErrors.length > 0 || runResult.images.length === 0) {
       const errText = runResult.error || runResult.pushErrors.join("\n");
-      setLog(
-        runResult.artifactPath
-          ? `⚠️ 分支打包成功，但镜像推送未完成\n\n${errText}\n\n${resultLog}`
-          : `❌ 打包失败:\n${errText}`,
-      );
+      // 失败时附带命令输出便于排障；成功过程仍保留 prev
+      setLog((prev) => {
+        const base = prev.trim();
+        if (runResult.artifactPath) {
+          return [base, "⚠️ 分支打包成功，但镜像推送未完成", errText, resultLog]
+            .filter((s) => s && String(s).trim())
+            .join("\n\n");
+        }
+        return [base, `❌ 打包失败:\n${errText}`, resultLog]
+          .filter((s) => s && String(s).trim())
+          .join("\n\n");
+      });
       if (runResult.artifactPath) {
         await showSystemAlert("打包完成", `分支「${branchName.trim()}」打包成功，但推送未完成。`);
       }
@@ -316,7 +329,9 @@ export async function handlePackageFromBranch(
     }
     setProgress(100);
     setProgressMessage("✅ 镜像推送完成");
-    setLog(`✅ 分支打包并推送镜像完成\n\n${resultLog}`);
+    setLog((prev) =>
+      [prev.trim(), "✅ 分支打包并推送镜像完成"].filter(Boolean).join("\n"),
+    );
     setActiveTab("branch");
     await maybeAutoPublishKs(runResult.images);
     await showSystemAlert(
@@ -327,7 +342,10 @@ export async function handlePackageFromBranch(
       await showSystemAlert("上传完成", btSummary);
     }
   } catch (e) {
-    setLog(`❌ 打包失败:\n${e}`);
+    setLog((prev) => {
+      const err = `❌ 打包失败:\n${e}`;
+      return prev.trim() ? `${prev.trim()}\n${err}` : err;
+    });
   } finally {
     setIsBuilding(false);
   }

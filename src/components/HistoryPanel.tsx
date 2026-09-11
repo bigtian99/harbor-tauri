@@ -29,6 +29,8 @@ import { avatarColor, avatarInitials } from "../avatarUrl";
 import { historyCanPushJar } from "../historyJarPush.ts";
 import { parseHistoryImageTags } from "../branchImageResults";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
+import { isCompactSuccessLog } from "../hooks/useBuildProgress";
+import { PanelPageHeader } from "./PanelPageHeader";
 
 const sidebarPaperStyles = {
   root: {
@@ -514,6 +516,12 @@ export function HistoryPanel({
   }, [sortedProjects, selectedProject]);
 
   return (
+    <Stack gap="sm" className="history-panel-shell" style={{ flex: 1, minHeight: 0 }}>
+      <PanelPageHeader
+        eyebrow="BUILD HISTORY → REPUSH"
+        title="历史记录"
+        sub="按项目浏览本机构建产物与镜像，支持再次推送 Harbor"
+      />
     <Group align="stretch" gap={0} wrap="nowrap" className="history-panel-new" style={{ flex: 1, minHeight: 0 }}>
       <Paper w={200} styles={sidebarPaperStyles} className="history-sidebar">
         <Group justify="space-between" px="sm" pt="sm" pb={8} className="history-sidebar-header">
@@ -655,13 +663,9 @@ export function HistoryPanel({
                     {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
                   </Button>
                   {showBuildLog && (
-                    log.includes("✅") ? (
-                      <div className="log-panel success">{renderLog(log)}</div>
-                    ) : (
-                      <ScrollArea.Autosize mah={300} type="auto">
-                        <div className="log-panel">{renderLog(log)}</div>
-                      </ScrollArea.Autosize>
-                    )
+                    <div className={`log-panel ${isCompactSuccessLog(log) ? "success" : ""}`}>
+                      {renderLog(log)}
+                    </div>
                   )}
                 </Stack>
               )}
@@ -776,5 +780,6 @@ export function HistoryPanel({
         )}
       </Stack>
     </Group>
+    </Stack>
   );
 }

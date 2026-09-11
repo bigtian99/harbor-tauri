@@ -37,6 +37,7 @@ import {
 import { BaotaIcon, KubeSphereIcon } from "./icons/BrandIcons";
 import { openReleasePage } from "../utils/releasePage";
 import { KsPublishMapEditor } from "./KsPublishMapEditor";
+import { PanelPageHeader } from "./PanelPageHeader";
 
 export type CheckUpdateResult = {
   status: "update" | "latest" | "error";
@@ -319,6 +320,11 @@ export function ConfigPanel({
     <div className="config-shell">
       <div className="config-panel-body">
       <Stack gap="md" className="config-panel">
+      <PanelPageHeader
+        eyebrow="HARBOR · BAOTA · KUBESPHERE"
+        title="设置"
+        sub="配置 Harbor、宝塔、KubeSphere 等连接与偏好"
+      />
       <Tabs
         value={activeTab}
         onChange={(value) => {

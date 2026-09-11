@@ -1,5 +1,6 @@
 /* App.css — OPT-011: style entry; re-exports modular sheets in original cascade order */
 @import "./styles/base.css";
+@import "./styles/panel-header.css";
 @import "./styles/upload.css";
 @import "./styles/packspeed.css";
 @import "./styles/landing.css";

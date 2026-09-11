@@ -2,14 +2,11 @@ import {
   TextInput,
   Button,
   Group,
-  Title,
   Paper,
   Stack,
   SegmentedControl,
-  Text,
 } from "@mantine/core";
 import {
-  Globe,
   Rocket,
   ExternalLink,
   Copy,
@@ -18,6 +15,7 @@ import {
 } from "lucide-react";
 import type { LandingMode } from "../../hooks/useLanding";
 import { panelSegmentedStyles } from "../../theme/panelStyles";
+import { PanelPageHeader } from "../PanelPageHeader";
 
 interface LandingChannelFormProps {
   landingIds: string;
@@ -56,18 +54,11 @@ export function LandingChannelForm({
 }: LandingChannelFormProps) {
   return (
     <>
-      <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
-        <Group gap="sm" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
-          <Globe size={20} color="var(--color-primary)" style={{ marginTop: 2, flexShrink: 0 }} />
-          <div style={{ minWidth: 0 }}>
-            <Title order={3} c="var(--color-text)" style={{ lineHeight: 1.25 }}>
-              生成落地页
-            </Title>
-            <Text size="xs" c="var(--color-text-muted)" mt={4}>
-              按子渠道或马甲包生成落地页，预览后可上传 FTP。
-            </Text>
-          </div>
-        </Group>
+      <PanelPageHeader
+        eyebrow="CHANNEL → TEMPLATE → FTP"
+        title="生成落地页"
+        sub="按子渠道或马甲包生成落地页，预览后可上传 FTP"
+      >
         <Button
           leftSection={<Package size={14} />}
           onClick={onOpenTemplateManager}
@@ -77,7 +68,7 @@ export function LandingChannelForm({
         >
           管理模板
         </Button>
-      </Group>
+      </PanelPageHeader>
 
       <Paper p="lg" radius="md">
         <Stack gap="md">

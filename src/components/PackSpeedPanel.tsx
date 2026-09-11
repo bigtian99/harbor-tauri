@@ -27,6 +27,7 @@ import type { BatchPackResult } from "../types";
 import type { BatchPackType } from "../opsBatchPack";
 
 import { panelSegmentedStyles } from "../theme/panelStyles";
+import { PanelPageHeader } from "./PanelPageHeader";
 import "../styles/ops-panel.css";
 
 interface PackSpeedPanelProps {
@@ -251,6 +252,11 @@ export function PackSpeedPanel({
 
   return (
     <Stack gap="md" className="pack-speed-panel">
+      <PanelPageHeader
+        eyebrow="OPS BATCH → PACK QUEUE"
+        title="打包加速"
+        sub="配置运营后台凭证，批量触发打包加速任务"
+      />
       <Paper p="md" radius="md">
         <Stack gap="md">
           <PasswordInput

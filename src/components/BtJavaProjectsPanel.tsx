@@ -15,13 +15,13 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
-import { Coffee, Loader2, RefreshCw, RotateCcw, Search, StopCircle, Upload, XCircle } from "lucide-react";
+import { Loader2, RefreshCw, RotateCcw, Search, StopCircle, Upload, XCircle } from "lucide-react";
 import { displayBtUpdatedAt, setBtLastUpload } from "../utils/btLastUpload";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
 import { isTauriRuntime } from "../types";
 import { showSystemAlert } from "../systemAlert";
+import { PanelPageHeader } from "./PanelPageHeader";
 
 export interface BtJavaProjectInfo {
   id: string;
@@ -937,19 +937,13 @@ export function BtJavaProjectsPanel() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-end">
-        <div>
-          <Group gap="xs" mb={4}>
-            <Coffee size={20} />
-            <Title order={3}>Java 项目</Title>
-          </Group>
-          <Text size="sm" c="dimmed">
-            把 JAR 拖到某一行上（行内有「拖入 JAR」提示），松开即上传并重启
-            {isPolling
-              ? ` · 等待端口出现 ${pollAttempt}/${RESTART_POLL_MAX_ATTEMPTS}`
-              : ""}
-          </Text>
-        </div>
+      <PanelPageHeader
+        eyebrow="JAR → BAOTA JAVA"
+        title="Java 项目"
+        sub={`把 JAR 拖到某一行上（行内有「拖入 JAR」提示），松开即上传并重启${
+          isPolling ? ` · 等待端口出现 ${pollAttempt}/${RESTART_POLL_MAX_ATTEMPTS}` : ""
+        }`}
+      >
         <Group gap="sm" align="center">
           <Checkbox
             label="自动刷新"
@@ -976,7 +970,7 @@ export function BtJavaProjectsPanel() {
             刷新
           </Button>
         </Group>
-      </Group>
+      </PanelPageHeader>
 
       {fileDragActive && (
         <div className="bt-java-drop-banner">

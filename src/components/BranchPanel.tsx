@@ -28,6 +28,8 @@ import type {
   GitBranchOption, LastCommitInfo, CommitInfo, AuthorInfo, NginxLocationBlock
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
+import { isCompactSuccessLog } from "../hooks/useBuildProgress";
+import { PanelPageHeader } from "./PanelPageHeader";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
 import { branchDropdownLabel } from "../branchRef";
 import { panelSegmentedStyles, commitHashButtonStyles } from "../theme/panelStyles";
@@ -240,6 +242,11 @@ export function BranchPanel({
 
   return (
     <Stack gap="sm" className="branch-panel">
+      <PanelPageHeader
+        eyebrow="GIT BRANCH → BUILD → HARBOR"
+        title="分支打包"
+        sub="拉取指定分支，Maven / npm 构建产物，可选自动推送镜像与发布"
+      />
       <SegmentedControl
         size="sm"
         value={branchProjectType}
@@ -832,11 +839,9 @@ export function BranchPanel({
             {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
           </Button>
           {showBuildLog && (
-            <ScrollArea.Autosize mah={400} type="auto">
-              <div className={`log-panel ${log.includes("✅") ? "success" : ""}`}>
-                {renderLog(log)}
-              </div>
-            </ScrollArea.Autosize>
+            <div className={`log-panel ${isCompactSuccessLog(log) ? "success" : ""}`}>
+              {renderLog(log)}
+            </div>
           )}
         </Stack>
       )}

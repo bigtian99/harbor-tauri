@@ -11,7 +11,7 @@ import type { HarborConfig, KsPublishMap } from "../types";
 import { isTauriRuntime } from "../types";
 import { pickKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
-import { KubeSphereIcon } from "./icons/BrandIcons";
+import { PanelPageHeader } from "./PanelPageHeader";
 import { panelAccentButtonStyles, panelFieldStyles, panelPaperStyles, panelPrimaryButtonStyles } from "../theme/panelStyles";
 import {
   KsBatchConfirmModal,
@@ -1372,27 +1372,26 @@ export function KsPublishPanel({
   return (
     <>
       <Stack gap="md" className="ks-publish-panel">
+        <PanelPageHeader
+          eyebrow="HARBOR IMAGE → KUBESPHERE"
+          title="KubeSphere 发布"
+          sub="连接集群环境，选择命名空间与部署，更新镜像并发布"
+        >
+          {connecting && (
+            <Group gap={6}>
+              <Loader size={14} />
+              <Text size="sm" c="dimmed">{statusText || "正在连接…"}</Text>
+            </Group>
+          )}
+          {connected && selectedEnv && !connecting && (
+            <Badge color="green" variant="dot" size="sm">已连接 {selectedEnv.name}</Badge>
+          )}
+          {!connected && !connecting && statusText && (
+            <Text size="sm" c="red">{statusText}</Text>
+          )}
+        </PanelPageHeader>
         <Card shadow="sm" radius="md" withBorder styles={panelPaperStyles}>
           <Stack gap="md">
-            <Group justify="space-between" wrap="wrap" gap="sm">
-              <Group gap={8}>
-                <KubeSphereIcon size={20} color="#329dce" />
-                <Title order={4}>KubeSphere 镜像发布</Title>
-              </Group>
-              {connecting && (
-                <Group gap={6}>
-                  <Loader size={14} />
-                  <Text size="sm" c="dimmed">{statusText || "正在连接…"}</Text>
-                </Group>
-              )}
-              {connected && selectedEnv && !connecting && (
-                <Badge color="green" variant="dot" size="sm">已连接 {selectedEnv.name}</Badge>
-              )}
-              {!connected && !connecting && statusText && (
-                <Text size="sm" c="red">{statusText}</Text>
-              )}
-            </Group>
-
             <Group align="flex-end" wrap="wrap" gap="md" className="ks-publish-toolbar">
               <Select
                 label="环境"

@@ -302,16 +302,28 @@ body {
   min-height: 0;
 }
 
-/* 历史记录：锁住 AppShell.Main 滚动，只让面板内列表滚 */
-.content:has(.history-panel-new) {
-  padding-block: 0 !important;
+/* 历史记录：锁住 AppShell.Main 滚动，只让面板内列表滚；左边距留给折叠钮，避免挡页头 */
+.content:has(.history-panel-shell) {
+  padding-block: 16px 0 !important;
   padding-inline-end: 0 !important;
-  padding-inline-start: var(--app-shell-navbar-offset, 0rem) !important;
+  padding-inline-start: calc(var(--app-shell-navbar-offset, 0rem) + 28px) !important;
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
   height: 100vh !important;
   max-height: 100vh !important;
+}
+
+.history-panel-shell {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.history-panel-shell > .panel-head {
+  flex-shrink: 0;
+  padding-inline-end: 28px;
 }
 
 /* 设置页：主区锁高，保存条在滚动区外，不压映射列表 */

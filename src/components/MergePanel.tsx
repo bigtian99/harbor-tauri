@@ -5,6 +5,7 @@ import { MergeProgressOverlay } from "./merge/MergeProgressOverlay";
 import { CommitDiffModal } from "./merge/CommitDiffModal";
 import { ConflictDetailModal } from "./merge/ConflictDetailModal";
 import { MergeFormSection } from "./merge/MergeFormSection";
+import { PanelPageHeader } from "./PanelPageHeader";
 
 export type { MergePanelProps } from "./merge/types";
 
@@ -13,6 +14,11 @@ export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge, onCon
 
   return (
     <Stack gap="sm" className="merge-panel">
+      <PanelPageHeader
+        eyebrow="SOURCE → TARGET → MERGE"
+        title="分支合并"
+        sub="选择源分支与目标分支合并，冲突可就地处理，合并后可继续打包"
+      />
       <MergeProgressOverlay
         phase={m.mergeOverlayPhase}
         sourceBranch={m.sourceBranch}

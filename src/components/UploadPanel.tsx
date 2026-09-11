@@ -16,6 +16,8 @@ import {
 import type { ArtifactType } from "../types";
 import { getPathName } from "../types";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
+import { isCompactSuccessLog } from "../hooks/useBuildProgress";
+import { PanelPageHeader } from "./PanelPageHeader";
 
 interface UploadPanelProps {
   artifactType: ArtifactType;
@@ -63,12 +65,11 @@ export function UploadPanel({
 
   return (
     <div className="upload-shell">
-      <header className="upload-head">
-        <div className="upload-head-text">
-          <span className="upload-eyebrow">JAR / DIST → DOCKER → HARBOR</span>
-          <h1 className="upload-title">上传推送</h1>
-          <p className="upload-sub">选择构建产物，按需调整镜像参数，一键打包并推送到 Harbor 仓库</p>
-        </div>
+      <PanelPageHeader
+        eyebrow="JAR / DIST → DOCKER → HARBOR"
+        title="上传推送"
+        sub="选择构建产物，按需调整镜像参数，一键打包并推送到 Harbor 仓库"
+      >
         <ol className="upload-steps" aria-label="构建流程">
           <li className={`upload-step ${hasArtifact ? "done" : "active"}`}>
             <span className="upload-step-num">{hasArtifact ? "✓" : "1"}</span>
@@ -80,7 +81,7 @@ export function UploadPanel({
             <span className="upload-step-label">构建推送</span>
           </li>
         </ol>
-      </header>
+      </PanelPageHeader>
 
       <div
         className={`drop-zone ${isDragOver ? "drag-over" : ""} ${hasArtifact ? "has-file" : ""}`}
@@ -271,7 +272,7 @@ export function UploadPanel({
           </Button>
           <Collapse expanded={showBuildLog}>
             <Paper
-              className={`log-panel upload-log ${log.includes("✅") ? "success" : ""}`}
+              className={`log-panel upload-log ${isCompactSuccessLog(log) ? "success" : ""}`}
               p="xs"
               radius="md"
             >

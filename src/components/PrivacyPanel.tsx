@@ -13,14 +13,14 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
   Badge,
   ActionIcon,
   Tooltip,
 } from "@mantine/core";
-import { Copy, Download, ExternalLink, FileUp, Loader2, Shield, Trash2 } from "lucide-react";
+import { Copy, Download, ExternalLink, FileUp, Loader2, Trash2 } from "lucide-react";
 import { isTauriRuntime } from "../types";
 import { useConfirmDialog } from "../hooks/useConfirmDialog";
+import { PanelPageHeader } from "./PanelPageHeader";
 import "../styles/privacy.css";
 import "../styles/ops-panel.css";
 
@@ -336,17 +336,11 @@ export function PrivacyPanel() {
 
   return (
     <Stack gap="md" className="privacy-panel">
-        <Group gap="sm" align="flex-start" wrap="nowrap">
-          <Shield size={20} color="var(--color-primary)" style={{ marginTop: 2, flexShrink: 0 }} />
-          <div style={{ minWidth: 0 }}>
-            <Title order={3} c="var(--color-text)" style={{ lineHeight: 1.25 }}>
-              隐私协议
-            </Title>
-            <Text size="xs" c="var(--color-text-muted)" mt={4}>
-              不填目标地址为新增；填写访问 URL 可解析目录、预览后覆盖该目录 index.html。历史仅保存在本机。
-            </Text>
-          </div>
-        </Group>
+      <PanelPageHeader
+        eyebrow="TEMPLATE → PREVIEW → FTP"
+        title="隐私协议"
+        sub="不填目标地址为新增；填写访问 URL 可解析目录、预览后覆盖该目录 index.html。历史仅保存在本机。"
+      />
 
         <Paper
           p="md"

@@ -14,12 +14,10 @@ import {
   Switch,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import {
   CheckCircle,
   ExternalLink,
-  FileText,
   FolderOpen,
   Loader2,
   Play,
@@ -27,6 +25,7 @@ import {
 
 import type { SettlementGenerateResult } from "../types";
 import { isTauriRuntime } from "../types";
+import { PanelPageHeader } from "./PanelPageHeader";
 import "../styles/ops-panel.css";
 
 type PathPickerProps = {
@@ -209,17 +208,11 @@ export function SettlementPanel() {
   return (
     <Box className="settlement-panel">
       <Stack gap="md">
-        <Group gap="sm" align="flex-start" wrap="nowrap">
-          <FileText size={20} color="var(--color-primary)" style={{ marginTop: 2, flexShrink: 0 }} />
-          <div style={{ minWidth: 0 }}>
-            <Title order={3} c="var(--color-text)" style={{ lineHeight: 1.25 }}>
-              结算单
-            </Title>
-            <Text size="xs" c="var(--color-text-muted)" mt={4}>
-              选择渠道打款表与结算数据，生成结算单文件。
-            </Text>
-          </div>
-        </Group>
+        <PanelPageHeader
+          eyebrow="CHANNEL TABLE → SETTLEMENT → XLSX"
+          title="结算单"
+          sub="选择渠道打款表与结算数据，生成结算单文件"
+        />
 
         <Paper p="md" radius="md">
           <Stack gap="md">
