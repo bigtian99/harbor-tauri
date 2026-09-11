@@ -326,11 +326,11 @@ body {
   padding-inline-end: 28px;
 }
 
-/* 设置页：主区锁高，保存条在滚动区外，不压映射列表 */
+/* 设置页：主区锁高，保存条在滚动区外，不压映射列表；左边距留给折叠钮，避免挡页头 */
 .content:has(.ks-publish-panel) {
   padding-block: 12px;
   padding-inline-end: 12px;
-  padding-inline-start: calc(var(--app-shell-navbar-offset, 0rem) + 12px) !important;
+  padding-inline-start: calc(var(--app-shell-navbar-offset, 0rem) + 28px) !important;
 }
 
 .ks-publish-panel {
@@ -584,6 +584,23 @@ body {
   box-shadow:
     0 24px 48px rgba(0, 0, 0, 0.45),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.ks-batch-branch-status {
+  min-height: 2.6em;
+  line-height: 1.3;
+}
+
+.ks-batch-merge-scroll {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.ks-batch-merge-tip,
+.ks-batch-footer-status {
+  min-height: 1.3em;
+  line-height: 1.3;
 }
 
 .ks-batch-meta-panel {

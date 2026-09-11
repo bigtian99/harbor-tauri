@@ -375,31 +375,38 @@ pub async fn list_remote_branches(repo_path: String) -> Result<RemoteBranchListR
     .map_err(|e| format!("读取远程分支线程异常: {e}"))?
 }
 
-/// 在仓库目录执行 git 命令，捕获 stdout/stderr 与退出码。
-fn run_git_capture(repo_root: &PathBuf, args: &[&str]) -> (bool, String, String) {
+/// 在仓库目录执行 git 命令，捕获退出码与 stdout/stderr。
+/// 启动失败时 code = -1。
+fn run_git_capture_code(repo_root: &PathBuf, args: &[&str]) -> (i32, String, String) {
     let out = silent_command("git")
         .args(args)
         .current_dir(repo_root)
         .output();
     match out {
         Ok(o) => (
-            o.status.success(),
+            o.status.code().unwrap_or(-1),
             String::from_utf8_lossy(&o.stdout).to_string(),
             String::from_utf8_lossy(&o.stderr).to_string(),
         ),
-        Err(e) => (false, String::new(), format!("启动 git 失败: {e}")),
+        Err(e) => (-1, String::new(), format!("启动 git 失败: {e}")),
     }
+}
+
+/// 兼容旧调用：只关心是否 success。
+fn run_git_capture(repo_root: &PathBuf, args: &[&str]) -> (bool, String, String) {
+    let (code, stdout, stderr) = run_git_capture_code(repo_root, args);
+    (code == 0, stdout, stderr)
 }
 
 /// 预检把远程 source 合并进远程 target 是否会冲突。不改动工作区。
 ///
 /// source / target 形如 `origin/feature`、`origin/master`。用 `git merge-tree --write-tree target source`
 /// （Git ≥ 2.38）直接对远程引用求值：
-/// - 无冲突：退出码 0，stdout 输出 tree SHA。
-/// - 有冲突：退出码 1，stdout 依次输出 tree SHA、空行、冲突文件列表。
+/// - 退出码 0：无冲突，stdout 为 tree SHA
+/// - 退出码 1：有冲突，stdout 含 tree SHA + 冲突文件信息
+/// - 其它退出码：参数/引用错误等，不应标成「冲突」
 ///
-/// 对老版本 Git（不识别 --write-tree），回退到 `git merge-tree $(git merge-base target source) target source`，
-/// 解析输出中是否含冲突标记来判定。
+/// 对老版本 Git（不识别 --write-tree），回退到 `git merge-tree $(git merge-base target source) target source`。
 #[tauri::command]
 pub async fn check_remote_merge(
     repo_path: String,
@@ -416,58 +423,201 @@ pub async fn check_remote_merge(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let repo_root = resolve_repo_root(&repo_path)?;
+        crate::diag::diag_log(
+            "git",
+            &format!(
+                "check_remote_merge repo={} source={} target={}",
+                repo_root.display(),
+                source,
+                target
+            ),
+        );
 
         // 优先用新语法 --write-tree，直接对远程引用求值
-        let (ok, stdout, stderr) = run_git_capture(
+        let (code, stdout, stderr) = run_git_capture_code(
             &repo_root,
             &["merge-tree", "--write-tree", "--no-messages", &target, &source],
         );
         if stderr.contains("unknown option") || stderr.contains("usage:") {
-            // 老版本回退：用 merge-base + merge-tree（无 --write-tree）
-            let (base_ok, base_out, _) = run_git_capture(&repo_root, &["merge-base", &target, &source]);
-            if !base_ok {
-                return Ok(LocalMergeCheck {
-                    can_merge: false,
-                    conflict_files: Vec::new(),
-                    message: format!("无法计算 {} 与 {} 的共同祖先", target, source),
-                });
-            }
-            let base = base_out.trim();
-            let (_, tree_out, _) = run_git_capture(&repo_root, &["merge-tree", base, &target, &source]);
-            let has_conflict = tree_out.contains("<<<<<<<") || tree_out.contains("=======") || tree_out.contains(">>>>>>>");
-            return Ok(LocalMergeCheck {
-                can_merge: !has_conflict,
-                conflict_files: Vec::new(),
-                message: if has_conflict {
-                    "存在冲突".to_string()
-                } else {
-                    "无冲突，可直接合并".to_string()
-                },
-            });
+            return check_remote_merge_legacy(&repo_root, &source, &target);
         }
 
-        if ok {
-            Ok(LocalMergeCheck {
+        if code == 0 {
+            crate::diag::diag_log("git", "check_remote_merge ok: clean");
+            return Ok(LocalMergeCheck {
                 can_merge: true,
                 conflict_files: Vec::new(),
                 message: "无冲突，可直接合并".to_string(),
-            })
-        } else {
-            let conflict_files = parse_merge_tree_conflicts(&stdout);
-            let message = if conflict_files.is_empty() {
-                "存在冲突".to_string()
-            } else {
-                format!("存在冲突，涉及 {} 个文件", conflict_files.len())
-            };
-            Ok(LocalMergeCheck {
-                can_merge: false,
-                conflict_files,
-                message,
-            })
+            });
         }
+
+        // 仅退出码 1 表示「有冲突」；其它（如 128）是引用不存在等硬错误
+        if code != 1 {
+            let detail = first_git_error_line(&stderr, &stdout);
+            crate::diag::diag_log(
+                "git",
+                &format!("check_remote_merge error code={code} detail={detail}"),
+            );
+            return Err(format!(
+                "合并预检失败（{} → {}）：{}",
+                source, target, detail
+            ));
+        }
+
+        let conflict_files = collect_merge_tree_conflict_files(&repo_root, &source, &target, &stdout, &stderr);
+        crate::diag::diag_log(
+            "git",
+            &format!(
+                "check_remote_merge conflict files={} sample={:?}",
+                conflict_files.len(),
+                conflict_files.iter().take(5).collect::<Vec<_>>()
+            ),
+        );
+        let message = if conflict_files.is_empty() {
+            "存在冲突，但未能解析冲突文件列表".to_string()
+        } else {
+            format!("存在冲突，涉及 {} 个文件", conflict_files.len())
+        };
+        Ok(LocalMergeCheck {
+            can_merge: false,
+            conflict_files,
+            message,
+        })
     })
     .await
     .map_err(|e| format!("合并预检线程异常: {e}"))?
+}
+
+fn first_git_error_line(stderr: &str, stdout: &str) -> String {
+    for line in stderr.lines().chain(stdout.lines()) {
+        let t = line.trim();
+        if !t.is_empty() {
+            return t.to_string();
+        }
+    }
+    "git merge-tree 失败（无详细输出）".to_string()
+}
+
+fn check_remote_merge_legacy(
+    repo_root: &PathBuf,
+    source: &str,
+    target: &str,
+) -> Result<LocalMergeCheck, String> {
+    let (base_code, base_out, base_err) =
+        run_git_capture_code(repo_root, &["merge-base", target, source]);
+    if base_code != 0 {
+        let detail = first_git_error_line(&base_err, &base_out);
+        return Err(format!(
+            "无法计算 {} 与 {} 的共同祖先：{}",
+            target, source, detail
+        ));
+    }
+    let base = base_out.trim();
+    let (tree_code, tree_out, tree_err) =
+        run_git_capture_code(repo_root, &["merge-tree", base, target, source]);
+    if tree_code != 0 && tree_out.trim().is_empty() && !tree_err.trim().is_empty() {
+        return Err(format!(
+            "合并预检失败（{} → {}）：{}",
+            source,
+            target,
+            first_git_error_line(&tree_err, &tree_out)
+        ));
+    }
+    let mut has_conflict =
+        tree_out.contains("<<<<<<<") || tree_out.contains("=======") || tree_out.contains(">>>>>>>");
+    let conflict_files = parse_legacy_merge_tree_conflicts(&tree_out);
+    if !has_conflict && !conflict_files.is_empty() {
+        has_conflict = true;
+    }
+    let message = if has_conflict {
+        if conflict_files.is_empty() {
+            "存在冲突，但未能解析冲突文件列表".to_string()
+        } else {
+            format!("存在冲突，涉及 {} 个文件", conflict_files.len())
+        }
+    } else {
+        "无冲突，可直接合并".to_string()
+    };
+    Ok(LocalMergeCheck {
+        can_merge: !has_conflict,
+        conflict_files,
+        message,
+    })
+}
+
+/// 从 --write-tree 输出收集冲突路径；为空时再试 --name-only / 带 messages。
+fn collect_merge_tree_conflict_files(
+    repo_root: &PathBuf,
+    source: &str,
+    target: &str,
+    stdout: &str,
+    stderr: &str,
+) -> Vec<String> {
+    let mut files = parse_merge_tree_conflicts(stdout);
+    if files.is_empty() {
+        files = parse_legacy_merge_tree_conflicts(stdout);
+    }
+    if files.is_empty() {
+        files = parse_legacy_merge_tree_conflicts(stderr);
+    }
+    if files.is_empty() {
+        let (name_code, name_out, name_err) = run_git_capture_code(
+            repo_root,
+            &["merge-tree", "--write-tree", "--name-only", target, source],
+        );
+        if name_code == 1 || name_code == 0 {
+            files = parse_merge_tree_name_only(&name_out);
+            if files.is_empty() {
+                files = parse_legacy_merge_tree_conflicts(&name_out);
+            }
+            if files.is_empty() {
+                files = parse_legacy_merge_tree_conflicts(&name_err);
+            }
+        }
+    }
+    if files.is_empty() {
+        // 最后再跑一次带 messages 的，解析 "CONFLICT ... in path"
+        let (msg_code, msg_out, msg_err) = run_git_capture_code(
+            repo_root,
+            &["merge-tree", "--write-tree", "--messages", target, source],
+        );
+        if msg_code == 1 {
+            files = parse_legacy_merge_tree_conflicts(&msg_out);
+            if files.is_empty() {
+                files = parse_legacy_merge_tree_conflicts(&msg_err);
+            }
+            if files.is_empty() {
+                files = parse_merge_tree_conflicts(&msg_out);
+            }
+        }
+    }
+    files
+}
+
+/// `--name-only`：首行可能是 tree OID，其后每行一个冲突路径。
+fn parse_merge_tree_name_only(stdout: &str) -> Vec<String> {
+    let mut files: Vec<String> = Vec::new();
+    for (i, line) in stdout.lines().enumerate() {
+        let path = line.trim();
+        if path.is_empty() {
+            continue;
+        }
+        // 首行常为 40 位 OID
+        if i == 0 && path.len() >= 40 && path.bytes().all(|b| b.is_ascii_hexdigit()) {
+            continue;
+        }
+        // 过滤 stage 行（含 tab）——若误开非 name-only
+        let path = if let Some(pos) = path.rfind('\t') {
+            path[pos + 1..].trim()
+        } else {
+            path
+        };
+        if path.is_empty() || files.iter().any(|f| f == path) {
+            continue;
+        }
+        files.push(path.to_string());
+    }
+    files
 }
 
 /// 获取冲突文件在两个分支中的内容，用于左右对比展示。
@@ -529,6 +679,44 @@ fn parse_merge_tree_conflicts(stdout: &str) -> Vec<String> {
             let path = line[pos + 1..].trim().to_string();
             if !path.is_empty() && !files.contains(&path) {
                 files.push(path);
+            }
+        }
+    }
+    files
+}
+
+/// 旧版 `git merge-tree <base> <ours> <theirs>` / 文本冲突输出中提取路径。
+fn parse_legacy_merge_tree_conflicts(stdout: &str) -> Vec<String> {
+    let mut files: Vec<String> = Vec::new();
+    let push_unique = |files: &mut Vec<String>, path: &str| {
+        let path = path.trim().trim_matches('"');
+        if !path.is_empty() && !path.starts_with('<') && !files.iter().any(|f| f == path) {
+            files.push(path.to_string());
+        }
+    };
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("CONFLICT") {
+            if let Some(idx) = rest.rfind(" in ") {
+                push_unique(&mut files, &rest[idx + 4..]);
+                continue;
+            }
+        }
+        // changed in both / added in both 等块里：`  our    100644 <hash> <path>`
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.starts_with("base")
+            || lower.starts_with("our")
+            || lower.starts_with("their")
+            || lower.starts_with("result")
+        {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() >= 4 {
+                // mode hash path…（path 可能含空格，取第 4 段起）
+                let path = parts[3..].join(" ");
+                if path.contains('/') || path.contains('.') {
+                    push_unique(&mut files, &path);
+                }
             }
         }
     }
@@ -976,4 +1164,42 @@ pub async fn match_git_repo_paths(paths: Vec<String>) -> Result<Vec<GitRepoPathM
     })
     .await
     .map_err(|e| format!("match_git_repo_paths 线程异常: {e}"))?
+}
+
+#[cfg(test)]
+mod conflict_parse_tests {
+    use super::{
+        parse_legacy_merge_tree_conflicts, parse_merge_tree_conflicts, parse_merge_tree_name_only,
+    };
+
+    #[test]
+    fn parse_write_tree_conflict_paths() {
+        let out = "abc123tree\n100644 blob1 1\tsrc/A.java\n100644 blob2 2\tsrc/A.java\n100644 blob3 3\tsrc/A.java\n100644 x 1\tREADME.md\n";
+        let files = parse_merge_tree_conflicts(out);
+        assert_eq!(files, vec!["src/A.java".to_string(), "README.md".to_string()]);
+    }
+
+    #[test]
+    fn parse_legacy_conflict_paths() {
+        let out = r#"
+changed in both
+  base   100644 aaa src/main/App.java
+  our    100644 bbb src/main/App.java
+  their  100644 ccc src/main/App.java
+<<<<<<< .our
+=======
+>>>>>>> .their
+CONFLICT (content): Merge conflict in conf/application.yml
+"#;
+        let files = parse_legacy_merge_tree_conflicts(out);
+        assert!(files.contains(&"src/main/App.java".to_string()));
+        assert!(files.contains(&"conf/application.yml".to_string()));
+    }
+
+    #[test]
+    fn parse_name_only_skips_oid_line() {
+        let out = "0123456789abcdef0123456789abcdef01234567\nsrc/A.java\nREADME.md\n";
+        let files = parse_merge_tree_name_only(out);
+        assert_eq!(files, vec!["src/A.java".to_string(), "README.md".to_string()]);
+    }
 }

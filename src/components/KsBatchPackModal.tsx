@@ -4,6 +4,7 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Group,
   Loader,
   Modal,
@@ -14,6 +15,7 @@ import {
   Select,
   SimpleGrid,
   Stack,
+  Table,
   Text,
   ThemeIcon,
 } from "@mantine/core";
@@ -30,9 +32,16 @@ import {
   type KsBatchNpmScriptPref,
 } from "../utils/ksBatchPackPublish";
 import {
+  buildIdleKsBatchMergeRows,
+  checkKsBatchMergesParallel,
+  type KsBatchMergeRow,
+} from "../utils/ksBatchMerge";
+import { KsBatchMergeConflictFilesModal } from "./KsBatchMergeConflictFilesModal";
+import {
   CheckCircle2,
   Check,
   GitBranch,
+  GitMerge,
   Layers3,
   Package,
   RefreshCw,
@@ -67,6 +76,9 @@ export interface KsBatchMeta {
 export interface KsBatchConfirmValues {
   branch: string;
   npmScript: KsBatchNpmScriptPref;
+  /** 先按源→目标合并各仓库，再打包推送发布 */
+  mergeBeforePack: boolean;
+  sourceBranch: string;
 }
 
 export interface KsBatchSummary {
@@ -93,6 +105,8 @@ interface KsBatchConfirmModalProps {
   onConcurrencyPrefChange: (n: number) => void;
   onClose: () => void;
   onStart: (values: KsBatchConfirmValues) => void;
+  /** 选中部署映射到的本地仓库（去重），供可选合并预检 */
+  mergeRepoPaths?: string[];
 }
 
 export function KsBatchConfirmModal({
@@ -111,10 +125,19 @@ export function KsBatchConfirmModal({
   onConcurrencyPrefChange,
   onClose,
   onStart,
+  mergeRepoPaths = [],
 }: KsBatchConfirmModalProps) {
   const [branch, setBranch] = useState(initialBranch);
   const [npmMode, setNpmMode] = useState<KsBatchNpmScriptMode>(initialNpmScript.mode);
   const [npmCustom, setNpmCustom] = useState(initialNpmScript.customScript);
+  const [mergeBeforePack, setMergeBeforePack] = useState(false);
+  const [sourceBranch, setSourceBranch] = useState("");
+  const [mergeRows, setMergeRows] = useState<KsBatchMergeRow[]>([]);
+  const [mergeChecking, setMergeChecking] = useState(false);
+  const [mergeCheckDone, setMergeCheckDone] = useState(false);
+  const [conflictViewRow, setConflictViewRow] = useState<KsBatchMergeRow | null>(null);
+  const mergeCheckCancel = useRef({ cancelled: false });
+  const didAutoPickBranch = useRef(false);
 
   const safeBranchGroups = useMemo(
     () => normalizeKsBatchBranchOptionGroups(branchOptionGroups),
@@ -137,21 +160,43 @@ export function KsBatchConfirmModal({
     return new Set(gitGroup?.items ?? []);
   }, [safeBranchGroups]);
 
+  // 仅在弹窗打开时重置表单；不要把 gitBranchesLoading 放进依赖，
+  // 否则点「拉取仓库分支」会整页重置，居中弹窗随高度先缩再胀。
   useEffect(() => {
-    if (!opened) return;
-    setNpmMode(initialNpmScript.mode);
-    setNpmCustom(initialNpmScript.customScript);
-    const preferred = initialBranch.trim();
-    if (preferred) {
-      setBranch(preferred);
+    if (!opened) {
+      mergeCheckCancel.current.cancelled = true;
+      setMergeChecking(false);
       return;
     }
-    if (!gitBranchesLoading && allBranchNames.length > 0) {
-      setBranch(allBranchNames[0]);
-    } else {
-      setBranch("");
-    }
-  }, [opened, initialBranch, initialNpmScript, gitBranchesLoading, allBranchNames]);
+    didAutoPickBranch.current = false;
+    setNpmMode(initialNpmScript.mode);
+    setNpmCustom(initialNpmScript.customScript);
+    setMergeBeforePack(false);
+    setSourceBranch("");
+    setMergeCheckDone(false);
+    mergeCheckCancel.current.cancelled = true;
+    setMergeChecking(false);
+    setMergeRows(buildIdleKsBatchMergeRows(mergeRepoPaths));
+    const preferred = initialBranch.trim();
+    setBranch(preferred);
+    if (preferred) didAutoPickBranch.current = true;
+  }, [opened, initialBranch, initialNpmScript, mergeRepoPaths]);
+
+  // 打开后若无初始分支，列表就绪时只自动补一次，不清空用户手动清除
+  useEffect(() => {
+    if (!opened || gitBranchesLoading || didAutoPickBranch.current) return;
+    if (allBranchNames.length === 0) return;
+    didAutoPickBranch.current = true;
+    setBranch((prev) => (prev.trim() ? prev : allBranchNames[0]));
+  }, [opened, gitBranchesLoading, allBranchNames]);
+
+  /** 换分支只清空结果，不自动预检 */
+  useEffect(() => {
+    if (!mergeBeforePack) return;
+    setMergeCheckDone(false);
+    setConflictViewRow(null);
+    setMergeRows(buildIdleKsBatchMergeRows(mergeRepoPaths));
+  }, [sourceBranch, branch, mergeBeforePack, mergeRepoPaths]);
 
   const count = meta?.deployNames.length ?? 0;
   const effective =
@@ -174,14 +219,92 @@ export function KsBatchConfirmModal({
   const npmReady = !hasFrontendDeploys
     || npmMode !== "custom"
     || npmCustom.trim().length > 0;
-  const canStart = count > 0 && branchReady && npmReady && !gitBranchesLoading;
+  const sourceReady = !mergeBeforePack || sourceBranch.trim().length > 0;
+  const sourceDiffers = !mergeBeforePack
+    || (sourceBranch.trim() !== "" && sourceBranch.trim() !== branch.trim());
+  const mergePrecheckReady = !mergeBeforePack || mergeCheckDone;
+  const canStart = count > 0
+    && branchReady
+    && npmReady
+    && !gitBranchesLoading
+    && sourceReady
+    && sourceDiffers
+    && !mergeChecking
+    && (mergeBeforePack ? mergeRepoPaths.length > 0 : true)
+    && mergePrecheckReady;
+
+  const mergeCheckProgress = useMemo(() => {
+    if (mergeRows.length === 0) return { done: 0, total: 0, pct: 0 };
+    const done = mergeRows.filter((r) => r.status !== "idle" && r.status !== "checking").length;
+    return {
+      done,
+      total: mergeRows.length,
+      pct: Math.round((done / mergeRows.length) * 100),
+    };
+  }, [mergeRows]);
+
+  const runMergeCheck = async () => {
+    if (!mergeBeforePack || mergeRepoPaths.length === 0) return;
+    if (!sourceBranch.trim() || !branch.trim()) return;
+    mergeCheckCancel.current = { cancelled: false };
+    setMergeChecking(true);
+    setMergeCheckDone(false);
+    setMergeRows(buildIdleKsBatchMergeRows(mergeRepoPaths).map((r) => ({
+      ...r,
+      status: "checking",
+      message: "等待中…",
+    })));
+    try {
+      await checkKsBatchMergesParallel(
+        mergeRepoPaths,
+        sourceBranch.trim(),
+        branch.trim(),
+        {
+          concurrency: 4,
+          signal: mergeCheckCancel.current,
+          onUpdate: (rows) => setMergeRows(rows),
+        },
+      );
+      if (!mergeCheckCancel.current.cancelled) {
+        setMergeCheckDone(true);
+      }
+    } finally {
+      setMergeChecking(false);
+    }
+  };
 
   const handleStart = () => {
     if (!canStart) return;
     onStart({
       branch: branch.trim(),
       npmScript: npmScriptPref,
+      mergeBeforePack,
+      sourceBranch: mergeBeforePack ? sourceBranch.trim() : "",
     });
+  };
+
+  const mergeStatusColor = (status: KsBatchMergeRow["status"]) => {
+    if (status === "ok" || status === "merged") return "teal";
+    if (status === "conflict") return "yellow";
+    if (status === "error") return "red";
+    if (status === "checking" || status === "merging") return "cyan";
+    return "gray";
+  };
+
+  const mergeStatusLabel = (row: KsBatchMergeRow) => {
+    switch (row.status) {
+      case "idle": return "未检查";
+      case "checking": return "检查中";
+      case "ok": return "可合并";
+      case "conflict":
+        return row.conflictFiles.length > 0
+          ? `冲突 ${row.conflictFiles.length}`
+          : "有冲突";
+      case "error": return "失败";
+      case "merging": return "合并中";
+      case "merged": return "已合并";
+      default: return row.status;
+    }
   };
 
   return (
@@ -194,7 +317,7 @@ export function KsBatchConfirmModal({
       radius="md"
       overlayProps={{ backgroundOpacity: 0.55 }}
       lockScroll={false}
-      transitionProps={{ duration: 120 }}
+      transitionProps={{ transition: "fade", duration: 120 }}
       title={(
         <Group gap="sm" wrap="nowrap">
           <ThemeIcon size={36} radius="md" variant="light" color="cyan">
@@ -245,7 +368,7 @@ export function KsBatchConfirmModal({
             <Group gap={6}>
               <GitBranch size={14} className="ks-batch-meta-icon" />
               <Text size="sm" fw={600}>
-                目标分支
+                {mergeBeforePack ? "目标分支（合并到 · 打包）" : "目标分支"}
               </Text>
             </Group>
             <Button
@@ -292,20 +415,205 @@ export function KsBatchConfirmModal({
               </Group>
             )}
           />
-          {gitBranchesError && (
-            <Text size="xs" c="red">
-              {gitBranchesError}
-            </Text>
-          )}
-          {!gitBranchesLoading && gitRepoCount > 0 && (
-            <Text size="xs" c="dimmed">
-              已从 {gitRepoCount} 个本地仓库 fetch；下拉含「最近使用」与「仓库分支」
-            </Text>
-          )}
+          {/* 固定一行状态区，避免拉取时高度跳动导致居中弹窗「缩小再大」 */}
+          <Text
+            size="xs"
+            c={gitBranchesError ? "red" : "dimmed"}
+            className="ks-batch-branch-status"
+            lineClamp={2}
+          >
+            {gitBranchesLoading
+              ? "正在拉取仓库分支…"
+              : gitBranchesError
+                ? gitBranchesError
+                : gitRepoCount > 0
+                  ? `已从 ${gitRepoCount} 个本地仓库 fetch；下拉含「最近使用」与「仓库分支」`
+                  : "点击「拉取仓库分支」从本地仓库同步"}
+          </Text>
           {!gitBranchesLoading && branch.trim() && gitBranchSet.size > 0 && !branchInGitList && (
             <Text size="xs" c="orange">
               「{branch.trim()}」来自最近使用记录，请确认仓库存在该引用
             </Text>
+          )}
+        </Stack>
+
+        <Stack gap="sm">
+          <Checkbox
+            label={(
+              <Group gap={6}>
+                <GitMerge size={14} />
+                <Text size="sm" fw={600}>先合并再打包</Text>
+              </Group>
+            )}
+            description="各仓库统一：源分支 → 目标分支；合完后按目标分支打包 → 推送 → 发布 K8s"
+            checked={mergeBeforePack}
+            onChange={(e) => {
+              const on = e.currentTarget.checked;
+              setMergeBeforePack(on);
+              setMergeCheckDone(false);
+              setMergeRows(buildIdleKsBatchMergeRows(mergeRepoPaths));
+            }}
+          />
+          {mergeBeforePack && (
+            <Stack gap="xs" pl={4}>
+              <Select
+                label="源分支"
+                description={
+                  branch.trim()
+                    ? `合并进上方目标分支「${branch.trim()}」`
+                    : "请先选上方目标分支"
+                }
+                searchable
+                clearable
+                withCheckIcon={false}
+                placeholder={gitBranchesLoading ? "正在拉取分支…" : "请选择源分支"}
+                data={branchSelectData}
+                value={sourceBranch || null}
+                onChange={(v) => setSourceBranch(v ?? "")}
+                disabled={gitBranchesLoading}
+                nothingFoundMessage="无匹配分支"
+                aria-label="批量合并源分支"
+                comboboxProps={{ withinPortal: true }}
+              />
+              {sourceBranch.trim() && sourceBranch.trim() === branch.trim() && (
+                <Text size="xs" c="orange">源分支与目标分支相同，无需合并</Text>
+              )}
+              {mergeRepoPaths.length === 0 && (
+                <Text size="xs" c="orange">
+                  当前选中部署未解析到本地仓库，请检查 KS 发布映射
+                </Text>
+              )}
+              <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+                <Text size="xs" c="dimmed">
+                  {mergeRepoPaths.length} 个仓库 · 点「检查冲突」才预检（不会自动检查）
+                </Text>
+                <Button
+                  size="compact-sm"
+                  variant="light"
+                  color="cyan"
+                  leftSection={mergeChecking ? <Loader size={12} /> : <GitMerge size={12} />}
+                  disabled={
+                    mergeChecking
+                    || mergeRepoPaths.length === 0
+                    || !sourceBranch.trim()
+                    || !branch.trim()
+                    || sourceBranch.trim() === branch.trim()
+                  }
+                  onClick={() => void runMergeCheck()}
+                >
+                  {mergeChecking ? "检查中…" : "检查冲突"}
+                </Button>
+              </Group>
+              <Paper withBorder p="sm" radius="md" className="ks-batch-merge-precheck">
+                <Stack gap={8}>
+                  <Group justify="space-between" align="flex-end" wrap="nowrap" gap="sm">
+                    <Stack gap={2} style={{ minWidth: 0 }}>
+                      <Text size="xs" fw={600}>
+                        冲突预检进度
+                        {!mergeChecking && !mergeCheckDone ? " · 未开始" : ""}
+                        {mergeChecking ? " · 检查中" : ""}
+                        {mergeCheckDone && !mergeChecking ? " · 已完成" : ""}
+                      </Text>
+                      <Text size="sm" fw={700} lh={1.2}>
+                        {mergeCheckProgress.done}
+                        {" / "}
+                        {Math.max(mergeCheckProgress.total, mergeRows.length)}
+                        <Text span size="xs" c="dimmed" fw={500} ml={6}>
+                          （{mergeRows.length === 0 ? 0 : mergeCheckProgress.pct}%）
+                        </Text>
+                      </Text>
+                    </Stack>
+                  </Group>
+                  <Progress
+                    value={mergeRows.length === 0 ? 0 : mergeCheckProgress.pct}
+                    size="md"
+                    radius="xl"
+                    animated={mergeChecking}
+                    className="jp-progress-mantine"
+                  />
+                  {/* 固定高度，避免逐行回写时 ScrollArea 变高带动弹窗跳动 */}
+                  <ScrollArea h={200} type="auto" offsetScrollbars className="ks-batch-merge-scroll">
+                    {mergeRows.length === 0 ? (
+                      <Text size="xs" c="dimmed" py="sm">暂无仓库列表</Text>
+                    ) : (
+                      <Table
+                        striped
+                        highlightOnHover
+                        verticalSpacing={6}
+                        horizontalSpacing="sm"
+                        fz="xs"
+                      >
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th w={36}>#</Table.Th>
+                            <Table.Th>仓库</Table.Th>
+                            <Table.Th w={88}>状态</Table.Th>
+                            <Table.Th>说明</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {mergeRows.map((row, index) => {
+                            const clickable = row.status === "conflict";
+                            return (
+                              <Table.Tr
+                                key={row.repoPath}
+                                style={clickable ? { cursor: "pointer" } : undefined}
+                                onClick={clickable ? () => setConflictViewRow(row) : undefined}
+                                title={clickable ? "点击查看冲突文件" : undefined}
+                              >
+                                <Table.Td c="dimmed">{index + 1}</Table.Td>
+                                <Table.Td>
+                                  <Text size="xs" fw={600} truncate title={row.repoPath}>
+                                    {row.name}
+                                  </Text>
+                                </Table.Td>
+                                <Table.Td>
+                                  <Badge size="sm" variant="light" color={mergeStatusColor(row.status)}>
+                                    {mergeStatusLabel(row)}
+                                  </Badge>
+                                </Table.Td>
+                                <Table.Td>
+                                  <Text
+                                    size="xs"
+                                    c={
+                                      row.status === "error"
+                                        ? "red"
+                                        : clickable
+                                          ? "yellow"
+                                          : "dimmed"
+                                    }
+                                    lineClamp={2}
+                                    title={row.message || undefined}
+                                  >
+                                    {clickable
+                                      ? (row.conflictFiles.length > 0
+                                        ? `${row.message || "存在冲突"} · 点击查看 ${row.conflictFiles.length} 个文件`
+                                        : `${row.message || "存在冲突"} · 点击查看`)
+                                      : (row.message || (row.status === "idle" ? "待检查" : "—"))}
+                                  </Text>
+                                </Table.Td>
+                              </Table.Tr>
+                            );
+                          })}
+                        </Table.Tbody>
+                      </Table>
+                    )}
+                  </ScrollArea>
+                  <Text
+                    size="xs"
+                    c="yellow"
+                    className="ks-batch-merge-tip"
+                    style={{
+                      visibility: mergeCheckDone && mergeRows.some((r) => r.status === "conflict")
+                        ? "visible"
+                        : "hidden",
+                    }}
+                  >
+                    存在冲突仍可开始；合并阶段失败时将中止后续打包发布
+                  </Text>
+                </Stack>
+              </Paper>
+            </Stack>
           )}
         </Stack>
 
@@ -413,6 +721,20 @@ export function KsBatchConfirmModal({
         <Text size="xs" c="dimmed" lh={1.55}>
           本次将按并发 {effective} 执行；日志可能交错显示。
         </Text>
+        {/* 固定占位，避免点「检查冲突」时提示消失/出现导致弹窗高度跳动 */}
+        {mergeBeforePack && (
+          <Text
+            size="xs"
+            c={mergeCheckDone ? "teal" : "orange"}
+            className="ks-batch-footer-status"
+          >
+            {mergeChecking
+              ? "正在检查冲突…"
+              : mergeCheckDone
+                ? "冲突预检已完成，可以开始执行"
+                : "请先点击「检查冲突」完成预检后再开始"}
+          </Text>
+        )}
 
         <Group justify="flex-end" gap="sm" mt={4}>
           <Button variant="default" onClick={onClose}>
@@ -429,6 +751,13 @@ export function KsBatchConfirmModal({
           </Button>
         </Group>
       </Stack>
+
+      <KsBatchMergeConflictFilesModal
+        row={conflictViewRow}
+        sourceBranch={sourceBranch}
+        targetBranch={branch}
+        onClose={() => setConflictViewRow(null)}
+      />
     </Modal>
   );
 }

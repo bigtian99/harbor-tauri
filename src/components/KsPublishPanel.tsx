@@ -36,8 +36,10 @@ import {
   runKsBatchPackPublish,
   saveKsBatchConcurrencyPref,
   saveKsBatchNpmScriptPref,
+  collectKsBatchRepoPaths,
   type KsBatchConcurrencyPref,
 } from "../utils/ksBatchPackPublish";
+import { mergeKsBatchReposSequential } from "../utils/ksBatchMerge";
 import { runKsBatchCloneToEnv } from "../utils/ksBatchCloneDeploy";
 import {
   defaultKsBatchBranch,
@@ -127,6 +129,7 @@ export function KsPublishPanel({
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [batchMeta, setBatchMeta] = useState<KsBatchMeta | null>(null);
+  const [batchMergeRepoPaths, setBatchMergeRepoPaths] = useState<string[]>([]);
   const [batchSummary, setBatchSummary] = useState<KsBatchSummary | null>(null);
   const [batchConcurrencyPref, setBatchConcurrencyPref] = useState<KsBatchConcurrencyPref>(
     () => loadKsBatchConcurrencyPref(),
@@ -758,6 +761,10 @@ export function KsPublishPanel({
     }
 
     const deployNames = selectedDeploys.map((d) => d.name);
+    const deployments = selectedDeploys.map((d) => ({
+      name: d.name,
+      containers: d.containers,
+    }));
     startTransition(() => {
       setBatchMeta({
         branch: batchBranch.trim(),
@@ -766,7 +773,11 @@ export function KsPublishPanel({
         deployNames,
         deployRoles: resolveKsBatchDeployRoles(config, envId, namespace, deployNames),
       });
+      setBatchMergeRepoPaths([]);
       setBatchConfirmOpen(true);
+    });
+    void collectKsBatchRepoPaths(config, envId, namespace, deployments).then(({ repoPaths }) => {
+      setBatchMergeRepoPaths(repoPaths);
     });
   };
 
@@ -775,6 +786,10 @@ export function KsPublishPanel({
     const branch = normalizeBatchBranchInput(values.branch);
     if (!branch) {
       notifications.show({ color: "yellow", message: "请填写目标分支" });
+      return;
+    }
+    if (values.mergeBeforePack && !values.sourceBranch.trim()) {
+      notifications.show({ color: "yellow", message: "请填写合并源分支" });
       return;
     }
 
@@ -795,9 +810,69 @@ export function KsPublishPanel({
     setBatchLog("");
     setBatchProgress(0);
     batchStepLabelRef.current = "";
-    setBatchMessage("正在解析本地仓库…");
+    setBatchMessage(
+      values.mergeBeforePack ? "正在合并分支…" : "正在解析本地仓库…",
+    );
+
+    const appendLog = (line: string) =>
+      setBatchLog((prev) => (prev ? `${prev}\n${line}` : line));
 
     try {
+      if (values.mergeBeforePack) {
+        let repoPaths = batchMergeRepoPaths;
+        if (repoPaths.length === 0) {
+          const collected = await collectKsBatchRepoPaths(
+            config,
+            envId,
+            namespace,
+            selectedDeploys.map((d) => ({ name: d.name, containers: d.containers })),
+          );
+          repoPaths = collected.repoPaths;
+          if (collected.missing.length > 0) {
+            appendLog(`仓库解析告警：\n${collected.missing.map((m) => `  - ${m}`).join("\n")}`);
+          }
+        }
+        if (repoPaths.length === 0) {
+          notifications.show({
+            color: "red",
+            title: "无法合并",
+            message: "未解析到任何本地仓库，请检查 KS 发布映射",
+          });
+          setBatchSummary({ success: 0, failed: selectedDeploys.length, skipped: 0 });
+          return;
+        }
+
+        appendLog(
+          `合并 ${values.sourceBranch.trim()} → ${branch}，仓库 ${repoPaths.length} 个`,
+        );
+        const mergeResult = await mergeKsBatchReposSequential(
+          repoPaths,
+          values.sourceBranch.trim(),
+          branch,
+          {
+            push: true,
+            appendLog,
+            onProgress: (pct, msg) => {
+              batchStepLabelRef.current = msg;
+              setBatchProgress((prev) => Math.max(prev, pct));
+              setBatchMessage(msg);
+            },
+          },
+        );
+        if (!mergeResult.ok) {
+          notifications.show({
+            color: "red",
+            title: "合并中止",
+            message: mergeResult.error ?? "合并失败，已跳过打包发布",
+            autoClose: 8000,
+          });
+          setBatchSummary({ success: 0, failed: selectedDeploys.length, skipped: 0 });
+          return;
+        }
+        setBatchMessage("合并完成，开始打包推送并发布…");
+        setBatchProgress((prev) => Math.max(prev, 42));
+      }
+
       const summary = await runKsBatchPackPublish({
         config,
         envId,
@@ -811,14 +886,18 @@ export function KsPublishPanel({
           name: d.name,
           containers: d.containers,
         })),
-        appendLog: (line) => setBatchLog((prev) => (prev ? `${prev}\n${line}` : line)),
+        appendLog,
         onProgress: (pct, msg, ctx) => {
           batchStepLabelRef.current = msg;
           if (ctx) {
             batchItemIndexRef.current = ctx.itemIndex;
             batchItemTotalRef.current = ctx.itemTotal;
           }
-          setBatchProgress((prev) => Math.max(prev, pct));
+          // 合并已占约 0–42%，打包映射到 42–100
+          const mapped = values.mergeBeforePack
+            ? Math.min(100, Math.round(42 + (pct * 58) / 100))
+            : pct;
+          setBatchProgress((prev) => Math.max(prev, mapped));
           setBatchMessage(msg);
         },
       });
@@ -2318,6 +2397,7 @@ export function KsPublishPanel({
         }}
         onClose={() => setBatchConfirmOpen(false)}
         onStart={(values) => void startBatchPack(values)}
+        mergeRepoPaths={batchMergeRepoPaths}
       />
       )}
       {(batchOpen || batchRunning) && (
