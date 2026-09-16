@@ -28,9 +28,12 @@ export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge, onCon
         resultMessage={m.mergeResultMessage}
         onClose={m.closeMergeOverlay}
       />
-      {m.selectedDiffCommit && (
+      {(m.selectedDiffCommit || m.branchDiffOpen) && (
         <CommitDiffModal
+          mode={m.selectedDiffCommit ? "commit" : "branch"}
           commit={m.selectedDiffCommit}
+          branchLabel={m.branchDiffLabel}
+          branchFileCount={m.commitDiffFiles.length}
           commitDiff={m.commitDiff}
           commitDiffError={m.commitDiffError}
           isLoading={m.isLoadingCommitDiff}
@@ -122,6 +125,7 @@ export function MergePanel({ config, onOpenDirectory, onPackageAfterMerge, onCon
         onSelectAuthor={m.setSelectedAuthor}
         onDiffCommitSearchChange={m.setDiffCommitSearch}
         onOpenCommitDiff={m.openCommitDiffModal}
+        onOpenBranchDiff={() => m.openBranchDiffModal(m.sourceBranch, m.targetBranch)}
       />
     </Stack>
   );

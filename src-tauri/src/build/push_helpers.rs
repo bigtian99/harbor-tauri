@@ -510,7 +510,12 @@ mod push_progress_tests {
 
     #[test]
     fn parses_size_units() {
-        assert_eq!(parse_docker_size("12.3MB"), Some((12.3 * 1024.0 * 1024.0) as u64));
+        // 实现用 round，避免 (f64 as u64) 截断与 12.3MiB 浮点边界不一致
+        assert_eq!(
+            parse_docker_size("12.3MB"),
+            Some((12.3_f64 * 1024.0 * 1024.0).round() as u64)
+        );
+        assert_eq!(parse_docker_size("12MB"), Some(12 * 1024 * 1024));
         assert!(parse_docker_size("1.024kB").is_some());
     }
 

@@ -13,7 +13,7 @@ const quickMerge = readFileSync("src/components/merge/QuickMergeConfigModal.tsx"
 const cloneDeploy = readFileSync("src/utils/ksBatchCloneDeploy.ts", "utf8");
 const ksPublish = readFileSync("src/components/KsPublishPanel.tsx", "utf8");
 const ksConnection = readFileSync("src/components/ksPublish/useKsConnection.ts", "utf8");
-const configPanel = readFileSync("src/components/ConfigPanel.tsx", "utf8");
+const configKsSection = readFileSync("src/components/config/ConfigKsSection.tsx", "utf8");
 
 describe("config snapshot save races", () => {
   it("setConfig 同步写 configRef，避免改完立刻 save 丢字段", () => {
@@ -49,7 +49,7 @@ describe("config snapshot save races", () => {
   });
 
   it("KS 环境校验失败有提示；发布页只对当前环境凭证重连", () => {
-    assert.match(configPanel, /无法保存环境/);
+    assert.match(configKsSection, /无法保存环境/);
     assert.match(ksConnection, /currentCredFp/);
     assert.match(ksConnection, /selectedEnv\.password/);
     assert.ok(ksPublish.includes("getConfigSnapshot"));

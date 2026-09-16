@@ -80,6 +80,7 @@ interface MergeFormSectionProps {
   onSelectAuthor: (author: string) => void;
   onDiffCommitSearchChange: (value: string) => void;
   onOpenCommitDiff: (commit: CommitInfo) => void;
+  onOpenBranchDiff: () => void;
 }
 
 const checkboxLabelStyles = { label: { color: "var(--color-text)" } } as const;
@@ -143,6 +144,7 @@ export function MergeFormSection({
   onSelectAuthor,
   onDiffCommitSearchChange,
   onOpenCommitDiff,
+  onOpenBranchDiff,
 }: MergeFormSectionProps) {
   const [commitsOpen, setCommitsOpen] = useState(false);
   const commitPreview = 2;
@@ -348,6 +350,18 @@ export function MergeFormSection({
               <Text component="span" size="xs" c="var(--color-text-muted)" ml={8}>
                 {sourceBranch} → {targetBranch}
               </Text>
+              <Button
+                variant="light"
+                color="cyan"
+                size="compact-xs"
+                ml="auto"
+                leftSection={<FileText size={13} />}
+                onClick={onOpenBranchDiff}
+                disabled={isLoadingDiff || diffCommits.length === 0}
+                title="一键查看源分支相对目标分支的全部改动文件"
+              >
+                查看全部改动文件
+              </Button>
             </div>
 
             {diffAuthors.length > 0 && (

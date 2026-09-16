@@ -15,6 +15,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const actionSrc = readFileSync(join(root, "src/hooks/branch/branchPackageAction.ts"), "utf8");
 const branchPanelSrc = readFileSync(join(root, "src/components/BranchPanel.tsx"), "utf8");
 const historyPanelSrc = readFileSync(join(root, "src/components/HistoryPanel.tsx"), "utf8");
+const buildProgressSrc = readFileSync(join(root, "src/components/BuildProgressBlock.tsx"), "utf8");
 
 assert.doesNotMatch(
   actionSrc,
@@ -41,6 +42,11 @@ assert.doesNotMatch(
   historyPanelSrc,
   /ScrollArea\.Autosize[\s\S]{0,120}log-panel/,
   "History 日志区不要套 ScrollArea",
+);
+assert.doesNotMatch(
+  buildProgressSrc,
+  /ScrollArea\.Autosize[\s\S]{0,120}log-panel/,
+  "BuildProgressBlock 日志区不要套 ScrollArea（双滚动条）",
 );
 
 assert.equal(isCompactSuccessLog("✅ 分支打包完成"), true);

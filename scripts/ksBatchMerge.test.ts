@@ -15,21 +15,25 @@ assert.match(util, /export async function checkKsBatchMergesParallel/);
 assert.match(util, /export async function mergeKsBatchReposSequential/);
 assert.match(util, /mapPool/);
 
-const modal = read("src/components/KsBatchPackModal.tsx");
-assert.match(modal, /mergeBeforePack/);
-assert.match(modal, /检查冲突/);
-assert.match(modal, /runMergeCheck/);
-assert.match(modal, /不会自动检查/);
-assert.match(modal, /mergePrecheckReady/);
-assert.match(modal, /mergeCheckDone/);
-assert.match(modal, /请先点击「检查冲突」完成预检后再开始/);
-assert.match(modal, /KsBatchMergeConflictFilesModal/);
-assert.match(modal, /点击查看冲突文件/);
+const confirmModal = read("src/components/ksPublish/KsBatchConfirmModal.tsx");
+assert.match(confirmModal, /mergeBeforePack/);
+assert.match(confirmModal, /检查冲突/);
+assert.match(confirmModal, /runMergeCheck/);
+assert.match(confirmModal, /不会自动检查/);
+assert.match(confirmModal, /mergePrecheckReady/);
+assert.match(confirmModal, /mergeCheckDone/);
+assert.match(confirmModal, /请先点击「检查冲突」完成预检后再开始/);
+assert.match(confirmModal, /KsBatchMergeConflictFilesModal/);
+assert.match(confirmModal, /点击查看冲突文件/);
 assert.doesNotMatch(
-  modal,
+  confirmModal,
   /useEffect\(\(\) => \{[\s\S]{0,200}checkKsBatchMergesParallel/,
   "选分支不得自动跑预检",
 );
+
+const packEntry = read("src/components/KsBatchPackModal.tsx");
+assert.match(packEntry, /export \{ KsBatchConfirmModal \}/);
+assert.match(packEntry, /export \{ KsBatchProgressModal \}/);
 
 const panel = read("src/components/KsPublishPanel.tsx");
 assert.match(panel, /useKsBatchActions/);
@@ -38,6 +42,10 @@ assert.match(panel, /mergeRepoPaths=\{batch\.batchMergeRepoPaths\}/);
 const batchHook = read("src/components/ksPublish/useKsBatchActions.ts");
 assert.match(batchHook, /mergeKsBatchReposSequential/);
 assert.match(batchHook, /values\.mergeBeforePack/);
+
+const cloneModal = read("src/components/KsBatchCloneModal.tsx");
+assert.match(cloneModal, /restoreSourceSession/);
+assert.match(cloneModal, /拉完目标 ns 后立刻回到源环境/);
 
 /** 内联验证限并发池保序 */
 async function mapPool<T, R>(

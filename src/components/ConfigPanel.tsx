@@ -1,48 +1,23 @@
-import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button, Tabs } from "@mantine/core";
 import {
-  ActionIcon,
-  Button,
-  Checkbox,
-  Group,
-  Modal,
-  Paper,
-  Stack,
-  Tabs,
-  Text,
-  Textarea,
-  TextInput,
-  PasswordInput,
-} from "@mantine/core";
-import {
-  Settings, CheckCircle, AlertCircle, FolderOpen, Archive,
-  Server, Package, Globe, FolderOutput, Info, RefreshCw, Loader2, ExternalLink, Trash2,
-  Bell, Plus, Pencil, Copy, Plug,
+  Settings, CheckCircle, Server, Package, Globe, FolderOutput, Info,
 } from "lucide-react";
-import { showSystemAlert } from "../systemAlert";
-import type { HarborConfig, KsEnvironment } from "../types";
-import { isTauriRuntime } from "../types";
-import { useConfirmDialog } from "../hooks/useConfirmDialog";
-import { createKsEnvironment, resolveKsEnvironments } from "../utils/ksEnvironments";
-import {
-  fetchBtTempLogin,
-  loadBtTempLoginOpenPref,
-  saveBtTempLoginOpenPref,
-} from "../utils/btTempLogin";
-import {
-  deriveMavenLocalRepo,
-  isDerivedMavenLocalRepo,
-} from "../utils/mavenPaths";
+import type { HarborConfig } from "../types";
 import { BaotaIcon, KubeSphereIcon } from "./icons/BrandIcons";
-import { openReleasePage } from "../utils/releasePage";
-import { KsPublishMapEditor } from "./KsPublishMapEditor";
 import { PanelPageHeader } from "./PanelPageHeader";
+import { ConfigHarborSection } from "./config/ConfigHarborSection";
+import { ConfigJarSection } from "./config/ConfigJarSection";
+import { ConfigFrontendSection } from "./config/ConfigFrontendSection";
+import { ConfigBtSection } from "./config/ConfigBtSection";
+import { ConfigOutputSection } from "./config/ConfigOutputSection";
+import { ConfigKsSection } from "./config/ConfigKsSection";
+import {
+  ConfigAboutSection,
+  type CheckUpdateResult,
+} from "./config/ConfigAboutSection";
 
-export type CheckUpdateResult = {
-  status: "update" | "latest" | "error";
-  message: string;
-};
+export type { CheckUpdateResult };
 
 export type ConfigTab = "connection" | "jar" | "frontend" | "bt" | "output" | "ks" | "about";
 
@@ -68,7 +43,7 @@ interface ConfigPanelProps {
   initialSubTab?: ConfigTab;
 }
 
-const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
+const TABS: { key: ConfigTab; label: string; icon: ReactNode }[] = [
   { key: "connection", label: "Harbor 连接", icon: <Server size={14} /> },
   { key: "jar", label: "JAR 打包", icon: <Package size={14} /> },
   { key: "frontend", label: "前端打包", icon: <Globe size={14} /> },
@@ -78,248 +53,28 @@ const TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { key: "about", label: "关于", icon: <Info size={14} /> },
 ];
 
-const panelPaperProps = {
-  p: "md" as const,
-  radius: "md" as const,
-  withBorder: true as const,
-};
-
-const sectionCardStyle = {
-  background: "var(--color-bg-card)",
-  border: "1px solid var(--color-border)",
-} as const;
-
-const browseButtonProps = {
-  size: "compact-xs" as const,
-  variant: "default" as const,
-  leftSection: <FolderOpen size={14} />,
-};
-
 export function ConfigPanel({
   config, configSaved, showPassword,
   onConfigChange, onSaveConfig, onTogglePassword,
   appVersion, onCheckUpdate, onClearGitRecords,
   initialSubTab,
 }: ConfigPanelProps) {
-  const { confirm } = useConfirmDialog();
   const [activeTab, setActiveTab] = useState<ConfigTab>(initialSubTab || "connection");
+  const flushKsMapsRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (initialSubTab) setActiveTab(initialSubTab);
   }, [initialSubTab]);
-
-  const applyMavenHome = (home: string) => {
-    const nextHome = home.trim();
-    const currentRepo = (config.maven_local_repo ?? "").trim();
-    const currentHome = (config.maven_home ?? "").trim();
-    onConfigChange("maven_home", nextHome);
-    if (
-      nextHome
-      && isDerivedMavenLocalRepo(currentHome, currentRepo)
-    ) {
-      onConfigChange("maven_local_repo", deriveMavenLocalRepo(nextHome));
-    }
-  };
-  const [checking, setChecking] = useState(false);
-  const [checkMsg, setCheckMsg] = useState<{ type: "ok" | "update" | "err"; text: string } | null>(null);
-  const [clearingGit, setClearingGit] = useState(false);
-  const [gitClearMsg, setGitClearMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [envEditor, setEnvEditor] = useState<{ mode: "add" | "edit"; draft: KsEnvironment } | null>(null);
-  const [envEditorPassword, setEnvEditorPassword] = useState(false);
-  const [tempLoginLoading, setTempLoginLoading] = useState(false);
-  const [tempLoginOpenInBrowser, setTempLoginOpenInBrowser] = useState(
-    () => loadBtTempLoginOpenPref(),
-  );
-  const flushKsMapsRef = useRef<(() => void) | null>(null);
-  const [harborLoginTesting, setHarborLoginTesting] = useState(false);
-  const [harborLoginMsg, setHarborLoginMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-
-  const [mavenProbe, setMavenProbe] = useState<{
-    source: string;
-    effective_home: string;
-    effective_local_repo: string;
-    bundled_available: boolean;
-    bundled_home: string;
-    bundled_java_home: string;
-    home_valid: boolean;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-    void invoke<{
-      source: string;
-      effective_home: string;
-      effective_local_repo: string;
-      bundled_available: boolean;
-      bundled_home: string;
-      bundled_java_home: string;
-      home_valid: boolean;
-    }>("resolve_maven_settings", { config })
-      .then(setMavenProbe)
-      .catch(() => setMavenProbe(null));
-  }, [config.maven_home, config.maven_local_repo]);
 
   const handleSaveConfig = () => {
     flushKsMapsRef.current?.();
     void onSaveConfig();
   };
 
-  const handleTestHarborLogin = async () => {
-    if (!isTauriRuntime()) {
-      setHarborLoginMsg({ type: "err", text: "请在桌面端测试登录" });
-      return;
-    }
-    setHarborLoginTesting(true);
-    setHarborLoginMsg(null);
-    try {
-      const msg = await invoke<string>("test_harbor_connection", {
-        harborUrl: config.harbor_url,
-        username: config.username,
-        password: config.password,
-      });
-      setHarborLoginMsg({ type: "ok", text: msg });
-    } catch (e) {
-      setHarborLoginMsg({ type: "err", text: String(e) });
-    } finally {
-      setHarborLoginTesting(false);
-    }
-  };
-
-  const gitRecordCount =
-    (config.repo_path_history?.length ?? 0) + Object.keys(config.branch_repo_settings ?? {}).length;
-  const hasGitRecords = Boolean(
-    gitRecordCount > 0 ||
-    config.last_repo_path?.trim() ||
-    config.last_branch?.trim() ||
-    config.last_frontend_dir?.trim() ||
-    config.last_build_script?.trim() ||
-    config.last_spring_profile?.trim() ||
-    config.last_expose_port?.trim(),
-  );
-
-  const handleClearGitRecords = async () => {
-    if (!onClearGitRecords || clearingGit) return;
-    setClearingGit(true);
-    setGitClearMsg(null);
-    try {
-      const cleared = await onClearGitRecords();
-      if (cleared) {
-        setGitClearMsg({ type: "ok", text: "已清空 Git 记录" });
-      } else {
-        setGitClearMsg({ type: "err", text: "清空失败，请稍后重试" });
-      }
-    } catch (e) {
-      setGitClearMsg({ type: "err", text: String(e) });
-    } finally {
-      setClearingGit(false);
-    }
-  };
-
-  const handleClearGitClick = async () => {
-    if (!onClearGitRecords || !hasGitRecords || clearingGit) return;
-    const ok = await confirm({
-      title: "清空 Git 记录",
-      message: "此操作不可恢复，将清除以下本地记忆：",
-      details: [
-        "分支打包 / 快捷合并的仓库路径历史",
-        "上次选择的仓库与分支",
-        "各仓库的高级设置（端口、nginx 等）",
-      ],
-      confirmLabel: "确认清空",
-      variant: "danger",
-    });
-    if (ok) {
-      await handleClearGitRecords();
-    }
-  };
-
-  const handleCheckUpdate = async () => {
-    if (!onCheckUpdate || checking) return;
-    setChecking(true);
-    setCheckMsg(null);
-    try {
-      const r = await onCheckUpdate();
-      if (r.status === "update") setCheckMsg({ type: "update", text: r.message });
-      else if (r.status === "latest") setCheckMsg({ type: "ok", text: r.message });
-      else setCheckMsg({ type: "err", text: r.message });
-    } catch (e) {
-      setCheckMsg({ type: "err", text: String(e) });
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  const ksEnvs = resolveKsEnvironments(config);
-
-  const setKsEnvs = (next: KsEnvironment[]) => {
-    onConfigChange("ks_environments", next);
-    if (next.length === 0) {
-      onConfigChange("ks_console", "");
-      onConfigChange("ks_username", "");
-      onConfigChange("ks_password", "");
-      onConfigChange("ks_last_env_id", "");
-      return;
-    }
-    if (config.ks_last_env_id && !next.some((env) => env.id === config.ks_last_env_id)) {
-      onConfigChange("ks_last_env_id", next[0].id);
-    }
-  };
-
-  const openAddKsEnv = () => {
-    setEnvEditorPassword(false);
-    setEnvEditor({ mode: "add", draft: createKsEnvironment(ksEnvs) });
-  };
-
-  const openEditKsEnv = (env: KsEnvironment) => {
-    setEnvEditorPassword(false);
-    setEnvEditor({ mode: "edit", draft: { ...env } });
-  };
-
-  const closeKsEnvEditor = () => {
-    setEnvEditor(null);
-    setEnvEditorPassword(false);
-  };
-
-  const saveKsEnvEditor = () => {
-    if (!envEditor) return;
-    const draft = {
-      ...envEditor.draft,
-      name: envEditor.draft.name.trim() || envEditor.draft.name,
-      console: envEditor.draft.console.trim(),
-      username: envEditor.draft.username.trim(),
-      password: envEditor.draft.password ?? "",
-    };
-    if (!draft.name.trim() || !draft.console.trim() || !draft.username.trim() || !draft.password) {
-      void showSystemAlert("无法保存环境", "请填写环境名、控制台地址、用户名和密码");
-      return;
-    }
-    const nextEnvs =
-      envEditor.mode === "add"
-        ? [...ksEnvs, draft]
-        : ksEnvs.map((env) => (env.id === draft.id ? draft : env));
-    setKsEnvs(nextEnvs);
-    closeKsEnvEditor();
-    // 立刻落盘（configRef 已由 onConfigChange 同步更新，含密码）
-    handleSaveConfig();
-  };
-
-  const removeKsEnv = async (env: KsEnvironment) => {
-    const ok = await confirm({
-      title: "删除环境",
-      message: `确定删除「${env.name || env.id}」？发布页将无法再选择该环境。`,
-      confirmLabel: "删除",
-      variant: "danger",
-    });
-    if (ok) {
-      setKsEnvs(ksEnvs.filter((item) => item.id !== env.id));
-      handleSaveConfig();
-    }
-  };
-
   return (
     <div className="config-shell">
       <div className="config-panel-body">
-      <Stack gap="md" className="config-panel">
+      <div className="config-panel" style={{ display: "flex", flexDirection: "column", gap: "var(--mantine-spacing-md)" }}>
       <PanelPageHeader
         eyebrow="HARBOR · BAOTA · KUBESPHERE"
         title="设置"
@@ -369,764 +124,65 @@ export function ConfigPanel({
         </div>
 
         <Tabs.Panel value="connection" pt="md">
-          <Paper {...panelPaperProps}>
-            <Stack gap="md">
-              <TextInput
-                label="Harbor 地址"
-                value={config.harbor_url}
-                onChange={(e) => onConfigChange("harbor_url", e.currentTarget.value)}
-                placeholder="例如: harbor.example.com"
-              />
-              <TextInput
-                label="用户名"
-                value={config.username}
-                onChange={(e) => onConfigChange("username", e.currentTarget.value)}
-                placeholder="Harbor 登录用户名"
-              />
-              <PasswordInput
-                label="密码"
-                value={config.password}
-                onChange={(e) => onConfigChange("password", e.currentTarget.value)}
-                placeholder="Harbor 登录密码"
-                visible={showPassword}
-                onVisibilityChange={() => onTogglePassword()}
-              />
-              <Group justify="flex-end" align="center" gap="sm">
-                {harborLoginMsg && (
-                  <Text
-                    size="sm"
-                    c={harborLoginMsg.type === "ok" ? "var(--color-success)" : "var(--color-error)"}
-                    style={{ flex: 1 }}
-                  >
-                    {harborLoginMsg.text}
-                  </Text>
-                )}
-                <Button
-                  variant="default"
-                  size="compact-sm"
-                  loading={harborLoginTesting}
-                  leftSection={<Plug size={14} />}
-                  onClick={() => { void handleTestHarborLogin(); }}
-                >
-                  测试连接
-                </Button>
-              </Group>
-              <TextInput
-                label="Harbor 项目"
-                value={config.project}
-                onChange={(e) => onConfigChange("project", e.currentTarget.value)}
-                placeholder="例如: my-project"
-                description="推送时自动拼在镜像名前，最终地址为 harbor地址/项目名/镜像名:标签"
-              />
-            </Stack>
-          </Paper>
-          <Paper {...panelPaperProps} mt="md">
-            <Stack gap="md">
-              <Text size="sm" fw={600} c="var(--color-text)">
-                落地页 / 隐私协议 FTP
-              </Text>
-              <Text size="xs" c="var(--color-text-muted)">
-                账号密码不再写进程序。落地页上传与隐私协议共用用户/密码；隐私主机可单独填写。
-              </Text>
-              <TextInput
-                label="落地页 FTP 主机"
-                value={config.landing_ftp_host ?? ""}
-                onChange={(e) => onConfigChange("landing_ftp_host", e.currentTarget.value)}
-                placeholder="FTP 主机 IP 或域名"
-              />
-              <TextInput
-                label="落地页 FTP 用户"
-                value={config.landing_ftp_user ?? ""}
-                onChange={(e) => onConfigChange("landing_ftp_user", e.currentTarget.value)}
-                placeholder="FTP 用户名"
-              />
-              <PasswordInput
-                label="落地页 FTP 密码"
-                value={config.landing_ftp_pass ?? ""}
-                onChange={(e) => onConfigChange("landing_ftp_pass", e.currentTarget.value)}
-                placeholder="FTP 密码"
-                visible={showPassword}
-                onVisibilityChange={() => onTogglePassword()}
-              />
-              <TextInput
-                label="落地页站点根目录"
-                value={config.landing_ftp_base_dir ?? ""}
-                onChange={(e) => onConfigChange("landing_ftp_base_dir", e.currentTarget.value)}
-                placeholder="例如: common.example.com（可留空）"
-                description="上传后公开 URL 用此主机名拼 https://根目录/渠道/"
-              />
-              <TextInput
-                label="隐私协议 FTP 主机"
-                value={config.privacy_ftp_host ?? ""}
-                onChange={(e) => onConfigChange("privacy_ftp_host", e.currentTarget.value)}
-                placeholder="与落地页不同机时填写"
-                description="用户/密码复用上方落地页 FTP 账号"
-              />
-            </Stack>
-          </Paper>
+          <ConfigHarborSection
+            config={config}
+            showPassword={showPassword}
+            onConfigChange={onConfigChange}
+            onTogglePassword={onTogglePassword}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="ks" pt="md">
-          <Stack gap="md">
-            <Paper {...panelPaperProps}>
-              <Stack gap="md">
-                <Group justify="space-between" align="center" wrap="nowrap">
-                  <Text size="sm" c="var(--color-text-muted)">
-                    配置多个 KubeSphere 环境，发布页按环境切换连接
-                  </Text>
-                  <Button
-                    size="xs"
-                    variant="default"
-                    leftSection={<Plus size={14} />}
-                    onClick={openAddKsEnv}
-                    style={{ flexShrink: 0 }}
-                  >
-                    添加环境
-                  </Button>
-                </Group>
-                {ksEnvs.length === 0 && (
-                  <Text size="sm" c="var(--color-text-muted)">
-                    还没有环境，点击「添加环境」开始配置
-                  </Text>
-                )}
-                {ksEnvs.length > 0 && (
-                  <Stack gap="sm">
-                    {ksEnvs.map((env) => (
-                      <Paper
-                        key={env.id}
-                        p="sm"
-                        radius="md"
-                        withBorder
-                        style={sectionCardStyle}
-                      >
-                        <Group justify="space-between" wrap="nowrap">
-                          <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
-                            <Text size="sm" fw={600} c="var(--color-text)" truncate>
-                              {env.name || env.id}
-                            </Text>
-                            <Text size="xs" c="var(--color-text-muted)" truncate>
-                              {env.console || "未填地址"}
-                            </Text>
-                            <Text size="xs" c="var(--color-text-muted)" truncate>
-                              {env.username || "未填用户"} · {env.password ? "已设密码" : "未设密码"}
-                            </Text>
-                          </Stack>
-                          <Group gap={6} style={{ flexShrink: 0 }}>
-                            <ActionIcon
-                              variant="subtle"
-                              color="gray"
-                              title="编辑"
-                              onClick={() => openEditKsEnv(env)}
-                            >
-                              <Pencil size={14} />
-                            </ActionIcon>
-                            <ActionIcon
-                              variant="subtle"
-                              color="red"
-                              title="删除"
-                              onClick={() => void removeKsEnv(env)}
-                            >
-                              <Trash2 size={14} />
-                            </ActionIcon>
-                          </Group>
-                        </Group>
-                      </Paper>
-                    ))}
-                  </Stack>
-                )}
-              </Stack>
-            </Paper>
-
-            <Paper {...panelPaperProps}>
-              <KsPublishMapEditor
-                config={config}
-                onMapsChange={(updater) =>
-                  onConfigChange("ks_publish_maps", (prev) => {
-                    const current = (Array.isArray(prev) ? prev : []) as NonNullable<
-                      HarborConfig["ks_publish_maps"]
-                    >;
-                    return typeof updater === "function" ? updater(current) : updater;
-                  })}
-                onRegisterFlush={(flush) => {
-                  flushKsMapsRef.current = flush;
-                }}
-              />
-            </Paper>
-          </Stack>
+          <ConfigKsSection
+            config={config}
+            onConfigChange={onConfigChange}
+            onSaveConfig={handleSaveConfig}
+            onRegisterFlush={(flush) => {
+              flushKsMapsRef.current = flush;
+            }}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="jar" pt="md">
-          <Paper {...panelPaperProps}>
-            <Stack gap="md">
-              <TextInput
-                label="JAR 基础镜像"
-                value={config.base_image}
-                onChange={(e) => onConfigChange("base_image", e.currentTarget.value)}
-                placeholder="例如: eclipse-temurin:17-jre"
-              />
-              <TextInput
-                label="JAR 暴露端口"
-                value={config.expose_port}
-                onChange={(e) => onConfigChange("expose_port", e.currentTarget.value)}
-                placeholder="例如: 8181"
-              />
-              <TextInput
-                label={
-                  <Group gap={6}>
-                    <FolderOpen size={14} />
-                    <span>Maven Home</span>
-                  </Group>
-                }
-                value={config.maven_home ?? ""}
-                onChange={(e) => applyMavenHome(e.currentTarget.value)}
-                placeholder="留空则尝试环境变量 MAVEN_HOME / M2_HOME"
-                description="本机需已安装 Maven（及 JDK）。优先读配置，其次环境变量。填写后会自动带上 conf/settings.xml"
-                rightSectionWidth={90}
-                rightSection={
-                  <Button
-                    {...browseButtonProps}
-                    onClick={async () => {
-                      if (!isTauriRuntime()) return;
-                      try {
-                        const current = (config.maven_home ?? "").trim();
-                        const selected = await open({
-                          multiple: false,
-                          directory: true,
-                          recursive: false,
-                          title: "选择 Maven 安装目录",
-                          defaultPath: current || undefined,
-                        });
-                        if (selected) applyMavenHome(selected as string);
-                      } catch (e) {
-                        console.error("选择 Maven Home 失败:", e);
-                      }
-                    }}
-                  >
-                    选择
-                  </Button>
-                }
-              />
-              {mavenProbe && (
-                <Text size="xs" c={mavenProbe.home_valid ? "var(--color-success)" : "var(--color-text-muted)"}>
-                  {mavenProbe.home_valid ? (
-                    <>
-                      当前生效（{mavenProbe.source === "bundled" ? "安装包内置" : mavenProbe.source}
-                      ）：{mavenProbe.effective_home}
-                      {mavenProbe.effective_local_repo ? ` · 仓库 ${mavenProbe.effective_local_repo}` : ""}
-                    </>
-                  ) : mavenProbe.bundled_available ? (
-                    <>检测到可选内置 Maven/JDK（{mavenProbe.bundled_home}），留空配置时可使用</>
-                  ) : (
-                    <>未检测到有效 Maven；请安装本机 Maven/JDK，或在上方填写 Maven Home</>
-                  )}
-                </Text>
-              )}
-              <TextInput
-                label={
-                  <Group gap={6}>
-                    <FolderOpen size={14} />
-                    <span>Maven 本地仓库</span>
-                  </Group>
-                }
-                value={config.maven_local_repo ?? ""}
-                onChange={(e) => onConfigChange("maven_local_repo", e.currentTarget.value)}
-                placeholder="默认 ~/.m2/repository 或 {Maven Home}/repository"
-                description='手动指定 Home 时默认 {"{home}/repository"}；也可单独修改本地仓库路径'
-                rightSectionWidth={90}
-                rightSection={
-                  <Button
-                    {...browseButtonProps}
-                    onClick={async () => {
-                      if (!isTauriRuntime()) return;
-                      try {
-                        const current = (config.maven_local_repo ?? "").trim();
-                        const home = (config.maven_home ?? "").trim();
-                        const selected = await open({
-                          multiple: false,
-                          directory: true,
-                          recursive: false,
-                          title: "选择 Maven 本地仓库目录",
-                          defaultPath: current || home || undefined,
-                        });
-                        if (selected) onConfigChange("maven_local_repo", selected as string);
-                      } catch (e) {
-                        console.error("选择 Maven 本地仓库失败:", e);
-                      }
-                    }}
-                  >
-                    选择
-                  </Button>
-                }
-              />
-              <TextInput
-                label={
-                  <Group gap={6}>
-                    <FolderOpen size={14} />
-                    <span>tools 目录 (--build-context)</span>
-                  </Group>
-                }
-                value={config.custom_docker_extras_dir}
-                onChange={(e) => onConfigChange("custom_docker_extras_dir", e.currentTarget.value)}
-                placeholder="例如: /Users/daijunxiong/code/packingmachine/tools"
-                description={
-                  <>
-                    填 tools/ 的绝对路径，jarporter 通过 <code>--build-context tools=</code> 注入。Dockerfile 里用{" "}
-                    <code>COPY --from=tools ./ /opt/tools/</code> 获取。
-                  </>
-                }
-                rightSectionWidth={90}
-                rightSection={
-                  <Button
-                    {...browseButtonProps}
-                    onClick={async () => {
-                      if (!isTauriRuntime()) return;
-                      try {
-                        const selected = await open({
-                          multiple: false,
-                          directory: true,
-                          recursive: false,
-                          title: "选择 tools 目录",
-                        });
-                        if (selected) {
-                          onConfigChange("custom_docker_extras_dir", selected as string);
-                        }
-                      } catch (e) {
-                        console.error("选择目录失败:", e);
-                      }
-                    }}
-                  >
-                    选择
-                  </Button>
-                }
-              />
-            </Stack>
-          </Paper>
+          <ConfigJarSection
+            config={config}
+            onConfigChange={onConfigChange}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="bt" pt="md">
-          <Paper {...panelPaperProps}>
-            <Stack gap="md">
-              <TextInput
-                label="面板地址"
-                value={config.bt_panel_url ?? ""}
-                onChange={(e) => onConfigChange("bt_panel_url", e.currentTarget.value)}
-                placeholder="https://面板地址:端口"
-              />
-              <PasswordInput
-                label="面板 API 密钥"
-                value={config.bt_panel_secret ?? ""}
-                onChange={(e) => onConfigChange("bt_panel_secret", e.currentTarget.value)}
-                placeholder="面板设置 → API 接口密钥"
-                visible={showPassword}
-                onVisibilityChange={() => onTogglePassword()}
-              />
-              <Stack gap="xs">
-                <Text size="sm" fw={500} c="var(--color-text)">
-                  宝塔自动部署
-                </Text>
-                <Text size="sm" c="var(--color-text-muted)">
-                  匹配下方 Profile 时：Maven 打包 FTP 覆盖 JAR 并重启；npm 在对应 Profile 或 build:{"{profile}"} 时上传 dist
-                </Text>
-                <Checkbox
-                  label="启用打包后自动部署"
-                  checked={config.bt_auto_deploy_test !== false}
-                  onChange={(e) => onConfigChange("bt_auto_deploy_test", e.currentTarget.checked)}
-                  color="cyan"
-                />
-                <TextInput
-                  id="bt-auto-deploy-profile"
-                  label="自动部署 Profile"
-                  value={config.bt_auto_deploy_profile ?? "test"}
-                  placeholder="test"
-                  disabled={config.bt_auto_deploy_test === false}
-                  onChange={(e) => onConfigChange("bt_auto_deploy_profile", e.currentTarget.value.trim())}
-                />
-              </Stack>
-              <Stack gap="xs">
-                <Text size="sm" fw={500} c="var(--color-text)">
-                  临时登录
-                </Text>
-                <Group gap="md" wrap="wrap">
-                  <Button
-                    size="sm"
-                    variant="default"
-                    disabled={
-                      tempLoginLoading
-                      || !(config.bt_panel_url ?? "").trim()
-                      || !(config.bt_panel_secret ?? "").trim()
-                    }
-                    leftSection={
-                      tempLoginLoading
-                        ? <Loader2 size={14} className="spin" />
-                        : tempLoginOpenInBrowser
-                          ? <ExternalLink size={14} />
-                          : <Copy size={14} />
-                    }
-                    onClick={() => {
-                      setTempLoginLoading(true);
-                      void fetchBtTempLogin(tempLoginOpenInBrowser ? "open" : "copy")
-                        .finally(() => setTempLoginLoading(false));
-                    }}
-                    title={
-                      tempLoginOpenInBrowser
-                        ? "生成临时登录链接并在浏览器打开（约 10 分钟有效）"
-                        : "生成临时登录链接并复制到剪贴板（约 10 分钟有效）"
-                    }
-                  >
-                    {tempLoginOpenInBrowser ? "打开临时登录" : "复制临时登录"}
-                  </Button>
-                  <Checkbox
-                    label="默认打开"
-                    checked={tempLoginOpenInBrowser}
-                    onChange={(e) => {
-                      const on = e.currentTarget.checked;
-                      setTempLoginOpenInBrowser(on);
-                      saveBtTempLoginOpenPref(on);
-                    }}
-                    color="cyan"
-                  />
-                </Group>
-                <Text size="sm" c="var(--color-text-muted)">
-                  勾选「默认打开」则在浏览器打开；取消勾选则复制链接到剪贴板。约 10 分钟有效，用后失效。请先保存配置再点。
-                </Text>
-              </Stack>
-              <TextInput
-                label="前端 dist 上传目录"
-                value={config.bt_frontend_remote_dir ?? ""}
-                onChange={(e) => onConfigChange("bt_frontend_remote_dir", e.currentTarget.value)}
-                placeholder="/www/wwwroot/example.com"
-                description="上传 dist 内文件（不套一层 dist 目录）"
-              />
-              <Checkbox
-                label="跳过面板 TLS 证书校验（自签证书）"
-                checked={config.bt_panel_insecure !== false}
-                onChange={(e) => onConfigChange("bt_panel_insecure", e.currentTarget.checked)}
-                color="cyan"
-              />
-              <TextInput
-                label="FTP 主机"
-                value={config.bt_ftp_host ?? ""}
-                onChange={(e) => onConfigChange("bt_ftp_host", e.currentTarget.value)}
-                placeholder="FTP 主机"
-              />
-              <TextInput
-                label="FTP 用户"
-                value={config.bt_ftp_user ?? ""}
-                onChange={(e) => onConfigChange("bt_ftp_user", e.currentTarget.value)}
-                placeholder="admin"
-              />
-              <TextInput
-                label="FTP 密码"
-                type={showPassword ? "text" : "password"}
-                value={config.bt_ftp_pass ?? ""}
-                onChange={(e) => onConfigChange("bt_ftp_pass", e.currentTarget.value)}
-                placeholder="FTP 密码"
-              />
-              <Textarea
-                label="JAR → 项目 ID 映射"
-                value={Object.entries(config.bt_jar_project_ids ?? {})
-                  .map(([jar, id]) => `${jar}=${id}`)
-                  .join("\n")}
-                onChange={(e) => {
-                  const map: Record<string, string> = {};
-                  for (const line of e.currentTarget.value.split("\n")) {
-                    const trimmed = line.trim();
-                    if (!trimmed || trimmed.startsWith("#")) continue;
-                    const eq = trimmed.indexOf("=");
-                    if (eq <= 0) continue;
-                    const jar = trimmed.slice(0, eq).trim();
-                    const id = trimmed.slice(eq + 1).trim();
-                    if (jar && id) map[jar] = id;
-                  }
-                  onConfigChange("bt_jar_project_ids", map);
-                }}
-                spellCheck={false}
-                autosize
-                minRows={4}
-                maxRows={12}
-                resize="vertical"
-                placeholder={"tksy-backend-1.0.0.jar=19"}
-                description={
-                  <>
-                    每行 <code>jar文件名=项目id</code>。同名 JAR 多项目时按此强制部署（如 tksy-backend → 19）
-                  </>
-                }
-                styles={{
-                  input: { fontFamily: "var(--mantine-font-family-monospace)" },
-                }}
-              />
-            </Stack>
-          </Paper>
+          <ConfigBtSection
+            config={config}
+            showPassword={showPassword}
+            onConfigChange={onConfigChange}
+            onTogglePassword={onTogglePassword}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="frontend" pt="md">
-          <Paper {...panelPaperProps}>
-            <Stack gap="md">
-              <TextInput
-                label="前端基础镜像"
-                value={config.frontend_base_image}
-                onChange={(e) => onConfigChange("frontend_base_image", e.currentTarget.value)}
-                placeholder="例如: nginx:alpine"
-              />
-              <TextInput
-                label="前端暴露端口"
-                value={config.frontend_expose_port}
-                onChange={(e) => onConfigChange("frontend_expose_port", e.currentTarget.value)}
-                placeholder="例如: 80"
-              />
-              <Textarea
-                label="前端 Dockerfile 模板"
-                value={config.frontend_dockerfile_template}
-                onChange={(e) => onConfigChange("frontend_dockerfile_template", e.currentTarget.value)}
-                spellCheck={false}
-                autosize
-                minRows={10}
-                maxRows={24}
-                resize="vertical"
-                description={
-                  <>
-                    可用变量：{"{{BASE_IMAGE}}"}、{"{{EXPOSE_PORT}}"}、{"{{NGINX_CONF_PATH}}"}、{"{{DIST_DIR}}"}、
-                    {"{{IMAGE_NAME}}"}、{"{{IMAGE_TAG}}"}、{"{{FULL_IMAGE}}"}
-                  </>
-                }
-                styles={{
-                  input: { fontFamily: "var(--mantine-font-family-monospace)" },
-                }}
-              />
-              <Textarea
-                label="nginx.conf 模板"
-                value={config.frontend_nginx_template}
-                onChange={(e) => onConfigChange("frontend_nginx_template", e.currentTarget.value)}
-                spellCheck={false}
-                autosize
-                minRows={14}
-                maxRows={28}
-                resize="vertical"
-                styles={{
-                  input: { fontFamily: "var(--mantine-font-family-monospace)" },
-                }}
-              />
-            </Stack>
-          </Paper>
+          <ConfigFrontendSection
+            config={config}
+            onConfigChange={onConfigChange}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="output" pt="md">
-          <Paper {...panelPaperProps}>
-            <Stack gap="md">
-              <TextInput
-                label={
-                  <Group gap={6}>
-                    <Archive size={14} />
-                    <span>打包产物目录</span>
-                  </Group>
-                }
-                value={config.artifact_output_dir}
-                onChange={(e) => onConfigChange("artifact_output_dir", e.currentTarget.value)}
-                placeholder="默认: 桌面"
-                description="打包产物将自动复制到此目录，留空则不复制"
-                rightSectionWidth={90}
-                rightSection={
-                  <Button
-                    {...browseButtonProps}
-                    onClick={async () => {
-                      if (!isTauriRuntime()) {
-                        return;
-                      }
-                      try {
-                        const selected = await open({
-                          multiple: false,
-                          directory: true,
-                          recursive: false,
-                          title: "选择打包产物输出目录",
-                        });
-                        if (selected) {
-                          onConfigChange("artifact_output_dir", selected as string);
-                        }
-                      } catch (e) {
-                        console.error("选择目录失败:", e);
-                      }
-                    }}
-                  >
-                    选择
-                  </Button>
-                }
-              />
-            </Stack>
-          </Paper>
+          <ConfigOutputSection
+            config={config}
+            onConfigChange={onConfigChange}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="about" pt="md">
-          <Stack gap="md" className="about-panel">
-            <Paper p="lg" radius="md" withBorder style={sectionCardStyle}>
-              <Stack gap="sm" align="center">
-                <Text size="xl" fw={700} c="var(--color-text)">
-                  码头工坊
-                </Text>
-                <Text size="sm" c="var(--color-text-muted)">
-                  当前版本 <Text span fw={600} c="var(--color-primary)">v{appVersion || "—"}</Text>
-                </Text>
-                <Text size="sm" c="var(--color-text-muted)">
-                  JAR / 前端 dist 一键打包推送 Harbor
-                </Text>
-                <Group gap="sm" mt="xs">
-                  <Button
-                    size="sm"
-                    variant="default"
-                    leftSection={checking ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
-                    onClick={handleCheckUpdate}
-                    disabled={checking || !onCheckUpdate}
-                    loading={checking}
-                  >
-                    {checking ? "检查中…" : "检查更新"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="subtle"
-                    color="gray"
-                    rightSection={<ExternalLink size={12} />}
-                    onClick={() => {
-                      void openReleasePage().catch((e) => {
-                        void showSystemAlert("无法打开发布页", String(e));
-                      });
-                    }}
-                  >
-                    发布页
-                  </Button>
-                </Group>
-                {checkMsg && (
-                  <Group
-                    gap={8}
-                    p="sm"
-                    style={{
-                      borderRadius: "var(--radius-md)",
-                      background:
-                        checkMsg.type === "ok"
-                          ? "rgba(16, 185, 129, 0.12)"
-                          : checkMsg.type === "update"
-                            ? "var(--color-primary-muted)"
-                            : "rgba(239, 68, 68, 0.12)",
-                      border: `1px solid ${
-                        checkMsg.type === "ok"
-                          ? "var(--color-success)"
-                          : checkMsg.type === "update"
-                            ? "var(--color-primary)"
-                            : "var(--color-error)"
-                      }`,
-                      color:
-                        checkMsg.type === "ok"
-                          ? "var(--color-success)"
-                          : checkMsg.type === "update"
-                            ? "var(--color-primary-hover)"
-                            : "var(--color-error)",
-                    }}
-                  >
-                    {checkMsg.type === "ok" && <CheckCircle size={14} />}
-                    {checkMsg.type === "update" && <RefreshCw size={14} />}
-                    {checkMsg.type === "err" && <AlertCircle size={14} />}
-                    <Text size="sm">{checkMsg.text}</Text>
-                  </Group>
-                )}
-              </Stack>
-            </Paper>
-
-            <Paper p="lg" radius="md" withBorder style={sectionCardStyle}>
-              <Stack gap="sm">
-                <Text size="md" fw={600} c="var(--color-text)">
-                  Git 本地记录
-                </Text>
-                <Text size="sm" c="var(--color-text-muted)">
-                  包含分支打包与快捷合并中的仓库路径历史，以及各仓库的高级设置记忆。
-                  {gitRecordCount > 0 ? ` 当前共 ${gitRecordCount} 条路径/仓库记忆。` : hasGitRecords ? " 当前有分支选择记忆。" : " 当前暂无记录。"}
-                </Text>
-                <Button
-                  size="sm"
-                  color="red"
-                  variant="light"
-                  leftSection={<Trash2 size={16} />}
-                  onClick={() => void handleClearGitClick()}
-                  disabled={!onClearGitRecords || !hasGitRecords || clearingGit}
-                  loading={clearingGit}
-                  w="fit-content"
-                >
-                  清空 Git 记录
-                </Button>
-                {gitClearMsg && (
-                  <Group
-                    gap={8}
-                    p="sm"
-                    style={{
-                      borderRadius: "var(--radius-md)",
-                      background: gitClearMsg.type === "ok" ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.12)",
-                      border: `1px solid ${gitClearMsg.type === "ok" ? "var(--color-success)" : "var(--color-error)"}`,
-                      color: gitClearMsg.type === "ok" ? "var(--color-success)" : "var(--color-error)",
-                    }}
-                  >
-                    {gitClearMsg.type === "ok" ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
-                    <Text size="sm">{gitClearMsg.text}</Text>
-                  </Group>
-                )}
-              </Stack>
-            </Paper>
-
-            <Paper p="lg" radius="md" withBorder style={sectionCardStyle}>
-              <Stack gap="sm">
-                <Text size="md" fw={600} c="var(--color-text)">
-                  系统通知测试
-                </Text>
-                <Text size="sm" c="var(--color-text-muted)">
-                  点击发送一条测试通知，验证 macOS 通知中心是否正常工作。若无弹出，请前往
-                  「系统设置 → 通知 → JarPorter」开启允许通知。
-                </Text>
-                <Button
-                  size="sm"
-                  variant="default"
-                  leftSection={<Bell size={16} />}
-                  onClick={() => void showSystemAlert("测试通知", "JarPorter 系统通知正常 ✅")}
-                  w="fit-content"
-                >
-                  发送测试通知
-                </Button>
-              </Stack>
-            </Paper>
-
-            <Paper
-              p={0}
-              radius="md"
-              className="config-tip"
-              styles={{
-                root: {
-                  background:
-                    "linear-gradient(135deg, var(--color-primary-muted), rgba(56, 189, 248, 0.05))",
-                  border: "1px solid var(--color-primary-muted)",
-                  boxShadow: "0 4px 16px var(--color-primary-muted)",
-                },
-              }}
-            >
-              <Group gap={6} align="center" wrap="nowrap" mb="xs">
-                <AlertCircle size={14} style={{ display: "block", flexShrink: 0 }} />
-                <Text size="sm" fw={600} lh={1.3} c="var(--color-text)">
-                  配置说明
-                </Text>
-              </Group>
-              <Stack gap={6} component="ul" className="config-tip-list">
-                {[
-                  "配置保存后无需重复填写",
-                  "Harbor 地址不需要带 https:// 前缀",
-                  "Harbor 项目为仓库中的项目名，会与镜像名称拼接",
-                  "JAR 模式使用 JAR 基础镜像和 JAR 暴露端口",
-                  "前端 dist 模式会把所选 dist 目录的内容复制为 nginx 站点根目录，不会在镜像里嵌套 dist 目录",
-                  "默认 nginx.conf 的 /index.html 回退路径对应 /usr/share/nginx/html/index.html",
-                ].map((item) => (
-                  <Text key={item} component="li" size="xs" lh={1.5} c="var(--color-text-muted)">
-                    {item}
-                  </Text>
-                ))}
-              </Stack>
-            </Paper>
-          </Stack>
+          <ConfigAboutSection
+            config={config}
+            appVersion={appVersion}
+            onCheckUpdate={onCheckUpdate}
+            onClearGitRecords={onClearGitRecords}
+          />
         </Tabs.Panel>
       </Tabs>
-      </Stack>
+      </div>
       </div>
       {activeTab !== "about" && (
         <div className="config-save-bar">
@@ -1144,79 +200,6 @@ export function ConfigPanel({
           </Button>
         </div>
       )}
-
-      <Modal
-        opened={!!envEditor}
-        onClose={closeKsEnvEditor}
-        title={envEditor?.mode === "add" ? "添加环境" : "编辑环境"}
-        size="sm"
-        styles={{
-          content: { background: "var(--color-bg-surface)" },
-          header: { background: "var(--color-bg-surface)" },
-          title: { color: "var(--color-text)", fontWeight: 600 },
-        }}
-      >
-        {envEditor && (
-          <Stack gap="md">
-            <TextInput
-              label="环境名"
-              value={envEditor.draft.name}
-              onChange={(e) => setEnvEditor({
-                ...envEditor,
-                draft: { ...envEditor.draft, name: e.currentTarget.value },
-              })}
-              placeholder="dev / test / prod"
-            />
-            <TextInput
-              label="控制台地址"
-              value={envEditor.draft.console}
-              onChange={(e) => setEnvEditor({
-                ...envEditor,
-                draft: { ...envEditor.draft, console: e.currentTarget.value },
-              })}
-              placeholder="例如: http://kubesphere:30880"
-            />
-            <TextInput
-              label="用户名"
-              value={envEditor.draft.username}
-              onChange={(e) => setEnvEditor({
-                ...envEditor,
-                draft: { ...envEditor.draft, username: e.currentTarget.value },
-              })}
-              placeholder="KubeSphere 登录用户名"
-            />
-            <PasswordInput
-              label="密码"
-              value={envEditor.draft.password}
-              onChange={(e) => setEnvEditor({
-                ...envEditor,
-                draft: { ...envEditor.draft, password: e.currentTarget.value },
-              })}
-              placeholder="KubeSphere 登录密码"
-              visible={envEditorPassword}
-              onVisibilityChange={(visible) => setEnvEditorPassword(visible)}
-            />
-            <Group justify="flex-end" gap="sm" mt="xs">
-              <Button variant="default" onClick={closeKsEnvEditor}>
-                取消
-              </Button>
-              <Button
-                variant="filled"
-                color="blue"
-                disabled={
-                  !envEditor.draft.name.trim()
-                  || !envEditor.draft.console.trim()
-                  || !envEditor.draft.username.trim()
-                  || !envEditor.draft.password
-                }
-                onClick={saveKsEnvEditor}
-              >
-                {envEditor.mode === "add" ? "添加" : "保存"}
-              </Button>
-            </Group>
-          </Stack>
-        )}
-      </Modal>
     </div>
   );
 }

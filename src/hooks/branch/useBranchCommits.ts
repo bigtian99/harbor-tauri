@@ -123,6 +123,9 @@ export function useBranchCommits(deps: UseBranchCommitsDeps) {
     setLastCommit(null);
     setCommitList([]);
     setCommitListTotal(0);
+    setCommitAuthors([]);
+    setCommitAuthorFilter("");
+    setCommitMessageFilter("");
   }
 
   return {

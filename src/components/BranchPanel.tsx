@@ -4,32 +4,29 @@ import {
   Button,
   Checkbox,
   Group,
-  Modal,
   Paper,
-  Progress,
-  ScrollArea,
   SegmentedControl,
-  Select,
   Stack,
   Text,
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import {
-  FileText, CheckCircle, Copy, Loader2, Eye, EyeOff,
-  GitBranch, FolderOpen, ExternalLink, List, Pin, XCircle, Search, User, Package, RotateCcw
+  FileText, CheckCircle, Copy, Loader2,
+  GitBranch, FolderOpen, ExternalLink, List, Pin, Package, RotateCcw
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "./SearchableDropdown";
 import { SpringProfileSection } from "./branch/SpringProfileSection";
 import { BranchAdvancedSettings } from "./branch/BranchAdvancedSettings";
+import { CommitListModal, openCommitListModal } from "./branch/CommitListModal";
 import type {
   BranchProjectType, HarborConfig,
   GitBranchOption, LastCommitInfo, CommitInfo, AuthorInfo, NginxLocationBlock
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
-import { isCompactSuccessLog } from "../hooks/useBuildProgress";
 import { PanelPageHeader } from "./PanelPageHeader";
+import { BuildProgressBlock, BUILD_LOG_LABELS } from "./BuildProgressBlock";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
 import { branchDropdownLabel } from "../branchRef";
 import { panelSegmentedStyles, commitHashButtonStyles } from "../theme/panelStyles";
@@ -128,16 +125,6 @@ interface BranchPanelProps {
   renderLog: (text: string) => React.ReactNode;
 }
 
-function closeCommitModal(
-  setShowCommitListModal: (show: boolean) => void,
-  setCommitAuthorFilter: (filter: string) => void,
-  setCommitMessageFilter: (filter: string) => void,
-) {
-  setShowCommitListModal(false);
-  setCommitAuthorFilter("");
-  setCommitMessageFilter("");
-}
-
 function commitNpmBuildScript(value: string, onChange: (script: string) => void) {
   const trimmed = value.trim();
   onChange(parseNpmScriptFromCommand(trimmed) ?? trimmed);
@@ -228,16 +215,16 @@ export function BranchPanel({
       : false;
   const branchFallbackCopyText = branchFullImage ? normalizeCopyText(branchFullImage) : "";
 
-  const authorSelectData = [
-    { value: "", label: "全部作者" },
-    ...commitAuthors.map((author) => ({
-      value: author.name,
-      label: `${author.name} (${author.count})`,
-    })),
-  ];
-
-  const handleCloseCommitModal = () => {
-    closeCommitModal(setShowCommitListModal, setCommitAuthorFilter, setCommitMessageFilter);
+  const openCommitModal = () => {
+    openCommitListModal({
+      setShowCommitListModal,
+      repoPath,
+      branchName,
+      commitAuthorFilter,
+      commitMessageFilter,
+      loadCommitList,
+      loadCommitAuthors,
+    });
   };
 
   return (
@@ -356,15 +343,7 @@ export function BranchPanel({
                         {commitListTotal}
                       </Badge>
                     }
-                    onClick={() => {
-                      setShowCommitListModal(true);
-                      if (commitList.length === 0) {
-                        loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter);
-                      }
-                      if (commitAuthors.length === 0) {
-                        loadCommitAuthors(repoPath, branchName);
-                      }
-                    }}
+                    onClick={openCommitModal}
                   >
                     全部记录
                   </Button>
@@ -408,15 +387,7 @@ export function BranchPanel({
               fullWidth
               className="branch-commit-history-btn"
               leftSection={<List size={15} />}
-              onClick={() => {
-                setShowCommitListModal(true);
-                if (commitList.length === 0) {
-                  loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter);
-                }
-                if (commitAuthors.length === 0) {
-                  loadCommitAuthors(repoPath, branchName);
-                }
-              }}
+              onClick={openCommitModal}
             >
               查看提交记录 ({commitListTotal})
             </Button>
@@ -644,15 +615,18 @@ export function BranchPanel({
         {isBuilding ? "分支打包中..." : "从指定分支打包"}
       </Button>
 
-      {showProgress && (
-        <Stack gap="xs" className="progress-section">
-          <Group justify="space-between">
-            <Text size="sm" c="var(--color-text)">{progressMessage}</Text>
-            <Text size="sm" c="var(--color-primary-hover)" fw={600}>{progress}%</Text>
-          </Group>
-          <Progress value={progress} />
-        </Stack>
-      )}
+      <BuildProgressBlock
+        showProgress={showProgress}
+        progress={progress}
+        progressMessage={progressMessage}
+        progressTextSize="sm"
+        progressPercentTone="branch"
+        progressLayout="stack"
+        log=""
+        showBuildLog={showBuildLog}
+        setShowBuildLog={setShowBuildLog}
+        renderLog={renderLog}
+      />
 
       {showResults && (
         <Paper
@@ -813,196 +787,40 @@ export function BranchPanel({
         </Paper>
       )}
 
-      {isBuilding && (
-        <Button
-          variant="light"
-          color="red"
-          className="cancel-btn"
-          onClick={onCancelBuild}
-          leftSection={<XCircle size={16} />}
-        >
-          取消构建
-        </Button>
-      )}
+      <BuildProgressBlock
+        progress={progress}
+        progressMessage={progressMessage}
+        showCancel={isBuilding}
+        onCancel={onCancelBuild}
+        cancelLabel="取消构建"
+        cancelPlacement="below"
+        cancelVariant="light-red"
+        cancelClassName="cancel-btn"
+        log={log}
+        showBuildLog={showBuildLog}
+        setShowBuildLog={setShowBuildLog}
+        renderLog={renderLog}
+        logLabels={BUILD_LOG_LABELS}
+        logExpandMode="toggle"
+      />
 
-      {log && (
-        <Stack gap="xs" className="log-section">
-          <Button
-            variant="light"
-            color="cyan"
-            size="sm"
-            style={{ alignSelf: "flex-start" }}
-            onClick={() => setShowBuildLog(!showBuildLog)}
-            title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
-            leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}
-          >
-            {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
-          </Button>
-          {showBuildLog && (
-            <div className={`log-panel ${isCompactSuccessLog(log) ? "success" : ""}`}>
-              {renderLog(log)}
-            </div>
-          )}
-        </Stack>
-      )}
-
-      <Modal
+      <CommitListModal
         opened={showCommitListModal}
-        onClose={handleCloseCommitModal}
-        title="提交记录"
-        size="lg"
-        centered
-        styles={{
-          content: { background: "var(--color-bg-surface)", border: "1px solid var(--color-border)" },
-          header: { background: "var(--color-bg-surface)" },
-          title: { color: "var(--color-text)", fontWeight: 600 },
-        }}
-      >
-        <Stack gap="sm">
-          <Group gap="xs" align="flex-end" wrap="wrap">
-            <TextInput
-              flex={1}
-              miw={180}
-              placeholder="搜索提交信息..."
-              value={commitMessageFilter}
-              onChange={(e) => setCommitMessageFilter(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter);
-                }
-              }}
-              leftSection={<Search size={15} />}
-            />
-            <Select
-              miw={160}
-              data={authorSelectData}
-              value={commitAuthorFilter}
-              onChange={(value) => {
-                const next = value ?? "";
-                setCommitAuthorFilter(next);
-                loadCommitList(repoPath, branchName, 1, next, commitMessageFilter);
-              }}
-              leftSection={<User size={15} />}
-              comboboxProps={{ withinPortal: true }}
-            />
-            <Button
-              variant="default"
-              leftSection={<Search size={14} />}
-              onClick={() => loadCommitList(repoPath, branchName, 1, commitAuthorFilter, commitMessageFilter)}
-            >
-              搜索
-            </Button>
-            {(commitAuthorFilter || commitMessageFilter) && (
-              <Button
-                variant="subtle"
-                color="gray"
-                onClick={() => {
-                  setCommitAuthorFilter("");
-                  setCommitMessageFilter("");
-                  loadCommitList(repoPath, branchName, 1, "", "");
-                }}
-              >
-                清除
-              </Button>
-            )}
-          </Group>
-
-          {isLoadingCommitList && commitList.length === 0 ? (
-            <Group justify="center" gap="xs" py="lg" c="var(--color-text-muted)">
-              <Loader2 size={16} className="spin" />
-              <Text size="sm">加载中...</Text>
-            </Group>
-          ) : commitList.length === 0 ? (
-            <Text ta="center" c="var(--color-text-muted)" py="lg">暂无提交记录</Text>
-          ) : (
-            <ScrollArea.Autosize
-              mah={400}
-              type="auto"
-              style={{
-                opacity: isLoadingCommitList ? 0.55 : 1,
-                transition: "opacity 0.15s ease",
-                pointerEvents: isLoadingCommitList ? "none" : undefined,
-              }}
-            >
-              <Stack gap="xs">
-                {isLoadingCommitList && (
-                  <Group justify="center" gap="xs" py={4} c="var(--color-text-muted)">
-                    <Loader2 size={14} className="spin" />
-                    <Text size="xs">加载中...</Text>
-                  </Group>
-                )}
-                {commitList.map((commit) => (
-                  <Paper
-                    key={commit.hash}
-                    p="sm"
-                    radius="sm"
-                    styles={{
-                      root: {
-                        background: "var(--color-bg-elevated)",
-                        border: "1px solid var(--color-border)",
-                      },
-                    }}
-                    className="modal-list-item"
-                  >
-                    <Group align="flex-start" gap="sm" mb={4}>
-                      {commit.url ? (
-                        <Button
-                          variant="subtle"
-                          color="gray"
-                          size="compact-xs"
-                          className="commit-hash commit-link"
-                          title={`在浏览器中打开: ${commit.hash}`}
-                          onClick={() => openUrl(commit.url!)}
-                          rightSection={<ExternalLink size={10} />}
-                          styles={commitHashButtonStyles}
-                        >
-                          {commit.short_hash}
-                        </Button>
-                      ) : (
-                        <Badge variant="light" color="blue" className="commit-hash" title={commit.hash}>
-                          {commit.short_hash}
-                        </Badge>
-                      )}
-                      <Text size="sm" c="var(--color-text)" style={{ flex: 1, wordBreak: "break-word" }}>
-                        {commit.message}
-                      </Text>
-                    </Group>
-                    <Group gap="md">
-                      <Text size="xs" c="var(--color-text-muted)">{commit.author}</Text>
-                      <Text size="xs" c="var(--color-text-muted)">{commit.date}</Text>
-                    </Group>
-                  </Paper>
-                ))}
-              </Stack>
-            </ScrollArea.Autosize>
-          )}
-
-          {commitListTotal > 0 && (
-            <Group justify="center" gap="md">
-              <Button
-                variant="default"
-                disabled={commitListPage <= 1 || isLoadingCommitList}
-                onClick={() => loadCommitList(repoPath, branchName, commitListPage - 1, commitAuthorFilter, commitMessageFilter)}
-              >
-                上一页
-              </Button>
-              <Text size="sm" c="var(--color-text-muted)">
-                第 {commitListPage} / {Math.ceil(commitListTotal / commitListPageSize)} 页
-              </Text>
-              <Button
-                variant="default"
-                disabled={
-                  isLoadingCommitList
-                  || commitListPage >= Math.ceil(commitListTotal / commitListPageSize)
-                }
-                onClick={() => loadCommitList(repoPath, branchName, commitListPage + 1, commitAuthorFilter, commitMessageFilter)}
-              >
-                下一页
-              </Button>
-            </Group>
-          )}
-        </Stack>
-      </Modal>
+        repoPath={repoPath}
+        branchName={branchName}
+        commitList={commitList}
+        commitListTotal={commitListTotal}
+        commitAuthors={commitAuthors}
+        isLoadingCommitList={isLoadingCommitList}
+        commitListPage={commitListPage}
+        commitListPageSize={commitListPageSize}
+        commitAuthorFilter={commitAuthorFilter}
+        commitMessageFilter={commitMessageFilter}
+        setShowCommitListModal={setShowCommitListModal}
+        setCommitAuthorFilter={setCommitAuthorFilter}
+        setCommitMessageFilter={setCommitMessageFilter}
+        loadCommitList={loadCommitList}
+      />
     </Stack>
   );
 }

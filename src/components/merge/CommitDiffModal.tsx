@@ -7,7 +7,10 @@ import { renderCommitDiffFileTree } from "./utils";
 import "../Modal.css";
 
 interface CommitDiffModalProps {
-  commit: CommitInfo;
+  mode: "commit" | "branch";
+  commit: CommitInfo | null;
+  branchLabel: string;
+  branchFileCount: number;
   commitDiff: string;
   commitDiffError: string;
   isLoading: boolean;
@@ -48,7 +51,10 @@ const modalStyles = {
 } as const;
 
 export function CommitDiffModal({
+  mode,
   commit,
+  branchLabel,
+  branchFileCount,
   commitDiffError,
   isLoading,
   commitDiffFiles,
@@ -64,6 +70,7 @@ export function CommitDiffModal({
   onSelectFile,
   onToggleDir,
 }: CommitDiffModalProps) {
+  const isBranch = mode === "branch";
   return (
     <Modal
       opened
@@ -71,7 +78,7 @@ export function CommitDiffModal({
       title={
         <Group gap={6}>
           <FileText size={16} />
-          <span>提交 Diff</span>
+          <span>{isBranch ? "分支整体改动文件" : "提交 Diff"}</span>
         </Group>
       }
       size="90%"
@@ -80,14 +87,23 @@ export function CommitDiffModal({
       styles={modalStyles}
     >
       <div className="commit-diff-summary">
-        <div className="commit-diff-summary-main">
-          <span className="commit-hash" title={commit.hash}>{commit.short_hash}</span>
-          <strong>{commit.message}</strong>
-        </div>
-        <div className="commit-diff-summary-meta">
-          <span>{commit.author}</span>
-          <span>{commit.date}</span>
-        </div>
+        {isBranch || !commit ? (
+          <div className="commit-diff-summary-main">
+            <span className="commit-hash" title={branchLabel}>{branchFileCount} 个文件</span>
+            <strong>{branchLabel}</strong>
+          </div>
+        ) : (
+          <div className="commit-diff-summary-main">
+            <span className="commit-hash" title={commit.hash}>{commit.short_hash}</span>
+            <strong>{commit.message}</strong>
+          </div>
+        )}
+        {!isBranch && commit && (
+          <div className="commit-diff-summary-meta">
+            <span>{commit.author}</span>
+            <span>{commit.date}</span>
+          </div>
+        )}
         <div className="commit-diff-jump-actions">
           <Button
             type="button"
@@ -170,7 +186,9 @@ export function CommitDiffModal({
           </div>
         </div>
       ) : (
-        <Text ta="center" c="var(--color-text-muted)" py="xl">这个提交没有可展示的文件变更</Text>
+        <Text ta="center" c="var(--color-text-muted)" py="xl">
+          {isBranch ? "两个分支没有可展示的文件变更" : "这个提交没有可展示的文件变更"}
+        </Text>
       )}
     </Modal>
   );

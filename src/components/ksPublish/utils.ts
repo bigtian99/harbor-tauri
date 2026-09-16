@@ -1,9 +1,26 @@
+import { notifications } from "@mantine/notifications";
 import type { DeployInfo, DeployRevision } from "./types";
 import { RFC1123_NAME } from "./types";
 
 export function isRfc1123Name(name: string): boolean {
   const n = name.trim();
   return n.length > 0 && n.length <= 253 && RFC1123_NAME.test(n);
+}
+
+/** 复制文本到剪贴板；失败时回退选中预览 textarea */
+export async function copyText(text: string, tip = "已复制到剪贴板") {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    notifications.show({ color: "green", message: tip });
+  } catch {
+    const ta = document.querySelector<HTMLTextAreaElement>(".ks-preview-textarea");
+    if (ta) {
+      ta.select();
+      document.execCommand("copy");
+      notifications.show({ color: "green", message: "已复制（请 Ctrl+C 确认）" });
+    }
+  }
 }
 
 /** 仅当已有 SW_AGENT_NAME 行时，将其值同步为 ConfigMap 名称；没有则不新增 */

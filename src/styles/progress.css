@@ -19,6 +19,7 @@
 .jp-progress-track,
 .progress-track,
 .update-progress-track,
+.bt-panel-progress-track,
 .bt-java-progress-track,
 .merge-progress-track {
   position: relative;
@@ -31,6 +32,7 @@
 }
 
 .jp-progress-track--lg,
+.bt-panel-progress-track,
 .bt-java-progress-track {
   height: var(--progress-size-md);
 }
@@ -40,6 +42,7 @@
 .progress-fill,
 .progress-bar,
 .update-progress-bar,
+.bt-panel-progress-bar,
 .bt-java-progress-bar,
 .merge-progress-bar {
   height: 100%;
@@ -56,6 +59,7 @@
 .jp-progress-bar--active::after,
 .progress-fill::after,
 .progress-bar::after,
+.bt-panel-progress-bar--active::after,
 .bt-java-progress-bar--active::after,
 .update-progress-bar:not(.update-progress-bar--indeterminate):not(.update-progress-bar--pulse)::after {
   content: "";

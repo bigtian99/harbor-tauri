@@ -3,19 +3,8 @@ import {
 } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
 import { notifications } from "@mantine/notifications";
-import { isRfc1123Name, syncSwAgentNameIfPresent } from "./utils";
+import { copyText, isRfc1123Name, syncSwAgentNameIfPresent } from "./utils";
 import type { KsConfigMapsApi } from "./useKsConfigMaps";
-
-async function copyText(text: string, tip = "已复制到剪贴板") {
-  if (!text) return;
-  try {
-    await navigator.clipboard.writeText(text);
-    notifications.show({ color: "green", message: tip });
-  } catch {
-    const ta = document.querySelector<HTMLTextAreaElement>(".ks-preview-textarea");
-    if (ta) { ta.select(); document.execCommand("copy"); notifications.show({ color: "green", message: "已复制（请 Ctrl+C 确认）" }); }
-  }
-}
 
 export function KsConfigMapModal(p: KsConfigMapsApi & { namespace: string | null }) {
   return (

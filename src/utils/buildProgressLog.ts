@@ -16,6 +16,22 @@ export function appendBuildProgressLog(prev: string, message: string): string {
   return `${prev}\n${msg}`;
 }
 
+/** 批量日志行数上限，超出时保留尾部，避免无界增长 */
+export const BATCH_LOG_MAX_LINES = 2000;
+
+export function appendCappedLog(prev: string, line: string, maxLines = BATCH_LOG_MAX_LINES): string {
+  const chunk = line.replace(/\r\n/g, "\n");
+  const merged = prev ? `${prev}\n${chunk}` : chunk;
+  return capLogLines(merged, maxLines);
+}
+
+export function capLogLines(text: string, maxLines = BATCH_LOG_MAX_LINES): string {
+  const lines = text.split("\n");
+  if (lines.length <= maxLines) return text;
+  const dropped = lines.length - maxLines;
+  return `… truncated ${dropped} lines …\n${lines.slice(lines.length - maxLines).join("\n")}`;
+}
+
 /** 镜像地址只走面板上的「完整镜像」行，日志里不重复展示 */
 export function stripFullImageLines(text: string): string {
   return text

@@ -200,6 +200,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
     loadLastCommit,
     loadCommitList,
     loadCommitAuthors,
+    clearCommitState,
   } = commits;
 
   const gitLoad = useBranchGitLoad({
@@ -522,11 +523,10 @@ export function useBranchPack(deps: UseBranchPackDeps) {
       await loadSpringProfiles(repoPath, value);
       loadLastCommit(repoPath, value);
       loadCommitList(repoPath, value, 1);
+      void loadCommitAuthors(repoPath, value);
     } else {
       setSpringProfiles([]);
-      setLastCommit(null);
-      setCommitList([]);
-      setCommitListTotal(0);
+      clearCommitState();
     }
   }
 

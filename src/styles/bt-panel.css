@@ -1,6 +1,6 @@
-/* Java 项目列表：拖拽 JAR 投放提示 */
+/* Bt 面板列表：拖拽投放 / 表格布局（Java & PHP 共用） */
 
-.bt-java-drop-banner {
+.bt-panel-drop-banner {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -13,49 +13,49 @@
   font-weight: 600;
 }
 
-.bt-java-table-wrap {
+.bt-panel-table-wrap {
   overflow: auto;
   max-width: 100%;
 }
 
-.bt-java-table {
+.bt-panel-table {
   min-width: 720px;
   table-layout: fixed;
   width: 100%;
 }
 
-.bt-java-cell-name {
+.bt-panel-cell-name {
   width: 18%;
   max-width: 160px;
   vertical-align: top;
 }
 
-.bt-java-cell-status {
+.bt-panel-cell-status {
   width: 88px;
   white-space: nowrap;
   vertical-align: middle;
 }
 
-.bt-java-cell-port {
+.bt-panel-cell-port {
   width: 72px;
   white-space: nowrap;
   vertical-align: middle;
 }
 
-.bt-java-cell-path {
+.bt-panel-cell-path {
   width: 22%;
   max-width: 220px;
   vertical-align: top;
   word-break: break-all;
 }
 
-.bt-java-cell-time {
+.bt-panel-cell-time {
   width: 148px;
   white-space: nowrap;
   vertical-align: middle;
 }
 
-.bt-java-cell-actions {
+.bt-panel-cell-actions {
   width: 196px;
   min-width: 196px;
   white-space: nowrap;
@@ -63,21 +63,21 @@
   padding-inline: 8px;
 }
 
-.bt-java-row {
+.bt-panel-row {
   position: relative;
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.bt-java-row.bt-java-row--drag-active {
+.bt-panel-row.bt-panel-row--drag-active {
   background: var(--color-primary-muted);
 }
 
-.bt-java-row.bt-java-row--drop-target {
+.bt-panel-row.bt-panel-row--drop-target {
   background: var(--color-primary-muted) !important;
   box-shadow: inset 0 0 0 2px var(--color-primary);
 }
 
-.bt-java-row-hint {
+.bt-panel-row-hint {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -96,13 +96,13 @@
   box-sizing: border-box;
 }
 
-.bt-java-row.bt-java-row--drag-active .bt-java-row-hint {
+.bt-panel-row.bt-panel-row--drag-active .bt-panel-row-hint {
   color: var(--color-primary);
   background: var(--color-primary-muted);
   border-color: var(--color-primary-muted);
 }
 
-.bt-java-row.bt-java-row--drop-target .bt-java-row-hint {
+.bt-panel-row.bt-panel-row--drop-target .bt-panel-row-hint {
   color: #fff;
   background: var(--color-primary);
   border-color: var(--color-primary);
@@ -110,23 +110,23 @@
 }
 
 @media (max-width: 1100px) {
-  .bt-java-table {
+  .bt-panel-table {
     min-width: 640px;
   }
 
-  .bt-java-cell-name {
+  .bt-panel-cell-name {
     width: 22%;
     max-width: 140px;
   }
 
-  .bt-java-cell-time {
+  .bt-panel-cell-time {
     width: 120px;
   }
 
-  .bt-java-drop-banner {
+  .bt-panel-drop-banner {
     font-size: 12px;
     padding: 8px 12px;
   }
 }
 
-/* Java 项目列表：拖拽 JAR 投放提示 — 进度条样式见 progress.css */
+/* 进度条样式见 progress.css（.bt-panel-progress-*） */

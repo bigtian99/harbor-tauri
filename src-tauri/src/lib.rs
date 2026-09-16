@@ -26,7 +26,8 @@ use build::{
     warmup_bt_ftp,
 };
 use commit::{
-    get_commit_authors, get_commit_diff, get_commit_list, get_last_commit, list_branch_diff_commits,
+    get_branch_diff, get_commit_authors, get_commit_diff, get_commit_list, get_last_commit,
+    list_branch_diff_commits,
 };
 use config_cmd::{
     clear_git_records, derive_maven_repo_from_home, load_config, resolve_maven_settings, save_config,
@@ -126,6 +127,7 @@ pub fn run() {
             get_last_commit,
             get_commit_list,
             get_commit_diff,
+            get_branch_diff,
             get_commit_authors,
             list_branch_diff_commits,
             list_npm_scripts,

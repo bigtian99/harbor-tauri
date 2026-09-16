@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  Rocket, Loader2, Eye, EyeOff, XCircle, CheckCircle, Copy, RefreshCw, Box, Search, Trash2, Lock, Tag, Package, X, Play, ChevronDown,
+  Rocket, Loader2, CheckCircle, Copy, RefreshCw, Box, Search, Trash2, Lock, Tag, Package, X, Play, ChevronDown,
 } from "lucide-react";
 import {
   ActionIcon,
@@ -9,15 +9,14 @@ import {
   Collapse,
   Group,
   Paper,
-  Progress,
   Stack,
   Text,
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import type { LocalImageInfo } from "../hooks/useUploadPush";
-import { isCompactSuccessLog } from "../hooks/useBuildProgress";
 import { PanelPageHeader } from "./PanelPageHeader";
+import { BuildProgressBlock, PUSH_LOG_LABELS } from "./BuildProgressBlock";
 
 interface PushImagePanelProps {
   localImage: string;
@@ -539,27 +538,24 @@ export function PushImagePanel({
           {isBuilding ? "推送中..." : "推送到 Harbor"}
         </Button>
 
-        {isBuilding && (
-          <Paper p="sm" withBorder radius="md" className="push-progress-panel">
-            <Group justify="space-between" mb={6}>
-              <Text size="xs" c="var(--color-text-muted)">{progressMessage}</Text>
-              <Text size="xs" fw={600} c="var(--color-text-muted)">{progress}%</Text>
-            </Group>
-            <Progress value={progress} />
-          </Paper>
-        )}
-
-        {isBuilding && (
-          <Button
-            variant="default"
-            color="gray"
-            size="sm"
-            onClick={onCancelBuild}
-            leftSection={<XCircle size={16} />}
-          >
-            取消推送
-          </Button>
-        )}
+        <BuildProgressBlock
+          showProgress={isBuilding}
+          progress={progress}
+          progressMessage={progressMessage}
+          progressTextSize="xs"
+          progressPercentTone="muted"
+          progressLayout="paper"
+          progressClassName="push-progress-panel"
+          showCancel={isBuilding}
+          onCancel={onCancelBuild}
+          cancelLabel="取消推送"
+          cancelPlacement="below"
+          cancelVariant="default-gray"
+          log=""
+          showBuildLog={showBuildLog}
+          setShowBuildLog={setShowBuildLog}
+          renderLog={renderLog}
+        />
 
         {fullImage && (
           <div
@@ -595,31 +591,17 @@ export function PushImagePanel({
           </div>
         )}
 
-        {log && (
-          <Stack gap="xs" className="log-section push-log-section">
-            <Button
-              type="button"
-              variant="light"
-              color="cyan"
-              size="sm"
-              style={{ alignSelf: "flex-start" }}
-              onClick={() => setShowBuildLog(!showBuildLog)}
-              title={showBuildLog ? "隐藏推送日志" : "展开推送日志"}
-              leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}
-            >
-              {showBuildLog ? "隐藏推送日志" : "展开推送日志"}
-            </Button>
-            <Collapse expanded={showBuildLog}>
-              <Paper
-                className={`log-panel ${isCompactSuccessLog(log) ? "success" : ""}`}
-                p="sm"
-                radius="md"
-              >
-                {renderLog(log)}
-              </Paper>
-            </Collapse>
-          </Stack>
-        )}
+        <BuildProgressBlock
+          progress={progress}
+          progressMessage={progressMessage}
+          log={log}
+          showBuildLog={showBuildLog}
+          setShowBuildLog={setShowBuildLog}
+          renderLog={renderLog}
+          logLabels={PUSH_LOG_LABELS}
+          logExpandMode="collapse"
+          logSectionClassName="log-section push-log-section"
+        />
       </Stack>
     </Stack>
   );

@@ -314,6 +314,52 @@ pub async fn list_branch_diff_commits(
     .map_err(|e| format!("读取分支差异提交线程异常: {e}"))?
 }
 
+/// 获取 source 分支相对 target 分支的整体改动（`git diff target...source`，即合并会带入的文件差异）。
+/// 用于分支合并面板「一键查看全部改动文件」。复用 `CommitDiffResult`，`hash` 为 `{source}...{target}`。
+#[tauri::command]
+pub async fn get_branch_diff(
+    repo_path: String,
+    source: String,
+    target: String,
+) -> Result<CommitDiffResult, String> {
+    let source = source.trim().to_string();
+    let target = target.trim().to_string();
+    if source.is_empty() || target.is_empty() {
+        return Err("源分支和目标分支都不能为空".to_string());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo_root = crate::git::resolve_repo_root(&repo_path)?;
+        let range = format!("{target}...{source}");
+        let diff = git_output(
+            &repo_root,
+            &[
+                "diff",
+                "--find-renames",
+                "--patch",
+                "--no-ext-diff",
+                "--no-color",
+                &range,
+            ],
+        )?;
+        crate::diag::diag_log(
+            "git",
+            &format!(
+                "get_branch_diff repo={} range={} diff_bytes={}",
+                repo_root.display(),
+                range,
+                diff.len()
+            ),
+        );
+        Ok(CommitDiffResult {
+            hash: format!("{source}...{target}"),
+            diff,
+        })
+    })
+    .await
+    .map_err(|e| format!("读取分支整体改动线程异常: {e}"))?
+}
+
 #[tauri::command]
 pub async fn get_commit_diff(
     repo_path: String,

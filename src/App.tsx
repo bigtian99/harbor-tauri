@@ -442,9 +442,6 @@ function App() {
           <HistoryPanel
             buildHistory={app.buildHistory}
             isLoadingHistory={app.isLoadingHistory}
-            expandedRecordId={null}
-            collapsedProjects={new Set()}
-            historySearch=""
             isBuilding={build.isBuilding}
             showPushProgress={historyPushUi}
             pushingRecordId={pushingRecordId}

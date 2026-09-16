@@ -9,7 +9,48 @@ import {
   type UpdateResult,
   EMPTY_DEPLOY_FORM,
 } from "./types";
-import { isRfc1123Name, buildRevisionDurationMap } from "./utils";
+import { isRfc1123Name, buildRevisionDurationMap, copyText } from "./utils";
+
+/** 健康检查路径：空则默认 /actuator/health，缺前导 / 则补上 */
+export function normalizeHealthPath(raw: string): string {
+  const path = raw.trim() || "/actuator/health";
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+/** 创建 / 预览 / 更新共用的表单 → invoke 载荷（不含 namespace / dryRun / container） */
+export function buildCreatePayload(f: typeof EMPTY_DEPLOY_FORM, name: string) {
+  return {
+    name,
+    image: f.image.trim(),
+    alias: f.alias.trim() || undefined,
+    port: f.port,
+    replicas: f.replicas,
+    envs: f.envs.split("\n").map((l) => l.trim()).filter(Boolean),
+    configMap: f.configMap || undefined,
+    healthPath: normalizeHealthPath(f.healthPath),
+  };
+}
+
+function validateCreateForm(f: typeof EMPTY_DEPLOY_FORM): string | null {
+  const depName = f.name.trim().toLowerCase();
+  if (!depName || !f.image.trim()) {
+    notifications.show({ color: "yellow", message: "请填写部署名称与镜像地址" });
+    return null;
+  }
+  if (!isRfc1123Name(depName)) {
+    notifications.show({
+      color: "yellow",
+      title: "部署名称不合法",
+      message: "须为小写字母/数字/'-'/'.'，且以字母或数字开头结尾（例：klcj-test-service）",
+    });
+    return null;
+  }
+  if (!f.port || f.port < 1 || f.port > 65535) {
+    notifications.show({ color: "yellow", message: "请填写有效的容器端口（1–65535）" });
+    return null;
+  }
+  return depName;
+}
 
 export function useKsDeployMutations(opts: {
   namespace: string | null;
@@ -89,39 +130,18 @@ export function useKsDeployMutations(opts: {
 
   const doCreate = async (dry: boolean) => {
     const f = createForm;
-    const depName = f.name.trim().toLowerCase();
-    if (!namespace || !depName || !f.image.trim()) {
+    if (!namespace) {
       notifications.show({ color: "yellow", message: "请填写部署名称与镜像地址" });
       return;
     }
-    if (!isRfc1123Name(depName)) {
-      notifications.show({
-        color: "yellow",
-        title: "部署名称不合法",
-        message: "须为小写字母/数字/'-'/'.'，且以字母或数字开头结尾（例：klcj-test-service）",
-      });
-      return;
-    }
-    if (!f.port || f.port < 1 || f.port > 65535) {
-      notifications.show({ color: "yellow", message: "请填写有效的容器端口（1–65535）" });
-      return;
-    }
-    const healthPath = (f.healthPath.trim() || "/actuator/health").startsWith("/")
-      ? (f.healthPath.trim() || "/actuator/health")
-      : `/${f.healthPath.trim()}`;
+    const depName = validateCreateForm(f);
+    if (!depName) return;
     if (f.name !== depName) setCreateForm({ ...f, name: depName });
     setCreateBusy(true);
     try {
       const msg = await invoke<string>("ks_create_deployment", {
         namespace,
-        name: depName,
-        image: f.image.trim(),
-        alias: f.alias.trim() || undefined,
-        port: f.port,
-        replicas: f.replicas,
-        envs: f.envs.split("\n").map((l) => l.trim()).filter(Boolean),
-        configMap: f.configMap || undefined,
-        healthPath,
+        ...buildCreatePayload(f, depName),
         dryRun: dry,
       });
       notifications.show({ color: "green", title: dry ? "校验通过" : "创建成功", message: msg });
@@ -140,39 +160,14 @@ export function useKsDeployMutations(opts: {
 
   const doPreview = async () => {
     const f = createForm;
-    const depName = f.name.trim().toLowerCase();
-    if (!depName || !f.image.trim()) {
-      notifications.show({ color: "yellow", message: "请填写部署名称与镜像地址" });
-      return;
-    }
-    if (!isRfc1123Name(depName)) {
-      notifications.show({
-        color: "yellow",
-        title: "部署名称不合法",
-        message: "须为小写字母/数字/'-'/'.'，且以字母或数字开头结尾（例：klcj-test-service）",
-      });
-      return;
-    }
-    if (!f.port || f.port < 1 || f.port > 65535) {
-      notifications.show({ color: "yellow", message: "请填写有效的容器端口（1–65535）" });
-      return;
-    }
-    const healthPath = (f.healthPath.trim() || "/actuator/health").startsWith("/")
-      ? (f.healthPath.trim() || "/actuator/health")
-      : `/${f.healthPath.trim()}`;
+    const depName = validateCreateForm(f);
+    if (!depName) return;
     if (f.name !== depName) setCreateForm({ ...f, name: depName });
     setCreateBusy(true);
     try {
       const yaml = await invoke<string>("ks_preview_deployment", {
         namespace,
-        name: depName,
-        image: f.image.trim(),
-        alias: f.alias.trim() || undefined,
-        port: f.port,
-        replicas: f.replicas,
-        envs: f.envs.split("\n").map((l) => l.trim()).filter(Boolean),
-        configMap: f.configMap || undefined,
-        healthPath,
+        ...buildCreatePayload(f, depName),
       });
       setPreviewYaml(yaml);
     } catch (e) {
@@ -183,25 +178,7 @@ export function useKsDeployMutations(opts: {
   };
 
   const copyYaml = async () => {
-    if (!previewYaml) return;
-    try {
-      await navigator.clipboard.writeText(previewYaml);
-      notifications.show({ color: "green", message: "已复制到剪贴板" });
-    } catch {
-      const ta = document.querySelector<HTMLTextAreaElement>(".ks-preview-textarea");
-      if (ta) { ta.select(); document.execCommand("copy"); notifications.show({ color: "green", message: "已复制（请 Ctrl+C 确认）" }); }
-    }
-  };
-
-  const copyText = async (text: string, tip = "已复制到剪贴板") => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      notifications.show({ color: "green", message: tip });
-    } catch {
-      const ta = document.querySelector<HTMLTextAreaElement>(".ks-preview-textarea");
-      if (ta) { ta.select(); document.execCommand("copy"); notifications.show({ color: "green", message: "已复制（请 Ctrl+C 确认）" }); }
-    }
+    await copyText(previewYaml);
   };
 
   const submit = async () => {
@@ -214,21 +191,11 @@ export function useKsDeployMutations(opts: {
       notifications.show({ color: "yellow", message: "请填写有效的容器端口（1–65535）" });
       return;
     }
-    const healthPath = (editForm.healthPath.trim() || "/actuator/health").startsWith("/")
-      ? (editForm.healthPath.trim() || "/actuator/health")
-      : `/${editForm.healthPath.trim()}`;
     setSubmitting(true);
     try {
       const r = await invoke<UpdateResult>("ks_update_deployment", {
         namespace,
-        name: editForm.name.trim(),
-        image: editForm.image.trim(),
-        alias: editForm.alias.trim() || undefined,
-        port: editForm.port,
-        replicas: editForm.replicas,
-        envs: editForm.envs.split("\n").map((l) => l.trim()).filter(Boolean),
-        configMap: editForm.configMap || undefined,
-        healthPath,
+        ...buildCreatePayload(editForm, editForm.name.trim()),
         container: editForm.container || selContainer || undefined,
       });
       notifications.show({
@@ -283,21 +250,11 @@ export function useKsDeployMutations(opts: {
       notifications.show({ color: "yellow", message: "请填写部署名称与镜像地址" });
       return;
     }
-    const healthPath = (editForm.healthPath.trim() || "/actuator/health").startsWith("/")
-      ? (editForm.healthPath.trim() || "/actuator/health")
-      : `/${editForm.healthPath.trim()}`;
     setSubmitting(true);
     try {
       const yaml = await invoke<string>("ks_preview_deployment", {
         namespace,
-        name: editForm.name.trim(),
-        image: editForm.image.trim(),
-        alias: editForm.alias.trim() || undefined,
-        port: editForm.port,
-        replicas: editForm.replicas,
-        envs: editForm.envs.split("\n").map((l) => l.trim()).filter(Boolean),
-        configMap: editForm.configMap || undefined,
-        healthPath,
+        ...buildCreatePayload(editForm, editForm.name.trim()),
       });
       setEditPreviewYaml(yaml);
     } catch (e) {

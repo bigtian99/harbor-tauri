@@ -1,13 +1,12 @@
 import {
   Rocket, Package, FileText, UploadCloud, RefreshCw,
-  Loader2, Eye, EyeOff, XCircle, CheckCircle, Copy, ChevronDown,
+  Loader2, CheckCircle, Copy, ChevronDown,
 } from "lucide-react";
 import {
   Button,
   Collapse,
   Group,
   Paper,
-  Progress,
   Stack,
   Text,
   TextInput,
@@ -16,8 +15,8 @@ import {
 import type { ArtifactType } from "../types";
 import { getPathName } from "../types";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
-import { isCompactSuccessLog } from "../hooks/useBuildProgress";
 import { PanelPageHeader } from "./PanelPageHeader";
+import { BuildProgressBlock, BUILD_LOG_LABELS } from "./BuildProgressBlock";
 
 interface UploadPanelProps {
   artifactType: ArtifactType;
@@ -203,27 +202,24 @@ export function UploadPanel({
         {isBuilding ? "构建推送中..." : "构建并推送"}
       </Button>
 
-      {isBuilding && (
-        <Paper p="sm" radius="md" withBorder className="upload-progress">
-          <Stack gap={6}>
-            <Group justify="space-between" gap="xs">
-              <Text size="xs" c="var(--color-text-muted)">{progressMessage}</Text>
-              <Text size="xs" fw={600} c="var(--color-text-muted)">{progress}%</Text>
-            </Group>
-            <Progress value={progress} />
-            <Button
-              variant="subtle"
-              color="red"
-              size="compact-xs"
-              onClick={onCancelBuild}
-              leftSection={<XCircle size={12} />}
-              style={{ alignSelf: "flex-start" }}
-            >
-              取消构建
-            </Button>
-          </Stack>
-        </Paper>
-      )}
+      <BuildProgressBlock
+        showProgress={isBuilding}
+        progress={progress}
+        progressMessage={progressMessage}
+        progressTextSize="xs"
+        progressPercentTone="muted"
+        progressLayout="paper"
+        progressClassName="upload-progress"
+        showCancel={isBuilding}
+        onCancel={onCancelBuild}
+        cancelLabel="取消构建"
+        cancelPlacement="inside"
+        cancelVariant="subtle-red"
+        log=""
+        showBuildLog={showBuildLog}
+        setShowBuildLog={setShowBuildLog}
+        renderLog={renderLog}
+      />
 
       {fullImage && (
         <div className={`image-url-row image-url-row--primary ${fullImageCopied ? "copied" : ""}`}>
@@ -256,31 +252,18 @@ export function UploadPanel({
         </div>
       )}
 
-      {log && (
-        <Stack gap={4} className="log-section">
-          <Button
-            type="button"
-            variant="light"
-            color="cyan"
-            size="sm"
-            style={{ alignSelf: "flex-start" }}
-            onClick={() => setShowBuildLog(!showBuildLog)}
-            title={showBuildLog ? "隐藏构建日志" : "展开构建日志"}
-            leftSection={showBuildLog ? <EyeOff size={15} /> : <Eye size={15} />}
-          >
-            {showBuildLog ? "隐藏构建日志" : "展开构建日志"}
-          </Button>
-          <Collapse expanded={showBuildLog}>
-            <Paper
-              className={`log-panel upload-log ${isCompactSuccessLog(log) ? "success" : ""}`}
-              p="xs"
-              radius="md"
-            >
-              {renderLog(log)}
-            </Paper>
-          </Collapse>
-        </Stack>
-      )}
+      <BuildProgressBlock
+        progress={progress}
+        progressMessage={progressMessage}
+        log={log}
+        showBuildLog={showBuildLog}
+        setShowBuildLog={setShowBuildLog}
+        renderLog={renderLog}
+        logLabels={BUILD_LOG_LABELS}
+        logExpandMode="collapse"
+        logPaperPadding="xs"
+        logPanelClassName="upload-log"
+      />
     </div>
   );
 }

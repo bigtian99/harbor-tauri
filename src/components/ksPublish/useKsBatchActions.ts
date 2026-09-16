@@ -36,6 +36,8 @@ import {
 } from "../../utils/ksBatchGitBranches";
 import {
   appendBuildProgressLog,
+  appendCappedLog,
+  capLogLines,
   normalizeBatchBranchInput,
   scaleBatchBuildPercent,
 } from "../../utils/buildProgressLog";
@@ -166,7 +168,7 @@ export function useKsBatchActions({
         const scaled = scaleBatchBuildPercent(index, total, percent);
         setBatchProgress((prev) => Math.max(prev, scaled));
         setBatchMessage(step ? `${step} · ${message}` : message);
-        setBatchLog((prev) => appendBuildProgressLog(prev, message));
+        setBatchLog((prev) => capLogLines(appendBuildProgressLog(prev, message)));
       },
     );
     return () => {
@@ -236,11 +238,11 @@ export function useKsBatchActions({
     );
 
     const appendLog = (line: string) =>
-      setBatchLog((prev) => (prev ? `${prev}\n${line}` : line));
+      setBatchLog((prev) => appendCappedLog(prev, line));
 
     try {
-      if (values.mergeBeforePack) {
-        let repoPaths = batchMergeRepoPaths;
+    if (values.mergeBeforePack) {
+      let repoPaths = batchMergeRepoPaths;
         if (repoPaths.length === 0) {
           const collected = await collectKsBatchRepoPaths(
             config,
@@ -353,6 +355,7 @@ export function useKsBatchActions({
 
   const closeCloneConfirm = () => {
     setCloneConfirmOpen(false);
+    // 关闭确认框：确保主面板 KS 会话回到源环境（弹窗拉目标 ns 时可能短暂切走过）
     if (envId) void connect(envId);
   };
 
@@ -386,7 +389,7 @@ export function useKsBatchActions({
         copyConfigMap: values.copyConfigMap,
         copyPublishMaps: values.copyPublishMaps,
         dryRun: values.dryRun,
-        appendLog: (line) => setCloneLog((prev) => (prev ? `${prev}\n${line}` : line)),
+        appendLog: (line) => setCloneLog((prev) => appendCappedLog(prev, line)),
         onProgress: (pct, msg) => {
           setCloneProgress((prev) => Math.max(prev, pct));
           setCloneMessage(msg);

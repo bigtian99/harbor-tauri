@@ -92,6 +92,7 @@ assertEqual(fileTree[1].children?.[1].path, "src/types.ts", "direct child files 
 const mergePanelSource = [
   readFileSync("src/components/MergePanel.tsx", "utf8"),
   readFileSync("src/components/merge/useMergePanel.ts", "utf8"),
+  readFileSync("src/components/merge/useMergeDiff.ts", "utf8"),
   readFileSync("src/components/merge/CommitDiffModal.tsx", "utf8"),
   readFileSync("src/components/merge/utils.tsx", "utf8"),
 ].join("\n");

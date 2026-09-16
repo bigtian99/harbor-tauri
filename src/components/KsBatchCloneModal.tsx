@@ -88,10 +88,29 @@ export function KsBatchCloneConfirmModal({
     }
     const env = pickKsEnvironment(envs, targetEnvId);
     if (!env) return;
+    const sourceEnv = meta
+      ? pickKsEnvironment(envs, meta.sourceEnvId)
+      : null;
     let cancelled = false;
     setLoadingNs(true);
     setNsError("");
     setTargetNamespace(null);
+
+    /** 拉完目标 ns 后立刻回到源环境，避免长期占用全局 KS 会话 */
+    const restoreSourceSession = async () => {
+      if (!sourceEnv) return;
+      try {
+        await invoke("ks_connect", {
+          envId: sourceEnv.id,
+          console: sourceEnv.console?.trim() || "",
+          username: sourceEnv.username?.trim() || "",
+          password: sourceEnv.password ?? "",
+        });
+      } catch {
+        /* closeCloneConfirm / 复制流程还会再连源环境 */
+      }
+    };
+
     void (async () => {
       try {
         await invoke("ks_connect", {
@@ -101,26 +120,32 @@ export function KsBatchCloneConfirmModal({
           password: env.password ?? "",
         });
         const ns = await invoke<string[]>("ks_list_namespaces");
-        if (cancelled) return;
-        setNamespaces(ns);
-        const prefer =
-          ns.find((n) => n.includes("test"))
-          ?? ns.find((n) => n !== meta?.sourceNamespace)
-          ?? ns[0]
-          ?? null;
-        setTargetNamespace(prefer);
+        if (!cancelled) {
+          setNamespaces(ns);
+          const prefer =
+            ns.find((n) => n.includes("test"))
+            ?? ns.find((n) => n !== meta?.sourceNamespace)
+            ?? ns[0]
+            ?? null;
+          setTargetNamespace(prefer);
+        }
       } catch (e) {
-        if (cancelled) return;
-        setNamespaces([]);
-        setNsError(String(e));
+        if (!cancelled) {
+          setNamespaces([]);
+          setNsError(String(e));
+        }
       } finally {
-        if (!cancelled) setLoadingNs(false);
+        // 仅本轮仍有效时恢复：切 targetEnvId 会 cancel，旧请求不得抢回源会话覆盖新目标连接
+        if (!cancelled) {
+          await restoreSourceSession();
+          setLoadingNs(false);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [opened, targetEnvId]);
+  }, [opened, targetEnvId, meta?.sourceEnvId, meta?.sourceNamespace]);
 
   const sameAsSource =
     !!meta
