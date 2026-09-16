@@ -229,8 +229,8 @@ export function PackSpeedPanel({
   }
 
   return (
-    <div className="branch-panel pack-speed-panel">
-      <div className="branch-card">
+    <div className="panel-page pack-speed-panel">
+      <div className="panel-card">
         <div className="form-group">
           <label><KeyRound size={14} /> Authorization</label>
           <div className="auth-input-row">

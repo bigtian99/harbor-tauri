@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { HarborConfig, TabType, BuildRecord } from "../types";
+import type { HarborConfig, TabType } from "../types";
 import type { UpdateInfo } from "../components/UpdateModal";
 import {
   DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE,
   DEFAULT_FRONTEND_NGINX_TEMPLATE,
   isTauriRuntime,
 } from "../types";
-import { resolveOpsInitialTab, resolveTabForOpsMode } from "../opsNavigation";
 
 
 export type DiagDateInfo = {
@@ -71,50 +70,37 @@ export function createDefaultHarborConfig(): HarborConfig {
 }
 
 interface UseAppConfigDeps {
-  setLog: (value: string) => void;
   setActiveTab: (tab: TabType | ((prev: TabType) => TabType)) => void;
-  /**
-   * 配置加载成功后的副作用（如恢复分支记忆设置）。
-   * 返回值由调用方处理；hook 本身只负责 load/save/config state。
-   */
-  onConfigLoaded?: (config: HarborConfig) => void | Promise<void>;
 }
 
 /**
- * Harbor 配置、OPS 模式、更新检查、构建历史与 shell UI 状态。
+ * Harbor 配置、更新检查、诊断日志与 shell UI 状态（运营版）。
  */
 export function useAppConfig(deps: UseAppConfigDeps) {
-  const { setLog, setActiveTab, onConfigLoaded } = deps;
-  const onConfigLoadedRef = useRef(onConfigLoaded);
-  onConfigLoadedRef.current = onConfigLoaded;
+  const { setActiveTab } = deps;
 
   const [config, setConfig] = useState<HarborConfig>(createDefaultHarborConfig);
   /** 保存配置时读最新快照，避免闭包里的 config 滞后于 setConfig */
   const configRef = useRef(config);
   configRef.current = config;
-  /** load_config 完成（成功或失败）后为 true；KS 等面板需等此标志再自动连接，避免 reload 抢跑空配置 */
+  /** load_config 完成（成功或失败）后为 true */
   const [configLoaded, setConfigLoaded] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
-  const [opsMode, setOpsMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [appVersion, setAppVersion] = useState("");
-  const [buildHistory, setBuildHistory] = useState<BuildRecord[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [showLogViewer, setShowLogViewer] = useState(false);
   const [logContent, setLogContent] = useState("");
   const [logSearch, setLogSearch] = useState("");
   const [logDates, setLogDates] = useState<DiagDateInfo[]>([]);
   const [logDay, setLogDay] = useState<string | null>(null); // null = 最近 3 天（默认）
-  const opsModeInitializedRef = useRef(false);
 
   const handleTabChange = useCallback(
     (tab: TabType) => {
-      setActiveTab(resolveTabForOpsMode(tab, opsMode));
+      setActiveTab(tab);
     },
-    [opsMode, setActiveTab],
+    [setActiveTab],
   );
 
   async function loadConfig() {
@@ -126,8 +112,6 @@ export function useAppConfig(deps: UseAppConfigDeps) {
       const savedConfig = withSessionConfigDefaults(await invoke<HarborConfig>("load_config"));
       configRef.current = savedConfig;
       setConfig(savedConfig);
-      setBuildHistory(savedConfig.build_history || []);
-      await onConfigLoadedRef.current?.(savedConfig);
     } catch (e) {
       console.error("加载配置失败:", e);
     } finally {
@@ -137,7 +121,6 @@ export function useAppConfig(deps: UseAppConfigDeps) {
 
   async function handleSaveConfig() {
     if (!isTauriRuntime()) {
-      setLog("❌ 当前是浏览器预览环境，保存配置请在 Tauri 桌面窗口中操作");
       setActiveTab("config");
       return;
     }
@@ -147,8 +130,7 @@ export function useAppConfig(deps: UseAppConfigDeps) {
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 2000);
     } catch (e) {
-      setLog(`❌ 保存配置失败: ${e}`);
-      setActiveTab("upload");
+      console.error("保存配置失败:", e);
     }
   }
 
@@ -175,96 +157,6 @@ export function useAppConfig(deps: UseAppConfigDeps) {
   async function handleOpsAuthorizationSave(authorization: string) {
     const token = authorization.trim();
     setConfig((prev) => ({ ...prev, ops_authorization: token }));
-  }
-
-  async function loadBuildHistory() {
-    if (!isTauriRuntime()) return;
-    setIsLoadingHistory(true);
-    try {
-      const history = await invoke<BuildRecord[]>("get_build_history");
-      setBuildHistory(history);
-      setConfig((prev) => ({ ...prev, build_history: history }));
-    } catch (e) {
-      console.error("[Build History] 获取失败:", e);
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  }
-
-  async function deleteArtifactFiles(path: string) {
-    if (!isTauriRuntime() || !path) return;
-    try {
-      await invoke("delete_artifact_path", { path });
-    } catch (e) {
-      console.error("[Delete Artifact] 删除产物失败:", path, e);
-    }
-  }
-
-  async function deleteBuildRecord(
-    record: BuildRecord,
-    showToast?: (message: string) => void,
-  ) {
-    if (!isTauriRuntime()) return;
-    try {
-      await invoke("delete_build_record", { recordId: record.id });
-      await deleteArtifactFiles(record.artifact_path);
-      if (record.backend_artifact_path) {
-        await deleteArtifactFiles(record.backend_artifact_path);
-      }
-      setBuildHistory((prev) => prev.filter((r) => r.id !== record.id));
-    } catch (e) {
-      console.error("[Delete Record] 删除失败:", e);
-      showToast?.(`删除记录失败: ${e}`);
-    }
-  }
-
-  async function clearGitRecords(showToast?: (message: string) => void): Promise<boolean> {
-    if (!isTauriRuntime()) {
-      showToast?.("请在桌面端操作");
-      return false;
-    }
-    try {
-      const cleared = withSessionConfigDefaults(await invoke<HarborConfig>("clear_git_records"));
-      setConfig(cleared);
-      showToast?.("已清空 Git 记录");
-      return true;
-    } catch (e) {
-      console.error("[Clear Git Records] 清空失败:", e);
-      showToast?.(`清空 Git 记录失败: ${e}`);
-      return false;
-    }
-  }
-
-  async function clearBuildHistory(showToast?: (message: string) => void) {
-    if (!isTauriRuntime()) return;
-    try {
-      for (const record of buildHistory) {
-        await deleteArtifactFiles(record.artifact_path);
-        if (record.backend_artifact_path) {
-          await deleteArtifactFiles(record.backend_artifact_path);
-        }
-      }
-      await invoke("clear_build_history");
-      setBuildHistory([]);
-    } catch (e) {
-      console.error("[Clear History] 清空失败:", e);
-      showToast?.(`清空历史失败: ${e}`);
-    }
-  }
-
-  async function openArtifactPath(
-    path: string,
-    showToast?: (message: string) => void,
-  ) {
-    if (!isTauriRuntime()) {
-      showToast?.("浏览器环境下无法打开目录");
-      return;
-    }
-    try {
-      await invoke("open_directory", { path });
-    } catch (e) {
-      showToast?.(`打开失败: ${e}`);
-    }
   }
 
   async function handleManualCheckUpdate(): Promise<{
@@ -332,15 +224,6 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     }
   }
 
-  async function refreshDiagnosticDates(): Promise<void> {
-    try {
-      const dates = await invoke<DiagDateInfo[]>("list_diagnostic_log_dates");
-      setLogDates(dates);
-    } catch {
-      // 非 Tauri 环境/未初始化：忽略
-    }
-  }
-
   async function downloadDiagnosticLog(
     showToast?: (message: string) => void,
   ): Promise<void> {
@@ -389,24 +272,9 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     }
   }
 
-  // 启动：加载配置 + OPS 模式
+  // 启动：加载配置
   useEffect(() => {
     loadConfig();
-    if (!isTauriRuntime()) return;
-
-    invoke<boolean>("is_ops_mode")
-      .then((ops) => {
-        if (ops) {
-          setOpsMode(true);
-          if (!opsModeInitializedRef.current) {
-            opsModeInitializedRef.current = true;
-            setActiveTab((currentTab) => resolveOpsInitialTab(currentTab));
-          }
-        }
-      })
-      .catch(() => {
-        /* 非 Tauri 环境忽略 */
-      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -440,18 +308,12 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     setConfig,
     configLoaded,
     configSaved,
-    opsMode,
     sidebarCollapsed,
     setSidebarCollapsed,
     updateInfo,
     updateModalOpen,
     setUpdateModalOpen,
     appVersion,
-    buildHistory,
-    setBuildHistory,
-    isLoadingHistory,
-    showPassword,
-    setShowPassword,
     showLogViewer,
     setShowLogViewer,
     logContent,
@@ -460,17 +322,11 @@ export function useAppConfig(deps: UseAppConfigDeps) {
     logDates,
     logDay,
     selectDiagnosticDay,
-    refreshDiagnosticDates,
     handleTabChange,
     loadConfig,
     handleSaveConfig,
     handleConfigChange,
     handleOpsAuthorizationSave,
-    loadBuildHistory,
-    deleteBuildRecord,
-    clearBuildHistory,
-    clearGitRecords,
-    openArtifactPath,
     handleManualCheckUpdate,
     openDiagnosticLog,
     downloadDiagnosticLog,

@@ -1,15 +1,11 @@
 /* App.css — OPT-011: style entry; re-exports modular sheets in original cascade order */
 @import "./styles/base.css";
-@import "./styles/upload.css";
+@import "./styles/panel-shared.css";
 @import "./styles/packspeed.css";
 @import "./styles/landing.css";
 @import "./styles/progress.css";
 @import "./styles/config.css";
-@import "./styles/branch.css";
 @import "./styles/config-extras.css";
 @import "./styles/utilities.css";
-@import "./styles/history.css";
-@import "./styles/merge.css";
 @import "./styles/settlement.css";
 @import "./styles/utilities-end.css";
-@import "./styles/bt-java.css";

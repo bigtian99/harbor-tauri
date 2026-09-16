@@ -68,8 +68,8 @@ const opsCapabilitySource = readFileSync("src-tauri/capabilities/ops-login.json"
 
 assertContains(typesSource, '"packSpeed"', "TabType should include the pack speed page");
 assertContains(typesSource, "ops_authorization?: string", "Config should allow a session-only ops Authorization token without requiring a default");
-assertContains(sidebarSource, 'tab: "packSpeed"', "Sidebar should show the pack speed menu in normal builds");
-assertContains(sidebarSource, "isOpsTab(item.tab)", "Ops mode should keep the pack speed menu visible");
+assertContains(sidebarSource, 'tab: "packSpeed"', "Sidebar should show the pack speed menu");
+assertNotContains(sidebarSource, 'tab: "upload"', "Ops-only sidebar should not expose non-ops pages");
 assertNotContains(panelSource, "artifact-type-selector", "Pack speed panel should not render a duplicate top tab button");
 assertNotContains(panelSource, "保存 Authorization", "Pack speed panel should not show a separate save button");
 assertNotContains(panelSource, "自动保存", "Pack speed panel should not claim Authorization is saved locally");

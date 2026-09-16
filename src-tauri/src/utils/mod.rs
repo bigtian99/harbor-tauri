@@ -1,6 +1,5 @@
 mod config_io;
 mod maven_paths;
-mod npm_cache;
 mod paths_fs;
 mod process_cmd;
 
@@ -12,7 +11,6 @@ pub(crate) static CURRENT_PID: Mutex<Option<u32>> = Mutex::new(None);
 
 pub(crate) use config_io::*;
 pub(crate) use maven_paths::*;
-pub(crate) use npm_cache::*;
 pub(crate) use paths_fs::*;
 pub(crate) use process_cmd::*;
 

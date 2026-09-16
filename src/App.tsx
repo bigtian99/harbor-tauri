@@ -1,34 +1,21 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CalendarDays, CheckCircle, ChevronDown, ScrollText, Search, X, Download, FolderOpen } from "lucide-react";
 
-
 import { Sidebar } from "./components/Sidebar";
-import { UploadPanel } from "./components/UploadPanel";
-import { BranchPanel } from "./components/BranchPanel";
-import { HistoryPanel } from "./components/HistoryPanel";
 import { LandingPanel } from "./components/LandingPanel";
-import { MergePanel } from "./components/MergePanel";
-import { PushImagePanel } from "./components/PushImagePanel";
-import { ConfigPanel, type ConfigTab } from "./components/ConfigPanel";
 import { SettlementPanel } from "./components/SettlementPanel";
 import { PackSpeedPanel } from "./components/PackSpeedPanel";
 import { PrivacyPanel } from "./components/PrivacyPanel";
-import { KsPublishPanel } from "./components/KsPublishPanel";
-import { BtJavaProjectsPanel } from "./components/BtJavaProjectsPanel";
-import { BtPhpSitesPanel } from "./components/BtPhpSitesPanel";
+import { ConfigPanel } from "./components/ConfigPanel";
 import { UpdateModal } from "./components/UpdateModal";
 import { useLanding } from "./hooks/useLanding";
 import { useAppConfig, type DiagDateInfo } from "./hooks/useAppConfig";
 import { useBuildProgress, useToast } from "./hooks/useBuildProgress";
-import { useUploadPush } from "./hooks/useUploadPush";
-import { useBranchPack } from "./hooks/useBranchPack";
-import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import "./App.css";
 
-import type { HarborConfig, TabType, BuildRecord } from "./types";
-import { isTauriRuntime, resolveHarborRepository } from "./types";
+import type { TabType } from "./types";
+import { isTauriRuntime } from "./types";
 import { invoke } from "@tauri-apps/api/core";
-import { resolveHistoryJarPushConfig } from "./historyJarPush.ts";
 import { shouldKeepPreviewServer } from "./utils/previewLifecycle";
 import { readStoredActiveTab, writeStoredActiveTab } from "./utils/activeTabStorage";
 
@@ -133,10 +120,8 @@ function LogDayPicker({
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabType>(() => readStoredActiveTab("upload"));
-  const [configSubTab, setConfigSubTab] = useState<ConfigTab | undefined>();
+  const [activeTab, setActiveTab] = useState<TabType>(() => readStoredActiveTab("landing"));
   const previewStopTimerRef = useRef<number | null>(null);
-  const { confirm } = useConfirmDialog();
 
   // 记住当前菜单：右键 reload / 刷新后回到离开前的页签
   useEffect(() => {
@@ -146,56 +131,7 @@ function App() {
   const { toast, showToast } = useToast();
   const build = useBuildProgress({ showToast });
 
-  // 配置加载后恢复分支记忆：通过 ref 打破与 useBranchPack 的声明顺序依赖
-  const onConfigLoadedRef = useRef<(config: HarborConfig) => void | Promise<void>>(() => {});
-  const app = useAppConfig({
-    setLog: build.setLog,
-    setActiveTab,
-    onConfigLoaded: (config) => onConfigLoadedRef.current(config),
-  });
-
-  const onDropRepoPathRef = useRef<(path: string) => void>(() => {});
-  const upload = useUploadPush({
-    config: app.config,
-    setActiveTab,
-    setLog: build.setLog,
-    setIsBuilding: build.setIsBuilding,
-    setCopied: build.setCopied,
-    setProgress: build.setProgress,
-    setProgressMessage: build.setProgressMessage,
-    showToast,
-    activeTab,
-    onDropRepoPath: (path) => onDropRepoPathRef.current(path),
-  });
-
-  const openMavenConfig = useCallback(() => {
-    setConfigSubTab("jar");
-    setActiveTab("config");
-  }, [setActiveTab]);
-
-  const branch = useBranchPack({
-    config: app.config,
-    setConfig: app.setConfig,
-    setActiveTab,
-    setLog: build.setLog,
-    setIsBuilding: build.setIsBuilding,
-    setCopied: build.setCopied,
-    setProgress: build.setProgress,
-    setProgressMessage: build.setProgressMessage,
-    showToast,
-    loadBuildHistory: app.loadBuildHistory,
-    imageName: upload.imageName,
-    setImageName: upload.setImageName,
-    imageTag: upload.imageTag,
-    artifactPath: upload.artifactPath,
-    setArtifactPath: upload.setArtifactPath,
-    onOpenMavenConfig: openMavenConfig,
-    confirm,
-  });
-
-  // 保持 ref 指向最新实现
-  onConfigLoadedRef.current = (config) => branch.applyRememberedConfig(config);
-  onDropRepoPathRef.current = (path) => branch.handleDropRepoPath(path);
+  const app = useAppConfig({ setActiveTab });
 
   const landing = useLanding({
     activeTab,
@@ -204,14 +140,6 @@ function App() {
     setProgressMessage: build.setProgressMessage,
     opsAuthorization: app.config.ops_authorization,
   });
-
-  // 进入历史 tab 时刷新记录
-  useEffect(() => {
-    if (activeTab === "history" && isTauriRuntime()) {
-      app.loadBuildHistory();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -243,284 +171,17 @@ function App() {
     };
   }, [activeTab]);
 
-  const openArtifactPath = useCallback(
-    (path: string) => app.openArtifactPath(path, showToast),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [app.openArtifactPath, showToast],
-  );
-
-  const [pushingRecordId, setPushingRecordId] = useState<string | null>(null);
-  /** 历史页推送会话：推送中及完成后仍显示进度/日志，离开历史 tab 后清除 */
-  const [historyPushUi, setHistoryPushUi] = useState(false);
-
-  useEffect(() => {
-    if (activeTab !== "history") {
-      setHistoryPushUi(false);
-      setPushingRecordId(null);
-    }
-  }, [activeTab]);
-
-  const handleHistoryPushJar = useCallback(
-    async (record: BuildRecord) => {
-      if (!isTauriRuntime()) {
-        showToast("请在桌面端推送 Harbor");
-        return;
-      }
-      if (build.isBuilding) {
-        showToast("已有构建任务进行中");
-        return;
-      }
-      const resolved = resolveHistoryJarPushConfig(record, app.config);
-      if (!resolved) {
-        showToast("该记录没有可推送的 JAR");
-        return;
-      }
-      if (!app.config.harbor_url || !app.config.username || !app.config.password || !app.config.project) {
-        showToast("请先完善 Harbor 配置");
-        setActiveTab("config");
-        return;
-      }
-      const repoCheck = resolveHarborRepository(resolved.imageName, app.config.project);
-      if (!repoCheck.ok) {
-        showToast(repoCheck.error);
-        return;
-      }
-
-      setHistoryPushUi(true);
-      setPushingRecordId(record.id);
-      build.setIsBuilding(true);
-      build.setCopied(null);
-      build.setProgress(0);
-      build.setProgressMessage("🚀 历史记录推送 Harbor...");
-      build.setLog("");
-      build.setShowBuildLog(true);
-      try {
-        const result = await invoke<string>("build_and_push", {
-          jarPath: resolved.jarPath,
-          imageName: resolved.imageName,
-          imageTag: resolved.imageTag,
-          artifactType: "jar",
-          exposePort: resolved.exposePort || null,
-          nginxLocations: [],
-        });
-        const imgMatch = result.match(/完整镜像:\s*(.+)/);
-        const fullImage = imgMatch?.[1]?.trim() || `${resolved.imageName}:${resolved.imageTag}`;
-        await invoke("update_build_record_push", {
-          recordId: record.id,
-          imageName: resolved.imageName,
-          imageTag: fullImage,
-        });
-        await app.loadBuildHistory();
-        build.setLog(`✅ 历史 JAR 已推送 Harbor\n\n完整镜像: ${fullImage}`);
-        showToast("推送成功");
-      } catch (e) {
-        build.setLog(`❌ 历史 JAR 推送失败:\n${e}`);
-        showToast(`推送失败: ${e}`);
-      } finally {
-        build.setIsBuilding(false);
-        setPushingRecordId(null);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [app.config, app.loadBuildHistory, build.isBuilding, showToast],
-  );
-
   return (
     <div className="app">
       <Sidebar
         activeTab={activeTab}
         sidebarCollapsed={app.sidebarCollapsed}
-        opsMode={app.opsMode}
         onTabChange={app.handleTabChange}
         onToggleCollapse={() => app.setSidebarCollapsed(!app.sidebarCollapsed)}
         onOpenLog={app.openDiagnosticLog}
       />
 
       <main className="content">
-        {activeTab === "upload" && (
-          <UploadPanel
-            artifactType={upload.artifactType}
-            artifactPath={upload.artifactPath}
-            imageName={upload.imageName}
-            imageTag={upload.imageTag}
-            exposePort={upload.uploadExposePort}
-            isDragOver={upload.isDragOver}
-            isBuilding={build.isBuilding}
-            showImageConfig={upload.showImageConfig}
-            showBuildLog={build.showBuildLog}
-            progress={build.progress}
-            progressMessage={build.progressMessage}
-            log={build.log}
-            fullImage={upload.uploadFullImage}
-            copied={build.copied}
-            onCopyImage={build.handleCopyImage}
-            onArtifactTypeChange={upload.handleArtifactTypeChange}
-            onSelectFile={upload.handleSelectFile}
-            onBuildAndPush={upload.handleBuildAndPush}
-            onCancelBuild={build.handleCancelBuild}
-            onDragOver={upload.handleDragEvents}
-            onDragLeave={upload.handleDragEvents}
-            onDrop={upload.handleDragEvents}
-            setImageName={upload.setImageName}
-            setImageTag={upload.setImageTag}
-            setExposePort={upload.setUploadExposePort}
-            setShowImageConfig={upload.setShowImageConfig}
-            setShowBuildLog={build.setShowBuildLog}
-            renderLog={build.renderLog}
-          />
-        )}
-
-        {activeTab === "push" && (
-          <PushImagePanel
-            localImage={upload.pushLocalImage}
-            localImageOptions={upload.pushLocalImageOptions}
-            isLoadingImages={upload.pushIsLoadingImages}
-            imageName={upload.pushImageName}
-            imageTag={upload.pushImageTag}
-            isBuilding={build.isBuilding}
-            showImageConfig={upload.showImageConfig}
-            showBuildLog={build.showBuildLog}
-            progress={build.progress}
-            progressMessage={build.progressMessage}
-            log={build.log}
-            fullImage={upload.pushFullImage}
-            copied={build.copied}
-            onCopyImage={build.handleCopyImage}
-            onPushImage={upload.handlePushImage}
-            onCancelBuild={build.handleCancelBuild}
-            onRefreshImages={upload.loadLocalImages}
-            onRemoveImage={upload.removeLocalImage}
-            setLocalImage={upload.setPushLocalImage}
-            setImageName={upload.setPushImageName}
-            setImageTag={upload.setPushImageTag}
-            setShowImageConfig={upload.setShowImageConfig}
-            setShowBuildLog={build.setShowBuildLog}
-            renderLog={build.renderLog}
-          />
-        )}
-
-        {activeTab === "branch" && (
-          <BranchPanel
-            branchProjectType={branch.branchProjectType}
-            repoPath={branch.repoPath}
-            branchName={branch.branchName}
-            branchOptions={branch.branchOptions}
-            isLoadingBranches={branch.loading.branches}
-            frontendDir={branch.frontendDir}
-            npmScripts={branch.npmScripts}
-            selectedBuildScript={branch.selectedBuildScript}
-            isLoadingScripts={branch.loading.scripts}
-            packageWithBackend={branch.packageWithBackend}
-            springProfile={branch.springProfile}
-            springProfiles={branch.springProfiles}
-            isLoadingProfiles={branch.loading.profiles}
-            lastCommit={branch.lastCommit}
-            isLoadingCommit={branch.loading.commit}
-            commitList={branch.commitList}
-            commitListTotal={branch.commitListTotal}
-            showCommitListModal={branch.showCommitListModal}
-            artifactPath={upload.artifactPath}
-            backendArtifactPath={branch.backendArtifactPath}
-            worktreePath={branch.worktreePath}
-            customDockerfile={branch.customDockerfile}
-            branchHasDockerfile={branch.branchHasDockerfile}
-            isBuilding={build.isBuilding}
-            autoPushImage={branch.autoPushImage}
-            autoPublishKs={branch.autoPublishKs}
-            branchFullImage={branch.branchFullImage}
-            branchImageResults={branch.branchImageResults}
-            imageName={upload.imageName}
-            imageTag={upload.imageTag}
-            exposePort={branch.branchExposePort}
-            nginxLocations={branch.nginxLocations}
-            showAdvancedSettings={branch.showAdvancedSettings}
-            config={app.config}
-            progress={build.progress}
-            progressMessage={build.progressMessage}
-            log={build.log}
-            showBuildLog={build.showBuildLog}
-            copied={build.copied}
-            onBranchProjectTypeChange={branch.handleBranchProjectTypeChange}
-            onRepoPathChange={branch.handleRepoPathChange}
-            onSelectRepo={branch.handleSelectRepo}
-            onRefreshBranches={() => branch.loadGitBranches(branch.repoPath, branch.branchName)}
-            onBranchChange={branch.handleBranchChange}
-            onFrontendDirChange={(dir) => {
-              branch.setFrontendDir(dir);
-              if (branch.repoPath) {
-                branch.loadNpmScripts(branch.repoPath, dir, undefined, branch.branchName);
-              }
-            }}
-            onSelectedBuildScriptChange={branch.setSelectedBuildScript}
-            onPackageWithBackendChange={branch.setPackageWithBackend}
-            onSpringProfileChange={branch.setSpringProfile}
-            onAutoPushImageChange={branch.setAutoPushImage}
-            onAutoPublishKsChange={branch.setAutoPublishKs}
-            onRememberSettingsChange={branch.handleRememberSettingsChange}
-            setShowCommitListModal={branch.setShowCommitListModal}
-            loadCommitList={branch.loadCommitList}
-            loadCommitAuthors={branch.loadCommitAuthors}
-            commitAuthors={branch.commitAuthors}
-            isLoadingCommitList={branch.loading.commitList}
-            commitListPage={branch.commitListPage}
-            commitListPageSize={branch.commitListPageSize}
-            commitAuthorFilter={branch.commitAuthorFilter}
-            commitMessageFilter={branch.commitMessageFilter}
-            setCommitAuthorFilter={branch.setCommitAuthorFilter}
-            setCommitMessageFilter={branch.setCommitMessageFilter}
-            onPackageFromBranch={branch.handlePackageFromBranch}
-            onCancelBuild={build.handleCancelBuild}
-            onOpenDirectory={openArtifactPath}
-            onCopyImage={build.handleCopyImage}
-            setImageName={upload.setImageName}
-            setImageTag={upload.setImageTag}
-            setExposePort={branch.setBranchExposePort}
-            onNginxLocationsChange={branch.setNginxLocations}
-            setShowAdvancedSettings={branch.setShowAdvancedSettings}
-            setShowBuildLog={build.setShowBuildLog}
-            renderLog={build.renderLog}
-          />
-        )}
-
-        {activeTab === "history" && (
-          <HistoryPanel
-            buildHistory={app.buildHistory}
-            isLoadingHistory={app.isLoadingHistory}
-            expandedRecordId={null}
-            collapsedProjects={new Set()}
-            historySearch=""
-            isBuilding={build.isBuilding}
-            showPushProgress={historyPushUi}
-            pushingRecordId={pushingRecordId}
-            progress={build.progress}
-            progressMessage={build.progressMessage}
-            log={build.log}
-            showBuildLog={build.showBuildLog}
-            onLoadHistory={app.loadBuildHistory}
-            onClearHistory={() => app.clearBuildHistory(showToast)}
-            onDeleteRecord={(record) => app.deleteBuildRecord(record, showToast)}
-            onOpenArtifact={openArtifactPath}
-            onCopyImage={build.handleCopyImage}
-            onPushJar={(record) => { void handleHistoryPushJar(record); }}
-            onCancelBuild={build.handleCancelBuild}
-            setShowBuildLog={build.setShowBuildLog}
-            renderLog={build.renderLog}
-          />
-        )}
-
-        {activeTab === "btJava" && <BtJavaProjectsPanel />}
-        {activeTab === "btPhp" && <BtPhpSitesPanel />}
-
-        {activeTab === "merge" && (
-          <MergePanel
-            config={app.config}
-            onOpenDirectory={openArtifactPath}
-            onPackageAfterMerge={({ repoPath, targetBranch }) => {
-              void branch.packageFromMergeTarget(repoPath, targetBranch);
-            }}
-          />
-        )}
-
         {activeTab === "landing" && (
           <LandingPanel
             landingIds={landing.landingIds}
@@ -563,32 +224,14 @@ function App() {
           />
         )}
 
-        {activeTab === "ksPublish" && (
-          <KsPublishPanel
-            config={app.config}
-            configReady={app.configLoaded}
-            onLastEnvChange={(id) => app.setConfig((prev) => ({ ...prev, ks_last_env_id: id }))}
-            onPublishMapsChange={(maps) =>
-              app.setConfig((prev) => ({ ...prev, ks_publish_maps: maps }))
-            }
-          />
-        )}
         {activeTab === "config" && (
           <ConfigPanel
             config={app.config}
             configSaved={app.configSaved}
-            showPassword={app.showPassword}
             onConfigChange={app.handleConfigChange}
             onSaveConfig={app.handleSaveConfig}
-            onTogglePassword={() => app.setShowPassword(!app.showPassword)}
             appVersion={app.appVersion || app.updateInfo?.current_version}
             onCheckUpdate={app.handleManualCheckUpdate}
-            initialSubTab={configSubTab}
-            onClearGitRecords={async () => {
-              const ok = await app.clearGitRecords(showToast);
-              if (ok) branch.resetGitMemoryUi();
-              return ok;
-            }}
           />
         )}
       </main>
