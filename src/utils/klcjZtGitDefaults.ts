@@ -300,6 +300,13 @@ export const KLCJ_ZT_GIT_DEFAULTS: KlcjZtGitDefault[] = [
     role: "backend",
     expose_port: "9100",
   },
+  {
+    dir: "ai-chat",
+    keys: ["ai-chat"],
+    git_url: `${GITEE}/ai-chat.git`,
+    role: "backend",
+    expose_port: "9100",
+  },
 ];
 
 function normalizeDeployName(name: string): string {
