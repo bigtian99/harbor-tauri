@@ -198,7 +198,19 @@ fn harbor_err_chain(e: &reqwest::Error) -> String {
 /// 只有证书/TLS 类错误才允许降级重试；网络、超时错误不降级，避免无谓地关掉校验。
 fn is_cert_error(msg: &str) -> bool {
     let m = msg.to_lowercase();
-    m.contains("certificate") || m.contains("ssl") || m.contains("tls")
+    // 英文证书错误关键词
+    if m.contains("certificate") || m.contains("ssl") || m.contains("tls") {
+        return true;
+    }
+    // 中文证书错误关键词（Windows 简体中文系统）
+    if msg.contains("证书") || msg.contains("根证书") || msg.contains("不受信任") {
+        return true;
+    }
+    // Windows 证书错误代码
+    if msg.contains("-2146762487") || msg.contains("0x800B010F") {
+        return true;
+    }
+    false
 }
 
 fn harbor_get_projects(
