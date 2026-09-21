@@ -10,6 +10,8 @@ export interface DeployInfo {
   containers: string[];
   ports: number[];
   status: DeployStatus; pods: { new: PodInfo[]; old: PodInfo[] }; revision: string;
+  /** 是否配置了 Git 地址（用于批量打包） */
+  hasGitConfig?: boolean;
 }
 export interface UpdateResult { ok: boolean; oldImage: string; newImage: string; revision: string; }
 export interface ConfigMapInfo { name: string; alias: string; keys: string[]; dataSize: number; }

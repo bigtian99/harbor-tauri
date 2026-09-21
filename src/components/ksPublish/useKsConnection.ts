@@ -189,7 +189,10 @@ export function useKsConnection({
     const seq = ++loadSeqRef.current;
     if (!silent) setLoading(true);
     try {
-      const list = await invoke<DeployInfo[]>("ks_list_deployments", { namespace });
+      const list = await invoke<DeployInfo[]>("ks_list_deployments", {
+        namespace,
+        envId,
+      });
       if (seq !== loadSeqRef.current) return;
       const fp = deployListFingerprint(list);
       const unchanged = fp === deploysFpRef.current;

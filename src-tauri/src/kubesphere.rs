@@ -730,6 +730,9 @@ pub struct DeployInfo {
     pub status: DeployStatus,
     pub pods: PodsGroup,
     pub revision: String,
+    /// 是否配置了 Git 地址（用于批量打包）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_git_config: Option<bool>,
 }
 
 #[derive(Serialize, Clone)]
@@ -1276,6 +1279,7 @@ fn ks_list_deployments_sync(namespace: String) -> Result<Vec<DeployInfo>, String
             status,
             pods: PodsGroup { new_pods, old_pods },
             revision: cur_rev.unwrap_or_default(),
+            has_git_config: None,
         });
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -1294,8 +1298,31 @@ fn ks_list_deployments_sync(namespace: String) -> Result<Vec<DeployInfo>, String
 
 /// async + spawn_blocking：并行拉 deployments/rs/pods 可能 >15s，避免堵 UI 线程。
 #[tauri::command]
-pub async fn ks_list_deployments(namespace: String) -> Result<Vec<DeployInfo>, String> {
-    ks_blocking(move || ks_list_deployments_sync(namespace)).await
+pub async fn ks_list_deployments(
+    namespace: String,
+    env_id: String,
+) -> Result<Vec<DeployInfo>, String> {
+    let ns_clone = namespace.clone();
+    ks_blocking(move || {
+        let mut list = ks_list_deployments_sync(namespace)?;
+        // 检查每个部署是否配置了 Git 地址
+        if let Ok(config) = crate::config_cmd::load_config_sync() {
+            for deploy in &mut list {
+                let has_git = config
+                    .ks_publish_maps
+                    .iter()
+                    .any(|m| {
+                        m.env_id == env_id
+                            && m.namespace == ns_clone
+                            && m.deployment == deploy.name
+                            && !m.git_url.trim().is_empty()
+                    });
+                deploy.has_git_config = Some(has_git);
+            }
+        }
+        Ok(list)
+    })
+    .await
 }
 
 /// 列出 Deployment 的 ReplicaSet 历史（revision → 镜像）

@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Table, Badge, ActionIcon, Checkbox, Group, Text, Tooltip } from "@mantine/core";
-import { Pencil } from "lucide-react";
+import { Pencil, GitBranch } from "lucide-react";
 import type { DeployInfo } from "./types";
 import { STATUS_DOT, STATUS_COLOR } from "./types";
 
@@ -39,7 +39,16 @@ export const DeployRow = memo(function DeployRow({
           <Badge color={STATUS_COLOR[s.state] ?? "gray"} variant="light" size="xs">{s.label}</Badge>
         </Group>
       </Table.Td>
-      <Table.Td fw={700}>{d.name}</Table.Td>
+      <Table.Td fw={700}>
+        <Group gap={6} wrap="nowrap">
+          <Text>{d.name}</Text>
+          {d.hasGitConfig && (
+            <Tooltip label="已配置 Git 地址" withArrow>
+              <GitBranch size={14} style={{ color: "var(--mantine-color-teal-6)" }} />
+            </Tooltip>
+          )}
+        </Group>
+      </Table.Td>
       <Table.Td>{d.alias?.trim() || "-"}</Table.Td>
       <Table.Td>{d.containers.join(", ") || "-"}</Table.Td>
       <Table.Td style={{ fontFamily: "monospace", fontSize: 12 }}>
