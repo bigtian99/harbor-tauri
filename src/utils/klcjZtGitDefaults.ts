@@ -293,6 +293,13 @@ export const KLCJ_ZT_GIT_DEFAULTS: KlcjZtGitDefault[] = [
     role: "backend",
     expose_port: "9100",
   },
+  {
+    dir: "tksy-admin-backend",
+    keys: ["tksy-admin-backend", "tksy-admin"],
+    git_url: `${GITEE}/tksy-admin.git`,
+    role: "backend",
+    expose_port: "9100",
+  },
 ];
 
 function normalizeDeployName(name: string): string {
