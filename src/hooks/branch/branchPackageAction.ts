@@ -28,6 +28,8 @@ export interface BranchPackageActionState {
   nginxLocations: NginxLocationBlock[];
   imageName: string;
   imageTag: string;
+  /** 选中的 Harbor 环境 id（多 Harbor：推送目标） */
+  harborId: string;
 }
 
 export interface BranchPackageActionDeps extends BranchPackageActionState {
@@ -172,6 +174,7 @@ export async function handlePackageFromBranch(
   const branchName = overrides?.branchName ?? deps.branchName;
   const autoPushImage = overrides?.autoPushImage ?? deps.autoPushImage;
   const autoPublishKs = overrides?.autoPublishKs ?? deps.autoPublishKs;
+  const harborId = deps.harborId;
 
   if (!isTauriRuntime()) {
     setLog("❌ 当前是浏览器预览环境，分支打包请在 Tauri 桌面窗口中操作");
@@ -214,6 +217,7 @@ export async function handlePackageFromBranch(
       imageName,
       imageTag,
       autoPushImage,
+      harborId,
     });
 
     if (!runResult.ok && !runResult.packageLog) {

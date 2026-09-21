@@ -129,6 +129,7 @@ export function ConfigPanel({
             showPassword={showPassword}
             onConfigChange={onConfigChange}
             onTogglePassword={onTogglePassword}
+            onSaveConfig={handleSaveConfig}
           />
         </Tabs.Panel>
 

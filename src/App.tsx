@@ -27,7 +27,12 @@ import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import "./App.css";
 
 import type { HarborConfig, TabType, BuildRecord } from "./types";
-import { isTauriRuntime, resolveHarborRepository } from "./types";
+import {
+  isHarborEnvReady,
+  isTauriRuntime,
+  resolveHarborEnv,
+  resolveHarborRepository,
+} from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import { resolveHistoryJarPushConfig } from "./historyJarPush.ts";
 import { shouldKeepPreviewServer } from "./utils/previewLifecycle";
@@ -58,6 +63,8 @@ function App() {
   const onDropRepoPathRef = useRef<(path: string) => void>(() => {});
   const upload = useUploadPush({
     config: app.config,
+    setConfig: app.setConfig,
+    getConfigSnapshot: app.getConfigSnapshot,
     setActiveTab,
     setLog: build.setLog,
     setIsBuilding: build.setIsBuilding,
@@ -204,12 +211,14 @@ function App() {
         showToast("该记录没有可推送的 JAR");
         return;
       }
-      if (!app.config.harbor_url || !app.config.username || !app.config.password || !app.config.project) {
-        showToast("请先完善 Harbor 配置");
+      // 历史记录无环境选择器：默认取第一个 Harbor 环境
+      const harborEnv = resolveHarborEnv(app.config);
+      if (!isHarborEnvReady(harborEnv)) {
+        showToast("请先在配置中完善 Harbor 环境（地址 / 用户名 / 密码 / 项目）");
         setActiveTab("config");
         return;
       }
-      const repoCheck = resolveHarborRepository(resolved.imageName, app.config.project);
+      const repoCheck = resolveHarborRepository(resolved.imageName, harborEnv.project);
       if (!repoCheck.ok) {
         showToast(repoCheck.error);
         return;
@@ -231,6 +240,7 @@ function App() {
           artifactType: "jar",
           exposePort: resolved.exposePort || null,
           nginxLocations: [],
+          harborId: harborEnv.id,
         });
         const imgMatch = result.match(/完整镜像:\s*(.+)/);
         const fullImage = imgMatch?.[1]?.trim() || `${resolved.imageName}:${resolved.imageTag}`;
@@ -322,6 +332,9 @@ function App() {
             setShowImageConfig={upload.setShowImageConfig}
             setShowBuildLog={build.setShowBuildLog}
             renderLog={build.renderLog}
+            harborEnvs={upload.harborEnvs}
+            harborId={upload.uploadHarborId}
+            onHarborChange={upload.handleUploadHarborChange}
           />
         )}
 
@@ -352,6 +365,9 @@ function App() {
             setShowImageConfig={upload.setShowImageConfig}
             setShowBuildLog={build.setShowBuildLog}
             renderLog={build.renderLog}
+            harborEnvs={upload.harborEnvs}
+            harborId={upload.pushHarborId}
+            onHarborChange={upload.handlePushHarborChange}
           />
         )}
 
@@ -435,6 +451,8 @@ function App() {
             setShowAdvancedSettings={branch.setShowAdvancedSettings}
             setShowBuildLog={build.setShowBuildLog}
             renderLog={build.renderLog}
+            branchHarborId={branch.branchHarborId}
+            onBranchHarborChange={branch.handleBranchHarborChange}
           />
         )}
 

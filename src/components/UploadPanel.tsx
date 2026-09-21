@@ -12,10 +12,11 @@ import {
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
-import type { ArtifactType } from "../types";
+import type { ArtifactType, HarborEnv } from "../types";
 import { getPathName } from "../types";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
 import { PanelPageHeader } from "./PanelPageHeader";
+import { HarborPicker } from "./HarborPicker";
 import { BuildProgressBlock, BUILD_LOG_LABELS } from "./BuildProgressBlock";
 
 interface UploadPanelProps {
@@ -47,6 +48,10 @@ interface UploadPanelProps {
   setShowImageConfig: (show: boolean) => void;
   setShowBuildLog: (show: boolean) => void;
   renderLog: (text: string) => React.ReactNode;
+  // 多 Harbor：可选环境列表 / 当前选中 / 切换（记忆 last_harbor_upload）
+  harborEnvs: HarborEnv[];
+  harborId: string;
+  onHarborChange: (id: string) => void;
 }
 
 export function UploadPanel({
@@ -57,6 +62,7 @@ export function UploadPanel({
   onDragOver, onDragLeave, onDrop,
   setImageName, setImageTag, setExposePort, setShowImageConfig, setShowBuildLog,
   renderLog,
+  harborEnvs, harborId, onHarborChange,
 }: UploadPanelProps) {
   const fullImageCopied = fullImage ? isCopyHighlighted(copied, fullImage) : false;
   const fullImageCopyText = fullImage ? normalizeCopyText(fullImage) : "";
@@ -162,7 +168,7 @@ export function UploadPanel({
               value={imageName}
               onChange={(e) => setImageName(e.currentTarget.value)}
               placeholder="例如: my-app（不含 Harbor 项目名）"
-              description="Harbor 项目名在配置中填写，推送时自动拼接"
+              description="Harbor 项目名取自所选环境，推送时自动拼接"
             />
             <TextInput
               size="sm"
@@ -184,6 +190,15 @@ export function UploadPanel({
           </Stack>
         </Collapse>
       </Paper>
+
+      <HarborPicker
+        envs={harborEnvs}
+        value={harborId}
+        onChange={onHarborChange}
+        disabled={isBuilding}
+        label="推送目标"
+        hint="镜像将推送到该 Harbor 环境的项目下"
+      />
 
       <Button
         variant="filled"

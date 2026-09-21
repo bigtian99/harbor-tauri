@@ -19,7 +19,8 @@ mod utils;
 use build::{
     build_and_push, cancel_build, cancel_bt_java_deploy, cancel_bt_php_deploy, check_dockerfile,
     detect_frontend_dir, detect_spring_profiles, get_bt_temp_login_url, list_bt_java_projects,
-    list_bt_php_sites, list_local_images, list_npm_scripts, open_directory, open_external_url,
+    list_bt_php_sites, list_harbor_projects, list_local_images, list_npm_scripts, open_directory,
+    open_external_url,
     package_from_branch,
     push_local_image, remove_local_image, restart_bt_java_project, stop_bt_java_project,
     stop_bt_php_site, test_harbor_connection, upload_and_restart_bt_java_project, upload_bt_java_jar, upload_bt_php_site,
@@ -38,7 +39,7 @@ use diag::{
 };
 use git::{
     check_remote_merge, clone_repo, get_git_remote_url, get_latest_tag, get_merge_conflict_diff,
-    match_git_repo_paths,
+    match_git_repo_paths, scan_repos_git_urls,
     list_git_branches, list_git_branches_from_url, list_remote_branches, merge_remote_branches,
 };
 use history::{
@@ -153,6 +154,7 @@ pub fn run() {
             list_local_images,
             remove_local_image,
             test_harbor_connection,
+            list_harbor_projects,
             open_directory,
             save_build_record,
             get_build_history,
@@ -189,6 +191,7 @@ pub fn run() {
             get_latest_tag,
             get_git_remote_url,
             match_git_repo_paths,
+            scan_repos_git_urls,
             batch_pack_sub_channels,
             open_ops_login_window,
             close_ops_login_window,

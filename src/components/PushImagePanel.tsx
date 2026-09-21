@@ -14,8 +14,10 @@ import {
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
+import type { HarborEnv } from "../types";
 import type { LocalImageInfo } from "../hooks/useUploadPush";
 import { PanelPageHeader } from "./PanelPageHeader";
+import { HarborPicker } from "./HarborPicker";
 import { BuildProgressBlock, PUSH_LOG_LABELS } from "./BuildProgressBlock";
 
 interface PushImagePanelProps {
@@ -45,6 +47,10 @@ interface PushImagePanelProps {
   setShowImageConfig: (show: boolean) => void;
   setShowBuildLog: (show: boolean) => void;
   renderLog: (text: string) => React.ReactNode;
+  // 多 Harbor：可选环境列表 / 当前选中 / 切换（记忆 last_harbor_push）
+  harborEnvs: HarborEnv[];
+  harborId: string;
+  onHarborChange: (id: string) => void;
 }
 
 /** 展示用：拆出仓库路径与 tag（不裁成短名） */
@@ -79,6 +85,7 @@ export function PushImagePanel({
   setLocalImage, setImageName, setImageTag,
   setShowImageConfig, setShowBuildLog,
   renderLog,
+  harborEnvs, harborId, onHarborChange,
 }: PushImagePanelProps) {
   const [query, setQuery] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
@@ -521,6 +528,15 @@ export function PushImagePanel({
             </Stack>
           </Collapse>
         </Paper>
+
+        <HarborPicker
+          envs={harborEnvs}
+          value={harborId}
+          onChange={onHarborChange}
+          disabled={isBuilding}
+          label="推送目标"
+          hint="镜像将打标签并推送到该 Harbor 环境的项目下"
+        />
 
         <Button
           variant="filled"

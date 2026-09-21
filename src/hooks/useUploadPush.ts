@@ -4,14 +4,17 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useConfirmDialog } from "./useConfirmDialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { showSystemAlert } from "../systemAlert";
-import type { ArtifactType, HarborConfig, TabType } from "../types";
+import type { ArtifactType, HarborConfig, HarborEnv, TabType } from "../types";
 import {
   isTauriRuntime,
   inferImageName,
+  isHarborEnvReady,
+  resolveHarborEnv,
   resolveHarborRepository,
   inferImageNameFromRef,
 } from "../types";
 import { useEffect } from "react";
+import { pickHarborId } from "../components/HarborPicker";
 
 /** 与后端 list_local_images 对齐 */
 export type LocalImageInfo = {
@@ -25,6 +28,10 @@ export type LocalImageInfo = {
 
 interface UseUploadPushDeps {
   config: HarborConfig;
+  /** 记忆 Harbor 环境选择时写回配置（与 last_repo_path 等同一条写回链路） */
+  setConfig: (update: HarborConfig | ((prev: HarborConfig) => HarborConfig)) => void;
+  /** 写盘前取最新整表，避免闭包 config 覆盖其它字段 */
+  getConfigSnapshot?: () => HarborConfig;
   setActiveTab: (tab: TabType) => void;
   setLog: (value: string | ((prev: string) => string)) => void;
   setIsBuilding: (value: boolean) => void;
@@ -44,6 +51,8 @@ interface UseUploadPushDeps {
 export function useUploadPush(deps: UseUploadPushDeps) {
   const {
     config,
+    setConfig,
+    getConfigSnapshot,
     setActiveTab,
     setLog,
     setIsBuilding,
@@ -79,6 +88,53 @@ export function useUploadPush(deps: UseUploadPushDeps) {
   /** 加载请求代号：防抖 + 竞态守卫（快速连点重试时只认最新一次） */
   const imagesLoadSeq = useRef(0);
   const imagesLoadTimer = useRef<number | null>(null);
+
+  // 多 Harbor：上传 / 镜像推送各自记住上次选中的环境
+  const [uploadHarborId, setUploadHarborId] = useState("");
+  const [pushHarborId, setPushHarborId] = useState("");
+
+  const harborEnvs: HarborEnv[] = config.harbors ?? [];
+  /** 生效 id：本次选择 → 配置里的 last_harbor_* → 第一个环境（环境被删自动回落） */
+  const selectedUploadHarborId = pickHarborId(
+    harborEnvs,
+    uploadHarborId,
+    config.last_harbor_upload,
+  );
+  const selectedPushHarborId = pickHarborId(
+    harborEnvs,
+    pushHarborId,
+    config.last_harbor_push,
+  );
+  const uploadHarborEnv = resolveHarborEnv(config, selectedUploadHarborId);
+  const pushHarborEnv = resolveHarborEnv(config, selectedPushHarborId);
+
+  /** 写回 last_harbor_* 记忆：内存态 + save_config（localStorage 之外的既有约定） */
+  function persistHarborMemory(
+    field: "last_harbor_upload" | "last_harbor_push",
+    id: string,
+  ) {
+    const base = getConfigSnapshot?.() ?? config;
+    if (base[field] === id) return;
+    const updated: HarborConfig =
+      field === "last_harbor_upload"
+        ? { ...base, last_harbor_upload: id }
+        : { ...base, last_harbor_push: id };
+    setConfig(updated);
+    if (!isTauriRuntime()) return;
+    void invoke("save_config", { config: getConfigSnapshot?.() ?? updated }).catch((e) => {
+      console.error("保存 Harbor 环境选择失败:", e);
+    });
+  }
+
+  function handleUploadHarborChange(id: string) {
+    setUploadHarborId(id);
+    persistHarborMemory("last_harbor_upload", id);
+  }
+
+  function handlePushHarborChange(id: string) {
+    setPushHarborId(id);
+    persistHarborMemory("last_harbor_push", id);
+  }
 
   const handleDragEvents = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -140,8 +196,8 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       setLog("⚠️ 请输入镜像名称");
       return;
     }
-    if (!config.harbor_url || !config.username || !config.password || !config.project) {
-      setLog("⚠️ 请先配置Harbor信息");
+    if (!isHarborEnvReady(uploadHarborEnv)) {
+      setLog("⚠️ 请先配置 Harbor 环境（地址 / 用户名 / 密码 / 项目均必填）");
       setActiveTab("config");
       return;
     }
@@ -153,7 +209,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     setUploadFullImage("");
     const uploadPort = artifactType === "jar" ? (uploadExposePort.trim() || config.expose_port.trim()) : "";
     const uploadImageName = uploadPort ? `${imageName}-${uploadPort}` : imageName;
-    const resolvedRepo = resolveHarborRepository(uploadImageName, config.project);
+    const resolvedRepo = resolveHarborRepository(uploadImageName, uploadHarborEnv.project);
     if (!resolvedRepo.ok) {
       setLog(`⚠️ ${resolvedRepo.error}`);
       setIsBuilding(false);
@@ -167,6 +223,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
         artifactType,
         exposePort: uploadExposePort || null,
         nginxLocations: [],
+        harborId: uploadHarborEnv.id,
       });
       const imgMatch = result.match(/完整镜像:\s*(.+)/);
       if (imgMatch) {
@@ -274,8 +331,8 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       setLog("⚠️ 请输入目标镜像名称");
       return;
     }
-    if (!config.harbor_url || !config.username || !config.password || !config.project) {
-      setLog("⚠️ 请先配置Harbor信息");
+    if (!isHarborEnvReady(pushHarborEnv)) {
+      setLog("⚠️ 请先配置 Harbor 环境（地址 / 用户名 / 密码 / 项目均必填）");
       setActiveTab("config");
       return;
     }
@@ -290,6 +347,7 @@ export function useUploadPush(deps: UseUploadPushDeps) {
         localImage: pushLocalImage.trim(),
         imageName: pushImageName.trim(),
         imageTag: pushImageTag.trim() || "latest",
+        harborId: pushHarborEnv.id,
       });
       const imgMatch = result.match(/完整镜像:\s*(.+)/);
       if (imgMatch) {
@@ -368,6 +426,12 @@ export function useUploadPush(deps: UseUploadPushDeps) {
   }, [activeTab, onDropRepoPath]);
 
   return {
+    // Harbor 环境选择（上传 / 镜像推送各自记忆）
+    harborEnvs,
+    uploadHarborId: selectedUploadHarborId,
+    pushHarborId: selectedPushHarborId,
+    handleUploadHarborChange,
+    handlePushHarborChange,
     // upload
     artifactType,
     setArtifactType,

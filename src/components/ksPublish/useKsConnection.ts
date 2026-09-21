@@ -108,7 +108,19 @@ export function useKsConnection({
         return;
       }
       setNamespaces(ns);
-      const prefer = ns.includes("klcj-zt-dev") ? "klcj-zt-dev" : ns[0] ?? null;
+      let prefer: string | null = null;
+      if (env.default_namespace && ns.includes(env.default_namespace)) {
+        prefer = env.default_namespace;
+      } else {
+        if (env.default_namespace) {
+          notifications.show({
+            color: "yellow",
+            message: `默认命名空间「${env.default_namespace}」不存在，已自动选择其他命名空间`,
+            autoClose: 3000,
+          });
+        }
+        prefer = ns.includes("klcj-zt-dev") ? "klcj-zt-dev" : ns[0] ?? null;
+      }
       setNamespace(prefer);
       setConnected(true);
       const tip =

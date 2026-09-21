@@ -1203,3 +1203,69 @@ CONFLICT (content): Merge conflict in conf/application.yml
         assert_eq!(files, vec!["src/A.java".to_string(), "README.md".to_string()]);
     }
 }
+
+/// 批量扫描目录下所有项目的 Git 远程地址
+#[derive(Debug, serde::Serialize)]
+pub struct RepoGitInfo {
+    pub path: String,
+    pub name: String,
+    pub git_url: String,
+}
+
+#[tauri::command]
+pub async fn scan_repos_git_urls(base_dir: String) -> Result<Vec<RepoGitInfo>, String> {
+    use std::fs;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let base = PathBuf::from(&base_dir);
+        if !base.exists() {
+            return Err(format!("目录不存在: {}", base_dir));
+        }
+
+        crate::diag::diag_log("git", &format!("scan_repos_git_urls base={}", base.display()));
+
+        let mut results = Vec::new();
+        let entries = fs::read_dir(&base).map_err(|e| format!("读取目录失败: {e}"))?;
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            // 检查是否为 Git 仓库
+            let git_dir = path.join(".git");
+            if !git_dir.exists() {
+                continue;
+            }
+
+            let name = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            // 尝试获取 Git 远程地址
+            match git_output_no_cancel(&path, &["remote", "get-url", "origin"]) {
+                Ok(url) => {
+                    let git_url = url.trim().to_string();
+                    if !git_url.is_empty() {
+                        results.push(RepoGitInfo {
+                            path: path.to_string_lossy().to_string(),
+                            name,
+                            git_url,
+                        });
+                    }
+                }
+                Err(_) => {
+                    // 没有 origin，跳过
+                    continue;
+                }
+            }
+        }
+
+        crate::diag::diag_log("git", &format!("scan_repos_git_urls found {} repos", results.len()));
+        Ok(results)
+    })
+    .await
+    .map_err(|e| format!("扫描线程异常: {e}"))?
+}

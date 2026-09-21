@@ -55,6 +55,7 @@ const compactInputStyles = {
 interface DeployRow {
   name: string;
   containers: string[];
+  ports?: number[];
 }
 
 interface GridRow {
@@ -63,6 +64,8 @@ interface GridRow {
   role: KsPublishMapRole;
   git_url: string;
   expose_port: string;
+  /** K8s 实际 containerPort（从 Deployment YAML 读取） */
+  actualPorts?: number[];
   mapId?: string;
 }
 
@@ -85,17 +88,29 @@ function buildGridRows(
     );
     const suggested = suggestKlcjZtGit(d.name);
     const git_url = existing?.git_url?.trim() || suggested?.git_url || "";
-    const expose_port = resolveKlcjZtExposePort({
+
+    // 优先使用 K8s 实际端口，其次用配置端口，最后用推测端口
+    const actualPort = d.ports?.[0]?.toString() || "";
+    const expose_port = actualPort || resolveKlcjZtExposePort({
       deployment: d.name,
       gitUrl: git_url,
       existingPort: existing?.expose_port,
     }) || suggested?.expose_port || "";
+
+    // 根据端口推断角色：80/443 → frontend，其他按建议或默认 backend
+    let inferredRole: KsPublishMapRole = suggested?.role ?? "backend";
+    const portNum = parseInt(expose_port, 10);
+    if (portNum === 80 || portNum === 443) {
+      inferredRole = "frontend";
+    }
+
     return {
       deployment: d.name,
       container: existing?.container?.trim() || d.containers[0]?.trim() || "",
-      role: existing?.role ?? suggested?.role ?? "backend",
+      role: existing?.role ?? inferredRole,
       git_url,
       expose_port,
+      actualPorts: d.ports,
       mapId: existing?.id,
     };
   });
@@ -199,7 +214,13 @@ export function KsPublishMapEditor({
       }
       setNamespaces(ns);
       setConnected(true);
-      const prefer = ns.includes("klcj-zt-dev") ? "klcj-zt-dev" : ns[0];
+      // 优先使用环境配置的默认命名空间，其次用特殊值，最后用第一个
+      const defaultNs = env.default_namespace?.trim() || "";
+      const prefer = (defaultNs && ns.includes(defaultNs))
+        ? defaultNs
+        : ns.includes("klcj-zt-dev")
+          ? "klcj-zt-dev"
+          : ns[0];
       setNamespace(prefer);
       setStatusText(`已连接「${env.name}」，共 ${ns.length} 个命名空间`);
     } catch (e) {

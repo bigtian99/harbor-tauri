@@ -13,7 +13,7 @@ import {
 } from "@mantine/core";
 import {
   FileText, CheckCircle, Copy, Loader2,
-  GitBranch, FolderOpen, ExternalLink, List, Pin, Package, RotateCcw
+  GitBranch, FolderOpen, ExternalLink, List, Pin, Package, RotateCcw, Link2
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "./SearchableDropdown";
@@ -26,6 +26,7 @@ import type {
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
 import { PanelPageHeader } from "./PanelPageHeader";
+import { HarborPicker } from "./HarborPicker";
 import { BuildProgressBlock, BUILD_LOG_LABELS } from "./BuildProgressBlock";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
 import { branchDropdownLabel } from "../branchRef";
@@ -123,6 +124,9 @@ interface BranchPanelProps {
   setShowAdvancedSettings: (show: boolean) => void;
   setShowBuildLog: (show: boolean) => void;
   renderLog: (text: string) => React.ReactNode;
+  // 多 Harbor：当前选中环境 id / 切换（记忆 last_harbor_branch），列表取自 config.harbors
+  branchHarborId: string;
+  onBranchHarborChange: (id: string) => void;
 }
 
 function commitNpmBuildScript(value: string, onChange: (script: string) => void) {
@@ -148,6 +152,7 @@ export function BranchPanel({
   onPackageFromBranch, onCancelBuild, onOpenDirectory, onCopyImage,
   setImageName, setImageTag, setExposePort, onNginxLocationsChange, setShowAdvancedSettings, setShowBuildLog,
   renderLog,
+  branchHarborId, onBranchHarborChange,
 }: BranchPanelProps) {
   const showProgress = shouldShowBranchProgress(isBuilding, log, progress);
   const showResults = shouldShowBranchResults(
@@ -542,6 +547,15 @@ export function BranchPanel({
         <Stack gap="sm">
           <Text className="branch-section-title">推送与发布</Text>
 
+          <HarborPicker
+            envs={config.harbors ?? []}
+            value={branchHarborId}
+            onChange={onBranchHarborChange}
+            disabled={isBuilding}
+            label="推送目标"
+            hint="打包后镜像推送到该 Harbor 环境的项目下"
+          />
+
           {(branchProjectType === "maven" || branchProjectType === "npm") && (
             <Stack gap="sm">
               <Stack gap={4}>
@@ -668,15 +682,25 @@ export function BranchPanel({
                           {isCopied ? "已复制" : "复制"}
                         </Button>
                       </Group>
-                      <Text
-                        size="sm"
-                        ff="monospace"
-                        c="var(--color-text)"
-                        style={{ wordBreak: "break-all", lineHeight: 1.45 }}
-                        title={item.image}
-                      >
-                        {item.image}
-                      </Text>
+                      <Group gap={8} wrap="nowrap" align="baseline" pl={6}>
+                        <Link2
+                          size={13}
+                          color="var(--color-text-muted)"
+                          style={{ flexShrink: 0, position: "relative", top: 2, opacity: 0.55 }}
+                        />
+                        <Text size="xs" fw={600} w={56} c="var(--color-text-muted)" style={{ flexShrink: 0, opacity: 0.85 }}>
+                          地址
+                        </Text>
+                        <Text
+                          size="sm"
+                          ff="monospace"
+                          c="var(--color-text)"
+                          style={{ wordBreak: "break-all", lineHeight: 1.45, flex: 1, minWidth: 0 }}
+                          title={item.image}
+                        >
+                          {item.image}
+                        </Text>
+                      </Group>
                     </Stack>
                   );
                 })
@@ -703,20 +727,30 @@ export function BranchPanel({
                         {branchFallbackCopied ? "已复制" : "复制"}
                       </Button>
                     </Group>
-                    <Stack gap={4}>
-                      {branchFullImage.split("\n").map((line, i) => (
-                        <Text
-                          key={i}
-                          size="sm"
-                          ff="monospace"
-                          c="var(--color-text)"
-                          style={{ wordBreak: "break-all", lineHeight: 1.45 }}
-                          title={line}
-                        >
-                          {line}
-                        </Text>
-                      ))}
-                    </Stack>
+                    <Group gap={8} wrap="nowrap" align="baseline" pl={6}>
+                      <Link2
+                        size={13}
+                        color="var(--color-text-muted)"
+                        style={{ flexShrink: 0, position: "relative", top: 2, opacity: 0.55 }}
+                      />
+                      <Text size="xs" fw={600} w={56} c="var(--color-text-muted)" style={{ flexShrink: 0, opacity: 0.85 }}>
+                        地址
+                      </Text>
+                      <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                        {branchFullImage.split("\n").map((line, i) => (
+                          <Text
+                            key={i}
+                            size="sm"
+                            ff="monospace"
+                            c="var(--color-text)"
+                            style={{ wordBreak: "break-all", lineHeight: 1.45 }}
+                            title={line}
+                          >
+                            {line}
+                          </Text>
+                        ))}
+                      </Stack>
+                    </Group>
                   </Stack>
                   )
                 : null}

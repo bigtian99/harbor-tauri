@@ -286,7 +286,7 @@ export const appTheme = createTheme({
       styles: fieldChrome,
     },
     Select: {
-      defaultProps: { radius: "sm" },
+      /* 不单独设 radius：跟 TextInput 一样走 defaultRadius(md)，否则并排时圆角不齐 */
       styles: { input: fieldChrome.input },
     },
     Input: {

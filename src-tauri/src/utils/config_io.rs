@@ -24,6 +24,7 @@ pub(crate) fn normalize_config(mut config: HarborConfig) -> HarborConfig {
         config.ks_console = HarborConfig::default().ks_console;
     }
     migrate_ks_environments(&mut config);
+    migrate_harbors(&mut config);
     if matches_default_template(
         &config.frontend_dockerfile_template,
         LEGACY_FRONTEND_DOCKERFILE_TEMPLATE,
@@ -50,6 +51,73 @@ pub(crate) fn normalize_config(mut config: HarborConfig) -> HarborConfig {
     config
 }
 
+/// 旧版单 Harbor 字段 → harbors 列表；并修正三个面板的记忆位。
+fn migrate_harbors(config: &mut HarborConfig) {
+    use crate::models::HarborEnv;
+    if config.harbors.is_empty() {
+        // 判据刻意不含 harbor_url：它有默认值 dockerhub.kubekey.local，
+        // 一旦纳入，全新安装也会凭空生出一个空环境。
+        // 其余三项任一非空即算「配过」，这样只填了 地址+项目 的老配置也迁移过来，
+        // 由 HarborEnv::validate 提示补全，而不是被静默丢弃。
+        let has_legacy = !config.username.trim().is_empty()
+            || !config.password.is_empty()
+            || !config.project.trim().is_empty();
+        if has_legacy {
+            config.harbors.push(HarborEnv {
+                id: "default".to_string(),
+                name: "默认".to_string(),
+                url: if config.harbor_url.trim().is_empty() {
+                    HarborConfig::default().harbor_url
+                } else {
+                    config.harbor_url.clone()
+                },
+                username: config.username.clone(),
+                password: config.password.clone(),
+                project: config.project.clone(),
+            });
+        }
+    }
+    for (idx, env) in config.harbors.iter_mut().enumerate() {
+        if env.id.trim().is_empty() {
+            env.id = format!("harbor-{}", idx + 1);
+        }
+        if env.name.trim().is_empty() {
+            env.name = format!("环境{}", idx + 1);
+        }
+    }
+    let ids: Vec<String> = config.harbors.iter().map(|e| e.id.clone()).collect();
+    let fallback = ids.first().cloned().unwrap_or_default();
+    for slot in [
+        &mut config.last_harbor_upload,
+        &mut config.last_harbor_branch,
+        &mut config.last_harbor_push,
+    ] {
+        if slot.trim().is_empty() || !ids.iter().any(|id| id == slot) {
+            *slot = fallback.clone();
+        }
+    }
+}
+
+/// 按 id 取 Harbor 环境：id 为空取第一个，找不到报错。
+pub(crate) fn resolve_harbor(
+    config: &HarborConfig,
+    harbor_id: &str,
+) -> Result<crate::models::HarborEnv, String> {
+    if config.harbors.is_empty() {
+        return Err("请先在设置中配置 Harbor 环境".to_string());
+    }
+    let id = harbor_id.trim();
+    if id.is_empty() {
+        return Ok(config.harbors[0].clone());
+    }
+    config
+        .harbors
+        .iter()
+        .find(|e| e.id == id)
+        .cloned()
+        .ok_or_else(|| format!("Harbor 环境不存在: {id}"))
+}
+
 fn migrate_ks_environments(config: &mut HarborConfig) {
     if config.ks_environments.is_empty() {
         let has_legacy =
@@ -69,6 +137,7 @@ fn migrate_ks_environments(config: &mut HarborConfig) {
                     config.ks_username.clone()
                 },
                 password: config.ks_password.clone(),
+                default_namespace: String::new(),
             });
         }
     }
@@ -172,10 +241,106 @@ mod tests {
 
     #[test]
     fn empty_environments_without_legacy_stay_empty() {
-        let config = normalize_config(HarborConfig::default());
+        // default() 现在带预配置 KS 环境；旧版测试语义是「无遗留凭证时不自动迁移」
+        // 改为验证：手动清空后 normalize 不会再塞回来
+        let mut config = HarborConfig::default();
+        config.ks_environments.clear();
+        config.ks_username.clear();
+        config.ks_password.clear();
+        let config = normalize_config(config);
         assert!(config.ks_environments.is_empty());
         assert!(config.ks_username.is_empty());
         assert!(config.ks_password.is_empty());
+    }
+
+    #[test]
+    fn migrate_legacy_harbor_into_one_env() {
+        let mut config = HarborConfig::default();
+        config.harbor_url = "harbor.dev.local".to_string();
+        config.username = "admin".to_string();
+        config.password = "pwd".to_string();
+        config.project = "library".to_string();
+        config.harbors.clear();
+        let config = normalize_config(config);
+        assert_eq!(config.harbors.len(), 1);
+        assert_eq!(config.harbors[0].id, "default");
+        assert_eq!(config.harbors[0].url, "harbor.dev.local");
+        assert_eq!(config.harbors[0].project, "library");
+        // 三个面板记忆位落回唯一环境
+        assert_eq!(config.last_harbor_upload, "default");
+        assert_eq!(config.last_harbor_branch, "default");
+        assert_eq!(config.last_harbor_push, "default");
+    }
+
+    #[test]
+    fn empty_harbors_without_credentials_stay_empty() {
+        // 现在 default() 带一个预配置环境；旧版测试语义是「无遗留凭证时不自动迁移」
+        // 改为验证：手动清空 harbors 后，normalize 不会因默认值再塞回来
+        let mut config = HarborConfig::default();
+        config.harbors.clear();
+        config.username.clear();
+        config.password.clear();
+        config.project.clear();
+        let config = normalize_config(config);
+        assert!(config.harbors.is_empty());
+        assert!(config.last_harbor_upload.is_empty());
+    }
+
+    #[test]
+    fn migrate_legacy_harbor_with_only_url_and_project() {
+        // 只填过 地址+项目、从没填账号的老配置：应迁移出来交给 validate 提示补全，
+        // 而不是被静默丢弃（且不能因 harbor_url 的默认值误判为新装）
+        let mut config = HarborConfig::default();
+        config.harbor_url = "harbor.legacy.local".to_string();
+        config.project = "legacy-proj".to_string();
+        config.harbors.clear();
+        let config = normalize_config(config);
+        assert_eq!(config.harbors.len(), 1);
+        assert_eq!(config.harbors[0].url, "harbor.legacy.local");
+        assert_eq!(config.harbors[0].project, "legacy-proj");
+        // 缺账号 → validate 必须报错，供 UI 提示
+        assert!(config.harbors[0].validate().is_err());
+    }
+
+    #[test]
+    fn resolve_harbor_by_id_empty_id_and_missing_id() {
+        use crate::utils::resolve_harbor;
+        let mut config = HarborConfig::default();
+        config.harbors = vec![
+            crate::models::HarborEnv {
+                id: "dev".to_string(),
+                name: "开发".to_string(),
+                url: "harbor.dev.local".to_string(),
+                ..Default::default()
+            },
+            crate::models::HarborEnv {
+                id: "prod".to_string(),
+                name: "生产".to_string(),
+                url: "harbor.prod.local".to_string(),
+                ..Default::default()
+            },
+        ];
+        assert_eq!(resolve_harbor(&config, "prod").unwrap().url, "harbor.prod.local");
+        assert_eq!(resolve_harbor(&config, "").unwrap().id, "dev");
+        assert_eq!(resolve_harbor(&config, "  ").unwrap().id, "dev");
+        assert!(resolve_harbor(&config, "nope").is_err());
+
+        // 手动构造空列表（default() 现在带预配置）
+        let mut empty = HarborConfig::default();
+        empty.harbors.clear();
+        assert!(resolve_harbor(&empty, "").is_err());
+    }
+
+    #[test]
+    fn stale_harbor_memory_falls_back_to_first_env() {
+        let mut config = HarborConfig::default();
+        config.harbors = vec![crate::models::HarborEnv {
+            id: "prod".to_string(),
+            ..Default::default()
+        }];
+        config.last_harbor_upload = "已删除的环境".to_string();
+        let config = normalize_config(config);
+        assert_eq!(config.last_harbor_upload, "prod");
     }
 
     #[test]

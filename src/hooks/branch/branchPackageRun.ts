@@ -15,7 +15,9 @@ import { sanitizeBranchForImageRef } from "../../branchRef";
 import {
   getProjectName,
   inferImageName,
+  isHarborEnvReady,
   isTauriRuntime,
+  resolveHarborEnv,
   resolveHarborRepository,
 } from "../../types";
 
@@ -34,6 +36,8 @@ export interface BranchPackageRunParams {
   imageName?: string;
   imageTag?: string;
   autoPushImage: boolean;
+  /** 选中的 Harbor 环境 id（多环境：推送时按此环境取地址/账号/项目） */
+  harborId?: string;
   /** 传给 build_and_push 的 progressLabel */
   progressLabel?: string;
   /** K8s Deployment 名，多模块 Maven 自动匹配子模块 */
@@ -90,11 +94,15 @@ export async function runBranchPackageAndPush(
     imageName = "",
     imageTag,
     autoPushImage,
+    harborId,
     progressLabel,
     deploymentHint,
     packSlot,
     skipBtDeploy,
   } = params;
+
+  /** 本次推送目标 Harbor 环境（id 为空取第一个；环境被删时回落） */
+  const harborEnv = resolveHarborEnv(config, harborId);
 
   const emptyArtifacts = {
     artifactPath: "",
@@ -204,13 +212,13 @@ export async function runBranchPackageAndPush(
     };
   }
 
-  if (!config.harbor_url || !config.username || !config.password || !config.project) {
+  if (!isHarborEnvReady(harborEnv)) {
     return {
       ok: false,
-      error: "Harbor 配置不完整",
+      error: "Harbor 环境未配置完整（地址 / 用户名 / 密码 / 项目均必填）",
       packageLog: result.log,
       images: [],
-      pushErrors: ["Harbor 配置不完整，无法推送镜像"],
+      pushErrors: ["Harbor 环境未配置完整，无法推送镜像"],
       ...artifacts,
     };
   }
@@ -236,10 +244,10 @@ export async function runBranchPackageAndPush(
         ? [frontendImageName, backendImageName]
         : [frontendImageName];
   const invalidName = namesToPush.find(
-    (name) => !resolveHarborRepository(name, config.project).ok,
+    (name) => !resolveHarborRepository(name, harborEnv.project).ok,
   );
   if (invalidName) {
-    const err = resolveHarborRepository(invalidName, config.project);
+    const err = resolveHarborRepository(invalidName, harborEnv.project);
     return {
       ok: false,
       error: err.ok ? "镜像名不合法" : err.error,
@@ -265,6 +273,7 @@ export async function runBranchPackageAndPush(
         exposePort: branchExposePort || null,
         nginxLocations: [],
         progressLabel: label,
+        harborId: harborEnv.id,
       });
       const imgMatch = resultStr.match(/完整镜像:\s*(.+)/);
       if (imgMatch) {
@@ -294,6 +303,7 @@ export async function runBranchPackageAndPush(
         const value = await invoke<string>("build_and_push", {
           ...args,
           progressLabel: label ?? roleLabel(role),
+          harborId: harborEnv.id,
         });
         const imgMatch = value.match(/完整镜像:\s*(.+)/);
         if (imgMatch) {

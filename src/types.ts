@@ -17,11 +17,20 @@ export interface NginxLocationBlock {
 }
 
 export interface HarborConfig {
+  /** @deprecated 旧版单环境字段，加载时自动迁入 harbors[0] */
   harbor_url: string;
+  /** @deprecated 见 harbor_url */
   username: string;
+  /** @deprecated 见 harbor_url */
   password: string;
-  /** Harbor 项目名称，镜像名不含 / 时自动作为前缀 */
+  /** @deprecated 见 harbor_url */
   project: string;
+  /** 多 Harbor 环境（开发/生产等）；只含注册表身份，构建参数仍是全局的 */
+  harbors?: HarborEnv[];
+  /** 三个推送面板各自记住上次选中的 Harbor 环境 id */
+  last_harbor_upload?: string;
+  last_harbor_branch?: string;
+  last_harbor_push?: string;
   base_image: string;
   expose_port: string;
   frontend_base_image: string;
@@ -95,6 +104,17 @@ export interface HarborConfig {
   last_auto_publish_ks?: boolean;
 }
 
+/** Harbor 环境：只含注册表身份；base_image / expose_port / 模板仍是全局配置 */
+export interface HarborEnv {
+  id: string;
+  /** 显示名，如「开发」「生产」 */
+  name: string;
+  url: string;
+  username: string;
+  password: string;
+  project: string;
+}
+
 export interface KsEnvironment {
   id: string;
   /** 环境名，如 dev / test / prod */
@@ -102,6 +122,8 @@ export interface KsEnvironment {
   console: string;
   username: string;
   password: string;
+  /** 默认命名空间（可选，发布时自动填充） */
+  default_namespace?: string;
 }
 
 export type KsPublishMapRole = "frontend" | "backend" | "any";
@@ -277,6 +299,12 @@ export interface RemoteBranchListResult {
   branches: GitBranchOption[];
 }
 
+export interface RepoGitInfo {
+  path: string;
+  name: string;
+  git_url: string;
+}
+
 // ==================== 常量 ====================
 
 export const DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE = `FROM {{BASE_IMAGE}}
@@ -377,6 +405,24 @@ export function inferImageNameFromRef(imageRef: string): { name: string; tag: st
     : "";
 
   return { name, tag };
+}
+
+/** 按 id 取 Harbor 环境：id 为空取第一个；都没有返回 null。与后端 resolve_harbor 语义一致 */
+export function resolveHarborEnv(config: HarborConfig, harborId?: string): HarborEnv | null {
+  const envs = config.harbors ?? [];
+  if (envs.length === 0) return null;
+  const id = (harborId ?? "").trim();
+  if (!id) return envs[0];
+  return envs.find((e) => e.id === id) ?? null;
+}
+
+/** Harbor 环境是否填写完整 */
+export function isHarborEnvReady(env: HarborEnv | null): env is HarborEnv {
+  return !!env
+    && !!env.url.trim()
+    && !!env.username.trim()
+    && !!env.password
+    && !!env.project.trim();
 }
 
 /** Harbor 仓库路径须为 project/repo；镜像名已含 / 则原样使用 */

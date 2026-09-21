@@ -275,6 +275,16 @@ pub struct HarborConfig {
     pub ks_username: String,
     #[serde(default)]
     pub ks_password: String,
+    /// 多 Harbor 环境；旧版单环境字段（harbor_url/username/password/project）加载时迁入
+    #[serde(default)]
+    pub harbors: Vec<HarborEnv>,
+    /// 三个推送面板各自记住上次选中的 Harbor 环境 id
+    #[serde(default)]
+    pub last_harbor_upload: String,
+    #[serde(default)]
+    pub last_harbor_branch: String,
+    #[serde(default)]
+    pub last_harbor_push: String,
     #[serde(default)]
     pub ks_environments: Vec<KsEnvironment>,
     #[serde(default)]
@@ -309,6 +319,49 @@ pub struct KsPublishMap {
     pub expose_port: String,
 }
 
+/// Harbor 环境（dev / prod 等）—— 只含注册表身份，构建参数（base_image / port / 模板）仍是全局的
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct HarborEnv {
+    #[serde(default)]
+    pub id: String,
+    /// 显示名，如「开发」「生产」
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub project: String,
+}
+
+impl HarborEnv {
+    /// 必填项校验；返回中文提示。
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self.url.trim().is_empty()
+            || self.username.trim().is_empty()
+            || self.password.is_empty()
+            || self.project.trim().is_empty()
+        {
+            return Err(format!(
+                "Harbor 环境「{}」未配置完整（地址/用户名/密码/项目均必填）",
+                self.display_name()
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn display_name(&self) -> String {
+        if self.name.trim().is_empty() {
+            self.id.clone()
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
 /// KubeSphere 控制台环境（dev / test / prod 等）
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct KsEnvironment {
@@ -322,6 +375,9 @@ pub struct KsEnvironment {
     pub username: String,
     #[serde(default)]
     pub password: String,
+    /// 默认命名空间（可选，发布时自动填充）
+    #[serde(default)]
+    pub default_namespace: String,
 }
 
 impl Default for HarborConfig {
@@ -387,8 +443,30 @@ impl Default for HarborConfig {
             ks_console: String::new(),
             ks_username: String::new(),
             ks_password: String::new(),
-            ks_environments: Vec::new(),
-            ks_last_env_id: String::new(),
+            harbors: vec![
+                HarborEnv {
+                    id: "dev".to_string(),
+                    name: "开发环境".to_string(),
+                    url: "39.108.213.95".to_string(),
+                    username: "admin".to_string(),
+                    password: "Harbor@123".to_string(),
+                    project: "tksy-admin".to_string(),
+                },
+            ],
+            last_harbor_upload: "dev".to_string(),
+            last_harbor_branch: "dev".to_string(),
+            last_harbor_push: "dev".to_string(),
+            ks_environments: vec![
+                KsEnvironment {
+                    id: "dev".to_string(),
+                    name: "开发环境".to_string(),
+                    console: "http://39.108.213.95:30880".to_string(),
+                    username: "kunlunchuangjie".to_string(),
+                    password: "Kunlunchuangjie888666..".to_string(),
+                    default_namespace: String::new(),
+                },
+            ],
+            ks_last_env_id: "dev".to_string(),
             ks_publish_maps: Vec::new(),
             last_auto_publish_ks: false,
         }

@@ -4,12 +4,14 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type {
   BranchProjectType,
   HarborConfig,
+  HarborEnv,
   GitBranchOption,
   NginxLocationBlock,
   TabType,
 } from "../types";
 import type { BranchImageResult } from "../branchImageResults";
 import { isGitUrl, isTauriRuntime } from "../types";
+import { pickHarborId } from "../components/HarborPicker";
 import { getRememberedBranchAdvancedSettings, hasRememberedRepoExposePort, rememberBranchRepoSettings } from "../branchSettings";
 import {
   suggestKlcjZtByGitUrl,
@@ -109,6 +111,8 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   const [backendArtifactPath, setBackendArtifactPath] = useState("");
   const [springProfile, setSpringProfile] = useState("prod");
   const [springProfiles, setSpringProfiles] = useState<string[]>([]);
+  // 多 Harbor：分支打包记住上次选中的环境
+  const [branchHarborId, setBranchHarborId] = useState("");
 
   // UI / loading
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -129,6 +133,27 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   }
   function nextBranchLoadRequestId() {
     return ++branchLoadRequestRef.current;
+  }
+
+  const harborEnvs: HarborEnv[] = config.harbors ?? [];
+  /** 生效 id：本次选择 → last_harbor_branch 记忆 → 第一个环境（环境被删自动回落） */
+  const selectedBranchHarborId = pickHarborId(
+    harborEnvs,
+    branchHarborId,
+    config.last_harbor_branch,
+  );
+
+  /** 切换 Harbor 环境：内存态立即生效，并按既有的 save_config 链路写回记忆 */
+  function handleBranchHarborChange(id: string) {
+    setBranchHarborId(id);
+    const base = getConfigSnapshot?.() ?? config;
+    if (base.last_harbor_branch === id) return;
+    const updated = { ...base, last_harbor_branch: id };
+    setConfig(updated);
+    if (!isTauriRuntime()) return;
+    void invoke("save_config", { config: getConfigSnapshot?.() ?? updated }).catch((e) => {
+      console.error("保存 Harbor 环境选择失败:", e);
+    });
   }
 
   async function restoreRememberedBranchAdvancedSettings(
@@ -310,6 +335,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
       imageName,
       setImageName,
       imageTag,
+      harborId: selectedBranchHarborId,
       setArtifactPath,
       setBackendArtifactPath,
       setWorktreePath,
@@ -398,6 +424,7 @@ export function useBranchPack(deps: UseBranchPackDeps) {
         imageName: "",
         setImageName,
         imageTag,
+        harborId: selectedBranchHarborId,
         setArtifactPath,
         setBackendArtifactPath,
         setWorktreePath,
@@ -627,6 +654,10 @@ export function useBranchPack(deps: UseBranchPackDeps) {
   return {
     repoPath,
     setRepoPath,
+    // Harbor 环境选择（分支打包记忆 last_harbor_branch）
+    harborEnvs,
+    branchHarborId: selectedBranchHarborId,
+    handleBranchHarborChange,
     frontendDir,
     setFrontendDir,
     npmScripts,

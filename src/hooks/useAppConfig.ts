@@ -27,6 +27,11 @@ export function createDefaultHarborConfig(): HarborConfig {
     username: "",
     password: "",
     project: "",
+    // 多 Harbor 环境；首次启动空列表，由用户在设置页「新增环境」或后端迁移旧字段填充
+    harbors: [],
+    last_harbor_upload: "",
+    last_harbor_branch: "",
+    last_harbor_push: "",
     base_image: "eclipse-temurin:21-jre-alpine",
     expose_port: "8181",
     frontend_base_image: "nginx:alpine",

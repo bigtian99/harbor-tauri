@@ -1,7 +1,7 @@
 //! Docker login / push / rmi 等推送共享步骤。
 
 use crate::build::{docker_output, emit_progress};
-use crate::models::HarborConfig;
+use crate::models::HarborEnv;
 use crate::utils::{silent_docker_command, CANCEL_FLAG, TrackedPid};
 use std::collections::HashMap;
 use std::io::Write;
@@ -15,16 +15,9 @@ use tauri::AppHandle;
 // ponytail: 全局一份；改密码/账号后 key 变会重新 login
 static HARBOR_LOGIN_SESSION: Mutex<Option<String>> = Mutex::new(None);
 
-/// Harbor 必填项校验。
-pub(crate) fn require_harbor_config(config: &HarborConfig) -> Result<(), String> {
-    if config.harbor_url.is_empty()
-        || config.username.is_empty()
-        || config.password.is_empty()
-        || config.project.is_empty()
-    {
-        return Err("请先配置Harbor信息".to_string());
-    }
-    Ok(())
+/// 选中的 Harbor 环境必填项校验（错误提示由 `HarborEnv::validate` 给出，含环境名）。
+pub(crate) fn require_harbor_env(env: &HarborEnv) -> Result<(), String> {
+    env.validate()
 }
 
 /// 空或 `latest` 时生成 `v.YY.MM.DD.HH.MM`，否则原样返回。
@@ -136,6 +129,210 @@ pub async fn test_harbor_connection(
     })
     .await
     .map_err(|e| format!("登录线程异常: {e}"))?
+}
+
+/// Harbor 项目列表请求超时（秒）
+const HARBOR_API_TIMEOUT_SECS: u64 = 15;
+
+/// 项目下拉的数据
+#[derive(serde::Serialize)]
+pub struct HarborProjects {
+    pub names: Vec<String>,
+    /// true = 该 Harbor 是自签证书，本次读取跳过了 TLS 校验（前端据此提示）
+    pub insecure: bool,
+}
+
+/// Harbor 网页地址常被填成 `https://host/harbor`，而 API 与 docker 用的都是裸主机名。
+fn harbor_api_host(raw: &str) -> String {
+    harbor_login_host(raw)
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .to_string()
+}
+
+/// 候选 base：用户显式写了协议就先用它，再兜底另一个协议。
+fn harbor_base_candidates(raw: &str) -> Vec<String> {
+    let host = harbor_api_host(raw);
+    if host.is_empty() {
+        return Vec::new();
+    }
+    if raw.trim().starts_with("http://") {
+        vec![format!("http://{host}"), format!("https://{host}")]
+    } else {
+        vec![format!("https://{host}"), format!("http://{host}")]
+    }
+}
+
+/// 复用 docker 的证书目录：按 Harbor 文档把 CA 放进 `~/.docker/certs.d/<host>/` 后，
+/// 这里就能正常校验，无需降级跳过校验。
+fn docker_ca_for_host(host: &str) -> Option<reqwest::Certificate> {
+    let dir = dirs::home_dir()?.join(".docker").join("certs.d").join(host);
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_lowercase();
+        if !(name.ends_with(".crt") || name.ends_with(".pem")) {
+            continue;
+        }
+        if let Ok(pem) = std::fs::read(entry.path()) {
+            if let Ok(cert) = reqwest::Certificate::from_pem(&pem) {
+                return Some(cert);
+            }
+        }
+    }
+    None
+}
+
+/// `reqwest::Error` 的 Display 只有 "error sending request"，证书原因在 source 链里，
+/// 拼出来才能既让用户看懂、又让 `is_cert_error` 判得出来。
+fn harbor_err_chain(e: &reqwest::Error) -> String {
+    let mut out = e.to_string();
+    let mut src = std::error::Error::source(e);
+    while let Some(s) = src {
+        out.push_str(" <- ");
+        out.push_str(&s.to_string());
+        src = s.source();
+    }
+    out
+}
+
+/// 只有证书/TLS 类错误才允许降级重试；网络、超时错误不降级，避免无谓地关掉校验。
+fn is_cert_error(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    m.contains("certificate") || m.contains("ssl") || m.contains("tls")
+}
+
+fn harbor_get_projects(
+    base: &str,
+    user: &str,
+    password: &str,
+    ca: Option<&reqwest::Certificate>,
+    insecure: bool,
+) -> Result<Vec<String>, String> {
+    let mut builder = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(HARBOR_API_TIMEOUT_SECS));
+    if insecure {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+    if let Some(ca) = ca {
+        builder = builder.add_root_certificate(ca.clone());
+    }
+    let client = builder
+        .build()
+        .map_err(|e| format!("HTTP 客户端创建失败: {e}"))?;
+    let resp = client
+        .get(format!("{base}/api/v2.0/projects?page=1&page_size=100"))
+        .basic_auth(user, Some(password))
+        .header("Accept", "application/json")
+        .send()
+        .map_err(|e| format!("连接 Harbor 失败: {}", harbor_err_chain(&e)))?;
+    let status = resp.status().as_u16();
+    // 401/403 说明地址与协议都对，只是账号不对：换协议重试没有意义
+    if status == 401 || status == 403 {
+        return Err("Harbor 认证失败，请检查用户名和密码".into());
+    }
+    if !(200..300).contains(&status) {
+        return Err(format!("读取 Harbor 项目失败: HTTP {status}"));
+    }
+    // `/projects` 对匿名也开放：密码错了不会报错，只会静默少列私有项目。
+    // 用 `/users/current` 确认这次是真的登录上了，避免给出一个「看着对但缺项目」的下拉。
+    let auth = client
+        .get(format!("{base}/api/v2.0/users/current"))
+        .basic_auth(user, Some(password))
+        .header("Accept", "application/json")
+        .send();
+    if let Ok(r) = auth {
+        let code = r.status().as_u16();
+        if code == 401 || code == 403 {
+            return Err("Harbor 认证失败，请检查用户名和密码".into());
+        }
+    }
+    let arr = resp
+        .json::<Vec<serde_json::Value>>()
+        .map_err(|e| format!("解析 Harbor 项目失败: {e}"))?;
+    let mut names: Vec<String> = arr
+        .iter()
+        .filter_map(|v| v.get("name").and_then(|n| n.as_str()))
+        .map(|s| s.to_string())
+        .collect();
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
+fn fetch_harbor_projects(
+    url: &str,
+    user: &str,
+    password: &str,
+) -> Result<HarborProjects, String> {
+    let bases = harbor_base_candidates(url);
+    if bases.is_empty() {
+        return Err("请填写 Harbor 地址、用户名和密码".into());
+    }
+    let host = harbor_api_host(url);
+    let ca = docker_ca_for_host(&host);
+    // 保留首个候选（首选协议）的错误：它比兜底协议的错误更能说明问题
+    let mut first_err: Option<String> = None;
+    for base in bases {
+        let (names, insecure) =
+            match harbor_get_projects(&base, user, password, ca.as_ref(), false) {
+                Ok(names) => (names, false),
+                Err(e) if e.starts_with("Harbor 认证失败") => return Err(e),
+                Err(e) if is_cert_error(&e) => {
+                    crate::diag::diag_log(
+                        "docker",
+                        &format!("list_harbor_projects {host} 证书不受信任，本次读取降级为跳过校验"),
+                    );
+                    match harbor_get_projects(&base, user, password, ca.as_ref(), true) {
+                        Ok(names) => (names, true),
+                        Err(e2) => {
+                            first_err.get_or_insert(e2);
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    first_err.get_or_insert(e);
+                    continue;
+                }
+            };
+        crate::diag::diag_log(
+            "docker",
+            &format!(
+                "list_harbor_projects ok base={base} count={} insecure={insecure}",
+                names.len()
+            ),
+        );
+        return Ok(HarborProjects { names, insecure });
+    }
+    let err = first_err.unwrap_or_else(|| "无法连接 Harbor".to_string());
+    crate::diag::diag_log("docker", &format!("list_harbor_projects failed: {err}"));
+    Err(err)
+}
+
+/// 列出 Harbor 项目名，供配置页「项目」下拉选择。
+#[tauri::command]
+pub async fn list_harbor_projects(
+    harbor_url: String,
+    username: String,
+    password: String,
+) -> Result<HarborProjects, String> {
+    let url = harbor_url.trim().to_string();
+    let user = username.trim().to_string();
+    crate::diag::diag_log(
+        "docker",
+        &format!(
+            "list_harbor_projects host={} user={}",
+            harbor_login_host(&url),
+            user
+        ),
+    );
+    if url.is_empty() || user.is_empty() || password.is_empty() {
+        return Err("请先填写 Harbor 地址、用户名和密码".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || fetch_harbor_projects(&url, &user, &password))
+        .await
+        .map_err(|e| format!("读取 Harbor 项目线程异常: {e}"))?
 }
 
 /// 解析 Docker 尺寸字符串：`1.024kB` / `45.23MB` / `1.2GB`
@@ -543,5 +740,77 @@ mod push_progress_tests {
             "dockerhub.kubekey.local"
         );
         assert_eq!(harbor_login_host("harbor.example.com"), "harbor.example.com");
+    }
+
+    #[test]
+    fn harbor_api_host_drops_ui_path() {
+        // Harbor 网页地址常带 /harbor，API 与 docker 都用裸主机
+        assert_eq!(harbor_api_host("https://39.108.213.95/harbor"), "39.108.213.95");
+        assert_eq!(harbor_api_host("39.108.213.95"), "39.108.213.95");
+        assert_eq!(harbor_api_host("http://harbor.lan:8080/"), "harbor.lan:8080");
+        assert!(harbor_api_host("  ").is_empty());
+    }
+
+    #[test]
+    fn base_candidates_honor_explicit_scheme() {
+        assert_eq!(
+            harbor_base_candidates("http://h1/harbor"),
+            vec!["http://h1".to_string(), "https://h1".to_string()]
+        );
+        assert_eq!(
+            harbor_base_candidates("h1"),
+            vec!["https://h1".to_string(), "http://h1".to_string()]
+        );
+        assert!(harbor_base_candidates("").is_empty());
+    }
+
+    #[test]
+    fn only_tls_errors_allow_downgrade() {
+        assert!(is_cert_error("连接 Harbor 失败: invalid peer certificate"));
+        assert!(is_cert_error("连接 Harbor 失败: SSL certificate problem"));
+        assert!(!is_cert_error("连接 Harbor 失败: connection timed out"));
+        assert!(!is_cert_error("读取 Harbor 项目失败: HTTP 502"));
+    }
+
+    /// 自签证书 Harbor 的降级路径验证：占位账号即可，密码不参与 TLS 判断。
+    /// 运行：`JARPORTER_TEST_HARBOR_SELF_SIGNED_URL=https://host cargo test -- --ignored self_signed`
+    #[test]
+    #[ignore = "需要真实自签证书 Harbor 的 JARPORTER_TEST_HARBOR_SELF_SIGNED_URL"]
+    fn live_self_signed_needs_insecure_fallback() {
+        let url = std::env::var("JARPORTER_TEST_HARBOR_SELF_SIGNED_URL")
+            .expect("缺少 JARPORTER_TEST_HARBOR_SELF_SIGNED_URL");
+        let base = format!("https://{}", harbor_api_host(&url));
+        let strict = harbor_get_projects(&base, "probe", "probe", None, false)
+            .expect_err("严格校验不应通过自签证书");
+        assert!(is_cert_error(&strict), "严格模式应报证书错误，实际: {strict}");
+        // 跳过校验后 TLS 握手完成、Harbor 才会回 401 —— 证明降级路径真的通了；
+        // 同时验证「匿名也能列公开项目」这个坑被 users/current 拦住了
+        let loose = harbor_get_projects(&base, "probe", "probe", None, true)
+            .expect_err("占位账号不应成功");
+        assert!(
+            loose.starts_with("Harbor 认证失败"),
+            "跳过校验后应拿到 401，实际: {loose}"
+        );
+    }
+
+    /// 真实 Harbor 连通性验证；凭据走环境变量，源码不留明文。
+    /// 运行：`cargo test -p jarporter -- --ignored live_harbor_projects`
+    #[test]
+    #[ignore = "需要真实 Harbor 环境变量 JARPORTER_TEST_HARBOR_URL/USER/PASSWORD"]
+    fn live_harbor_projects() {
+        let url = std::env::var("JARPORTER_TEST_HARBOR_URL")
+            .expect("缺少 JARPORTER_TEST_HARBOR_URL");
+        let user = std::env::var("JARPORTER_TEST_HARBOR_USER").expect("缺少 USER");
+        let pass = std::env::var("JARPORTER_TEST_HARBOR_PASSWORD").expect("缺少 PASSWORD");
+        let got = fetch_harbor_projects(&url, &user, &pass).expect("拉取 Harbor 项目失败");
+        println!(
+            "projects={:?} insecure={}",
+            got.names, got.insecure
+        );
+        assert!(!got.names.is_empty(), "项目列表不应为空");
+        assert!(
+            got.names.iter().all(|n| !n.trim().is_empty()),
+            "项目名不应有空值"
+        );
     }
 }

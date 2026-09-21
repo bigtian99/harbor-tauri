@@ -75,6 +75,7 @@ export function ConfigKsSection({
       console: envEditor.draft.console.trim(),
       username: envEditor.draft.username.trim(),
       password: envEditor.draft.password ?? "",
+      default_namespace: envEditor.draft.default_namespace?.trim() || "",
     };
     if (!draft.name.trim() || !draft.console.trim() || !draft.username.trim() || !draft.password) {
       void showSystemAlert("无法保存环境", "请填写环境名、控制台地址、用户名和密码");
@@ -148,6 +149,11 @@ export function ConfigKsSection({
                         <Text size="xs" c="var(--color-text-muted)" truncate>
                           {env.username || "未填用户"} · {env.password ? "已设密码" : "未设密码"}
                         </Text>
+                        {env.default_namespace && (
+                          <Text size="xs" c="var(--color-text-muted)" truncate>
+                            默认命名空间: {env.default_namespace}
+                          </Text>
+                        )}
                       </Stack>
                       <Group gap={6} style={{ flexShrink: 0 }}>
                         <ActionIcon
@@ -242,6 +248,16 @@ export function ConfigKsSection({
               placeholder="KubeSphere 登录密码"
               visible={envEditorPassword}
               onVisibilityChange={(visible) => setEnvEditorPassword(visible)}
+            />
+            <TextInput
+              label="默认命名空间"
+              value={envEditor.draft.default_namespace || ""}
+              onChange={(e) => setEnvEditor({
+                ...envEditor,
+                draft: { ...envEditor.draft, default_namespace: e.currentTarget.value },
+              })}
+              placeholder="例如: tksy-system（选填）"
+              description="发布时自动填充到命名空间字段"
             />
             <Group justify="flex-end" gap="sm" mt="xs">
               <Button variant="default" onClick={closeKsEnvEditor}>
