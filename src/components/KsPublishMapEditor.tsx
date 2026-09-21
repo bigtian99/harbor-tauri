@@ -262,11 +262,11 @@ export function KsPublishMapEditor({
   }, [envIdsFp, currentCredFp]);
 
   const loadDeploys = useCallback(async (ns: string) => {
-    if (!connected || !ns) return;
+    if (!connected || !ns || !envId) return;
     setLoadingDeploys(true);
     setStatusText(`正在加载 ${ns} 部署列表…`);
     try {
-      const list = await invoke<DeployRow[]>("ks_list_deployments", { namespace: ns });
+      const list = await invoke<DeployRow[]>("ks_list_deployments", { namespace: ns, envId });
       setDeploys(list);
       // 用 ref，避免 publishMaps 变化触发整表重载、冲掉未保存编辑
       setRows(buildGridRows(list, publishMapsRef.current, envId, ns));
