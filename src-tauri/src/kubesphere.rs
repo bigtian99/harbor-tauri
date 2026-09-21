@@ -1300,9 +1300,10 @@ fn ks_list_deployments_sync(namespace: String) -> Result<Vec<DeployInfo>, String
 #[tauri::command]
 pub async fn ks_list_deployments(
     namespace: String,
-    env_id: String,
+    #[allow(non_snake_case)] envId: String,
 ) -> Result<Vec<DeployInfo>, String> {
     let ns_clone = namespace.clone();
+    let env_id = envId;
     ks_blocking(move || {
         let mut list = ks_list_deployments_sync(namespace)?;
         // 检查每个部署是否配置了 Git 地址
