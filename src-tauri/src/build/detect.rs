@@ -78,12 +78,17 @@ pub async fn list_npm_scripts(
 #[tauri::command]
 pub async fn detect_frontend_dir(repo_path: String) -> Result<Option<String>, String> {
     let repo_path = PathBuf::from(repo_path);
+    crate::diag::diag_log(
+        "build",
+        &format!("detect_frontend_dir: checking {}", repo_path.display()),
+    );
     if !repo_path.is_dir() {
         return Err(format!("仓库路径不是目录: {}", repo_path.display()));
     }
 
     // 先检查根目录
     if repo_path.join("package.json").is_file() {
+        crate::diag::diag_log("build", "detect_frontend_dir: found package.json in root, no subdir");
         return Ok(None);
     }
 
@@ -95,7 +100,21 @@ pub async fn detect_frontend_dir(repo_path: String) -> Result<Option<String>, St
         // 优先匹配常见目录名
         for candidate in &candidates {
             let path = repo_path.join(candidate);
-            if path.is_dir() && path.join("package.json").is_file() {
+            let has_pkg = path.join("package.json").is_file();
+            crate::diag::diag_log(
+                "build",
+                &format!(
+                    "detect_frontend_dir: checking candidate '{}' -> is_dir={} has_package.json={}",
+                    candidate,
+                    path.is_dir(),
+                    has_pkg
+                ),
+            );
+            if path.is_dir() && has_pkg {
+                crate::diag::diag_log(
+                    "build",
+                    &format!("detect_frontend_dir: found frontend dir '{}'", candidate),
+                );
                 return Ok(Some(candidate.to_string()));
             }
         }
@@ -116,11 +135,16 @@ pub async fn detect_frontend_dir(repo_path: String) -> Result<Option<String>, St
                 continue;
             }
             if entry.path().join("package.json").is_file() {
+                crate::diag::diag_log(
+                    "build",
+                    &format!("detect_frontend_dir: found other frontend dir '{}'", name),
+                );
                 return Ok(Some(name));
             }
         }
     }
 
+    crate::diag::diag_log("build", "detect_frontend_dir: no frontend dir found");
     Ok(None)
 }
 

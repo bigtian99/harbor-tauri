@@ -30,6 +30,14 @@
   --color-on-primary: #f8fbff;
   /* 落地页/隐私预览 iframe 纸面（真实页面底，非 UI chrome） */
   --color-preview-paper: #ffffff;
+  /* 阴影 */
+  --shadow-paper: 0 8px 28px rgba(0, 0, 0, 0.28);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.55), var(--glow-primary);
+  /* 背景渐变 */
+  --bg-gradient-1: radial-gradient(ellipse 90% 55% at 12% -8%, rgba(59, 158, 255, 0.16), transparent 55%);
+  --bg-gradient-2: radial-gradient(ellipse 70% 45% at 92% 8%, rgba(167, 139, 250, 0.1), transparent 50%);
+  --bg-gradient-3: radial-gradient(ellipse 60% 40% at 50% 100%, rgba(52, 211, 153, 0.05), transparent 55%);
+  --content-gradient: radial-gradient(ellipse 80% 50% at 0% 0%, rgba(59, 158, 255, 0.07), transparent 50%);
   --radius-md: 8px;
   --font-size-base: 14px;
   --font-size-sm: 12px;
@@ -54,6 +62,57 @@
   --progress-fill-glow: 0 0 16px rgba(59, 158, 255, 0.42), 0 1px 0 rgba(255, 255, 255, 0.14) inset;
   --progress-transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
   --progress-radius: 999px;
+}
+
+/* 浅色模式变量 - 优化对比度和层次感 */
+[data-mantine-color-scheme="light"] {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-solid: #1e40af;
+  --color-primary-solid-hover: #1e3a8a;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-subtle: rgba(37, 99, 235, 0.08);
+  --color-accent: #7c3aed;
+  --color-accent-muted: rgba(124, 58, 237, 0.15);
+  --color-bg-base: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-card: #ffffff;
+  --color-border: rgba(15, 23, 42, 0.18);
+  --color-border-strong: rgba(15, 23, 42, 0.32);
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-success: #10b981;
+  --color-success-hover: #059669;
+  --color-success-muted: rgba(16, 185, 129, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-muted: rgba(245, 158, 11, 0.15);
+  --color-error: #ef4444;
+  --color-error-muted: rgba(239, 68, 68, 0.15);
+  --color-input-bg: rgba(37, 99, 235, 0.06);
+  --color-input-focus-border: var(--color-primary);
+  --input-focus-ring: 0 0 0 1px var(--color-primary), 0 0 0 4px var(--color-primary-muted);
+  --color-on-primary: #ffffff;
+  /* 浅色模式轻量阴影 */
+  --shadow-paper: 0 2px 8px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-modal: 0 12px 32px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.08);
+  /* 浅色模式轻量渐变 */
+  --bg-gradient-1: radial-gradient(ellipse 90% 55% at 12% -8%, rgba(37, 99, 235, 0.04), transparent 55%);
+  --bg-gradient-2: radial-gradient(ellipse 70% 45% at 92% 8%, rgba(124, 58, 237, 0.03), transparent 50%);
+  --bg-gradient-3: radial-gradient(ellipse 60% 40% at 50% 100%, rgba(16, 185, 129, 0.02), transparent 55%);
+  --content-gradient: radial-gradient(ellipse 80% 50% at 0% 0%, rgba(37, 99, 235, 0.03), transparent 50%);
+  --glow-primary: 0 0 16px rgba(37, 99, 235, 0.18);
+  --progress-track-bg: rgba(15, 23, 42, 0.08);
+  --progress-track-border: rgba(15, 23, 42, 0.15);
+  --progress-track-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.12);
+  --progress-fill-gradient: linear-gradient(
+    90deg,
+    #1e40af 0%,
+    var(--color-primary) 28%,
+    var(--color-primary-hover) 70%,
+    var(--color-primary-solid-hover) 100%
+  );
+  --progress-fill-glow: 0 0 12px rgba(37, 99, 235, 0.35);
 }
 
 [data-mantine-color-scheme="dark"] {

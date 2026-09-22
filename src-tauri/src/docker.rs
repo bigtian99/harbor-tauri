@@ -63,7 +63,10 @@ pub(crate) fn prepare_custom_docker_context(
 
     let replacements = [
         ("BASE_IMAGE", config.base_image.clone()),
-        ("EXPOSE_PORT", config.expose_port.clone()),
+        ("EXPOSE_PORT", match artifact_type {
+            ArtifactType::Jar => config.expose_port.clone(),
+            ArtifactType::FrontendDist => config.frontend_expose_port.clone(),
+        }),
         ("FRONTEND_BASE_IMAGE", config.frontend_base_image.clone()),
         ("FRONTEND_EXPOSE_PORT", config.frontend_expose_port.clone()),
         ("IMAGE_NAME", image_name.to_string()),

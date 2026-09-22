@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "./SearchableDropdown";
+import { GroupedBranchDropdown } from "./GroupedBranchDropdown";
 import { SpringProfileSection } from "./branch/SpringProfileSection";
 import { BranchAdvancedSettings } from "./branch/BranchAdvancedSettings";
 import { CommitListModal, openCommitListModal } from "./branch/CommitListModal";
@@ -29,7 +30,6 @@ import { PanelPageHeader } from "./PanelPageHeader";
 import { HarborPicker } from "./HarborPicker";
 import { BuildProgressBlock, BUILD_LOG_LABELS } from "./BuildProgressBlock";
 import { shouldShowBranchProgress, shouldShowBranchResults } from "../branchImageResults";
-import { branchDropdownLabel } from "../branchRef";
 import { panelSegmentedStyles, commitHashButtonStyles } from "../theme/panelStyles";
 import { isCopyHighlighted, normalizeCopyText } from "../copyImage";
 import {
@@ -162,11 +162,6 @@ export function BranchPanel({
   );
 
   const branchNames = branchOptions.map((b) => b.name);
-  const branchDisplayMap = Object.fromEntries(
-    branchNames.map((name) => [branchDropdownLabel(name, branchNames), name]),
-  );
-  const branchDisplayNames = Object.keys(branchDisplayMap);
-  const currentBranchDisplay = branchDropdownLabel(branchName, branchNames) || branchName;
   const displayedBuildCommand = computeDefaultBuildCommand({
     projectType: branchProjectType,
     packageManager: config.npm_package_manager,
@@ -297,10 +292,10 @@ export function BranchPanel({
 
           <Stack gap={6}>
             <Text size="sm" fw={600} c="var(--color-text)">目标分支</Text>
-            <SearchableDropdown
-              value={currentBranchDisplay}
-              options={branchDisplayNames}
-              onChange={(display) => onBranchChange(branchDisplayMap[display] || display)}
+            <GroupedBranchDropdown
+              value={branchName}
+              branches={branchNames}
+              onChange={onBranchChange}
               placeholder={isLoadingBranches ? "加载中..." : branchOptions.length === 0 ? "请先选择仓库" : "搜索或选择分支..."}
               disabled={!repoPath || branchOptions.length === 0}
               loading={isLoadingBranches}

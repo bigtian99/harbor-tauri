@@ -11,7 +11,7 @@ import { ConfirmDialogProvider } from "./hooks/useConfirmDialog";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <MantineProvider theme={appTheme} defaultColorScheme="dark">
+    <MantineProvider theme={appTheme} defaultColorScheme="auto">
       <Notifications position="top-right" />
       <ConfirmDialogProvider>
         <App />

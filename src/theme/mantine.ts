@@ -224,10 +224,22 @@ export const appTheme = createTheme({
       },
     },
     Checkbox: {
+      defaultProps: { color: "blue" },
       styles: {
         input: {
           backgroundColor: "var(--color-bg-elevated)",
           borderColor: "var(--color-border-strong)",
+          cursor: "pointer",
+          "&:checked": {
+            backgroundColor: "var(--color-primary-solid)",
+            borderColor: "var(--color-primary-solid)",
+          },
+          "&:hover:not(:checked)": {
+            borderColor: "var(--color-primary)",
+          },
+        },
+        icon: {
+          color: "white !important",
         },
       },
     },
@@ -251,7 +263,7 @@ export const appTheme = createTheme({
         content: {
           background: "var(--color-bg-surface)",
           border: "1px solid var(--color-border-strong)",
-          boxShadow: "0 24px 64px rgba(0, 0, 0, 0.55), var(--glow-primary)",
+          boxShadow: "var(--shadow-modal)",
         },
       },
     },
@@ -305,7 +317,7 @@ export const appTheme = createTheme({
           background:
             "linear-gradient(165deg, color-mix(in srgb, var(--color-bg-card) 88%, var(--color-primary-solid)) 0%, var(--color-bg-card) 55%)",
           border: "1px solid var(--color-border-strong)",
-          boxShadow: "0 8px 28px rgba(0, 0, 0, 0.28)",
+          boxShadow: "var(--shadow-paper)",
         },
       },
     },

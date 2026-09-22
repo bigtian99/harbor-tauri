@@ -10,6 +10,7 @@ import {
   Stack,
   Text,
   Tooltip,
+  useMantineColorScheme,
 } from "@mantine/core";
 import {
   Upload,
@@ -27,6 +28,8 @@ import {
   Shield,
   Coffee,
   Code2,
+  Sun,
+  Moon,
 } from "lucide-react";
 import type { TabType } from "../types";
 import { isOpsTab } from "../opsNavigation";
@@ -47,8 +50,8 @@ const SIDEBAR_W_COLLAPSED = 56;
 const navStyles = {
   root: {
     borderRadius: "var(--radius-md)",
-    color: "var(--color-text-muted)",
-    "--nav-icon-opacity": "0.55",
+    color: "var(--color-text)",
+    "--nav-icon-opacity": "0.7",
     border: "none",
     boxShadow: "none",
     "&[data-active]": {
@@ -61,9 +64,9 @@ const navStyles = {
       fontWeight: 600,
     },
     "&:hover:not([data-active])": {
-      background: "rgba(255, 255, 255, 0.04)",
+      background: "var(--color-primary-subtle)",
       color: "var(--color-text)",
-      "--nav-icon-opacity": "0.85",
+      "--nav-icon-opacity": "0.9",
     },
   },
   label: { fontSize: 13, fontWeight: 500 },
@@ -146,6 +149,8 @@ export function Sidebar({
   onToggleCollapse,
   onOpenLog,
 }: SidebarProps) {
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === "dark";
   const buildItems: NavItem[] = [
     { tab: "upload", icon: <Upload size={18} />, label: "上传推送" },
     { tab: "push", icon: <Rocket size={18} />, label: "镜像推送" },
@@ -415,6 +420,23 @@ export function Sidebar({
             }}
           >
             <Stack gap={2}>
+              <Tooltip
+                label={isDark ? "切换到浅色模式" : "切换到深色模式"}
+                position="right"
+                withArrow
+                disabled={!sidebarCollapsed}
+              >
+                <NavLink
+                  className="sidebar-nav-link"
+                  label={isDark ? "浅色模式" : "深色模式"}
+                  leftSection={isDark ? <Sun size={18} /> : <Moon size={18} />}
+                  onClick={toggleColorScheme}
+                  color="gray"
+                  variant="subtle"
+                  styles={navStyles}
+                  aria-label="切换主题"
+                />
+              </Tooltip>
               <Tooltip label="系统日志" position="right" withArrow disabled={!sidebarCollapsed}>
                 <NavLink
                   className="sidebar-nav-link"

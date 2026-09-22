@@ -143,6 +143,49 @@ pub(crate) fn find_maven_path_from(maven_home: &str) -> Option<String> {
     None
 }
 
+/// 查找 npm 可执行文件路径
+pub(crate) fn find_npm_path() -> Option<String> {
+    // 1. PATH 查找
+    if let Some(path) = find_command_path("npm") {
+        return Some(path);
+    }
+
+    // 2. 检查 nvm 安装
+    if let Some(home) = dirs::home_dir() {
+        let nvm_dir = home.join(".nvm/versions/node");
+        if nvm_dir.exists() {
+            // 读取所有版本目录，按版本倒序
+            if let Ok(entries) = fs::read_dir(&nvm_dir) {
+                let mut versions: Vec<String> = entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().is_dir())
+                    .map(|e| e.file_name().to_string_lossy().to_string())
+                    .collect();
+                versions.sort_by(|a, b| b.cmp(a)); // 倒序，优先使用最新版本
+
+                for version in versions {
+                    let npm_path = nvm_dir.join(&version).join("bin");
+                    if let Some(path) = find_command_in_dir(&npm_path, "npm") {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+
+        // 3. Homebrew Node.js (Apple Silicon)
+        if let Some(path) = find_command_in_dir(Path::new("/opt/homebrew/bin"), "npm") {
+            return Some(path);
+        }
+
+        // 4. Homebrew Node.js (Intel)
+        if let Some(path) = find_command_in_dir(Path::new("/usr/local/bin"), "npm") {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
 fn java_bin_exists(java_home: &Path) -> bool {
     #[cfg(windows)]
     {
@@ -341,7 +384,7 @@ fn run_command_inner(
         return Err("构建已取消".to_string());
     }
 
-    // 对 mvn 命令特殊处理，查找完整路径
+    // 对 mvn 和 npm 命令特殊处理，查找完整路径
     let actual_command = if command == "mvn" {
         if maven_home.trim().is_empty() {
             find_maven_path()
@@ -349,6 +392,8 @@ fn run_command_inner(
             find_maven_path_from(maven_home)
         }
         .unwrap_or_else(|| "mvn".to_string())
+    } else if command == "npm" {
+        find_npm_path().unwrap_or_else(|| "npm".to_string())
     } else {
         find_command_path(command).unwrap_or_else(|| command.to_string())
     };

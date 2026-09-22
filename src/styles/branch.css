@@ -527,3 +527,68 @@
   text-align: center;
   font-style: italic;
 }
+
+/* 分组分支下拉样式 */
+.grouped-branch-list {
+  max-height: 400px;
+}
+
+.branch-group {
+  margin-bottom: 2px;
+}
+
+.branch-group:last-child {
+  margin-bottom: 0;
+}
+
+.branch-group-header {
+  padding: 8px 14px 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-primary) 12%, transparent),
+    color-mix(in srgb, var(--color-primary) 6%, transparent)
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  user-select: none;
+  cursor: default;
+}
+
+.branch-item {
+  padding-left: 32px;
+  font-size: 13px;
+  position: relative;
+}
+
+.branch-item::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  opacity: 0.3;
+  transition: all 0.15s ease;
+}
+
+.branch-item:hover::before,
+.branch-item.highlight::before {
+  opacity: 0.6;
+  background: var(--color-primary);
+}
+
+.branch-item.selected::before {
+  opacity: 1;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
