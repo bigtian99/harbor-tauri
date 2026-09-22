@@ -43,8 +43,8 @@ export const DeployRow = memo(function DeployRow({
         <Group gap={6} wrap="nowrap">
           <Text>{d.name}</Text>
           {d.hasGitConfig && (
-            <Tooltip label="已配置 Git 地址" withArrow>
-              <GitBranch size={14} style={{ color: "var(--mantine-color-teal-6)" }} />
+            <Tooltip label="已配置 Git 地址" withArrow openDelay={300}>
+              <GitBranch size={13} style={{ color: "var(--mantine-color-blue-6)", flexShrink: 0 }} />
             </Tooltip>
           )}
         </Group>
