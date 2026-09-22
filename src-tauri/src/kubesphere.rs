@@ -2332,7 +2332,11 @@ pub async fn ks_update_deployment(
             "replicas": replicas.unwrap_or(1),
             "template": {
                 "spec": {
-                    "containers": [container_patch]
+                    "containers": [container_patch],
+                    "volumes": [{
+                        "name": "host-time",
+                        "hostPath": { "path": "/etc/localtime", "type": "" }
+                    }]
                 }
             }
         }
