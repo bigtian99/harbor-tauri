@@ -392,11 +392,11 @@ body {
 }
 
 .ks-btn-batch-primary[data-disabled] {
-  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-bg-elevated)) !important;
-  color: color-mix(in srgb, var(--color-primary-hover) 70%, var(--color-text-muted)) !important;
-  border: 1px dashed color-mix(in srgb, var(--color-primary) 45%, var(--color-border-strong)) !important;
+  background: var(--color-disabled-bg) !important;
+  color: var(--color-disabled-text) !important;
+  border: 1px solid var(--color-disabled-border) !important;
   box-shadow: none !important;
-  opacity: 0.72;
+  opacity: 1;
 }
 
 .ks-btn-batch-clone:not([data-disabled]) {
@@ -404,11 +404,11 @@ body {
 }
 
 .ks-btn-batch-clone[data-disabled] {
-  background: transparent !important;
-  border: 1px dashed color-mix(in srgb, var(--color-success) 35%, var(--color-border-strong)) !important;
-  color: color-mix(in srgb, var(--color-success) 55%, var(--color-text-muted)) !important;
+  background: var(--color-disabled-bg) !important;
+  border: 1px solid var(--color-disabled-border) !important;
+  color: var(--color-disabled-text) !important;
   box-shadow: none !important;
-  opacity: 0.68;
+  opacity: 1;
 }
 
 /* 表格行内操作：图标按钮，悬停才显色 */
@@ -642,10 +642,27 @@ body {
   width: 100%;
 }
 
-.ks-batch-branch-option-label {
+.ks-batch-branch-option-main {
   flex: 1;
   min-width: 0;
+}
+
+.ks-batch-branch-option-icon {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  opacity: 0.78;
+}
+
+.ks-batch-branch-option-label {
+  min-width: 0;
   color: inherit;
+}
+
+.ks-batch-branch-option-context {
+  max-width: 48%;
+  min-width: 0;
+  color: var(--color-text-muted);
+  opacity: 0.72;
 }
 
 .ks-batch-branch-option--selected .ks-batch-branch-option-label {
@@ -939,4 +956,3 @@ body {
   min-height: 0;
   gap: 4px !important;
 }
-

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { SearchableDropdown } from "../SearchableDropdown";
+import { GroupedBranchDropdown } from "../GroupedBranchDropdown";
 import type { HarborConfig } from "../../types";
 
 interface QuickMergeConfigModalProps {
@@ -85,25 +85,21 @@ export function QuickMergeConfigModal({
         <Group align="flex-end" grow wrap="wrap">
           <Stack gap={4} style={{ flex: 1, minWidth: 200 }}>
             <Text size="sm" fw={600} c="var(--color-text)">源分支（被合并）</Text>
-            <SearchableDropdown
+            <GroupedBranchDropdown
               value={sourceBranch}
-              options={sourceOptions}
+              branches={sourceOptions}
               onChange={setSourceBranch}
               placeholder={hasLoadedBranches ? "选择或输入源分支..." : "输入源分支（如 origin/rc-master）"}
-              disabled={false}
-              commitOnInput={false}
               allowCustomValue
             />
           </Stack>
           <Stack gap={4} style={{ flex: 1, minWidth: 200 }}>
             <Text size="sm" fw={600} c="var(--color-text)">目标分支（合并到此）</Text>
-            <SearchableDropdown
+            <GroupedBranchDropdown
               value={targetBranch}
-              options={targetOptions}
+              branches={targetOptions}
               onChange={setTargetBranch}
               placeholder={hasLoadedBranches ? "选择或输入目标分支..." : "输入目标分支（如 origin/master）"}
-              disabled={false}
-              commitOnInput={false}
               allowCustomValue
             />
           </Stack>

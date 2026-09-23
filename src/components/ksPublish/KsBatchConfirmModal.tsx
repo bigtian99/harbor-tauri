@@ -60,6 +60,12 @@ function deployRoleColor(role: KsPublishMapRole | undefined): string {
   return "gray";
 }
 
+function splitBranchLabel(value: string) {
+  const parts = value.split("/");
+  const leaf = parts.pop() || value;
+  return { leaf, context: parts.join("/") };
+}
+
 interface KsBatchConfirmModalProps {
   opened: boolean;
   meta: KsBatchMeta | null;
@@ -381,9 +387,17 @@ export function KsBatchConfirmModal({
                 wrap="nowrap"
                 className={checked ? "ks-batch-branch-option ks-batch-branch-option--selected" : "ks-batch-branch-option"}
               >
-                <Text span size="sm" truncate className="ks-batch-branch-option-label">
-                  {option.label}
-                </Text>
+                <Group gap={7} wrap="nowrap" className="ks-batch-branch-option-main">
+                  <GitBranch size={14} className="ks-batch-branch-option-icon" />
+                  <Text span size="sm" truncate className="ks-batch-branch-option-label">
+                    {splitBranchLabel(option.label).leaf}
+                  </Text>
+                  {splitBranchLabel(option.label).context && (
+                    <Text span size="xs" truncate className="ks-batch-branch-option-context">
+                      {splitBranchLabel(option.label).context}
+                    </Text>
+                  )}
+                </Group>
                 {checked && <Check size={14} strokeWidth={2.5} className="ks-batch-branch-option-check" />}
               </Group>
             )}
@@ -444,9 +458,31 @@ export function KsBatchConfirmModal({
                 value={sourceBranch || null}
                 onChange={(v) => setSourceBranch(v ?? "")}
                 disabled={gitBranchesLoading}
-                nothingFoundMessage="无匹配分支"
-                aria-label="批量合并源分支"
-                comboboxProps={{ withinPortal: true }}
+              nothingFoundMessage="无匹配分支"
+              aria-label="批量合并源分支"
+                comboboxProps={{
+                  withinPortal: true,
+                  classNames: { option: "ks-batch-branch-combobox-option" },
+                }}
+                renderOption={({ option, checked }) => {
+                  const { leaf, context } = splitBranchLabel(option.label);
+                  return (
+                    <Group
+                      flex="1"
+                      gap="xs"
+                      justify="space-between"
+                      wrap="nowrap"
+                      className={checked ? "ks-batch-branch-option ks-batch-branch-option--selected" : "ks-batch-branch-option"}
+                    >
+                      <Group gap={7} wrap="nowrap" className="ks-batch-branch-option-main">
+                        <GitBranch size={14} className="ks-batch-branch-option-icon" />
+                        <Text span size="sm" truncate className="ks-batch-branch-option-label">{leaf}</Text>
+                        {context && <Text span size="xs" truncate className="ks-batch-branch-option-context">{context}</Text>}
+                      </Group>
+                      {checked && <Check size={14} strokeWidth={2.5} className="ks-batch-branch-option-check" />}
+                    </Group>
+                  );
+                }}
               />
               {sourceBranch.trim() && sourceBranch.trim() === branch.trim() && (
                 <Text size="xs" c="orange">源分支与目标分支相同，无需合并</Text>

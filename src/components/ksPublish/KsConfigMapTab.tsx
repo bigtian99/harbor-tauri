@@ -1,7 +1,7 @@
 import {
   Button, Card, Group, Pagination, ScrollArea, Select, Table, Text, Title, Tooltip,
 } from "@mantine/core";
-import { Copy, Plus } from "lucide-react";
+import { Copy, FileCode2, Plus } from "lucide-react";
 import { PAGE_SIZE_OPTIONS } from "./types";
 import { KsRefreshIcon } from "./KsRefreshIcon";
 import type { KsConfigMapsApi } from "./useKsConfigMaps";
@@ -11,7 +11,10 @@ export function KsConfigMapTab(p: KsConfigMapsApi) {
     <Card shadow="sm" radius="md" withBorder>
       <Group justify="space-between" mb="xs">
         <Group gap={8}>
-          <Title order={5}>🗂 ConfigMap</Title>
+          <Group gap={6}>
+            <FileCode2 size={16} aria-hidden="true" />
+            <Title order={5}>ConfigMap</Title>
+          </Group>
           <Text size="xs" c="dimmed">共 {p.cms.length} 个</Text>
         </Group>
         <Group gap="sm">

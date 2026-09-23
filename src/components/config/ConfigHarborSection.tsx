@@ -12,7 +12,7 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { GripVertical, Pencil, Plug, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, GripVertical, Pencil, Plug, Plus, Trash2 } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -428,7 +428,10 @@ export function ConfigHarborSection({
                   />
                   {projectsState.insecure && (
                     <Text size="xs" c="orange">
-                      ⚠️ 该 Harbor 使用自签证书，本次读取跳过了 TLS 校验。建议将 CA 证书放入 ~/.docker/certs.d/{"{"}主机名{"}"}/
+                      <Group gap={6} wrap="nowrap" align="flex-start">
+                        <AlertTriangle size={14} />
+                        <span>该 Harbor 使用自签证书，本次读取跳过了 TLS 校验。建议将 CA 证书放入 ~/.docker/certs.d/{"{"}主机名{"}"}/</span>
+                      </Group>
                     </Text>
                   )}
                 </>

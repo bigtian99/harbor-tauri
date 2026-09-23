@@ -3,6 +3,7 @@ import {
 } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
 import { notifications } from "@mantine/notifications";
+import { Copy } from "lucide-react";
 import { copyText, isRfc1123Name, syncSwAgentNameIfPresent } from "./utils";
 import type { KsConfigMapsApi } from "./useKsConfigMaps";
 
@@ -82,7 +83,7 @@ export function KsConfigMapModal(p: KsConfigMapsApi & { namespace: string | null
               <Stack>
                 <Group justify="space-between">
                   <Text size="xs" fw={600} c="dimmed">生成的 ConfigMap YAML</Text>
-                  <Button size="xs" variant="default" onClick={() => void copyText(p.cmPreview)}>📋 复制</Button>
+                  <Button size="xs" variant="default" leftSection={<Copy size={13} />} onClick={() => void copyText(p.cmPreview)}>复制</Button>
                 </Group>
                 <Textarea value={p.cmPreview} readOnly minRows={10} autosize maxRows={20} className="ks-preview-textarea" styles={{ input: { fontFamily: "monospace", fontSize: 12 } }} />
               </Stack>

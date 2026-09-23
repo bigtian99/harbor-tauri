@@ -200,7 +200,7 @@ export function useKsDeployMutations(opts: {
       });
       notifications.show({
         color: r.ok ? "green" : "red",
-        title: r.ok ? "🚀 更新成功" : "更新失败",
+        title: r.ok ? "更新成功" : "更新失败",
         message: `${r.newImage}（revision ${r.revision}）`,
       });
       setEditOpen(false);
@@ -232,7 +232,7 @@ export function useKsDeployMutations(opts: {
       });
       notifications.show({
         color: r.ok ? "green" : "red",
-        title: r.ok ? "🚀 发布成功" : "发布失败",
+        title: r.ok ? "发布成功" : "发布失败",
         message: `${r.newImage}（revision ${r.revision}）`,
       });
       setImage("");

@@ -1,4 +1,5 @@
 import { Button, Group, Modal, Stack, Text, Textarea } from "@mantine/core";
+import { Copy } from "lucide-react";
 import { DeployFormFields, type KsCmSelectProps } from "./DeployFormFields";
 import type { KsDeployMutationsApi } from "./useKsDeployMutations";
 
@@ -54,8 +55,8 @@ export function KsCreateDeployModal({
           <Stack gap="xs">
             <Group justify="space-between">
               <Text size="xs" fw={600} c="dimmed">生成的 Deployment YAML</Text>
-              <Button size="xs" variant="default" onClick={() => void copyYaml()}>
-                📋 复制
+              <Button size="xs" variant="default" leftSection={<Copy size={13} />} onClick={() => void copyYaml()}>
+                复制
               </Button>
             </Group>
             <Textarea

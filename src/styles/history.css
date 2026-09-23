@@ -416,10 +416,11 @@ a.commit-link {
   border-radius: var(--radius-md);
   cursor: pointer;
   width: 100%;
-  border: 1px solid transparent;
-  background: transparent;
+  border: 1px solid var(--color-border);
+  background: var(--color-sidebar-item-bg);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   transition: background 0.15s ease, border-color 0.15s ease;
-  margin-bottom: 1px;
+  margin-bottom: 4px;
 }
 
 .history-sidebar-item::before {
@@ -435,13 +436,14 @@ a.commit-link {
 }
 
 .history-sidebar-item:hover {
-  background: var(--color-bg-elevated);
+  background: var(--color-sidebar-item-hover);
+  border-color: var(--color-primary-muted);
 }
 
 .history-sidebar-item.active {
   background: var(--color-primary-subtle);
-  border-color: transparent;
-  box-shadow: none;
+  border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
 .history-sidebar-item.active::before {
@@ -454,7 +456,7 @@ a.commit-link {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-elevated);
+  background: var(--color-sidebar-item-icon-bg);
   border-radius: 6px;
   color: var(--color-text-muted);
   flex-shrink: 0;

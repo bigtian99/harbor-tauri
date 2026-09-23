@@ -1,6 +1,6 @@
 import {
   Rocket, Package, FileText, UploadCloud, RefreshCw,
-  Loader2, CheckCircle, Copy, ChevronDown,
+  Loader2, Check, CheckCircle, Copy, ChevronDown,
 } from "lucide-react";
 import {
   Button,
@@ -77,7 +77,9 @@ export function UploadPanel({
       >
         <ol className="upload-steps" aria-label="构建流程">
           <li className={`upload-step ${hasArtifact ? "done" : "active"}`}>
-            <span className="upload-step-num">{hasArtifact ? "✓" : "1"}</span>
+            <span className="upload-step-num">
+              {hasArtifact ? <Check size={14} strokeWidth={2.5} aria-label="已完成" /> : "1"}
+            </span>
             <span className="upload-step-label">选择产物</span>
           </li>
           <li className="upload-step-line" aria-hidden />

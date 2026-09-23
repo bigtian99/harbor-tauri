@@ -231,6 +231,7 @@ mod tests {
             console: "http://ks-prod:30880".to_string(),
             username: "ops".to_string(),
             password: "p".to_string(),
+            default_namespace: String::new(),
         }];
         config.ks_last_env_id = "prod".to_string();
         let config = normalize_config(config);

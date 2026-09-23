@@ -12,10 +12,11 @@ import {
 import { useEffect, useState } from "react";
 import {
   AlertTriangle, ArrowRight, CheckCircle, ChevronDown, ChevronUp, ExternalLink, FileText, FolderOpen,
-  GitBranch, GitCommit, GitMerge, Info, Loader2, RefreshCw, Search, Settings, Tag
+  GitBranch, GitCommit, GitMerge, Info, Loader2, RefreshCw, Search, Settings, Tag, X
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SearchableDropdown } from "../SearchableDropdown";
+import { GroupedBranchDropdown } from "../GroupedBranchDropdown";
 import { avatarColor, avatarInitials } from "../../avatarUrl";
 import { QuickMergeConfigModal } from "./QuickMergeConfigModal";
 import type { AuthorInfo, CommitInfo, HarborConfig, LocalMergeCheck } from "../../types";
@@ -209,15 +210,13 @@ export function MergeFormSection({
         <Group align="flex-end" gap="sm" wrap="wrap" className="merge-branch-row">
           <Stack gap={4} style={{ flex: 1, minWidth: 200 }}>
             <Text size="sm" fw={600} c="var(--color-text)">源分支（远程，被合并）</Text>
-            <SearchableDropdown
+            <GroupedBranchDropdown
               value={sourceBranch}
-              options={sourceOptions}
+              branches={sourceOptions}
               onChange={onSourceBranchChange}
               placeholder={isLoadingBranches ? "加载中..." : branchNames.length === 0 ? "请先选择仓库并刷新分支" : "选择源分支（如 origin/feature）..."}
               disabled={branchNames.length === 0}
               loading={isLoadingBranches}
-              commitOnInput={false}
-              allowCustomValue={false}
             />
           </Stack>
           <div className="merge-arrow">
@@ -225,15 +224,13 @@ export function MergeFormSection({
           </div>
           <Stack gap={4} style={{ flex: 1, minWidth: 200 }}>
             <Text size="sm" fw={600} c="var(--color-text)">目标分支（远程，合并到此）</Text>
-            <SearchableDropdown
+            <GroupedBranchDropdown
               value={targetBranch}
-              options={targetOptions}
+              branches={targetOptions}
               onChange={onTargetBranchChange}
               placeholder={isLoadingBranches ? "加载中..." : branchNames.length === 0 ? "请先选择仓库并刷新分支" : "选择目标分支（如 origin/master）..."}
               disabled={branchNames.length === 0}
               loading={isLoadingBranches}
-              commitOnInput={false}
-              allowCustomValue={false}
             />
           </Stack>
         </Group>
@@ -393,7 +390,7 @@ export function MergeFormSection({
                     onClick={() => onSelectAuthor("")}
                     title="清除筛选"
                   >
-                    ✕
+                    <X size={14} aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -437,7 +434,7 @@ export function MergeFormSection({
                         onClick={() => onDiffCommitSearchChange("")}
                         title="清除搜索"
                       >
-                        ✕
+                        <X size={14} aria-hidden="true" />
                       </Button>
                     ) : null
                   }

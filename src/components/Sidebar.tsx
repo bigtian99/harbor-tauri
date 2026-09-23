@@ -174,7 +174,8 @@ export function Sidebar({
   const itemsBuild = filterOps(buildItems);
   const itemsOps = filterOps(opsItems);
   const itemsPublish = filterOps(publishItems);
-  const showBtGroup = !opsMode;
+  // 宝塔入口暂时隐藏，相关页面与逻辑保留，后续需要恢复时改回 `!opsMode`。
+  const showBtGroup = false;
   const isBtActive = isBtTab(activeTab);
 
   const [btOpened, setBtOpened] = useState(() => isBtActive);
@@ -234,9 +235,9 @@ export function Sidebar({
         p={0}
         className="app-sidebar"
         data-collapsed={sidebarCollapsed || undefined}
-        style={{
+          style={{
           background:
-            "linear-gradient(180deg, color-mix(in srgb, var(--color-bg-surface) 82%, var(--color-primary-solid)) 0%, var(--color-bg-surface) 40%)",
+            "linear-gradient(180deg, var(--color-sidebar-bg-start) 0%, var(--color-sidebar-bg-end) 40%)",
           borderRight: "1px solid var(--color-border-strong)",
         }}
       >
@@ -416,7 +417,7 @@ export function Sidebar({
             py={10}
             style={{
               borderTop: "1px solid var(--color-border)",
-              background: "rgba(0, 0, 0, 0.18)",
+              background: "var(--color-bg-surface)",
             }}
           >
             <Stack gap={2}>

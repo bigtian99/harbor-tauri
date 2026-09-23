@@ -12,10 +12,19 @@
   --color-bg-surface: #101826;
   --color-bg-elevated: #182338;
   --color-bg-card: #141c2b;
+  --color-paper-bg: #141c2b;
+  --color-sidebar-bg-start: color-mix(in srgb, var(--color-bg-surface) 82%, var(--color-primary-solid));
+  --color-sidebar-bg-end: var(--color-bg-surface);
+  --color-sidebar-item-bg: rgba(255, 255, 255, 0.035);
+  --color-sidebar-item-hover: rgba(120, 170, 255, 0.1);
+  --color-sidebar-item-icon-bg: rgba(255, 255, 255, 0.06);
   --color-border: rgba(120, 170, 255, 0.12);
   --color-border-strong: rgba(120, 170, 255, 0.22);
   --color-text: #eef3ff;
   --color-text-muted: #93a4c3;
+  --color-disabled-bg: color-mix(in srgb, var(--color-primary) 11%, var(--color-bg-elevated));
+  --color-disabled-border: color-mix(in srgb, var(--color-primary) 28%, var(--color-border-strong));
+  --color-disabled-text: color-mix(in srgb, var(--color-primary-hover) 62%, var(--color-text-muted));
   --color-success: #4ec9a8;
   --color-success-hover: #6ee7b7;
   --color-success-muted: rgba(78, 201, 168, 0.10);
@@ -64,6 +73,18 @@
   --progress-radius: 999px;
 }
 
+/* 浅色主题：选中复选框使用蓝色描边与勾，避免白勾落在浅色底上看不清。 */
+[data-mantine-color-scheme="light"] input[type="checkbox"]:checked,
+[data-mantine-color-scheme="light"] input[type="checkbox"][data-indeterminate] {
+  background-color: transparent !important;
+  border-color: var(--color-primary-solid) !important;
+}
+
+[data-mantine-color-scheme="light"] input[type="checkbox"]:checked + svg,
+[data-mantine-color-scheme="light"] input[type="checkbox"][data-indeterminate] + svg {
+  color: var(--color-primary-solid) !important;
+}
+
 /* 浅色模式变量 - 优化对比度和层次感 */
 [data-mantine-color-scheme="light"] {
   --color-primary: #2563eb;
@@ -78,10 +99,19 @@
   --color-bg-surface: #ffffff;
   --color-bg-elevated: #ffffff;
   --color-bg-card: #ffffff;
+  --color-paper-bg: #ffffff;
+  --color-sidebar-bg-start: #f8fafc;
+  --color-sidebar-bg-end: #f1f5f9;
+  --color-sidebar-item-bg: #f1f5fb;
+  --color-sidebar-item-hover: #e9f0fc;
+  --color-sidebar-item-icon-bg: #e3ebf8;
   --color-border: rgba(15, 23, 42, 0.18);
   --color-border-strong: rgba(15, 23, 42, 0.32);
   --color-text: #0f172a;
   --color-text-muted: #64748b;
+  --color-disabled-bg: color-mix(in srgb, var(--color-primary) 9%, var(--color-bg-elevated));
+  --color-disabled-border: color-mix(in srgb, var(--color-primary) 24%, var(--color-border-strong));
+  --color-disabled-text: color-mix(in srgb, var(--color-primary-hover) 58%, var(--color-text-muted));
   --color-success: #10b981;
   --color-success-hover: #059669;
   --color-success-muted: rgba(16, 185, 129, 0.15);
@@ -89,7 +119,7 @@
   --color-warning-muted: rgba(245, 158, 11, 0.15);
   --color-error: #ef4444;
   --color-error-muted: rgba(239, 68, 68, 0.15);
-  --color-input-bg: rgba(37, 99, 235, 0.06);
+  --color-input-bg: #f8fafc;
   --color-input-focus-border: var(--color-primary);
   --input-focus-ring: 0 0 0 1px var(--color-primary), 0 0 0 4px var(--color-primary-muted);
   --color-on-primary: #ffffff;

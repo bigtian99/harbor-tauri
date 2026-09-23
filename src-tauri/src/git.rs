@@ -78,45 +78,122 @@ fn format_jar_mb(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
 }
 
+fn collect_nested_target_dirs(root: &Path, depth: u8, out: &mut Vec<PathBuf>) {
+    if depth >= 5 {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if matches!(name.as_str(), ".git" | "node_modules" | "target" | "dist" | "build") {
+            if name == "target" {
+                out.push(path);
+            }
+            continue;
+        }
+        collect_nested_target_dirs(&path, depth + 1, out);
+    }
+}
+
+fn is_maven_jar_candidate(path: &Path) -> bool {
+    if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("jar") {
+        return false;
+    }
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    !filename.ends_with("-sources.jar")
+        && !filename.ends_with("-javadoc.jar")
+        && !filename.starts_with("original-")
+}
+
 pub(crate) fn find_maven_artifact(worktree_path: &Path) -> Result<PathBuf, String> {
-    let target_dir = worktree_path.join("target");
-    if !target_dir.is_dir() {
+    let requested_target_dir = worktree_path.join("target");
+    let mut target_dirs = Vec::new();
+    if requested_target_dir.is_dir() {
+        target_dirs.push(requested_target_dir.clone());
+    }
+    if target_dirs.is_empty() {
+        collect_nested_target_dirs(worktree_path, 0, &mut target_dirs);
+        target_dirs.sort();
+        target_dirs.dedup();
+        if !target_dirs.is_empty() {
+            crate::diag::diag_log(
+                "build",
+                &format!(
+                    "Maven target 不在指定目录，回退扫描嵌套模块: root={} targets={:?}",
+                    worktree_path.display(), target_dirs
+                ),
+            );
+        }
+    }
+    if target_dirs.is_empty() {
         return Err(format!(
             "Maven 打包完成但未找到 target 目录: {}",
-            target_dir.display()
+            requested_target_dir.display()
         ));
     }
 
     let mut candidates = Vec::new();
-    for entry in fs::read_dir(&target_dir)
-        .map_err(|e| format!("读取 target 目录失败 {}: {}", target_dir.display(), e))?
-    {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-        if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("jar") {
-            continue;
-        }
-
-        let filename = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default();
-        // spring-boot repackage 后瘦包是 *.jar.original（扩展名 original，本循环已排除）；
-        // 另排除 sources/javadoc，以及历史 original-*.jar 命名。
-        if filename.ends_with("-sources.jar")
-            || filename.ends_with("-javadoc.jar")
-            || filename.starts_with("original-")
+    for target_dir in &target_dirs {
+        for entry in fs::read_dir(target_dir)
+            .map_err(|e| format!("读取 target 目录失败 {}: {}", target_dir.display(), e))?
         {
-            continue;
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            // spring-boot repackage 后瘦包是 *.jar.original（扩展名 original，本循环已排除）；
+            // 另排除 sources/javadoc，以及历史 original-*.jar 命名。
+            if is_maven_jar_candidate(&path) {
+                candidates.push(path);
+            }
         }
+    }
 
-        candidates.push(path);
+    if candidates.is_empty() && target_dirs.len() == 1 && target_dirs[0] == requested_target_dir {
+        let mut nested_target_dirs = Vec::new();
+        collect_nested_target_dirs(worktree_path, 0, &mut nested_target_dirs);
+        nested_target_dirs.sort();
+        nested_target_dirs.dedup();
+        for target_dir in nested_target_dirs {
+            if target_dir == requested_target_dir {
+                continue;
+            }
+            if let Ok(entries) = fs::read_dir(&target_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if is_maven_jar_candidate(&path) {
+                        candidates.push(path);
+                    }
+                }
+            }
+        }
+        if !candidates.is_empty() {
+            crate::diag::diag_log(
+                "build",
+                &format!(
+                    "指定 target 无可用 JAR，已回退扫描嵌套模块: root={} count={}",
+                    worktree_path.display(),
+                    candidates.len()
+                ),
+            );
+        }
     }
 
     if candidates.is_empty() {
         return Err(format!(
             "Maven 打包完成但未找到可用 JAR: {}",
-            target_dir.display()
+            target_dirs
+                .iter()
+                .map(|dir| dir.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
 
@@ -1201,6 +1278,31 @@ CONFLICT (content): Merge conflict in conf/application.yml
         let out = "0123456789abcdef0123456789abcdef01234567\nsrc/A.java\nREADME.md\n";
         let files = parse_merge_tree_name_only(out);
         assert_eq!(files, vec!["src/A.java".to_string(), "README.md".to_string()]);
+    }
+}
+
+#[cfg(test)]
+mod maven_artifact_tests {
+    use super::find_maven_artifact;
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn finds_jar_in_nested_maven_module_target() {
+        let root = std::env::temp_dir().join(format!(
+            "jarporter-maven-artifact-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let jar = root.join("service").join("target").join("service.jar");
+        fs::create_dir_all(jar.parent().unwrap()).unwrap();
+        fs::write(&jar, b"fixture").unwrap();
+
+        let found = find_maven_artifact(&root).unwrap();
+        assert_eq!(found, PathBuf::from(&jar));
+        let _ = fs::remove_dir_all(root);
     }
 }
 

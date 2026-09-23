@@ -278,6 +278,16 @@ export async function runBranchPackageAndPush(
       const imgMatch = resultStr.match(/完整镜像:\s*(.+)/);
       if (imgMatch) {
         images.push(createBranchImageResult("backend", imgMatch[1].trim()));
+      } else {
+        const error = "镜像推送返回成功，但未找到完整镜像地址";
+        return {
+          ok: false,
+          error,
+          packageLog: result.log,
+          images: [],
+          pushErrors: [error],
+          ...artifacts,
+        };
       }
       return {
         ok: true,

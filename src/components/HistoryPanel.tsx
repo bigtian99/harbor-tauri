@@ -15,7 +15,7 @@ import {
 } from "@mantine/core";
 import {
   History, Trash2, RefreshCw, Search,
-  Folder, ChevronRight,
+  Folder, ChevronRight, X,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { BuildRecord } from "../types";
@@ -165,7 +165,7 @@ export function HistoryPanel({
                   title="清除搜索"
                   aria-label="清除搜索"
                 >
-                  ✕
+                  <X size={14} aria-hidden="true" />
                 </ActionIcon>
               ) : null
             }

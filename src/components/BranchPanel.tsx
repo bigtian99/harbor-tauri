@@ -750,7 +750,7 @@ export function BranchPanel({
                   )
                 : null}
 
-            <Stack gap={2} pt={4} style={{ borderTop: "1px dashed var(--color-border-strong)" }}>
+            <Stack gap={2} pt={4} style={{ borderTop: "1px solid var(--color-border-strong)" }}>
               {artifactPath && (
                 <UnstyledButton
                   className="branch-result-path"

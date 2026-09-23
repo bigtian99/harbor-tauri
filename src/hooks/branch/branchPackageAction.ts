@@ -239,6 +239,17 @@ export async function handlePackageFromBranch(
     const resultLog = runResult.packageLog;
     const btSummary = runResult.btDeploySummary;
 
+    // 后端返回非成功状态时，不允许无推送路径继续落到“打包完成”提示。
+    if (!runResult.ok && !autoPushImage) {
+      setLog((prev) => {
+        const err = `❌ 打包失败:\n${runResult.error ?? "未知错误"}`;
+        return [prev.trim(), err, resultLog]
+          .filter((s) => s && String(s).trim())
+          .join("\n\n");
+      });
+      return;
+    }
+
     await saveBranchSettings({
       config,
       setConfig,

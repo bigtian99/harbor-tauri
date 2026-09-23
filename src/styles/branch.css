@@ -528,67 +528,130 @@
   font-style: italic;
 }
 
-/* 分组分支下拉样式 */
-.grouped-branch-list {
-  max-height: 400px;
-}
-
-.branch-group {
-  margin-bottom: 2px;
-}
-
-.branch-group:last-child {
-  margin-bottom: 0;
-}
-
-.branch-group-header {
-  padding: 8px 14px 6px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--color-primary);
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--color-primary) 12%, transparent),
-    color-mix(in srgb, var(--color-primary) 6%, transparent)
-  );
-  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  user-select: none;
-  cursor: default;
-}
-
-.branch-item {
-  padding-left: 32px;
+/* 分支级联选择（Mantine TreeSelect）自定义节点 */
+.branch-tree-select .mantine-Input-input {
+  min-height: 42px;
+  padding-inline: 12px;
+  background: color-mix(in srgb, var(--color-primary-subtle) 72%, var(--color-bg-card));
+  border-color: var(--color-border-strong);
   font-size: 13px;
-  position: relative;
 }
 
-.branch-item::before {
-  content: '';
-  position: absolute;
-  left: 18px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-  opacity: 0.3;
-  transition: all 0.15s ease;
+.branch-tree-select .mantine-Input-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.85;
 }
 
-.branch-item:hover::before,
-.branch-item.highlight::before {
-  opacity: 0.6;
-  background: var(--color-primary);
+.branch-tree-dropdown {
+  padding: 6px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-elevated);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
 }
 
-.branch-item.selected::before {
-  opacity: 1;
-  background: var(--color-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent);
+.branch-tree-dropdown .mantine-ScrollArea-viewport {
+  padding: 0;
+}
+
+.branch-tree-option {
+  min-height: 34px;
+  margin: 1px 0;
+  padding-block: 6px;
+  border-radius: 7px;
+  color: var(--color-text-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.branch-tree-option:hover,
+.branch-tree-option[data-combobox-selected],
+.branch-tree-option[data-combobox-active] {
+  background: var(--color-primary-subtle);
+  color: var(--color-text);
+}
+
+.branch-tree-option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--color-primary) 17%, transparent);
+  color: var(--color-primary-hover);
+}
+
+.jp-ts-node {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  gap: 7px;
+}
+
+.jp-ts-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  min-width: 18px;
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease;
+}
+
+.jp-ts-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.jp-ts-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  min-width: 16px;
+  color: color-mix(in srgb, var(--color-primary) 74%, var(--color-text-muted));
+}
+
+.jp-ts-branch-icon {
+  color: var(--color-text-muted);
+  opacity: 0.75;
+}
+
+.jp-ts-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.jp-ts-dir {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.jp-ts-node-leaf.is-selected .jp-ts-leaf {
+  color: var(--color-primary-hover);
+  font-weight: 600;
+}
+
+.jp-ts-context {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  opacity: 0.72;
+}
+
+.jp-ts-node-leaf .jp-ts-context {
+  max-width: 48%;
+}
+
+.jp-ts-node-dir .jp-ts-context {
+  max-width: 42%;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 10px;
+}
+
+@media (max-width: 560px) {
+  .jp-ts-context {
+    display: none;
+  }
 }

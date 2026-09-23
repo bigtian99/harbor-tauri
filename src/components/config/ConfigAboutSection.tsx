@@ -223,7 +223,7 @@ export function ConfigAboutSection({
             size="sm"
             variant="default"
             leftSection={<Bell size={16} />}
-            onClick={() => void showSystemAlert("测试通知", "JarPorter 系统通知正常 ✅")}
+            onClick={() => void showSystemAlert("测试通知", "JarPorter 系统通知正常")}
             w="fit-content"
           >
             发送测试通知

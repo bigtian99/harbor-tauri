@@ -57,16 +57,16 @@ const duskDark = [
 const fieldChrome = {
   label: { color: "var(--color-text)", fontWeight: 600 },
   input: {
-    backgroundColor: "var(--color-primary-subtle)",
+    backgroundColor: "var(--color-input-bg)",
     borderColor: "var(--color-border-strong)",
     color: "var(--color-text)",
     "&:hover": {
       borderColor: "var(--color-primary-muted)",
-      backgroundColor: "var(--color-primary-subtle)",
+      backgroundColor: "var(--color-input-bg)",
     },
     "&:focus, &:focus-within": {
       borderColor: "var(--color-input-focus-border)",
-      backgroundColor: "var(--color-primary-subtle)",
+      backgroundColor: "var(--color-input-bg)",
       boxShadow: "var(--input-focus-ring)",
     },
   },
@@ -104,6 +104,14 @@ export const appTheme = createTheme({
           fontWeight: 600,
           lineHeight: 1.35,
           transition: "background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease",
+          "&:disabled, &[data-disabled]": {
+            opacity: 1,
+            cursor: "not-allowed",
+            filter: "none",
+          },
+          "&:disabled .mantine-Button-label, &[data-disabled] .mantine-Button-label, &:disabled .mantine-Button-section, &[data-disabled] .mantine-Button-section": {
+            opacity: 1,
+          },
           /* 次要：灰底描边 */
           "&[data-variant='default']": {
             background: "var(--color-bg-elevated)",
@@ -114,6 +122,13 @@ export const appTheme = createTheme({
               borderColor: "var(--color-primary)",
               color: "var(--color-primary-hover)",
             },
+          },
+          "&[data-variant='default']:disabled, &[data-variant='default'][data-disabled]": {
+            background: "var(--color-disabled-bg) !important",
+            borderColor: "var(--color-disabled-border) !important",
+            color: "var(--color-disabled-text) !important",
+            "--button-color": "var(--color-disabled-text)",
+            boxShadow: "none",
           },
           /* 主操作：实心主色 + 白字 */
           "&[data-variant='filled']:not(:disabled):not([data-disabled])": {
@@ -134,17 +149,14 @@ export const appTheme = createTheme({
             color: "var(--color-on-primary)",
           },
           "&[data-variant='filled']:disabled, &[data-variant='filled'][data-disabled]": {
-            background: "var(--color-bg-elevated) !important",
-            color: "var(--color-text-muted) !important",
-            "--button-color": "var(--color-text-muted)",
-            border: "1px solid var(--color-border-strong)",
+            background: "var(--color-disabled-bg) !important",
+            color: "var(--color-disabled-text) !important",
+            "--button-color": "var(--color-disabled-text)",
+            border: "1px solid var(--color-disabled-border)",
             boxShadow: "none",
-            opacity: 0.55,
-            cursor: "not-allowed",
-            filter: "none",
           },
           "&[data-variant='filled']:disabled .mantine-Button-label, &[data-variant='filled'][data-disabled] .mantine-Button-label, &[data-variant='filled']:disabled .mantine-Button-section, &[data-variant='filled'][data-disabled] .mantine-Button-section": {
-            color: "var(--color-text-muted) !important",
+            color: "var(--color-disabled-text) !important",
           },
           /* 轻强调：浅色底 */
           "&[data-variant='light']": {
@@ -153,6 +165,13 @@ export const appTheme = createTheme({
               borderColor: "var(--color-primary-muted)",
             },
           },
+          "&[data-variant='light']:disabled, &[data-variant='light'][data-disabled]": {
+            background: "var(--color-disabled-bg) !important",
+            borderColor: "var(--color-disabled-border) !important",
+            color: "var(--color-disabled-text) !important",
+            "--button-color": "var(--color-disabled-text)",
+            boxShadow: "none",
+          },
           /* 描边强调 */
           "&[data-variant='outline']": {
             background: "transparent",
@@ -160,6 +179,13 @@ export const appTheme = createTheme({
             "&:hover:not(:disabled)": {
               background: "var(--color-primary-subtle)",
             },
+          },
+          "&[data-variant='outline']:disabled, &[data-variant='outline'][data-disabled]": {
+            background: "transparent !important",
+            borderColor: "var(--color-disabled-border) !important",
+            color: "var(--color-disabled-text) !important",
+            "--button-color": "var(--color-disabled-text)",
+            boxShadow: "none",
           },
           /* 文字/幽灵 */
           "&[data-variant='subtle']": {
@@ -172,6 +198,13 @@ export const appTheme = createTheme({
               color: "var(--color-primary-hover)",
             },
           },
+          "&[data-variant='subtle']:disabled, &[data-variant='subtle'][data-disabled]": {
+            background: "transparent !important",
+            borderColor: "transparent !important",
+            color: "var(--color-disabled-text) !important",
+            "--button-color": "var(--color-disabled-text)",
+            boxShadow: "none",
+          },
           /* 渐变主 CTA */
           "&[data-variant='gradient']": {
             border: "none",
@@ -182,6 +215,13 @@ export const appTheme = createTheme({
               filter: "brightness(1.06)",
               color: "var(--color-on-primary)",
             },
+          },
+          "&[data-variant='gradient']:disabled, &[data-variant='gradient'][data-disabled]": {
+            background: "var(--color-disabled-bg) !important",
+            border: "1px solid var(--color-disabled-border)",
+            color: "var(--color-disabled-text) !important",
+            "--button-color": "var(--color-disabled-text)",
+            boxShadow: "none",
           },
         },
       },
@@ -237,9 +277,6 @@ export const appTheme = createTheme({
           "&:hover:not(:checked)": {
             borderColor: "var(--color-primary)",
           },
-        },
-        icon: {
-          color: "white !important",
         },
       },
     },
@@ -314,8 +351,7 @@ export const appTheme = createTheme({
     Paper: {
       styles: {
         root: {
-          background:
-            "linear-gradient(165deg, color-mix(in srgb, var(--color-bg-card) 88%, var(--color-primary-solid)) 0%, var(--color-bg-card) 55%)",
+          background: "var(--color-paper-bg)",
           border: "1px solid var(--color-border-strong)",
           boxShadow: "var(--shadow-paper)",
         },

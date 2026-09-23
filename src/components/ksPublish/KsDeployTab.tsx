@@ -5,7 +5,7 @@ import {
   Select, SimpleGrid, Stack, Table, Text, TextInput, Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { Download, Search, Plus, Copy, Package } from "lucide-react";
+import { ClipboardList, Download, Search, Plus, Copy, Package } from "lucide-react";
 import { isTauriRuntime } from "../../types";
 import { panelAccentButtonStyles, panelPrimaryButtonStyles } from "../../theme/panelStyles";
 import {
@@ -229,7 +229,10 @@ export function KsDeployTab({
         <Stack gap="sm">
           <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
             <Group gap={8}>
-              <Title order={5}>📋 全部部署状态</Title>
+              <Group gap={6}>
+                <ClipboardList size={16} aria-hidden="true" />
+                <Title order={5}>全部部署状态</Title>
+              </Group>
               {lastRefresh && <Text size="xs" c="dimmed">最近刷新 {lastRefresh}</Text>}
             </Group>
             <Group gap="sm" wrap="wrap" className="ks-publish-actions">

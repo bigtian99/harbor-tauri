@@ -1,4 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { TreeSelect, type TreeNodeData } from "@mantine/core";
+import { ChevronRight, GitBranch, Folder, FolderOpen } from "lucide-react";
 
 interface GroupedBranchDropdownProps {
   value: string;
@@ -7,65 +9,126 @@ interface GroupedBranchDropdownProps {
   placeholder?: string;
   disabled?: boolean;
   loading?: boolean;
+  allowCustomValue?: boolean;
 }
 
-interface BranchGroup {
-  prefix: string;
-  branches: string[];
+interface BranchTreeNode {
+  segment: string;
+  path: string;
+  leaves: string[];
+  children: BranchTreeNode[];
 }
 
-function groupBranches(branches: string[]): BranchGroup[] {
-  const groups = new Map<string, string[]>();
+function isRemoteSegment(segment: string): boolean {
+  return segment === "origin" || segment === "remotes";
+}
+
+/** master/main 优先，其余按字母序 */
+function compareBranchNames(a: string, b: string): number {
+  const aIsMain = a === "master" || a === "main";
+  const bIsMain = b === "master" || b === "main";
+  if (aIsMain && !bIsMain) return -1;
+  if (!aIsMain && bIsMain) return 1;
+  return a.localeCompare(b);
+}
+
+/**
+ * 按 "/" 目录层级构建级联树。
+ * `origin/feature/AI-4` → origin > feature > 叶子 AI-4
+ * `origin/box`         → origin 下的叶子 box
+ */
+function buildBranchTree(branches: string[]): BranchTreeNode[] {
+  const roots: BranchTreeNode[] = [];
+  const findChild = (nodes: BranchTreeNode[], segment: string) =>
+    nodes.find((n) => n.segment === segment);
 
   branches.forEach((branch) => {
-    const parts = branch.split("/");
-    if (parts.length > 1) {
-      // 有路径分隔符，按第一级目录分组
-      const prefix = parts[0];
-      if (!groups.has(prefix)) {
-        groups.set(prefix, []);
+    const parts = branch.split("/").filter(Boolean);
+    if (parts.length === 0) return;
+
+    const dirSegments = parts.slice(0, -1);
+    let level = roots;
+    let node: BranchTreeNode | undefined;
+    let path = "";
+
+    dirSegments.forEach((segment) => {
+      path = path ? `${path}/${segment}` : segment;
+      let child = findChild(level, segment);
+      if (!child) {
+        child = { segment, path, leaves: [], children: [] };
+        level.push(child);
       }
-      groups.get(prefix)!.push(branch);
+      node = child;
+      level = child.children;
+    });
+
+    if (node) {
+      node.leaves.push(branch);
     } else {
-      // 没有路径分隔符，放到根目录
-      if (!groups.has("")) {
-        groups.set("", []);
+      let rootLeaf = findChild(roots, "");
+      if (!rootLeaf) {
+        rootLeaf = { segment: "", path: "", leaves: [], children: [] };
+        roots.push(rootLeaf);
       }
-      groups.get("")!.push(branch);
+      rootLeaf.leaves.push(branch);
     }
   });
 
-  // 转换为数组并排序：先显示远程分支（origin/remotes），再本地分支，最后根目录
-  const result: BranchGroup[] = [];
-  const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
-    // 根目录（本地分支）放最后
-    if (a === "") return 1;
-    if (b === "") return -1;
-    // origin 和 remotes 开头的放前面
-    const aIsRemote = a === "origin" || a === "remotes" || a.startsWith("remotes/");
-    const bIsRemote = b === "origin" || b === "remotes" || b.startsWith("remotes/");
-    if (aIsRemote && !bIsRemote) return -1;
-    if (!aIsRemote && bIsRemote) return 1;
-    // 同类型按字母排序
-    return a.localeCompare(b);
+  return roots;
+}
+
+function sortTree(nodes: BranchTreeNode[]) {
+  nodes.sort((a, b) => {
+    if (a.segment === "") return 1;
+    if (b.segment === "") return -1;
+    const aRemote = isRemoteSegment(a.segment);
+    const bRemote = isRemoteSegment(b.segment);
+    if (aRemote && !bRemote) return -1;
+    if (!aRemote && bRemote) return 1;
+    return a.segment.localeCompare(b.segment);
+  });
+  nodes.forEach((node) => {
+    node.leaves.sort((a, b) =>
+      compareBranchNames(a.split("/").pop() ?? a, b.split("/").pop() ?? b),
+    );
+    sortTree(node.children);
+  });
+}
+
+/** 转成 Mantine TreeSelect 的 TreeNodeData（目录节点带 children，分支为叶子） */
+function toTreeData(nodes: BranchTreeNode[]): TreeNodeData[] {
+  const out: TreeNodeData[] = [];
+  const leafNode = (branch: string): TreeNodeData => ({
+    // label 用完整分支名，选中后输入框展示完整路径；下拉中再拆成叶子 + 父级路径。
+    label: branch,
+    value: branch,
+    nodeProps: { title: branch },
   });
 
-  sortedKeys.forEach((key) => {
-    const sortedBranches = groups.get(key)!.sort((a, b) => {
-      // 在同一组内，master/main 优先
-      const aIsMain = a.endsWith("/master") || a.endsWith("/main") || a === "master" || a === "main";
-      const bIsMain = b.endsWith("/master") || b.endsWith("/main") || b === "master" || b === "main";
-      if (aIsMain && !bIsMain) return -1;
-      if (!aIsMain && bIsMain) return 1;
-      return a.localeCompare(b);
+  for (const node of nodes) {
+    if (!node.segment) {
+      out.push(...node.leaves.map(leafNode));
+      out.push(...toTreeData(node.children));
+      continue;
+    }
+    out.push({
+      // 目录节点 value 加前缀，避免与同名分支冲突
+      value: `dir:${node.path}`,
+      label: node.segment,
+      nodeProps: { title: node.path.split("/").slice(0, -1).join("/") },
+      children: [...node.leaves.map(leafNode), ...toTreeData(node.children)],
     });
-    result.push({
-      prefix: key,
-      branches: sortedBranches,
-    });
-  });
+  }
+  return out;
+}
 
-  return result;
+/** 搜索匹配：目录按路径匹配，分支按完整分支名匹配 */
+function filterBranchNode(query: string, node: TreeNodeData): boolean {
+  const q = query.toLowerCase().trim();
+  if (!q) return true;
+  const value = String(node.value);
+  const target = value.startsWith("dir:") ? value.slice(4) : value;
+  return target.toLowerCase().includes(q);
 }
 
 export function GroupedBranchDropdown({
@@ -75,158 +138,94 @@ export function GroupedBranchDropdown({
   placeholder = "请选择分支...",
   disabled = false,
   loading = false,
+  allowCustomValue = false,
 }: GroupedBranchDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const [highlightIndex, setHighlightIndex] = useState(0);
-
-  // 根据搜索词过滤分支
-  const filteredBranches = searchTerm
-    ? branches.filter((b) => b.toLowerCase().includes(searchTerm.toLowerCase()))
-    : branches;
-
-  const groupedBranches = groupBranches(filteredBranches);
-
-  // 计算所有可选项（用于键盘导航）
-  const allOptions = filteredBranches;
+  const data = useMemo(() => {
+    const tree = buildBranchTree(branches);
+    sortTree(tree);
+    return toTreeData(tree);
+  }, [branches]);
+  const firstLevelValues = useMemo(
+    () => data.filter((node) => node.children?.length).map((node) => node.value),
+    [data],
+  );
+  const [expandedValues, setExpandedValues] = useState<string[]>(firstLevelValues);
+  const searchTermRef = useRef("");
 
   useEffect(() => {
-    setHighlightIndex(0);
-  }, [searchTerm, branches]);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        listRef.current &&
-        !listRef.current.contains(event.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-        setSearchTerm("");
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelect = (branch: string) => {
-    onChange(branch);
-    setIsOpen(false);
-    setSearchTerm("");
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setSearchTerm(newValue);
-    if (!isOpen) {
-      setIsOpen(true);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      if (!isOpen) {
-        setIsOpen(true);
-        return;
-      }
-      setHighlightIndex((i) => Math.min(i + 1, Math.max(allOptions.length - 1, 0)));
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightIndex((i) => Math.max(i - 1, 0));
-      return;
-    }
-    if (e.key === "Escape") {
-      setIsOpen(false);
-      setSearchTerm("");
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const picked = allOptions[highlightIndex];
-      if (picked) {
-        handleSelect(picked);
-      }
-    }
-  };
-
-  const handleInputFocus = () => {
-    if (!disabled) {
-      setSearchTerm("");
-      setIsOpen(true);
-    }
-  };
-
-  const handleInputBlur = () => {
-    window.setTimeout(() => {
-      setIsOpen(false);
-      setSearchTerm("");
-    }, 150);
-  };
-
-  const displayValue = isOpen ? searchTerm : value || "";
+    setExpandedValues(firstLevelValues);
+  }, [firstLevelValues]);
 
   return (
-    <div className="grouped-branch-dropdown">
-      <input
-        ref={inputRef}
-        type="text"
-        className="searchable-dropdown-input"
-        value={displayValue}
-        onChange={handleInputChange}
-        onFocus={handleInputFocus}
-        onBlur={handleInputBlur}
-        onKeyDown={handleKeyDown}
-        placeholder={loading ? "加载中..." : placeholder}
-        disabled={disabled}
-        autoComplete="off"
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-      />
-      {isOpen && !disabled && (
-        <div ref={listRef} className="searchable-dropdown-list grouped-branch-list">
-          {loading && filteredBranches.length === 0 && !searchTerm ? (
-            <div className="searchable-dropdown-empty">加载中...</div>
-          ) : filteredBranches.length > 0 ? (
-            groupedBranches.map((group) => (
-              <div key={group.prefix || "root"} className="branch-group">
-                {group.prefix && (
-                  <div className="branch-group-header">{group.prefix}/</div>
-                )}
-                {group.branches.map((branch) => {
-                  const globalIndex = allOptions.indexOf(branch);
-                  const displayName = group.prefix
-                    ? branch.slice(group.prefix.length + 1)
-                    : branch;
-                  return (
-                    <div
-                      key={branch}
-                      className={`searchable-dropdown-item branch-item ${branch === value ? "selected" : ""} ${globalIndex === highlightIndex ? "highlight" : ""}`}
-                      title={branch}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleSelect(branch);
-                      }}
-                      onMouseEnter={() => setHighlightIndex(globalIndex)}
-                    >
-                      {displayName}
-                    </div>
-                  );
-                })}
-              </div>
-            ))
-          ) : (
-            <div className="searchable-dropdown-empty">暂无匹配分支</div>
-          )}
-        </div>
-      )}
-    </div>
+    <TreeSelect
+      data={data}
+      value={value || null}
+      onChange={(next) => {
+        if (typeof next === "string" && next) onChange(next);
+      }}
+      placeholder={loading ? "加载中..." : placeholder}
+      disabled={disabled}
+      searchable
+      allowDeselect={false}
+      clearable={false}
+      openOnFocus
+      expandOnClick
+      withLines={false}
+      expandedValues={expandedValues}
+      onExpandedChange={setExpandedValues}
+      onSearchChange={(query) => {
+        searchTermRef.current = query;
+      }}
+      onKeyDown={(event) => {
+        if (allowCustomValue && event.key === "Enter") {
+          const query = searchTermRef.current.trim();
+          if (query && !branches.includes(query)) {
+            event.preventDefault();
+            event.stopPropagation();
+            onChange(query);
+          }
+        }
+      }}
+      maxDropdownHeight={360}
+      nothingFoundMessage={loading ? "加载中..." : "暂无匹配分支"}
+      filter={filterBranchNode}
+      className="branch-tree-select"
+      comboboxProps={{
+        withinPortal: true,
+        shadow: "md",
+        classNames: { dropdown: "branch-tree-dropdown", option: "branch-tree-option" },
+      }}
+      renderNode={({ node, hasChildren, expanded, selected }) => {
+        if (hasChildren) {
+          return (
+            <span className="jp-ts-node jp-ts-node-dir">
+              <span className={`jp-ts-chevron${expanded ? " is-open" : ""}`}>
+                <ChevronRight size={13} />
+              </span>
+              <span className="jp-ts-icon" aria-hidden="true">
+                {expanded ? <FolderOpen size={15} /> : <Folder size={15} />}
+              </span>
+              <span className="jp-ts-label jp-ts-dir">{node.label}</span>
+              {node.nodeProps?.title && node.nodeProps.title !== node.label && (
+                <span className="jp-ts-context">{node.nodeProps.title}</span>
+              )}
+            </span>
+          );
+        }
+        const branch = String(node.label);
+        const segments = branch.split("/");
+        const leaf = segments.pop() || branch;
+        const context = segments.join("/");
+        return (
+          <span className={`jp-ts-node jp-ts-node-leaf${selected ? " is-selected" : ""}`} title={branch}>
+            <span className="jp-ts-icon jp-ts-branch-icon" aria-hidden="true">
+              <GitBranch size={14} />
+            </span>
+            <span className="jp-ts-label jp-ts-leaf">{leaf}</span>
+            {context && <span className="jp-ts-context">{context}</span>}
+          </span>
+        );
+      }}
+    />
   );
 }

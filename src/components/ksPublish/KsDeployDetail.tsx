@@ -2,7 +2,7 @@ import {
   Badge, Box, Button, Card, Divider, Group, Pagination,
   Select, Stack, Table, Text, TextInput, Title,
 } from "@mantine/core";
-import { History, Pencil, Rocket, ScrollText } from "lucide-react";
+import { Archive, History, Pencil, Rocket, ScrollText, Sparkles } from "lucide-react";
 import {
   type DeployInfo,
   REV_PAGE_SIZE_OPTIONS,
@@ -68,7 +68,10 @@ export function KsDeployDetail({
       </Group>
       <Group align="flex-start" gap="lg" wrap="wrap">
         <Box style={{ flex: "1 1 520px", minWidth: 0, maxWidth: "100%" }}>
-          <Text size="sm" fw={600} c="blue">🆕 新版本（当前 revision）</Text>
+          <Group gap={6}>
+            <Sparkles size={15} color="var(--color-primary-hover)" />
+            <Text size="sm" fw={600} c="blue">新版本（当前 revision）</Text>
+          </Group>
           {sel.pods.new.length === 0 && <Text size="xs" c="dimmed">暂无</Text>}
           {sel.pods.new.map((p) => (
             <Group key={p.name} gap={8} my={4} wrap="nowrap" justify="space-between">
@@ -88,7 +91,10 @@ export function KsDeployDetail({
               </Button>
             </Group>
           ))}
-          <Text size="sm" fw={600} c="dimmed" mt="sm">📦 旧版本</Text>
+          <Group gap={6} mt="sm">
+            <Archive size={15} color="var(--color-text-muted)" />
+            <Text size="sm" fw={600} c="dimmed">旧版本</Text>
+          </Group>
           {sel.pods.old.length === 0 && <Text size="xs" c="dimmed">无</Text>}
           {sel.pods.old.map((p) => (
             <Group key={p.name} gap={8} my={4} wrap="nowrap" justify="space-between" opacity={0.85}>
@@ -238,7 +244,10 @@ export function KsDeployDetail({
         </Box>
         <Divider orientation="vertical" />
         <Box style={{ flex: 1, minWidth: 280 }}>
-          <Title order={6} mb="xs">🚀 修改镜像并发布</Title>
+          <Group gap={6} mb="xs">
+            <Rocket size={16} color="var(--color-primary-hover)" />
+            <Title order={6}>修改镜像并发布</Title>
+          </Group>
           <Text size="xs" c="dimmed" mb={4}>容器：{selContainer || "-"}</Text>
           <TextInput
             placeholder="dockerhub.kubekey.local/项目/镜像:tag"
