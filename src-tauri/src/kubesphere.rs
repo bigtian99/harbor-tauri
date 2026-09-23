@@ -1989,10 +1989,61 @@ pub async fn ks_update_image(
     let old_image = cur.pointer("/spec/template/spec/containers/0/image").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let old_rev = cur.pointer("/metadata/annotations/deployment.kubernetes.io~1revision").and_then(|v| v.as_str()).unwrap_or("?").to_string();
 
-    // PATCH 只改镜像
-    let patch = serde_json::json!({
+    // 检查并补充 imagePullSecrets
+    let existing_secrets = cur
+        .pointer("/spec/template/spec/imagePullSecrets")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| item.get("name").and_then(|n| n.as_str()))
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let required_secrets = vec!["harbor-tksy", "harbor-tksy-ip"];
+    let mut secrets_to_add: Vec<String> = Vec::new();
+
+    for secret in &required_secrets {
+        if !existing_secrets.contains(&secret.to_string()) {
+            secrets_to_add.push(secret.to_string());
+        }
+    }
+
+    let final_secrets: Vec<serde_json::Value> = existing_secrets
+        .iter()
+        .map(|name| serde_json::json!({ "name": name }))
+        .chain(
+            secrets_to_add
+                .iter()
+                .map(|name| serde_json::json!({ "name": name }))
+        )
+        .collect();
+
+    if !secrets_to_add.is_empty() {
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!(
+                "ks_update_image auto-add imagePullSecrets: {:?} (existing: {:?})",
+                secrets_to_add, existing_secrets
+            ),
+        );
+    }
+
+    // PATCH 改镜像 + imagePullSecrets
+    let mut patch = serde_json::json!({
         "spec": { "template": { "spec": { "containers": [{ "name": container, "image": image }] } } }
     });
+
+    // 如果需要补充 imagePullSecrets，加入 patch
+    if !final_secrets.is_empty() {
+        if let Some(template_spec) = patch.pointer_mut("/spec/template/spec") {
+            if let Some(obj) = template_spec.as_object_mut() {
+                obj.insert("imagePullSecrets".into(), serde_json::Value::Array(final_secrets));
+            }
+        }
+    }
+
     let (s2, resp) = ks_api("PATCH", &format!("/apis/apps/v1/namespaces/{ns}/deployments/{dep}"), Some(patch))?;
     if s2 != 200 {
         let msg = resp.get("message").and_then(|v| v.as_str()).unwrap_or("未知错误");
