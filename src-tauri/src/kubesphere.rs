@@ -1607,6 +1607,10 @@ fn build_deployment_json(
                     "restartPolicy": "Always",
                     "terminationGracePeriodSeconds": 30,
                     "dnsPolicy": "ClusterFirst",
+                    "imagePullSecrets": [
+                        { "name": "harbor-tksy" },
+                        { "name": "harbor-tksy-ip" }
+                    ],
                     "volumes": [{
                         "name": "host-time",
                         "hostPath": { "path": "/etc/localtime", "type": "" }
@@ -2298,6 +2302,47 @@ pub async fn ks_update_deployment(
         .unwrap_or("?")
         .to_string();
 
+    // 检查并补充 imagePullSecrets
+    let existing_secrets = cur
+        .pointer("/spec/template/spec/imagePullSecrets")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| item.get("name").and_then(|n| n.as_str()))
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let required_secrets = vec!["harbor-tksy", "harbor-tksy-ip"];
+    let mut secrets_to_add: Vec<String> = Vec::new();
+
+    for secret in &required_secrets {
+        if !existing_secrets.contains(&secret.to_string()) {
+            secrets_to_add.push(secret.to_string());
+        }
+    }
+
+    let final_secrets: Vec<serde_json::Value> = existing_secrets
+        .iter()
+        .map(|name| serde_json::json!({ "name": name }))
+        .chain(
+            secrets_to_add
+                .iter()
+                .map(|name| serde_json::json!({ "name": name }))
+        )
+        .collect();
+
+    if !secrets_to_add.is_empty() {
+        crate::diag::diag_log(
+            "kubesphere",
+            &format!(
+                "ks_update_deployment auto-add imagePullSecrets: {:?} (existing: {:?})",
+                secrets_to_add, existing_secrets
+            ),
+        );
+    }
+
     // 复用创建模板拼出目标容器字段（含 SW_AGENT_NAME / ConfigMap / 探针）
     let built = build_deployment_json(
         &namespace,
@@ -2322,6 +2367,21 @@ pub async fn ks_update_deployment(
     let alias_val = alias.as_deref().unwrap_or("").trim();
     let alias_final = if alias_val.is_empty() { name.as_str() } else { alias_val };
 
+    let mut template_spec = serde_json::json!({
+        "containers": [container_patch],
+        "volumes": [{
+            "name": "host-time",
+            "hostPath": { "path": "/etc/localtime", "type": "" }
+        }]
+    });
+
+    // 如果需要补充 imagePullSecrets，加入 patch
+    if !final_secrets.is_empty() {
+        if let Some(obj) = template_spec.as_object_mut() {
+            obj.insert("imagePullSecrets".into(), serde_json::Value::Array(final_secrets));
+        }
+    }
+
     let patch = serde_json::json!({
         "metadata": {
             "annotations": {
@@ -2331,13 +2391,7 @@ pub async fn ks_update_deployment(
         "spec": {
             "replicas": replicas.unwrap_or(1),
             "template": {
-                "spec": {
-                    "containers": [container_patch],
-                    "volumes": [{
-                        "name": "host-time",
-                        "hostPath": { "path": "/etc/localtime", "type": "" }
-                    }]
-                }
+                "spec": template_spec
             }
         }
     });
