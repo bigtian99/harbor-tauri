@@ -139,6 +139,8 @@ export interface KsPublishMap {
   container?: string;
   /** 服务暴露端口（随 Git 映射一起记忆，分支打包可带出） */
   expose_port?: string;
+  /** 手选的 Maven 子模块 rel_path（多模块仓库；空则按部署名自动匹配） */
+  maven_module?: string;
 }
 
 export interface PackageFromBranchResult {

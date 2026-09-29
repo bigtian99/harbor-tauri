@@ -31,6 +31,11 @@ import {
   type KsBatchNpmScriptPref,
 } from "../../utils/ksBatchPackPublish";
 import {
+  mavenModuleOptions,
+  AUTO_MAVEN_MODULE,
+  type MavenModuleInfo,
+} from "../../utils/ksMavenModules";
+import {
   buildIdleKsBatchMergeRows,
   checkKsBatchMergesParallel,
   type KsBatchMergeRow,
@@ -86,6 +91,10 @@ interface KsBatchConfirmModalProps {
   onStart: (values: KsBatchConfirmValues) => void;
   /** 选中部署映射到的本地仓库（去重），供可选合并预检 */
   mergeRepoPaths?: string[];
+  /** 各部署可手选的 Maven 模块（仅多模块后端仓库有值） */
+  moduleOptions?: Record<string, MavenModuleInfo[]>;
+  /** 各部署默认选中的 Maven 模块 rel_path（取自发布映射，"" = 自动） */
+  moduleDefaults?: Record<string, string>;
 }
 
 export function KsBatchConfirmModal({
@@ -105,6 +114,8 @@ export function KsBatchConfirmModal({
   onClose,
   onStart,
   mergeRepoPaths = [],
+  moduleOptions = {},
+  moduleDefaults = {},
 }: KsBatchConfirmModalProps) {
   const [branch, setBranch] = useState(initialBranch);
   const [npmMode, setNpmMode] = useState<KsBatchNpmScriptMode>(initialNpmScript.mode);
@@ -112,6 +123,7 @@ export function KsBatchConfirmModal({
   const [mergeBeforePack, setMergeBeforePack] = useState(false);
   const [sourceBranch, setSourceBranch] = useState("");
   const [mergeRows, setMergeRows] = useState<KsBatchMergeRow[]>([]);
+  const [moduleOverrides, setModuleOverrides] = useState<Record<string, string>>({});
   const [mergeChecking, setMergeChecking] = useState(false);
   const [mergeCheckDone, setMergeCheckDone] = useState(false);
   const [conflictViewRow, setConflictViewRow] = useState<KsBatchMergeRow | null>(null);
@@ -145,6 +157,7 @@ export function KsBatchConfirmModal({
     if (!opened) {
       mergeCheckCancel.current.cancelled = true;
       setMergeChecking(false);
+      setModuleOverrides({});
       return;
     }
     didAutoPickBranch.current = false;
@@ -168,6 +181,22 @@ export function KsBatchConfirmModal({
     didAutoPickBranch.current = true;
     setBranch((prev) => (prev.trim() ? prev : allBranchNames[0]));
   }, [opened, gitBranchesLoading, allBranchNames]);
+
+  // 模块默认值异步就绪后补入（保留用户已手选的项）
+  useEffect(() => {
+    if (!opened) return;
+    setModuleOverrides((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [name, def] of Object.entries(moduleDefaults)) {
+        if (next[name] === undefined) {
+          next[name] = def;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [opened, moduleDefaults]);
 
   /** 换分支只清空结果，不自动预检 */
   useEffect(() => {
@@ -259,6 +288,7 @@ export function KsBatchConfirmModal({
       npmScript: npmScriptPref,
       mergeBeforePack,
       sourceBranch: mergeBeforePack ? sourceBranch.trim() : "",
+      moduleOverrides,
     });
   };
 
@@ -681,26 +711,55 @@ export function KsBatchConfirmModal({
             </Badge>
           </Group>
           <ScrollArea mah={180} type="auto" offsetScrollbars className="ks-batch-deploy-scroll">
-            <Group gap={8}>
-              {(meta?.deployNames ?? []).map((name) => (
-                <Badge
-                  key={name}
-                  variant="outline"
-                  color={deployRoleColor(meta?.deployRoles?.[name])}
-                  size="md"
-                  radius="sm"
-                  className="ks-batch-deploy-chip"
-                  leftSection={(
-                    <Text span size="10px" fw={700} opacity={0.85}>
-                      {deployRoleLabel(meta?.deployRoles?.[name])}
-                    </Text>
-                  )}
-                >
-                  {name}
-                </Badge>
-              ))}
-            </Group>
+            <Stack gap={6}>
+              {(meta?.deployNames ?? []).map((name) => {
+                const mods = moduleOptions[name] ?? [];
+                const showSelect =
+                  (meta?.deployRoles?.[name] ?? "backend") !== "frontend"
+                  && mods.length > 0;
+                return (
+                  <Group key={name} justify="space-between" wrap="nowrap" gap={8}>
+                    <Badge
+                      variant="outline"
+                      color={deployRoleColor(meta?.deployRoles?.[name])}
+                      size="md"
+                      radius="sm"
+                      className="ks-batch-deploy-chip"
+                      leftSection={(
+                        <Text span size="10px" fw={700} opacity={0.85}>
+                          {deployRoleLabel(meta?.deployRoles?.[name])}
+                        </Text>
+                      )}
+                    >
+                      {name}
+                    </Badge>
+                    {showSelect && (
+                      <Select
+                        size="xs"
+                        w={250}
+                        data={mavenModuleOptions(mods)}
+                        value={moduleOverrides[name] || AUTO_MAVEN_MODULE}
+                        onChange={(v) =>
+                          setModuleOverrides((prev) => ({
+                            ...prev,
+                            [name]: v && v !== AUTO_MAVEN_MODULE ? v : "",
+                          }))}
+                        searchable
+                        nothingFoundMessage="未扫描到模块"
+                        aria-label={`${name} Maven 模块`}
+                        comboboxProps={{ withinPortal: true }}
+                      />
+                    )}
+                  </Group>
+                );
+              })}
+            </Stack>
           </ScrollArea>
+          {Object.keys(moduleOptions).length > 0 && (
+            <Text size="xs" c="dimmed">
+              多模块 Maven 仓库可在此手选打包的子模块（默认按部署名自动匹配）
+            </Text>
+          )}
         </Stack>
 
         <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">

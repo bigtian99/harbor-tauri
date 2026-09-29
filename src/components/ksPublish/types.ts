@@ -49,6 +49,30 @@ export const EMPTY_DEPLOY_FORM = {
   container: "container-main",
 };
 
+/** 创建部署的镜像来源：直接填镜像地址，或填 Git 地址先构建推送再创建 */
+export type KsImageSource = "image" | "git";
+
+/** 创建部署「Git 构建」模式表单（构建参数尽量自动解析，这里只收最关键的几项） */
+export interface KsCreateGitForm {
+  url: string;
+  branch: string;
+  role: "backend" | "frontend";
+  /** 前端 npm 构建脚本选择（后端忽略） */
+  npmMode: "auto" | "prod" | "test" | "custom";
+  npmCustom: string;
+  /** 手选 Maven 子模块 rel_path（后端；"" = 按部署名自动匹配） */
+  mavenModule: string;
+}
+
+export const EMPTY_CREATE_GIT_FORM: KsCreateGitForm = {
+  url: "",
+  branch: "",
+  role: "backend",
+  npmMode: "auto",
+  npmCustom: "",
+  mavenModule: "",
+};
+
 export const STATUS_DOT: Record<string, string> = {
   running: "var(--color-success)",
   updating: "var(--color-primary)",

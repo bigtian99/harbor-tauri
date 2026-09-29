@@ -64,6 +64,8 @@ interface GridRow {
   role: KsPublishMapRole;
   git_url: string;
   expose_port: string;
+  /** 手选 Maven 子模块 rel_path（留空 = 按部署名自动匹配） */
+  maven_module: string;
   /** K8s 实际 containerPort（从 Deployment YAML 读取） */
   actualPorts?: number[];
   mapId?: string;
@@ -110,6 +112,7 @@ function buildGridRows(
       role: existing?.role ?? inferredRole,
       git_url,
       expose_port,
+      maven_module: existing?.maven_module ?? "",
       actualPorts: d.ports,
       mapId: existing?.id,
     };
@@ -366,6 +369,7 @@ export function KsPublishMapEditor({
       deployment: r.deployment,
       container: r.container.trim() || undefined,
       expose_port: r.expose_port.trim() || undefined,
+      maven_module: r.maven_module.trim() || undefined,
     });
 
   const saveNamespaceMaps = async () => {
@@ -402,6 +406,7 @@ export function KsPublishMapEditor({
         deployment: r.deployment,
         container: r.container.trim() || undefined,
         expose_port: r.expose_port.trim() || undefined,
+        maven_module: r.maven_module.trim() || undefined,
       }),
     );
     onMapsChange((prev) => {
@@ -531,6 +536,7 @@ export function KsPublishMapEditor({
                     <th>角色</th>
                     <th>端口</th>
                     <th>Git 远程地址</th>
+                    <th>Maven 模块</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -572,6 +578,17 @@ export function KsPublishMapEditor({
                           placeholder="git@host:group/repo.git"
                           onChange={(e) =>
                             updateRow(row.deployment, { git_url: e.currentTarget.value })}
+                          styles={compactInputStyles}
+                          style={{ minWidth: 200 }}
+                        />
+                      </td>
+                      <td>
+                        <TextInput
+                          size="xs"
+                          value={row.maven_module}
+                          placeholder="多模块仓库填，如 ruoyi-modules/ruoyi-system"
+                          onChange={(e) =>
+                            updateRow(row.deployment, { maven_module: e.currentTarget.value })}
                           styles={compactInputStyles}
                           style={{ minWidth: 200 }}
                         />

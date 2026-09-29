@@ -3,7 +3,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::Serialize;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MavenExecutableModule {
     pub rel_path: String,
     pub artifact_id: String,
@@ -228,7 +230,7 @@ fn score_module(deployment: &str, module: &MavenExecutableModule) -> i32 {
     .unwrap_or(0)
 }
 
-fn format_module_candidates(modules: &[MavenExecutableModule]) -> String {
+pub(crate) fn format_module_candidates(modules: &[MavenExecutableModule]) -> String {
     modules
         .iter()
         .take(8)

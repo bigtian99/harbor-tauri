@@ -16,6 +16,8 @@ export interface KsBatchConfirmValues {
   /** 先按源→目标合并各仓库，再打包推送发布 */
   mergeBeforePack: boolean;
   sourceBranch: string;
+  /** 手选 Maven 子模块：deployment → rel_path（"" = 按部署名自动匹配） */
+  moduleOverrides: Record<string, string>;
 }
 
 export interface KsBatchSummary {

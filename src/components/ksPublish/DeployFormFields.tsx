@@ -1,10 +1,23 @@
 import {
-  Autocomplete, Loader, NumberInput, Select, SimpleGrid,
-  Textarea, TextInput,
+  Autocomplete, Button, Group, Loader, NumberInput, SegmentedControl, Select, SimpleGrid,
+  Stack, Text, Textarea, TextInput,
 } from "@mantine/core";
-import type { Dispatch, SetStateAction } from "react";
-import { EMPTY_DEPLOY_FORM, HEALTH_PATH_OPTIONS } from "./types";
+import { useMemo, type Dispatch, type SetStateAction } from "react";
+import { RefreshCw } from "lucide-react";
+import {
+  EMPTY_DEPLOY_FORM, HEALTH_PATH_OPTIONS,
+  type KsCreateGitForm, type KsImageSource,
+} from "./types";
 import { isRfc1123Name } from "./utils";
+import {
+  describeKsBatchNpmScriptPref,
+  KS_BATCH_NPM_SCRIPT_PRESETS,
+  type KsBatchNpmScriptMode,
+  type KsBatchNpmScriptPref,
+} from "../../utils/ksBatchPackPublish";
+import { buildKsBatchBranchOptionGroups } from "../../utils/ksBatchGitBranches";
+import { loadKsBatchBranchHistory } from "../../utils/ksBatchBranchHistory";
+import { mavenModuleOptions, AUTO_MAVEN_MODULE, type MavenModuleInfo } from "../../utils/ksMavenModules";
 
 export type KsCmSelectProps = {
   cms: { name: string; alias: string; dataSize: number }[];
@@ -24,6 +37,22 @@ type Props = {
   cmSelectPlaceholder: string;
   /** 编辑弹窗镜像框自动聚焦 */
   imageAutoFocus?: boolean;
+  /** 镜像来源：image=直接填镜像地址（默认）；git=填 Git 地址，创建时先构建推送 */
+  sourceMode?: KsImageSource;
+  /** sourceMode==='git' 时的 Git 构建表单 */
+  git?: KsCreateGitForm;
+  setGit?: Dispatch<SetStateAction<KsCreateGitForm>>;
+  /** 基于 Git 地址 git fetch 出的分支（下拉） */
+  gitBranches?: string[];
+  gitBranchesLoading?: boolean;
+  gitBranchesError?: string;
+  /** Git 地址解析到的本地仓库路径（仅成功解析时有值） */
+  gitRepoPath?: string | null;
+  /** 本地仓库内可执行的 Spring Boot Maven 模块（供手选打包模块） */
+  mavenModules?: MavenModuleInfo[];
+  mavenModulesLoading?: boolean;
+  /** 拉取分支：force=false 供失焦自动触发（同 URL 不重复），true 供按钮强制刷新 */
+  onRefreshGitBranches?: (force?: boolean) => void;
 };
 
 /** 创建 / 编辑 Deployment 共用字段（名称可编辑性由 nameEditable 控制） */
@@ -35,7 +64,38 @@ export function DeployFormFields({
   cmLoading,
   cmSelectPlaceholder,
   imageAutoFocus,
+  sourceMode = "image",
+  git,
+  setGit,
+  gitBranches,
+  gitBranchesLoading,
+  gitBranchesError,
+  gitRepoPath,
+  mavenModules,
+  mavenModulesLoading,
+  onRefreshGitBranches,
 }: Props) {
+  const gitMode = sourceMode === "git";
+  const npmPref = useMemo<KsBatchNpmScriptPref>(
+    () => ({ mode: git?.npmMode ?? "auto", customScript: git?.npmCustom ?? "" }),
+    [git?.npmMode, git?.npmCustom],
+  );
+  const branchGroups = useMemo(
+    () => buildKsBatchBranchOptionGroups(gitBranches ?? [], loadKsBatchBranchHistory()),
+    [gitBranches],
+  );
+  const branchData = useMemo(() => {
+    if (branchGroups.length > 0) return branchGroups;
+    const seed = git?.branch?.trim();
+    return seed ? [seed] : [];
+  }, [branchGroups, git?.branch]);
+  const gitBranchSet = useMemo(() => new Set(gitBranches ?? []), [gitBranches]);
+  const branchNotInList =
+    !!git?.branch?.trim() && gitBranchSet.size > 0 && !gitBranchSet.has(git.branch.trim());
+  const updateGit = (patch: Partial<KsCreateGitForm>) => {
+    setGit?.((prev) => ({ ...prev, ...patch }));
+  };
+
   return (
     <>
       <SimpleGrid cols={2} spacing="sm" className="ks-form-2col">
@@ -73,14 +133,149 @@ export function DeployFormFields({
           onChange={(e) => setForm({ ...form, alias: e.currentTarget.value })}
         />
       </SimpleGrid>
-      <TextInput
-        label="镜像地址"
-        placeholder="dockerhub.kubekey.local/tksy-admin/my-service:v1.0.0"
-        value={form.image}
-        onChange={(e) => setForm({ ...form, image: e.currentTarget.value })}
-        required
-        data-autofocus={imageAutoFocus || undefined}
-      />
+      {gitMode ? (
+        <>
+          <TextInput
+            label="Git 地址"
+            description="先按该 Git 打包推送镜像，再用产出的镜像创建部署（本地仓库需在「分支打包」里打开过）"
+            placeholder="git@gitlab.tksy.com:tksy-middle/my-service.git"
+            value={git?.url ?? ""}
+            onChange={(e) => updateGit({ url: e.currentTarget.value })}
+            onBlur={() => onRefreshGitBranches?.(false)}
+            required
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <Stack gap={6}>
+            <Group gap={8} align="flex-end" wrap="nowrap">
+              <Select
+                label="分支"
+                description="基于上方 Git 地址拉取（git ls-remote），下拉选择；远端分支写 origin/xxx"
+                placeholder={gitBranchesLoading ? "正在拉取分支…" : "填写 Git 地址后自动拉取"}
+                data={branchData}
+                value={git?.branch ?? null}
+                onChange={(v) => updateGit({ branch: v ?? "" })}
+                searchable
+                nothingFoundMessage={gitBranchesLoading ? "正在拉取…" : "无匹配分支"}
+                disabled={gitBranchesLoading}
+                style={{ flex: 1 }}
+                required
+              />
+              <Button
+                variant="default"
+                size="xs"
+                leftSection={gitBranchesLoading ? <Loader size={12} /> : <RefreshCw size={12} />}
+                disabled={gitBranchesLoading || !git?.url?.trim()}
+                onClick={() => onRefreshGitBranches?.(true)}
+              >
+                拉取分支
+              </Button>
+            </Group>
+            <Text size="xs" c={gitBranchesError ? "red" : "dimmed"}>
+              {gitBranchesLoading
+                ? "正在拉取仓库分支…"
+                : gitBranchesError
+                  ? gitBranchesError
+                  : gitBranches && gitBranches.length > 0
+                    ? `已拉取 ${gitBranches.length} 个分支${gitRepoPath ? `（本地仓库 ${gitRepoPath}）` : ""}`
+                    : "填写 Git 地址后失焦自动拉取，或点「拉取分支」"}
+            </Text>
+            {branchNotInList && (
+              <Text size="xs" c="orange">
+                「{git!.branch.trim()}」不在已拉取的分支里，请确认仓库存在该引用
+              </Text>
+            )}
+          </Stack>
+          <Stack gap={6}>
+            <Text size="sm" fw={600}>构建类型</Text>
+            <SegmentedControl
+              fullWidth
+              size="xs"
+              value={git?.role ?? "backend"}
+              onChange={(v) => updateGit({ role: v === "frontend" ? "frontend" : "backend" })}
+              data={[
+                { label: "后端（Maven / JAR）", value: "backend" },
+                { label: "前端（npm / dist）", value: "frontend" },
+              ]}
+            />
+          </Stack>
+          {git?.role === "backend" && (
+            <Stack gap={6}>
+              <Select
+                label="Maven 模块（可选）"
+                description="多模块仓库可手动指定要打包的 Spring Boot 子模块；默认按部署名自动匹配"
+                data={mavenModuleOptions(mavenModules ?? [])}
+                value={git?.mavenModule || AUTO_MAVEN_MODULE}
+                onChange={(v) => updateGit({ mavenModule: v && v !== AUTO_MAVEN_MODULE ? v : "" })}
+                searchable
+                disabled={mavenModulesLoading}
+                rightSection={mavenModulesLoading ? <Loader size={14} /> : undefined}
+                nothingFoundMessage="未扫描到可执行模块"
+              />
+              <Text size="xs" c="dimmed">
+                {mavenModulesLoading
+                  ? "正在扫描仓库的 Maven 模块…"
+                  : (mavenModules?.length ?? 0) > 1
+                    ? `已扫描到 ${mavenModules?.length} 个可执行模块；部署名对不上时在此手动指定`
+                    : (mavenModules?.length ?? 0) === 1
+                      ? "仓库仅 1 个可执行模块，一般无需手选"
+                      : "解析到本地仓库后可手选（未打开过该仓库时走自动匹配）"}
+              </Text>
+            </Stack>
+          )}
+          {git?.role === "frontend" && (
+            <Stack gap={6}>
+              <Text size="sm" fw={600}>前端 npm 构建脚本</Text>
+              <SegmentedControl
+                fullWidth
+                size="xs"
+                value={git?.npmMode ?? "auto"}
+                onChange={(v) => {
+                  const mode = (
+                    v === "prod" || v === "test" || v === "custom" ? v : "auto"
+                  ) as KsBatchNpmScriptMode;
+                  const patch: Partial<KsCreateGitForm> = { npmMode: mode };
+                  if (mode === "prod") patch.npmCustom = "build:prod";
+                  if (mode === "test") patch.npmCustom = "build:test";
+                  updateGit(patch);
+                }}
+                data={[
+                  { label: "按分支自动", value: "auto" },
+                  { label: "build:prod", value: "prod" },
+                  { label: "build:test", value: "test" },
+                  { label: "自定义", value: "custom" },
+                ]}
+              />
+              {git?.npmMode === "auto" && (
+                <Text size="xs" c="dimmed">
+                  rc-master 分支 → build:prod，其它分支 → build:test
+                </Text>
+              )}
+              {git?.npmMode === "custom" && (
+                <Autocomplete
+                  placeholder="输入 npm script 名，如 build:prod"
+                  data={[...KS_BATCH_NPM_SCRIPT_PRESETS]}
+                  value={git?.npmCustom ?? ""}
+                  onChange={(v) => updateGit({ npmCustom: v })}
+                  aria-label="自定义 npm 构建脚本"
+                  comboboxProps={{ withinPortal: true }}
+                />
+              )}
+              <Text size="xs" c="dimmed">{describeKsBatchNpmScriptPref(npmPref)}</Text>
+            </Stack>
+          )}
+        </>
+      ) : (
+        <TextInput
+          label="镜像地址"
+          placeholder="dockerhub.kubekey.local/tksy-admin/my-service:v1.0.0"
+          value={form.image}
+          onChange={(e) => setForm({ ...form, image: e.currentTarget.value })}
+          required
+          data-autofocus={imageAutoFocus || undefined}
+        />
+      )}
       <SimpleGrid cols={2} spacing="sm" className="ks-form-2col">
         <NumberInput
           label="容器端口"

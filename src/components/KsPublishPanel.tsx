@@ -68,6 +68,10 @@ export function KsPublishPanel({
     setSel: conn.setSel,
     load: conn.load,
     confirm,
+    config,
+    envId: conn.envId,
+    onPublishMapsChange,
+    getConfigSnapshot,
   });
 
   const cmsApi = useKsConfigMaps({
@@ -84,6 +88,25 @@ export function KsPublishPanel({
     () => conn.deploys.filter((d) => conn.checkedNames.has(d.name)),
     [conn.deploys, conn.checkedNames],
   );
+
+  // 「已配置 Git」图标：以内存里的发布映射为准（新建/编辑后立即生效，不依赖磁盘落盘）
+  const deploysWithGitFlag = useMemo(() => {
+    const maps = config.ks_publish_maps ?? [];
+    const configured = new Set(
+      maps
+        .filter(
+          (m) =>
+            m.git_url.trim()
+            && m.env_id === conn.envId
+            && m.namespace === conn.namespace,
+        )
+        .map((m) => m.deployment),
+    );
+    return conn.deploys.map((d) => ({
+      ...d,
+      hasGitConfig: configured.has(d.name),
+    }));
+  }, [conn.deploys, conn.envId, conn.namespace, config.ks_publish_maps]);
 
   const batch = useKsBatchActions({
     config,
@@ -187,7 +210,7 @@ export function KsPublishPanel({
 
             <Tabs.Panel value="deploy">
               <KsDeployTab
-                deploys={conn.deploys}
+                deploys={deploysWithGitFlag}
                 sel={conn.sel}
                 setSel={conn.setSel}
                 checkedNames={conn.checkedNames}
@@ -247,6 +270,8 @@ export function KsPublishPanel({
           onClose={() => batch.setBatchConfirmOpen(false)}
           onStart={(values) => void batch.startBatchPack(values)}
           mergeRepoPaths={batch.batchMergeRepoPaths}
+          moduleOptions={batch.batchModuleOptions}
+          moduleDefaults={batch.batchModuleDefaults}
         />
       )}
       {(batch.batchOpen || batch.batchRunning) && (

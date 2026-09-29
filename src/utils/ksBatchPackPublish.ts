@@ -45,6 +45,8 @@ export interface KsBatchTarget {
   selectedBuildScript: string;
   packageWithBackend: boolean;
   nginxLocations: NginxLocationBlock[];
+  /** 手选的 Maven 子模块 rel_path（空 = 按部署名自动匹配） */
+  mavenModule: string;
 }
 
 export interface KsBatchPackSummary {
@@ -65,6 +67,8 @@ export interface KsBatchPackOptions {
   concurrency?: number;
   /** 前端 npm 构建偏好 */
   npmScript?: KsBatchNpmScriptPref;
+  /** 手选 Maven 子模块：deployment → rel_path（"" = 自动匹配） */
+  moduleOverrides?: Record<string, string>;
   appendLog: (line: string) => void;
   onProgress: (
     pct: number,
@@ -290,18 +294,35 @@ async function mapPool<T>(
   await Promise.all(runners);
 }
 
+/** 创建部署「Git 构建」模式：绕过发布映射，直接注入用户填写的 Git 地址 / 角色 */
+export interface KsBatchSourceOverride {
+  gitUrl?: string;
+  role?: KsPublishMapRole;
+  exposePort?: string;
+  /** 手选 Maven 子模块（传入即覆盖映射值；空串 = 强制自动匹配） */
+  mavenModule?: string;
+}
+
 function resolveGitForDeployment(
   maps: KsPublishMap[],
   envId: string,
   namespace: string,
   deployment: string,
-): { gitUrl: string; role: KsPublishMapRole; exposePort: string; container: string } {
+  override?: KsBatchSourceOverride,
+): {
+  gitUrl: string;
+  role: KsPublishMapRole;
+  exposePort: string;
+  container: string;
+  mavenModule: string;
+} {
   const map = lookupKsPublishMapByDeployment(maps, envId, namespace, deployment);
   const suggested = suggestKlcjZtGit(deployment);
-  const gitUrl = map?.git_url?.trim() || suggested?.git_url || "";
-  const role = map?.role ?? suggested?.role ?? "backend";
+  const gitUrl = override?.gitUrl?.trim() || map?.git_url?.trim() || suggested?.git_url || "";
+  const role = override?.role ?? map?.role ?? suggested?.role ?? "backend";
   const exposePort =
-    resolveKlcjZtExposePort({
+    override?.exposePort?.trim()
+    || resolveKlcjZtExposePort({
       deployment,
       gitUrl,
       existingPort: map?.expose_port,
@@ -309,7 +330,10 @@ function resolveGitForDeployment(
     || suggested?.expose_port
     || "";
   const container = map?.container?.trim() || "";
-  return { gitUrl, role, exposePort, container };
+  const mavenModule = override?.mavenModule !== undefined
+    ? override.mavenModule.trim()
+    : (map?.maven_module?.trim() ?? "");
+  return { gitUrl, role, exposePort, container, mavenModule };
 }
 
 /** 批量确认弹窗用：按映射/默认规则解析各部署角色（无需本地仓库） */
@@ -382,6 +406,38 @@ export async function collectKsBatchRepoPaths(
     }
   }
   return { repoPaths, missing };
+}
+
+/** 每个部署名 → 本地仓库路径（供批量手选 Maven 模块用）；未解析的写入 missing */
+export async function collectKsBatchDeployRepoPaths(
+  config: HarborConfig,
+  envId: string,
+  namespace: string,
+  deployments: KsBatchDeployItem[],
+): Promise<{ repoPathByDeploy: Record<string, string>; missing: string[] }> {
+  const maps = config.ks_publish_maps ?? [];
+  const missing: string[] = [];
+  const neededGitUrls: string[] = [];
+  for (const dep of deployments) {
+    const { gitUrl } = resolveGitForDeployment(maps, envId, namespace, dep.name);
+    if (gitUrl) neededGitUrls.push(gitUrl);
+  }
+  const repoIndex = await buildGitUrlRepoPathIndex(config, neededGitUrls);
+  const repoPathByDeploy: Record<string, string> = {};
+  for (const dep of deployments) {
+    const { gitUrl } = resolveGitForDeployment(maps, envId, namespace, dep.name);
+    if (!gitUrl) {
+      missing.push(`${dep.name}：未配置 Git 映射`);
+      continue;
+    }
+    const repoPath = resolveRepoPathFromIndex(gitUrl, config, repoIndex, dep.name);
+    if (!repoPath) {
+      missing.push(`${dep.name}：找不到本地仓库`);
+      continue;
+    }
+    repoPathByDeploy[dep.name] = repoPath;
+  }
+  return { repoPathByDeploy, missing };
 }
 
 /** 确认弹窗打开时预热仓库索引，点开始时可秒开 */
@@ -507,6 +563,7 @@ export async function resolveKsBatchTargets(
   deployments: KsBatchDeployItem[],
   branchName = "",
   npmScript: KsBatchNpmScriptPref = { mode: "auto", customScript: "" },
+  sourceOverrides?: Record<string, KsBatchSourceOverride>,
 ): Promise<{ targets: KsBatchTarget[]; skips: string[] }> {
   const maps = config.ks_publish_maps ?? [];
   const targets: KsBatchTarget[] = [];
@@ -514,18 +571,25 @@ export async function resolveKsBatchTargets(
 
   const neededGitUrls: string[] = [];
   for (const dep of deployments) {
-    const { gitUrl } = resolveGitForDeployment(maps, envId, namespace, dep.name);
+    const { gitUrl } = resolveGitForDeployment(
+      maps,
+      envId,
+      namespace,
+      dep.name,
+      sourceOverrides?.[dep.name],
+    );
     if (gitUrl) neededGitUrls.push(gitUrl);
   }
   const repoIndex = await buildGitUrlRepoPathIndex(config, neededGitUrls);
   const npmSettingsCache = new Map<string, { frontendDir: string; selectedBuildScript: string }>();
 
   for (const dep of deployments) {
-    const { gitUrl, role, exposePort, container } = resolveGitForDeployment(
+    const { gitUrl, role, exposePort, container, mavenModule } = resolveGitForDeployment(
       maps,
       envId,
       namespace,
       dep.name,
+      sourceOverrides?.[dep.name],
     );
     if (!gitUrl) {
       skips.push(`${dep.name}：未配置 Git 映射，请到系统设置 → KubeSphere 发布映射填写`);
@@ -567,13 +631,14 @@ export async function resolveKsBatchTargets(
       selectedBuildScript: npmSettings.selectedBuildScript || "build:prod",
       packageWithBackend: false,
       nginxLocations: remembered.nginxLocations ?? [],
+      mavenModule,
     });
   }
 
   return { targets, skips };
 }
 
-async function ensureKsConnected(config: HarborConfig, envId: string): Promise<void> {
+export async function ensureKsConnected(config: HarborConfig, envId: string): Promise<void> {
   const env = pickKsEnvironment(resolveKsEnvironments(config), envId);
   if (!env) throw new Error(`环境 id=${envId} 未找到`);
   const consoleUrl = env.console?.trim() || "";
@@ -613,6 +678,16 @@ async function publishImageToDeploy(
     container: resolvedContainer,
     image,
   });
+}
+
+/** 手选模块覆盖：deployment → mavenModule（"" 表示强制自动匹配） */
+function buildModuleOverrides(
+  input?: Record<string, string>,
+): Record<string, KsBatchSourceOverride> | undefined {
+  if (!input) return undefined;
+  const entries = Object.entries(input).filter(([k]) => k.trim());
+  if (entries.length === 0) return undefined;
+  return Object.fromEntries(entries.map(([k, v]) => [k, { mavenModule: v ?? "" }]));
 }
 
 /**
@@ -661,6 +736,7 @@ export async function runKsBatchPackPublish(
     deployments,
     branchName.trim(),
     npmScript,
+    buildModuleOverrides(opts.moduleOverrides),
   );
   for (const skip of skips) {
     summary.skipped += 1;
@@ -774,6 +850,7 @@ export async function runKsBatchPackPublish(
           autoPushImage: true,
           progressLabel: target.deployment,
           deploymentHint: target.deployment,
+          mavenModule: target.mavenModule,
           packSlot: packSlotFromDeployment(target.deployment),
           skipBtDeploy: true,
         });

@@ -18,7 +18,7 @@ pub use detect::{
     cancel_build, check_dockerfile, detect_frontend_dir, detect_spring_profiles, list_npm_scripts,
     open_directory, open_external_url,
 };
-pub use package::package_from_branch;
+pub use package::{list_maven_modules, package_from_branch};
 pub use push::{build_and_push, list_local_images, push_local_image, remove_local_image};
 pub use push_helpers::{list_harbor_projects, test_harbor_connection};
 

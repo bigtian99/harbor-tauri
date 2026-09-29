@@ -7,7 +7,24 @@ use crate::build::{begin_cancellable_operation, emit_progress};
 use crate::config_cmd::load_config_sync;
 use crate::models::{PackageFromBranchResult, PackageProjectType};
 
-use crate::utils::resolve_maven_module;
+use crate::utils::{
+    format_module_candidates, resolve_maven_module, scan_executable_modules, MavenModuleMatch,
+};
+
+/// 列出仓库内所有 Spring Boot 可执行 Maven 模块（供「手选打包模块」下拉）。
+/// 扫描当前工作树（不解包分支）；多模块结构一般跨分支一致。
+#[tauri::command]
+pub async fn list_maven_modules(
+    repo_path: String,
+) -> Result<Vec<crate::utils::MavenExecutableModule>, String> {
+    let path = std::path::PathBuf::from(repo_path.trim());
+    if !path.is_dir() {
+        return Err(format!("仓库路径不是目录: {}", path.display()));
+    }
+    tauri::async_runtime::spawn_blocking(move || scan_executable_modules(&path))
+        .await
+        .map_err(|e| format!("扫描 Maven 模块线程异常: {e}"))?
+}
 
 #[tauri::command]
 pub async fn package_from_branch(
@@ -21,6 +38,8 @@ pub async fn package_from_branch(
     spring_profile: Option<String>,
     package_with_backend: Option<bool>,
     deployment_hint: Option<String>,
+    // 手选的 Maven 子模块 rel_path（为空则按 deployment_hint 自动匹配）
+    maven_module: Option<String>,
     pack_slot: Option<String>,
     skip_bt_deploy: Option<bool>,
 ) -> Result<PackageFromBranchResult, String> {
@@ -34,10 +53,11 @@ pub async fn package_from_branch(
     crate::diag::diag_log(
         "build",
         &format!(
-            "package_from_branch repo={} branch={} deployment_hint={:?} pack_slot={:?} skip_bt_deploy={}",
+            "package_from_branch repo={} branch={} deployment_hint={:?} maven_module={:?} pack_slot={:?} skip_bt_deploy={}",
             repo_path,
             branch,
             deployment_hint,
+            maven_module,
             pack_slot,
             skip_bt_deploy.unwrap_or(false)
         ),
@@ -57,7 +77,29 @@ pub async fn package_from_branch(
 
     let (maven_pl_module, maven_artifact_dir) = if matches!(project_type, PackageProjectType::Maven) {
         let hint = deployment_hint.as_deref();
-        match resolve_maven_module(&ctx.worktree_path, hint)? {
+        let explicit = maven_module
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let resolved: Option<MavenModuleMatch> = if let Some(rel) = explicit {
+            // 手选模块：校验存在，避免打错服务
+            let modules = scan_executable_modules(&ctx.worktree_path)?;
+            match modules.iter().find(|m| m.rel_path == rel) {
+                Some(m) => Some(MavenModuleMatch {
+                    rel_path: m.rel_path.clone(),
+                    artifact_id: m.artifact_id.clone(),
+                }),
+                None => {
+                    return Err(format!(
+                        "指定的 Maven 模块「{rel}」在该分支不存在；候选: {}",
+                        format_module_candidates(&modules)
+                    ));
+                }
+            }
+        } else {
+            resolve_maven_module(&ctx.worktree_path, hint)?
+        };
+        match resolved {
             Some(m) => {
                 let msg = format!(
                     "☕ Maven 模块: {} (artifactId={}, deployment={})",

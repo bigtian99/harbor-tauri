@@ -42,6 +42,8 @@ export interface BranchPackageRunParams {
   progressLabel?: string;
   /** K8s Deployment 名，多模块 Maven 自动匹配子模块 */
   deploymentHint?: string;
+  /** 手选的 Maven 子模块 rel_path；空则按 deploymentHint 自动匹配 */
+  mavenModule?: string;
   /** 并行打包 worktree 槽位（同 Git 多服务） */
   packSlot?: string;
   /** KubeSphere 镜像发布：仅打包推镜像，不上传宝塔 */
@@ -97,6 +99,7 @@ export async function runBranchPackageAndPush(
     harborId,
     progressLabel,
     deploymentHint,
+    mavenModule,
     packSlot,
     skipBtDeploy,
   } = params;
@@ -159,6 +162,7 @@ export async function runBranchPackageAndPush(
           : null,
       packageWithBackend: branchProjectType === "npm" ? packageWithBackend : false,
       deploymentHint: deploymentHint?.trim() || null,
+      mavenModule: mavenModule?.trim() || null,
       packSlot: packSlot?.trim() || null,
       skipBtDeploy: skipBtDeploy ?? false,
     });

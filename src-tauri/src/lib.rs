@@ -19,7 +19,8 @@ mod utils;
 use build::{
     build_and_push, cancel_build, cancel_bt_java_deploy, cancel_bt_php_deploy, check_dockerfile,
     detect_frontend_dir, detect_spring_profiles, get_bt_temp_login_url, list_bt_java_projects,
-    list_bt_php_sites, list_harbor_projects, list_local_images, list_npm_scripts, open_directory,
+    list_bt_php_sites, list_harbor_projects, list_local_images, list_maven_modules, list_npm_scripts,
+    open_directory,
     open_external_url,
     package_from_branch,
     push_local_image, remove_local_image, restart_bt_java_project, stop_bt_java_project,
@@ -137,6 +138,7 @@ pub fn run() {
             check_dockerfile,
             cancel_build,
             package_from_branch,
+            list_maven_modules,
             list_bt_java_projects,
             list_bt_php_sites,
             get_bt_temp_login_url,

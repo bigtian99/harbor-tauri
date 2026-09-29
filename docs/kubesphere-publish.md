@@ -18,7 +18,8 @@
 | 自动/手动刷新 | **默认开启**自动刷新；可选 10s/30s/60s 轮询，或点「刷新」（保留选中；无变化时不重渲染） |
 | 导出 CSV | 全部部署状态导出（BOM+CRLF，Excel 中文正常） |
 | 修改镜像发布 | 选部署 → 填新镜像 → `ks_update_image`（strategic-merge-patch）→ 回读验证 revision |
-| 创建部署 | 「创建部署」按钮 → 弹窗填必传项（部署名/镜像/端口/副本/健康检查路径/引用配置字典/环境变量）；ConfigMap 按 key 展开为 `configMapKeyRef`；**`SW_AGENT_NAME` 固定取部署名称**（不走 ConfigMap） |
+| 创建部署 | 「创建部署」按钮 → 弹窗填必传项（部署名/镜像/端口/副本/健康检查路径/引用配置字典/环境变量）；ConfigMap 按 key 展开为 `configMapKeyRef`；**`SW_AGENT_NAME` 固定取部署名称**（不走 ConfigMap）。**镜像来源二选一**：`已有镜像地址` 直接填 Harbor 镜像；`Git 构建镜像` 填 Git 地址 → **失焦自动 `git ls-remote` 拉取分支并用下拉选择**（可点「拉取分支」刷新）+ 构建类型（后端/前端）+ **可选 Maven 子模块**，点「构建并创建」先按该分支打包推送镜像，再用产出的镜像创建部署，成功后自动写入「发布映射」（含手选模块）便于之后批量打包（适合首次、Harbor 上还没有镜像的部署） |
+| 微服务（多模块 Maven） | 一个 Git 仓库多个 Spring Boot 模块：后端扫描 `pom.xml` 可执行模块（含 `spring-boot-maven-plugin`），按 **K8s Deployment 名**自动匹配子模块并只构建该模块（`mvn -pl <module> -am`）；**手选兜底**：创建部署弹窗、批量确认弹窗（按部署逐项）、系统设置→发布映射新增「Maven 模块」列，三处都可用下拉/输入指定 `rel_path`（留空=自动）。自动匹配失败会列候选并拒绝，不会打错服务 |
 | ConfigMap 列表 | 「🗂 ConfigMap」卡片：名称/别名/键数/键列表；切 NS / 手动刷新部署时加载，自动刷新不重复拉 |
 | ConfigMap 创建 | 两种模式：**表单**（名称 + `K=V` 行，`ks_create_configmap` 后端拼接）或 **YAML**（粘贴完整 YAML，`ks_create_configmap_yaml`）；均支持「预览 YAML + 📋复制」「校验 (dryRun)」 |
 | ConfigMap 复制创建 | 行操作「复制创建」→ `ks_get_configmap` 读取 data → 预填表单（名称加 `-copy`）→ 改后创建 |

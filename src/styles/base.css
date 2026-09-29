@@ -524,6 +524,17 @@ body {
   width: 100%;
 }
 
+/* Mantine ScrollArea 只把 mah 设在 root 上时（root 是 overflow:hidden），
+   viewport 的 height:100% 会解析成内容高度，超出 max-height 的部分被 root 裁掉却没有滚动条，
+   表现为「列表一长就无法滚动」。把 max-height 下沉到真正滚动的 viewport：
+   长列表恢复滚动，短列表仍贴合内容高度。 */
+.ks-deploys-scroll .mantine-ScrollArea-viewport,
+.ks-cms-scroll .mantine-ScrollArea-viewport,
+.ks-batch-deploy-scroll .mantine-ScrollArea-viewport {
+  height: auto;
+  max-height: inherit;
+}
+
 /* 列表底部分页：左侧条数，右侧翻页靠右对齐 */
 .ks-list-pager {
   display: flex;
@@ -755,6 +766,24 @@ body {
   color: var(--color-text-muted);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* 创建部署（Git 构建）内联日志：自身滚动，避免再套 ScrollArea 踩 max-height 坑 */
+.ks-deploy-create-log {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow: auto;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-base);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-overflow-scrolling: touch;
 }
 
 .ks-batch-progress-footer {

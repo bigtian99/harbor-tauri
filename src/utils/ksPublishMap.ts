@@ -1,4 +1,4 @@
-import type { KsPublishMap } from "../types";
+import type { KsPublishMap, KsPublishMapRole } from "../types";
 
 export function normalizeGitUrl(url: string): string {
   let s = url.trim().toLowerCase();
@@ -72,4 +72,48 @@ export function lookupKsPublishMapByDeployment(
         && m.deployment === dep,
     ) ?? null
   );
+}
+
+/**
+ * 按 环境 + 命名空间 + 部署名 upsert 一条发布映射（同一部署只保留一条）。
+ * 创建部署走 Git 构建成功后写回，便于之后用批量打包。
+ */
+export function upsertKsPublishMapForDeployment(
+  maps: KsPublishMap[],
+  input: {
+    git_url: string;
+    role: KsPublishMapRole;
+    env_id: string;
+    namespace: string;
+    deployment: string;
+    container?: string;
+    expose_port?: string;
+    maven_module?: string;
+  },
+): { maps: KsPublishMap[]; action: "created" | "updated" | "none" } {
+  const gitUrl = input.git_url.trim();
+  const deployment = input.deployment.trim();
+  if (!gitUrl || !deployment) return { maps, action: "none" };
+
+  const existingIdx = maps.findIndex(
+    (m) =>
+      m.env_id === input.env_id
+      && m.namespace === input.namespace
+      && m.deployment === deployment,
+  );
+  const next = createKsPublishMap({
+    id: existingIdx >= 0 ? maps[existingIdx].id : undefined,
+    git_url: gitUrl,
+    role: input.role,
+    env_id: input.env_id,
+    namespace: input.namespace,
+    deployment,
+    container: input.container,
+    expose_port: input.expose_port,
+    maven_module: input.maven_module?.trim() || undefined,
+  });
+  if (existingIdx < 0) return { maps: [...maps, next], action: "created" };
+  const copy = maps.slice();
+  copy[existingIdx] = next;
+  return { maps: copy, action: "updated" };
 }

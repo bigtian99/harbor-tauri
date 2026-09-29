@@ -22,8 +22,11 @@ import {
   saveKsBatchConcurrencyPref,
   saveKsBatchNpmScriptPref,
   collectKsBatchRepoPaths,
+  collectKsBatchDeployRepoPaths,
   type KsBatchConcurrencyPref,
 } from "../../utils/ksBatchPackPublish";
+import { listMavenModules, type MavenModuleInfo } from "../../utils/ksMavenModules";
+import { lookupKsPublishMapByDeployment } from "../../utils/ksPublishMap";
 import { mergeKsBatchReposSequential } from "../../utils/ksBatchMerge";
 import { runKsBatchCloneToEnv } from "../../utils/ksBatchCloneDeploy";
 import {
@@ -93,6 +96,8 @@ export function useKsBatchActions({
   const [batchLog, setBatchLog] = useState("");
   const [batchProgress, setBatchProgress] = useState(0);
   const [batchMessage, setBatchMessage] = useState("");
+  const [batchModuleOptions, setBatchModuleOptions] = useState<Record<string, MavenModuleInfo[]>>({});
+  const [batchModuleDefaults, setBatchModuleDefaults] = useState<Record<string, string>>({});
   const batchStepLabelRef = useRef("");
   const batchItemIndexRef = useRef(0);
   const batchItemTotalRef = useRef(1);
@@ -154,6 +159,57 @@ export function useKsBatchActions({
     if (!batchConfirmOpen) return;
     void refreshBatchGitBranches();
   }, [batchConfirmOpen, refreshBatchGitBranches]);
+
+  // 确认弹窗打开时，按各部署解析到的本地仓库扫描可手选的 Maven 模块
+  const batchDeployNamesKey = batchMeta?.deployNames.join("|") ?? "";
+  useEffect(() => {
+    if (!batchConfirmOpen || !envId || !namespace || !batchDeployNamesKey) return;
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    void (async () => {
+      const names = batchDeployNamesKey.split("|").filter(Boolean);
+      try {
+        const { repoPathByDeploy } = await collectKsBatchDeployRepoPaths(
+          config,
+          envId,
+          namespace,
+          names.map((name) => ({ name, containers: [] })),
+        );
+        const maps = config.ks_publish_maps ?? [];
+        const byRepo = new Map<string, MavenModuleInfo[]>();
+        const options: Record<string, MavenModuleInfo[]> = {};
+        const defaults: Record<string, string> = {};
+        for (const name of names) {
+          const repoPath = repoPathByDeploy[name];
+          if (repoPath) {
+            let mods = byRepo.get(repoPath);
+            if (!mods) {
+              try {
+                mods = await listMavenModules(repoPath);
+              } catch {
+                mods = [];
+              }
+              byRepo.set(repoPath, mods);
+            }
+            if (mods.length > 0) options[name] = mods;
+          }
+          defaults[name] =
+            lookupKsPublishMapByDeployment(maps, envId, namespace, name)?.maven_module?.trim() ?? "";
+        }
+        if (cancelled) return;
+        setBatchModuleOptions(options);
+        setBatchModuleDefaults(defaults);
+      } catch {
+        if (!cancelled) {
+          setBatchModuleOptions({});
+          setBatchModuleDefaults({});
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [batchConfirmOpen, batchDeployNamesKey, config, envId, namespace]);
 
   useEffect(() => {
     if (!batchRunning || !isTauriRuntime()) return;
@@ -305,6 +361,7 @@ export function useKsBatchActions({
           ? KS_BATCH_CONCURRENCY_AUTO
           : batchConcurrencyPref,
         npmScript: values.npmScript,
+        moduleOverrides: values.moduleOverrides,
         deployments: selectedDeploys.map((d) => ({
           name: d.name,
           containers: d.containers,
@@ -447,6 +504,8 @@ export function useKsBatchActions({
     batchGitBranchesLoading,
     batchGitBranchesError,
     batchGitRepoCount,
+    batchModuleOptions,
+    batchModuleDefaults,
     refreshBatchGitBranches,
     beginBatchPack,
     startBatchPack,
