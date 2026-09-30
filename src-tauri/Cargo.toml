@@ -2,7 +2,7 @@
 # 包名保持 ASCII：macOS 下非 ASCII 可执行文件名会让 wry 取 WebKit 版本时
 # CFRelease 崩溃（SIGTRAP，EXC_BREAKPOINT）。软件显示名走 tauri.conf 的 productName。
 name = "jarporter"
-version = "0.2.79"
+version = "0.2.80"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
