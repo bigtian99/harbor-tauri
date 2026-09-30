@@ -143,47 +143,109 @@ pub(crate) fn find_maven_path_from(maven_home: &str) -> Option<String> {
     None
 }
 
-/// 查找 npm 可执行文件路径
-pub(crate) fn find_npm_path() -> Option<String> {
-    // 1. PATH 查找
-    if let Some(path) = find_command_path("npm") {
-        return Some(path);
+/// 查找 node 生态包管理器（npm/pnpm/yarn/npx/bun）的可执行文件路径。
+/// GUI 启动时 PATH 很干净（无 nvm/homebrew），必须主动去常见位置找。
+pub(crate) fn find_node_pm_path(pm: &str) -> Option<String> {
+    let pm = pm.trim();
+    if pm.is_empty() {
+        return None;
+    }
+    // 1. 先尊重当前 PATH（从终端启动时即用户正在用的 node，避免强行换版本）
+    if let Some(found) = find_command_path(pm) {
+        return Some(found);
     }
 
-    // 2. 检查 nvm 安装
+    // 2. GUI 启动 PATH 很干净：扫常见安装目录
+    let mut dirs: Vec<PathBuf> = Vec::new();
     if let Some(home) = dirs::home_dir() {
-        let nvm_dir = home.join(".nvm/versions/node");
-        if nvm_dir.exists() {
-            // 读取所有版本目录，按版本倒序
-            if let Ok(entries) = fs::read_dir(&nvm_dir) {
-                let mut versions: Vec<String> = entries
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.path().is_dir())
-                    .map(|e| e.file_name().to_string_lossy().to_string())
-                    .collect();
-                versions.sort_by(|a, b| b.cmp(a)); // 倒序，优先使用最新版本
-
-                for version in versions {
-                    let npm_path = nvm_dir.join(&version).join("bin");
-                    if let Some(path) = find_command_in_dir(&npm_path, "npm") {
-                        return Some(path);
-                    }
-                }
+        // nvm：按版本倒序优先最新
+        let nvm_root = home.join(".nvm/versions/node");
+        if let Ok(entries) = fs::read_dir(&nvm_root) {
+            let mut versions: Vec<String> = entries
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect();
+            versions.sort_by(|a, b| b.cmp(a));
+            for v in versions {
+                dirs.push(nvm_root.join(v).join("bin"));
             }
         }
-
-        // 3. Homebrew Node.js (Apple Silicon)
-        if let Some(path) = find_command_in_dir(Path::new("/opt/homebrew/bin"), "npm") {
-            return Some(path);
+        for rel in ["Library/pnpm", ".local/bin", ".volta/bin", ".bun/bin", "bin"] {
+            let d = home.join(rel);
+            if d.is_dir() {
+                dirs.push(d);
+            }
         }
+    }
+    dirs.push(PathBuf::from("/opt/homebrew/bin"));
+    dirs.push(PathBuf::from("/usr/local/bin"));
 
-        // 4. Homebrew Node.js (Intel)
-        if let Some(path) = find_command_in_dir(Path::new("/usr/local/bin"), "npm") {
-            return Some(path);
-        }
+    if let Some(found) = dirs
+        .into_iter()
+        .find_map(|dir| find_command_in_dir(&dir, pm))
+    {
+        return Some(found);
     }
 
     None
+}
+
+/// 把 node/npm 所在目录前置到子进程 PATH。
+/// 否则 npm/pnpm 的 `#!/usr/bin/env node` 在 GUI 启动（PATH 不含 nvm/homebrew）时会报
+/// `env: node: No such file or directory`。
+fn apply_node_path(command: &mut Command, pm_bin: &str) {
+    let mut dirs: Vec<String> = Vec::new();
+    if let Some(parent) = Path::new(pm_bin).parent() {
+        let p = parent.to_string_lossy().to_string();
+        if !p.is_empty() {
+            dirs.push(p);
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        let nvm_root = home.join(".nvm/versions/node");
+        if let Ok(entries) = fs::read_dir(&nvm_root) {
+            let mut versions: Vec<String> = entries
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect();
+            versions.sort_by(|a, b| b.cmp(a));
+            for v in versions {
+                dirs.push(nvm_root.join(v).join("bin").to_string_lossy().to_string());
+            }
+        }
+        for rel in ["Library/pnpm", ".local/bin", ".volta/bin", ".bun/bin"] {
+            let d = home.join(rel);
+            if d.is_dir() {
+                dirs.push(d.to_string_lossy().to_string());
+            }
+        }
+    }
+    dirs.push("/opt/homebrew/bin".to_string());
+    dirs.push("/usr/local/bin".to_string());
+
+    let mut seen = std::collections::HashSet::new();
+    let mut parts: Vec<String> = Vec::new();
+    for d in dirs {
+        if !d.is_empty() && seen.insert(d.clone()) {
+            parts.push(d);
+        }
+    }
+    if let Some(old) = std::env::var_os("PATH") {
+        for d in std::env::split_paths(&old) {
+            let s = d.to_string_lossy().to_string();
+            if !s.is_empty() && seen.insert(s.clone()) {
+                parts.push(s);
+            }
+        }
+    }
+    let sep = if cfg!(windows) { ";" } else { ":" };
+    crate::diag::diag_log(
+        "build",
+        &format!("node pm bin={} PATH+={}", pm_bin, parts.first().cloned().unwrap_or_default()),
+    );
+    command.env("PATH", parts.join(sep));
 }
 
 fn java_bin_exists(java_home: &Path) -> bool {
@@ -384,7 +446,10 @@ fn run_command_inner(
         return Err("构建已取消".to_string());
     }
 
-    // 对 mvn 和 npm 命令特殊处理，查找完整路径
+    // node 生态包管理器：GUI 启动时 PATH 干净（无 nvm/homebrew），需主动定位并补 PATH
+    let is_node_pm = matches!(command, "npm" | "pnpm" | "yarn" | "npx" | "bun");
+
+    // 对 mvn / node 包管理器命令特殊处理，查找完整路径
     let actual_command = if command == "mvn" {
         if maven_home.trim().is_empty() {
             find_maven_path()
@@ -392,8 +457,8 @@ fn run_command_inner(
             find_maven_path_from(maven_home)
         }
         .unwrap_or_else(|| "mvn".to_string())
-    } else if command == "npm" {
-        find_npm_path().unwrap_or_else(|| "npm".to_string())
+    } else if is_node_pm {
+        find_node_pm_path(command).unwrap_or_else(|| command.to_string())
     } else {
         find_command_path(command).unwrap_or_else(|| command.to_string())
     };
@@ -406,6 +471,8 @@ fn run_command_inner(
         .stderr(Stdio::piped());
     if command == "mvn" {
         apply_maven_java_home(&mut cmd);
+    } else if is_node_pm {
+        apply_node_path(&mut cmd, &actual_command);
     }
 
     let child = match cmd.spawn()

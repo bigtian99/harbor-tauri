@@ -177,10 +177,16 @@ export async function runBranchPackageAndPush(
     };
   }
 
-  const baseName =
+  const rawBase =
     branchProjectType === "npm"
-      ? getProjectName(repoPath).toLowerCase()
+      ? getProjectName(repoPath)
       : inferImageName(result.artifact_path, "jar");
+  // 目录名可能含空格 / 反斜杠等非法字符，压成合法 Docker 仓库名（避免拼出 d:\... 这种名字）
+  const baseName = rawBase
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
   const effectiveImageName = imageName.trim() || baseName;
   const branchSafeName = sanitizeBranchForImageRef(branchName);
   const scriptSafeName = selectedBuildScript.replace(/[^a-zA-Z0-9._-]/g, "-");
@@ -371,9 +377,15 @@ export async function runBranchPackageAndPush(
       && (hasBackend ? sorted.length >= 2 : sorted.length >= 1)
       && pushErrors.length === 0;
 
+    // 失败时把每个角色推送的真实报错（含 docker 原始 stderr）带出来，
+    // 不要只给一句概括，否则排障完全看不到原因。
+    const summary = getBranchPushSummary(pushErrors, hasBackend);
+    const errorWithDetail =
+      pushErrors.length > 0 ? `${summary}\n${pushErrors.join("\n")}` : summary;
+
     return {
       ok: pushOk || (sorted.length > 0 && !hasBackend),
-      error: pushOk ? undefined : getBranchPushSummary(pushErrors, hasBackend),
+      error: pushOk ? undefined : errorWithDetail,
       packageLog: result.log,
       images: sorted,
       pushErrors,

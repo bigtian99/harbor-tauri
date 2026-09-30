@@ -359,7 +359,9 @@ export function getPathName(path: string) {
 }
 
 export function getProjectName(repoPath: string) {
-  return repoPath.split('/').filter(Boolean).pop() || repoPath;
+  // 同时兼容 Windows 反斜杠：d:\a\b\tksy-admin → tksy-admin（否则会被当成整条路径拼进镜像名）
+  const parts = repoPath.split(/[/\\]/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : repoPath.trim();
 }
 
 export function inferImageName(path: string, type: ArtifactType) {

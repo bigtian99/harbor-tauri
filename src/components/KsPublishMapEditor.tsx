@@ -19,6 +19,13 @@ import {
   suggestKlcjZtGit,
 } from "../utils/klcjZtGitDefaults";
 import { createKsPublishMap } from "../utils/ksPublishMap";
+import {
+  AUTO_MAVEN_MODULE,
+  listMavenModules,
+  mavenModuleOptions,
+  type MavenModuleInfo,
+} from "../utils/ksMavenModules";
+import { resolveRepoPathForGitUrl } from "../utils/resolveRepoPath";
 import { showSystemAlert } from "../systemAlert";
 
 const ROLES: { value: KsPublishMapRole; label: string }[] = [
@@ -146,6 +153,9 @@ export function KsPublishMapEditor({
   const [deploys, setDeploys] = useState<DeployRow[]>([]);
   const [rows, setRows] = useState<GridRow[]>([]);
   const [fillLoading, setFillLoading] = useState(false);
+  /** 各部署可手选的 Maven 模块（按需扫描本地仓库，key=deployment） */
+  const [moduleOptionsByDeploy, setModuleOptionsByDeploy] = useState<Record<string, MavenModuleInfo[]>>({});
+  const [moduleLoadingByDeploy, setModuleLoadingByDeploy] = useState<Record<string, boolean>>({});
 
   const envNameById = (id: string) => ksEnvs.find((e) => e.id === id)?.name || id;
 
@@ -273,6 +283,9 @@ export function KsPublishMapEditor({
       setDeploys(list);
       // 用 ref，避免 publishMaps 变化触发整表重载、冲掉未保存编辑
       setRows(buildGridRows(list, publishMapsRef.current, envId, ns));
+      // 换命名空间：清掉按行缓存的 Maven 模块
+      setModuleOptionsByDeploy({});
+      setModuleLoadingByDeploy({});
       setStatusText(`已加载 ${list.length} 个部署`);
     } catch (e) {
       setDeploys([]);
@@ -290,6 +303,15 @@ export function KsPublishMapEditor({
   }, [connected, namespace, loadDeploys]);
 
   const updateRow = (deployment: string, patch: Partial<GridRow>) => {
+    // Git 地址变了：清掉该行已缓存的 Maven 模块，下次展开重新扫描
+    if (patch.git_url !== undefined) {
+      setModuleOptionsByDeploy((p) => {
+        if (!(deployment in p)) return p;
+        const next = { ...p };
+        delete next[deployment];
+        return next;
+      });
+    }
     setRows((prev) =>
       prev.map((r) => {
         if (r.deployment !== deployment) return r;
@@ -312,6 +334,24 @@ export function KsPublishMapEditor({
       }),
     );
   };
+
+  /** 展开下拉时才按 Git 地址解析本地仓库并扫描可执行 Maven 模块（结果缓存） */
+  const loadModulesForRow = useCallback(async (deployment: string, gitUrl: string) => {
+    const url = gitUrl.trim();
+    if (!url || !isTauriRuntime()) return;
+    // 已扫到模块就复用缓存；空结果允许下次展开重扫（比如之后才在分支打包页打开过该仓库）
+    if ((moduleOptionsByDeploy[deployment]?.length ?? 0) > 0) return;
+    setModuleLoadingByDeploy((p) => ({ ...p, [deployment]: true }));
+    try {
+      const repoPath = await resolveRepoPathForGitUrl(url, config);
+      const mods = repoPath ? await listMavenModules(repoPath) : [];
+      setModuleOptionsByDeploy((p) => ({ ...p, [deployment]: mods }));
+    } catch {
+      setModuleOptionsByDeploy((p) => ({ ...p, [deployment]: [] }));
+    } finally {
+      setModuleLoadingByDeploy((p) => ({ ...p, [deployment]: false }));
+    }
+  }, [moduleOptionsByDeploy, config]);
 
   const fillGitFromLastRepo = async () => {
     const repoPath = config.last_repo_path?.trim();
@@ -583,15 +623,38 @@ export function KsPublishMapEditor({
                         />
                       </td>
                       <td>
-                        <TextInput
-                          size="xs"
-                          value={row.maven_module}
-                          placeholder="多模块仓库填，如 ruoyi-modules/ruoyi-system"
-                          onChange={(e) =>
-                            updateRow(row.deployment, { maven_module: e.currentTarget.value })}
-                          styles={compactInputStyles}
-                          style={{ minWidth: 200 }}
-                        />
+                        {(() => {
+                          const mods = moduleOptionsByDeploy[row.deployment] ?? [];
+                          const base = mavenModuleOptions(mods);
+                          // 保留本地仓库没扫到的既有值，避免下拉把它清空
+                          const data = row.maven_module && !base.some((o) => o.value === row.maven_module)
+                            ? [...base, { value: row.maven_module, label: `${row.maven_module}（本地仓库未扫描到）` }]
+                            : base;
+                          const loading = !!moduleLoadingByDeploy[row.deployment];
+                          const noGit = !row.git_url.trim();
+                          return (
+                            <Select
+                              size="xs"
+                              value={row.maven_module || AUTO_MAVEN_MODULE}
+                              onChange={(v) =>
+                                updateRow(row.deployment, {
+                                  maven_module: v && v !== AUTO_MAVEN_MODULE ? v : "",
+                                })}
+                              data={data}
+                              searchable
+                              disabled={noGit}
+                              placeholder="自动（按部署名匹配）"
+                              onDropdownOpen={() => void loadModulesForRow(row.deployment, row.git_url)}
+                              nothingFoundMessage={
+                                loading ? "扫描中…" : noGit ? "先填 Git 地址" : "未扫描到可执行模块"
+                              }
+                              rightSection={loading ? <Loader2 size={12} className="spin" /> : undefined}
+                              styles={compactInputStyles}
+                              comboboxProps={{ withinPortal: true }}
+                              style={{ minWidth: 170 }}
+                            />
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
