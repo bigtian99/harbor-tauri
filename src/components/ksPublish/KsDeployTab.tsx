@@ -83,6 +83,7 @@ export function KsDeployTab({
     rollback: deploy.rollback,
     selContainer: deploy.selContainer,
   };
+  const [filterName, setFilterName] = useState("");
   const [filterDeploy, setFilterDeploy] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string | null>("all");
   const [filterImage, setFilterImage] = useState("");
@@ -91,12 +92,14 @@ export function KsDeployTab({
 
   // 命名空间切换时重置筛选（与原先 panel 行为一致）
   useEffect(() => {
+    setFilterName("");
     setFilterDeploy(null);
     setFilterStatus("all");
     setFilterImage("");
     setPage(1);
   }, [namespace]);
 
+  const deferredName = useDeferredValue(filterName);
   const deferredImage = useDeferredValue(filterImage);
   const deployOptions = useMemo(
     () =>
@@ -123,6 +126,13 @@ export function KsDeployTab({
   }, [deploys]);
   const filtered = useMemo(() => {
     let list = deploys;
+    const nq = deferredName.trim().toLowerCase();
+    if (nq) {
+      list = list.filter((d) =>
+        d.name.toLowerCase().includes(nq)
+        || (d.alias ?? "").toLowerCase().includes(nq),
+      );
+    }
     if (filterDeploy) list = list.filter((d) => d.name === filterDeploy);
     if (filterStatus === "bad") {
       list = list.filter((d) => BAD_STATES.includes(d.status.state));
@@ -137,7 +147,7 @@ export function KsDeployTab({
       });
     }
     return list;
-  }, [deploys, filterDeploy, filterStatus, deferredImage]);
+  }, [deploys, deferredName, filterDeploy, filterStatus, deferredImage]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -161,7 +171,7 @@ export function KsDeployTab({
 
   useEffect(() => {
     setPage(1);
-  }, [filterDeploy, filterStatus, deferredImage, pageSize]);
+  }, [filterName, filterDeploy, filterStatus, deferredImage, pageSize]);
 
   useEffect(() => {
     if (page !== safePage) setPage(safePage);
@@ -319,7 +329,20 @@ export function KsDeployTab({
               </Button>
             </Text>
           )}
-          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
+            <TextInput
+              label="部署名称"
+              type="search"
+              placeholder="按部署名 / 别名搜索"
+              leftSection={<Search size={14} />}
+              value={filterName}
+              onChange={(e) => setFilterName(e.currentTarget.value)}
+              size="sm"
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+            />
             <Select
               label="部署"
               placeholder="全部部署"
@@ -399,7 +422,7 @@ export function KsDeployTab({
         <div className="ks-list-pager">
           <Text size="sm" c="dimmed">
             共 {filtered.length} 条
-            {filterDeploy || (filterStatus && filterStatus !== "all") || filterImage.trim()
+            {filterName.trim() || filterDeploy || (filterStatus && filterStatus !== "all") || filterImage.trim()
               ? `（筛选自 ${deploys.length}）`
               : ""}
             {filtered.length > 0

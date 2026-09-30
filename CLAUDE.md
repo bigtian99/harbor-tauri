@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JarPorter is a Tauri 2.0 desktop app that packages JAR files or frontend `dist` directories into Docker images and pushes them to a Harbor registry. It also supports branch-based packaging via git worktree isolation.
+云坞 is a Tauri 2.0 desktop app that packages JAR files or frontend `dist` directories into Docker images and pushes them to a Harbor registry. It also supports branch-based packaging via git worktree isolation.
 
 **应用根目录**：本仓库 `jar-to-harbor/`（勿把父目录 `Desktop/tauri` 当成 app 根）。
 
@@ -113,7 +113,7 @@ pnpm release
 | 能力 | 状态 | 说明 |
 |------|------|------|
 | 统一诊断 API | ✅ 已落地 | `crate::diag::diag_log(module, msg)`：写 stderr + 当天诊断文件 |
-| 按模块打标签 | ✅ 已落地 | 行格式 `[JarPorter][{module}] {message}`，可按 `[updater]` 等过滤 |
+| 按模块打标签 | ✅ 已落地 | 行格式 `[云坞][{module}] {message}`，可按 `[updater]` 等过滤 |
 | 按天滚动文件 | ✅ 已落地 | `app_log_dir/diagnostic-YYYY-MM-DD.log`（`diag::init` 于启动时设置目录） |
 | 侧边栏「系统日志」 | ✅ 已落地 | `read_diagnostic_log` 默认合并最近 ≤3 天，**新日志在前**，支持关键词搜索与日期下拉切换 |
 | 兼容入口 | ✅ 已落地 | `templates_log(msg)` ≡ `diag_log("templates", msg)` |
@@ -124,15 +124,15 @@ pnpm release
 ### 日志格式
 
 ```text
-[YYYY-MM-DD HH:MM:SS] [JarPorter][模块名] 消息内容
+[YYYY-MM-DD HH:MM:SS] [云坞][模块名] 消息内容
 ```
 
 示例：
 
 ```text
-[2026-07-11 04:26:46] [JarPorter][updater] check_update: current=0.2.36, latest=0.2.37, needs_update=true
-[2026-07-11 04:27:01] [JarPorter][landing] generate_landing_pages base=... count=3
-[2026-07-11 04:27:10] [JarPorter][build] package_from_branch repo=... branch=main
+[2026-07-11 04:26:46] [云坞][updater] check_update: current=0.2.36, latest=0.2.37, needs_update=true
+[2026-07-11 04:27:01] [云坞][landing] generate_landing_pages base=... count=3
+[2026-07-11 04:27:10] [云坞][build] package_from_branch repo=... branch=main
 ```
 
 系统日志搜索框输入 `[updater]` / `[landing]` / `[build]` 即可只看该模块。
@@ -171,7 +171,7 @@ crate::diag::diag_log("landing", &format!("generate_landing_pages base={} count=
 templates_log("list_template_infos ok"); // ≡ diag_log("templates", ...)
 ```
 
-行格式必须是：`[JarPorter][{module}] {message}`（文件中另有时间戳前缀）。
+行格式必须是：`[云坞][{module}] {message}`（文件中另有时间戳前缀）。
 
 **存储与读取**：
 

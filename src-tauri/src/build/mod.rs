@@ -15,8 +15,8 @@ pub use bt_deploy::{
     upload_and_restart_bt_java_project, upload_bt_java_jar, upload_bt_php_site, warmup_bt_ftp,
 };
 pub use detect::{
-    cancel_build, check_dockerfile, detect_frontend_dir, detect_spring_profiles, list_npm_scripts,
-    open_directory, open_external_url,
+    cancel_build, check_dockerfile, detect_frontend_dir, detect_module_server_port,
+    detect_spring_profiles, list_npm_scripts, open_directory, open_external_url,
 };
 pub use package::{list_maven_modules, package_from_branch};
 pub use push::{build_and_push, list_local_images, push_local_image, remove_local_image};

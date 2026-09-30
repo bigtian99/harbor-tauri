@@ -14,7 +14,6 @@ use tauri::AppHandle;
 /// 打包前准备好的路径与元信息。
 pub(crate) struct WorktreeContext {
     pub repo_path: PathBuf,
-    pub repo_root: PathBuf,
     pub worktree_path: PathBuf,
     pub actual_build_path: PathBuf,
     pub output_base: PathBuf,
@@ -156,7 +155,6 @@ pub(crate) async fn prepare_worktree(
 
     Ok(WorktreeContext {
         repo_path,
-        repo_root,
         worktree_path,
         actual_build_path,
         output_base,
@@ -238,6 +236,7 @@ impl Drop for PackRepoGuard {
 }
 
 /// 持久打包 worktree 路径（默认槽位 `_pack`；多模块并行用 `pack_worktree_dir_with_slot`）
+#[cfg(test)]
 pub(crate) fn pack_worktree_dir(output_base: &Path, repo_name: &str) -> PathBuf {
     pack_worktree_dir_with_slot(output_base, repo_name, None)
 }

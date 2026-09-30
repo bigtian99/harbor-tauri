@@ -21,7 +21,7 @@ pub fn init(app: &AppHandle) {
         .unwrap_or_else(|| std::env::temp_dir().join("jarporter-logs"));
     if let Err(e) = fs::create_dir_all(&log_dir) {
         // 仍 set 目录，便于 path 命令与后续 create 重试；stderr 提示一次
-        eprintln!("[JarPorter][app] 诊断日志目录创建失败: {} ({e})", log_dir.display());
+        eprintln!("[云坞][app] 诊断日志目录创建失败: {} ({e})", log_dir.display());
     }
     let _ = LOG_DIR.set(log_dir);
 }
@@ -182,7 +182,7 @@ pub fn diag_log(module: &str, message: impl AsRef<str>) {
     // 单次 now：path 日期与行内时间戳一致，避免跨午夜 skew
     let now = chrono::Local::now();
     let safe = redact_secrets(message.as_ref());
-    let line = format!("[JarPorter][{module}] {safe}");
+    let line = format!("[云坞][{module}] {safe}");
     eprintln!("{line}");
 
     let Some(dir) = LOG_DIR.get() else {
@@ -199,7 +199,7 @@ pub fn diag_log(module: &str, message: impl AsRef<str>) {
         }
         Err(e) => {
             // 文件写失败至少打一次可观测信号（stderr）；避免完全静默
-            eprintln!("[JarPorter][app] 写入诊断文件失败 {}: {e}", path.display());
+            eprintln!("[云坞][app] 写入诊断文件失败 {}: {e}", path.display());
         }
     }
 }
@@ -351,7 +351,7 @@ fn collect_diagnostic_lines_window() -> Result<Vec<String>, String> {
             match fs::read_to_string(&legacy) {
                 Ok(content) => {
                     all_lines.push(
-                        "[JarPorter][app] （以下为升级前 templates-diagnostic.log，仅回退展示）"
+                        "[云坞][app] （以下为升级前 templates-diagnostic.log，仅回退展示）"
                             .to_string(),
                     );
                     for line in content.lines() {
@@ -539,9 +539,9 @@ mod tests {
     fn diag_log_format_contains_module() {
         let module = "updater";
         let message = "check_update: ok";
-        let line = format!("[JarPorter][{module}] {message}");
+        let line = format!("[云坞][{module}] {message}");
         assert!(line.contains("[updater]"));
-        assert!(line.starts_with("[JarPorter][updater]"));
+        assert!(line.starts_with("[云坞][updater]"));
     }
 
     #[test]

@@ -19,7 +19,7 @@ export async function showSystemAlert(
   body: string,
   _kind: "info" | "warning" | "error" = "info",
 ): Promise<void> {
-  const safeTitle = title.trim() || "JarPorter";
+  const safeTitle = title.trim() || "云坞";
   const safeBody = body.trim() || "任务已完成";
 
   diagLog(`showSystemAlert called: title="${safeTitle}" body="${safeBody}" isTauri=${isTauriRuntime()}`);

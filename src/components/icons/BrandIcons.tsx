@@ -1,44 +1,32 @@
-import type { CSSProperties, HTMLAttributes } from "react";
+import type { CSSProperties, HTMLAttributes, ImgHTMLAttributes } from "react";
 import type { SVGProps } from "react";
 import btLogoUrl from "../../assets/bt-logo.png";
+import appLogoUrl from "../../assets/app-logo.png";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 /**
- * 应用品牌标「码头工坊」：罐体 + 上升箭头 + 底部波浪。
- * 图形寓意「打包 → 镜像出海 → 推送入港」；工坊涵盖构建、发布与运营全家桶。
- * 渐变底随主题 --color-primary → --color-accent。
+ * 应用品牌标「云坞」：官方图标（集装箱货轮 + 上升箭头 + 节点网络）。
+ * 直接复用打包/安装包同一张 app-icon，保证各处 logo 一致。
  */
-export function BrandMark({ size = 28, ...props }: IconProps) {
+export function BrandMark({
+  size = 28,
+  style,
+  alt = "云坞",
+  ...props
+}: Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "width" | "height"> & {
+  size?: number;
+}) {
   return (
-    <svg
+    <img
+      src={appLogoUrl}
       width={size}
       height={size}
-      viewBox="0 0 32 32"
-      aria-hidden
+      alt={alt}
+      draggable={false}
+      style={{ display: "block", flexShrink: 0, ...style }}
       {...props}
-    >
-      <defs>
-        <linearGradient id="brandmark-gradient" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="var(--color-primary)" />
-          <stop offset="1" stopColor="var(--color-accent)" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="8" fill="url(#brandmark-gradient)" />
-      <g
-        fill="none"
-        stroke="var(--color-on-primary)"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 8.8h8" />
-        <path d="M12.3 12.2v5.4a3.7 3.7 0 0 0 3.7 3.7 3.7 3.7 0 0 0 3.7-3.7v-5.4" />
-        <path d="M16 18.8v-3.4" />
-        <path d="M14.4 17 16 15.4l1.6 1.6" />
-        <path d="M9.4 25.8c1.5-1.5 3-1.5 4.4 0s2.9 1.5 4.4 0 2.9-1.5 4.4 0" />
-      </g>
-    </svg>
+    />
   );
 }
 

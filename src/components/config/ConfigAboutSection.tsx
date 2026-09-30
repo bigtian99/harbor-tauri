@@ -102,7 +102,7 @@ export function ConfigAboutSection({
       <Paper p="lg" radius="md" withBorder style={sectionCardStyle}>
         <Stack gap="sm" align="center">
           <Text size="xl" fw={700} c="var(--color-text)">
-            码头工坊
+            云坞
           </Text>
           <Text size="sm" c="var(--color-text-muted)">
             当前版本 <Text span fw={600} c="var(--color-primary)">v{appVersion || "—"}</Text>
@@ -217,13 +217,13 @@ export function ConfigAboutSection({
           </Text>
           <Text size="sm" c="var(--color-text-muted)">
             点击发送一条测试通知，验证 macOS 通知中心是否正常工作。若无弹出，请前往
-            「系统设置 → 通知 → JarPorter」开启允许通知。
+            「系统设置 → 通知 → 云坞」开启允许通知。
           </Text>
           <Button
             size="sm"
             variant="default"
             leftSection={<Bell size={16} />}
-            onClick={() => void showSystemAlert("测试通知", "JarPorter 系统通知正常")}
+            onClick={() => void showSystemAlert("测试通知", "云坞 系统通知正常")}
             w="fit-content"
           >
             发送测试通知

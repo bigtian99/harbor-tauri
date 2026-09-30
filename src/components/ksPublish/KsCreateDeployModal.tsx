@@ -23,6 +23,7 @@ export function KsCreateDeployModal({
     createGitBranches, createGitBranchesLoading, createGitBranchesError,
     createGitRepoPath, refreshCreateGitBranches,
     createGitModules, createGitModulesLoading,
+    createGitDetectedPort, createGitPortLoading,
   } = deploy;
 
   const gitMode = createSource === "git";
@@ -78,6 +79,8 @@ export function KsCreateDeployModal({
           gitRepoPath={createGitRepoPath}
           mavenModules={createGitModules}
           mavenModulesLoading={createGitModulesLoading}
+          gitDetectedPort={createGitDetectedPort}
+          gitPortLoading={createGitPortLoading}
           onRefreshGitBranches={refreshCreateGitBranches}
         />
 

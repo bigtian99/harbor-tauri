@@ -17,7 +17,7 @@ import {
 } from "../../utils/ksBatchPackPublish";
 import { buildKsBatchBranchOptionGroups } from "../../utils/ksBatchGitBranches";
 import { loadKsBatchBranchHistory } from "../../utils/ksBatchBranchHistory";
-import { mavenModuleOptions, AUTO_MAVEN_MODULE, type MavenModuleInfo } from "../../utils/ksMavenModules";
+import { mavenModuleOptions, AUTO_MAVEN_MODULE, type MavenModuleInfo, type ModuleServerPort } from "../../utils/ksMavenModules";
 
 export type KsCmSelectProps = {
   cms: { name: string; alias: string; dataSize: number }[];
@@ -51,6 +51,9 @@ type Props = {
   /** 本地仓库内可执行的 Spring Boot Maven 模块（供手选打包模块） */
   mavenModules?: MavenModuleInfo[];
   mavenModulesLoading?: boolean;
+  /** 手选模块解析到的 server.port（用于回填容器端口提示） */
+  gitDetectedPort?: ModuleServerPort | null;
+  gitPortLoading?: boolean;
   /** 拉取分支：force=false 供失焦自动触发（同 URL 不重复），true 供按钮强制刷新 */
   onRefreshGitBranches?: (force?: boolean) => void;
 };
@@ -73,6 +76,8 @@ export function DeployFormFields({
   gitRepoPath,
   mavenModules,
   mavenModulesLoading,
+  gitDetectedPort,
+  gitPortLoading,
   onRefreshGitBranches,
 }: Props) {
   const gitMode = sourceMode === "git";
@@ -222,6 +227,13 @@ export function DeployFormFields({
                       ? "仓库仅 1 个可执行模块，一般无需手选"
                       : "解析到本地仓库后可手选（未打开过该仓库时走自动匹配）"}
               </Text>
+              {(gitPortLoading || gitDetectedPort) && (
+                <Text size="xs" c={gitDetectedPort ? "teal" : "dimmed"}>
+                  {gitPortLoading
+                    ? "正在解析该模块的 server.port…"
+                    : `模块 server.port=${gitDetectedPort?.port}（${gitDetectedPort?.file}）→ 已回填容器端口，镜像也按此端口启动`}
+                </Text>
+              )}
             </Stack>
           )}
           {git?.role === "frontend" && (

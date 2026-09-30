@@ -699,52 +699,6 @@ pub(crate) fn ftp_relative_path_from_panel(panel_path: &str) -> String {
     path.to_string()
 }
 
-/// 单文件上传到远程路径（面板绝对路径会自动剥 `/www/wwwroot`）。
-/// `on_progress(sent, total)` 可选，用于 UI 进度。
-pub(crate) fn run_ftp_upload_file_with(
-    local_file: &Path,
-    remote_full_path: &str,
-    host: &str,
-    user: &str,
-    pass: &str,
-    log_module: &str,
-) -> Result<(), String> {
-    run_ftp_upload_file_with_progress(
-        local_file,
-        remote_full_path,
-        host,
-        user,
-        pass,
-        log_module,
-        None::<fn(u64, u64)>,
-    )
-}
-
-pub(crate) fn run_ftp_upload_file_with_progress<F>(
-    local_file: &Path,
-    remote_full_path: &str,
-    host: &str,
-    user: &str,
-    pass: &str,
-    log_module: &str,
-    mut on_progress: Option<F>,
-) -> Result<(), String>
-where
-    F: FnMut(u64, u64),
-{
-    run_ftp_upload_file_with_progress_cancel(
-        local_file,
-        remote_full_path,
-        host,
-        user,
-        pass,
-        log_module,
-        on_progress.as_mut(),
-        &mut None,
-        None,
-    )
-}
-
 /// 可取消的单文件 FTP 上传（cancel=true 时尽快中断并返回「已取消」）。
 /// `on_status` 用于连接/进目录等尚未传字节时的即时文案。
 pub(crate) fn run_ftp_upload_file_with_progress_cancel<F>(

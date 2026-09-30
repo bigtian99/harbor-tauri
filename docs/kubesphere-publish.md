@@ -1,6 +1,6 @@
 # KubeSphere 镜像发布（集成说明）
 
-在 JarPorter 中新增「KubeSphere 发布」能力：连接 KubeSphere 控制台 → 查看部署实时状态 → 修改镜像并滚动发布。
+在 云坞 中新增「KubeSphere 发布」能力：连接 KubeSphere 控制台 → 查看部署实时状态 → 修改镜像并滚动发布。
 
 ## 入口
 
@@ -15,11 +15,12 @@
 | 部署状态表 | 状态徽章（运行中/更新中/拉取失败/崩溃重启/创建中/已停止）、容器、镜像Tag、就绪、版本、Pod 原因 |
 | 新/旧版本 Pod | **新版本（当前 revision）Pod 优先**，旧版本灰显——发布中即使旧 Pod 运行，新 Pod 异常也会标红 |
 | 只看异常 | 过滤出非运行中部署 |
+| 筛选 | 四组条件叠加：**部署名称**（模糊，匹配部署名/别名）、部署（下拉精确）、状态（含「只看异常」）、镜像（地址或 tag）；筛选时状态栏显示「筛选自 N」 |
 | 自动/手动刷新 | **默认开启**自动刷新；可选 10s/30s/60s 轮询，或点「刷新」（保留选中；无变化时不重渲染） |
 | 导出 CSV | 全部部署状态导出（BOM+CRLF，Excel 中文正常） |
 | 修改镜像发布 | 选部署 → 填新镜像 → `ks_update_image`（strategic-merge-patch）→ 回读验证 revision |
 | 创建部署 | 「创建部署」按钮 → 弹窗填必传项（部署名/镜像/端口/副本/健康检查路径/引用配置字典/环境变量）；ConfigMap 按 key 展开为 `configMapKeyRef`；**`SW_AGENT_NAME` 固定取部署名称**（不走 ConfigMap）。**镜像来源二选一**：`已有镜像地址` 直接填 Harbor 镜像；`Git 构建镜像` 填 Git 地址 → **失焦自动 `git ls-remote` 拉取分支并用下拉选择**（可点「拉取分支」刷新）+ 构建类型（后端/前端）+ **可选 Maven 子模块**，点「构建并创建」先按该分支打包推送镜像，再用产出的镜像创建部署，成功后自动写入「发布映射」（含手选模块）便于之后批量打包（适合首次、Harbor 上还没有镜像的部署） |
-| 微服务（多模块 Maven） | 一个 Git 仓库多个 Spring Boot 模块：后端扫描 `pom.xml` 可执行模块（含 `spring-boot-maven-plugin`），按 **K8s Deployment 名**自动匹配子模块并只构建该模块（`mvn -pl <module> -am`）；**手选兜底**：创建部署弹窗、批量确认弹窗（按部署逐项）、系统设置→发布映射新增「Maven 模块」列，三处都可用下拉/输入指定 `rel_path`（留空=自动）。自动匹配失败会列候选并拒绝，不会打错服务 |
+| 微服务（多模块 Maven） | 一个 Git 仓库多个 Spring Boot 模块：后端扫描 `pom.xml` 可执行模块（含 `spring-boot-maven-plugin`），按 **K8s Deployment 名**自动匹配子模块并只构建该模块（`mvn -pl <module> -am`）；**手选兜底**：创建部署弹窗、批量确认弹窗（按部署逐项）、系统设置→发布映射新增「Maven 模块」列，三处都可用下拉/输入指定 `rel_path`（留空=自动）。**手选模块后自动读该模块（指定分支）的 `server.port` 回填容器端口**，镜像以 `--server.port=<容器端口>` 启动，避免被全局默认端口（8181）强制。自动匹配失败会列候选并拒绝，不会打错服务 |
 | ConfigMap 列表 | 「🗂 ConfigMap」卡片：名称/别名/键数/键列表；切 NS / 手动刷新部署时加载，自动刷新不重复拉 |
 | ConfigMap 创建 | 两种模式：**表单**（名称 + `K=V` 行，`ks_create_configmap` 后端拼接）或 **YAML**（粘贴完整 YAML，`ks_create_configmap_yaml`）；均支持「预览 YAML + 📋复制」「校验 (dryRun)」 |
 | ConfigMap 复制创建 | 行操作「复制创建」→ `ks_get_configmap` 读取 data → 预填表单（名称加 `-copy`）→ 改后创建 |

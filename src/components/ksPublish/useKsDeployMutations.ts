@@ -31,7 +31,8 @@ import { appendBuildProgressLog, capLogLines } from "../../utils/buildProgressLo
 import { resolveRepoPathForGitUrl } from "../../utils/resolveRepoPath";
 import { fetchGitBranchesForRepoPaths } from "../../utils/ksBatchGitBranches";
 import { rememberKsBatchBranch } from "../../utils/ksBatchBranchHistory";
-import { listMavenModules, type MavenModuleInfo } from "../../utils/ksMavenModules";
+import { listMavenModules, detectModuleServerPort, type MavenModuleInfo, type ModuleServerPort } from "../../utils/ksMavenModules";
+import { getRememberedBranchAdvancedSettings } from "../../branchSettings";
 
 /** 诊断日志（模块名遵循 AGENTS.md 约定） */
 function ksDiag(module: "kubesphere" | "build" | "git", message: string): void {
@@ -125,7 +126,13 @@ export function useKsDeployMutations(opts: {
   const [createGitRepoPath, setCreateGitRepoPath] = useState<string | null>(null);
   const [createGitModules, setCreateGitModules] = useState<MavenModuleInfo[]>([]);
   const [createGitModulesLoading, setCreateGitModulesLoading] = useState(false);
+  const [createGitDetectedPort, setCreateGitDetectedPort] = useState<ModuleServerPort | null>(null);
+  const [createGitPortLoading, setCreateGitPortLoading] = useState(false);
   const gitBranchesUrlRef = useRef("");
+  /** 当前容器端口 / 上次自动回填的端口：避免覆盖用户手改 */
+  const createFormPortRef = useRef(createForm.port);
+  createFormPortRef.current = createForm.port;
+  const autoPortRef = useRef<number | null>(null);
   const [createProgress, setCreateProgress] = useState({
     running: false,
     percent: 0,
@@ -273,6 +280,61 @@ export function useKsDeployMutations(opts: {
     }
   }, [createGit.url, config, createForm.name, loadCreateGitModulesForRepo]);
 
+  /**
+   * 手选 Maven 模块后，从该模块（指定分支）读 `server.port`，回填容器端口。
+   * 只在用户没手改过端口时覆盖（默认 8080 或等于上次自动回填值）。
+   */
+  useEffect(() => {
+    if (createSource !== "git" || createGit.role !== "backend") return;
+    const repoPath = createGitRepoPath;
+    const moduleRel = createGit.mavenModule.trim();
+    const branch = createGit.branch.trim();
+    if (!repoPath || !moduleRel || !branch) {
+      setCreateGitDetectedPort(null);
+      return;
+    }
+    let cancelled = false;
+    setCreateGitPortLoading(true);
+    void (async () => {
+      try {
+        const springProfile = getRememberedBranchAdvancedSettings(config, repoPath).springProfile;
+        const info = await detectModuleServerPort({
+          repoPath,
+          branch,
+          moduleRelPath: moduleRel,
+          springProfile,
+        });
+        if (cancelled) return;
+        setCreateGitDetectedPort(info);
+        if (info) {
+          const current = createFormPortRef.current;
+          const untouched = autoPortRef.current === null
+            ? current === 8080
+            : current === autoPortRef.current;
+          if (untouched && current !== info.port) {
+            autoPortRef.current = info.port;
+            setCreateForm((prev) => ({ ...prev, port: info.port }));
+          }
+        }
+      } catch {
+        if (!cancelled) setCreateGitDetectedPort(null);
+      } finally {
+        if (!cancelled) setCreateGitPortLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    createSource,
+    createGit.role,
+    createGit.mavenModule,
+    createGit.branch,
+    createGitRepoPath,
+    config,
+    setCreateForm,
+  ]);
+
   const revTotalPages = Math.max(1, Math.ceil(revisions.length / revPageSize));
   const revSafePage = Math.min(revPage, revTotalPages);
   const revPageRows = revisions.slice((revSafePage - 1) * revPageSize, revSafePage * revPageSize);
@@ -383,6 +445,10 @@ export function useKsDeployMutations(opts: {
       appendLog(
         `目标仓库：${target.repoPath}（${target.projectType === "npm" ? "前端" : "后端"}）`,
       );
+      // 后端：镜像以 --server.port=<容器端口> 启动，保证镜像监听端口 = Deployment 容器端口/探针端口
+      const effectivePort = target.projectType === "maven"
+        ? String(createForm.port)
+        : target.exposePort;
       setCreateProgress((prev) => ({
         ...prev,
         message: `正在打包并推送镜像 · ${depName}…`,
@@ -397,7 +463,7 @@ export function useKsDeployMutations(opts: {
         selectedBuildScript: target.selectedBuildScript,
         packageWithBackend: target.packageWithBackend,
         springProfile: target.springProfile,
-        branchExposePort: target.exposePort,
+        branchExposePort: effectivePort,
         nginxLocations: target.nginxLocations,
         autoPushImage: true,
         progressLabel: depName,
@@ -441,7 +507,7 @@ export function useKsDeployMutations(opts: {
           env_id: envId,
           namespace,
           deployment: depName,
-          expose_port: target.exposePort,
+          expose_port: effectivePort,
           maven_module: target.mavenModule,
         });
         if (action !== "none") {
@@ -459,6 +525,8 @@ export function useKsDeployMutations(opts: {
       setCreateOpen(false);
       setCreateForm({ ...EMPTY_DEPLOY_FORM });
       setCreateGit({ ...EMPTY_CREATE_GIT_FORM });
+      autoPortRef.current = null;
+      setCreateGitDetectedPort(null);
       setPreviewYaml("");
       rememberKsBatchBranch(branch);
       void load({ silent: true });
@@ -725,6 +793,8 @@ export function useKsDeployMutations(opts: {
     createGitRepoPath,
     createGitModules,
     createGitModulesLoading,
+    createGitDetectedPort,
+    createGitPortLoading,
     refreshCreateGitBranches,
     createProgress,
     previewYaml,

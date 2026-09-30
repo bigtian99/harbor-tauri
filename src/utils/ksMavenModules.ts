@@ -43,3 +43,31 @@ export async function listMavenModules(repoPath: string): Promise<MavenModuleInf
     dirName: r.dir_name ?? "",
   }));
 }
+
+export interface ModuleServerPort {
+  port: number;
+  /** 命中的配置文件（分支内相对路径） */
+  file: string;
+}
+
+/** 读取指定分支某个模块的 `server.port`（application/boot 配置），用于回填容器端口 */
+export async function detectModuleServerPort(input: {
+  repoPath: string;
+  branch: string;
+  moduleRelPath: string;
+  springProfile?: string;
+}): Promise<ModuleServerPort | null> {
+  const { repoPath, branch, moduleRelPath, springProfile } = input;
+  if (!repoPath.trim() || !branch.trim() || !isTauriRuntime()) return null;
+  const info = await invoke<{ port?: number; file?: string } | null>(
+    "detect_module_server_port",
+    {
+      repoPath,
+      branch,
+      moduleRelPath,
+      springProfile: springProfile?.trim() || null,
+    },
+  );
+  if (!info || typeof info.port !== "number" || info.port <= 0) return null;
+  return { port: info.port, file: info.file ?? "" };
+}

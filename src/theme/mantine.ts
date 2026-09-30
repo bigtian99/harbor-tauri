@@ -72,6 +72,17 @@ const fieldChrome = {
   },
 } as const;
 
+/**
+ * 关闭输入框的「句首字母自动大写 / 自动纠错」。
+ * macOS(WebKit)/Windows 触摸键盘下 TextInput/Select/Textarea 会默认 autocapitalize=sentences，
+ * 导致输入英文单词首字母被顶上大写（部署名/Git 地址/镜像等场景必须是原样）。
+ */
+const noAutoCapitalize = {
+  autoCapitalize: "off",
+  autoCorrect: "off",
+  spellCheck: false,
+} as const;
+
 export const appTheme = createTheme({
   primaryColor: "blue",
   fontFamily:
@@ -320,22 +331,31 @@ export const appTheme = createTheme({
       }),
     },
     TextInput: {
+      defaultProps: { ...noAutoCapitalize },
       styles: fieldChrome,
     },
     PasswordInput: {
+      defaultProps: { ...noAutoCapitalize },
       styles: fieldChrome,
     },
     Textarea: {
+      defaultProps: { ...noAutoCapitalize },
       styles: fieldChrome,
     },
     NumberInput: {
       styles: fieldChrome,
     },
     Autocomplete: {
+      defaultProps: { ...noAutoCapitalize },
       styles: fieldChrome,
     },
     Select: {
+      defaultProps: { ...noAutoCapitalize },
       /* 不单独设 radius：跟 TextInput 一样走 defaultRadius(md)，否则并排时圆角不齐 */
+      styles: { input: fieldChrome.input },
+    },
+    MultiSelect: {
+      defaultProps: { ...noAutoCapitalize },
       styles: { input: fieldChrome.input },
     },
     Input: {

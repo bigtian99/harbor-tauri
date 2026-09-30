@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter};
 const GITHUB_REPO: &str = "bigtian99/harbor-tauri";
 const GITHUB_API_RELEASES: &str =
     "https://api.github.com/repos/bigtian99/harbor-tauri/releases?per_page=30";
-const USER_AGENT: &str = "JarPorter-Updater/1.0";
+const USER_AGENT: &str = "YunWu-Updater/1.0";
 const REQUEST_TIMEOUT: u64 = 15;
 const DOWNLOAD_TIMEOUT: u64 = 600; // 10 分钟，dmg 可能较大
 
@@ -125,11 +125,6 @@ fn release_asset_score(name: &str, os: &str, arch: &str) -> i32 {
         }
         _ => -1,
     }
-}
-
-/// 匹配当前 macOS 架构的 .dmg（兼容旧测试）
-fn match_dmg_asset(name: &str, arch: &str) -> bool {
-    match_release_asset(name, "macos", arch)
 }
 
 /// 粗检：真实 dmg 通常 >1MB，且不是 HTML/JSON 错误页
@@ -565,7 +560,7 @@ fn download_and_install_blocking(
         .split('/')
         .last()
         .filter(|s| s.ends_with(".dmg"))
-        .unwrap_or("JarPorter-update.dmg");
+        .unwrap_or("云坞-update.dmg");
     let dmg_path = cache_dir.join(filename);
 
     app.emit(
@@ -658,7 +653,7 @@ fn download_and_install_blocking(
         mount_point
     ));
 
-    let app_name = "JarPorter.app";
+    let app_name = "云坞.app";
     let mount_root = PathBuf::from(&mount_point);
     // 有的 dmg 根目录就是 .app，有的套一层文件夹
     let mounted_app = if mount_root.join(app_name).exists() {
@@ -682,7 +677,7 @@ fn download_and_install_blocking(
         let _ = fs::remove_file(&dmg_path);
         return Err(format!(
             "dmg 内未找到 {}.app（挂载点 {}）",
-            "JarPorter", mount_point
+            "云坞", mount_point
         ));
     }
 
@@ -773,7 +768,7 @@ fn download_and_install_blocking(
             let lower = s.to_ascii_lowercase();
             lower.ends_with(".exe") || lower.ends_with(".msi")
         })
-        .unwrap_or("JarPorter-update-setup.exe");
+        .unwrap_or("云坞-update-setup.exe");
     let installer_path = cache_dir.join(filename);
 
     app.emit(

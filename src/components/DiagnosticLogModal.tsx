@@ -103,7 +103,6 @@ export function DiagnosticLogModal({
       onClose={onClose}
       size="xl"
       centered
-      padding={0}
       styles={modalStyles}
       title={
         <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>

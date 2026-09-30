@@ -60,7 +60,7 @@ for (const line of lines) {
   else other.push(formatLine(line));
 }
 
-const parts = [`## JarPorter ${version}`, ""];
+const parts = [`## 云坞 ${version}`, ""];
 if (feat.length) parts.push("### 新功能", "", ...feat, "");
 if (fix.length) parts.push("### 修复与优化", "", ...fix, "");
 if (other.length) parts.push("### 其它", "", ...other, "");

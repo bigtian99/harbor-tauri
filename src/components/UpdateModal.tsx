@@ -223,7 +223,7 @@ export function UpdateModal({ opened, onClose, updateInfo }: UpdateModalProps) {
           </div>
           <div className="update-header-text">
             <h3>发现新版本</h3>
-            <p>码头工坊有可用更新</p>
+            <p>云坞有可用更新</p>
           </div>
           {!isLocked && (
             <button className="update-close" onClick={onClose} aria-label="关闭">

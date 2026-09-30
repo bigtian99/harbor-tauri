@@ -256,7 +256,7 @@ export function Sidebar({
         <AppShell.Section
           className="sidebar-brand-section"
           px={sidebarCollapsed ? 0 : 14}
-          py={14}
+          py={12}
           style={{
             borderBottom: "1px solid var(--color-border)",
             minHeight: 56,
@@ -269,10 +269,10 @@ export function Sidebar({
             align="center"
             w={sidebarCollapsed ? "100%" : undefined}
           >
-            <BrandMark size={28} style={{ flexShrink: 0 }} />
+            <BrandMark size={32} style={{ flexShrink: 0 }} />
             <Box className="sidebar-brand-text">
               <Text fw={700} style={{ color: "var(--color-text)", letterSpacing: "0.04em", fontSize: 15 }}>
-                码头工坊
+                云坞
               </Text>
               <Text
                 style={{
