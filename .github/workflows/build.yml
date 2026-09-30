@@ -200,6 +200,11 @@ jobs:
           # 只收安装包，不收 .app 目录（体积大且无法当 release asset 下载用）
           while IFS= read -r -d '' f; do
             base="$(basename "$f")"
+            # productName 是中文（云坞）时，Tauri/Tauri-action 生成的文件名会丢掉非 ASCII 前缀，
+            # 变成 `_0.2.80_...`；这里补回 ASCII 品牌前缀（避免中文在 Windows runner/URL 编码上的坑）。
+            if [[ "$base" == _* ]]; then
+              base="YunWu${base}"
+            fi
             ext="${base##*.}"
             name="${base%.*}"
             # 已含 ops 标记则不再重复加
