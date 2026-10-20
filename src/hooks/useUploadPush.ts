@@ -9,6 +9,8 @@ import {
   isTauriRuntime,
   inferImageName,
   isHarborEnvReady,
+  isZotEnv,
+  registryEnvLabel,
   resolveHarborEnv,
   resolveHarborRepository,
   inferImageNameFromRef,
@@ -197,7 +199,11 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       return;
     }
     if (!isHarborEnvReady(uploadHarborEnv)) {
-      setLog("⚠️ 请先配置 Harbor 环境（地址 / 用户名 / 密码 / 项目均必填）");
+      setLog(
+        `⚠️ 请先配置${registryEnvLabel(uploadHarborEnv)}环境（地址 / 用户名 / 密码${
+          isZotEnv(uploadHarborEnv) ? "" : " / 项目"
+        }均必填）`,
+      );
       setActiveTab("config");
       return;
     }
@@ -209,7 +215,11 @@ export function useUploadPush(deps: UseUploadPushDeps) {
     setUploadFullImage("");
     const uploadPort = artifactType === "jar" ? (uploadExposePort.trim() || config.expose_port.trim()) : "";
     const uploadImageName = uploadPort ? `${imageName}-${uploadPort}` : imageName;
-    const resolvedRepo = resolveHarborRepository(uploadImageName, uploadHarborEnv.project);
+    const resolvedRepo = resolveHarborRepository(
+      uploadImageName,
+      uploadHarborEnv.project,
+      uploadHarborEnv.registry_type,
+    );
     if (!resolvedRepo.ok) {
       setLog(`⚠️ ${resolvedRepo.error}`);
       setIsBuilding(false);
@@ -232,7 +242,10 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       const logResult = result.replace(/完整镜像:.*(\n|$)/g, "").replace(/\n{3,}/g, "\n\n").trim();
       setLog((prev) => (prev ? `${prev}\n\n${logResult}` : logResult));
       const notifyImage = imgMatch ? imgMatch[1].trim() : uploadImageName;
-      await showSystemAlert("构建推送完成", `镜像 ${notifyImage} 已成功推送到 Harbor`);
+      await showSystemAlert(
+        "构建推送完成",
+        `镜像 ${notifyImage} 已成功推送到 ${registryEnvLabel(uploadHarborEnv)}`,
+      );
       setArtifactPath("");
       setImageTag("latest");
       const jarName = artifactType === "jar" ? inferImageName(artifactPath, "jar") : null;
@@ -332,7 +345,11 @@ export function useUploadPush(deps: UseUploadPushDeps) {
       return;
     }
     if (!isHarborEnvReady(pushHarborEnv)) {
-      setLog("⚠️ 请先配置 Harbor 环境（地址 / 用户名 / 密码 / 项目均必填）");
+      setLog(
+        `⚠️ 请先配置${registryEnvLabel(pushHarborEnv)}环境（地址 / 用户名 / 密码${
+          isZotEnv(pushHarborEnv) ? "" : " / 项目"
+        }均必填）`,
+      );
       setActiveTab("config");
       return;
     }

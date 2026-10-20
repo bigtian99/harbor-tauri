@@ -17,6 +17,8 @@ import {
   inferImageName,
   isHarborEnvReady,
   isTauriRuntime,
+  isZotEnv,
+  registryEnvLabel,
   resolveHarborEnv,
   resolveHarborRepository,
 } from "../../types";
@@ -223,12 +225,15 @@ export async function runBranchPackageAndPush(
   }
 
   if (!isHarborEnvReady(harborEnv)) {
+    const label = registryEnvLabel(harborEnv);
     return {
       ok: false,
-      error: "Harbor 环境未配置完整（地址 / 用户名 / 密码 / 项目均必填）",
+      error: `${label} 环境未配置完整（地址 / 用户名 / 密码${
+        isZotEnv(harborEnv) ? "" : " / 项目"
+      }均必填）`,
       packageLog: result.log,
       images: [],
-      pushErrors: ["Harbor 环境未配置完整，无法推送镜像"],
+      pushErrors: [`${label} 环境未配置完整，无法推送镜像`],
       ...artifacts,
     };
   }
@@ -254,10 +259,15 @@ export async function runBranchPackageAndPush(
         ? [frontendImageName, backendImageName]
         : [frontendImageName];
   const invalidName = namesToPush.find(
-    (name) => !resolveHarborRepository(name, harborEnv.project).ok,
+    (name) =>
+      !resolveHarborRepository(name, harborEnv.project, harborEnv.registry_type).ok,
   );
   if (invalidName) {
-    const err = resolveHarborRepository(invalidName, harborEnv.project);
+    const err = resolveHarborRepository(
+      invalidName,
+      harborEnv.project,
+      harborEnv.registry_type,
+    );
     return {
       ok: false,
       error: err.ok ? "镜像名不合法" : err.error,

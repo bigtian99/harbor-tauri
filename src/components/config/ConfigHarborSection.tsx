@@ -65,6 +65,7 @@ function createHarborEnv(existing: HarborEnv[]): HarborEnv {
   return {
     id: nextHarborEnvId(existing),
     name: `环境${existing.length + 1}`,
+    registry_type: "harbor",
     url: "",
     username: "",
     password: "",
@@ -102,6 +103,7 @@ export function ConfigHarborSection({
   >({ status: "idle" });
 
   const harborEnvs = config.harbors ?? [];
+  const isZotDraft = envEditor?.draft.registry_type === "zot";
 
   // 拖拽排序 sensors
   const sensors = useSensors(
@@ -161,6 +163,7 @@ export function ConfigHarborSection({
     const draft: HarborEnv = {
       ...envEditor.draft,
       name: envEditor.draft.name.trim() || envEditor.draft.name,
+      registry_type: envEditor.draft.registry_type ?? "harbor",
       url: envEditor.draft.url.trim(),
       username: envEditor.draft.username.trim(),
       password: envEditor.draft.password ?? "",
@@ -178,7 +181,7 @@ export function ConfigHarborSection({
   const removeHarborEnv = async (env: HarborEnv) => {
     const ok = await confirm({
       title: "删除环境",
-      message: `确定删除 Harbor 环境「${env.name || env.id}」？推送页将无法再选择该环境。`,
+      message: `确定删除仓库环境「${env.name || env.id}」？推送页将无法再选择该环境。`,
       confirmLabel: "删除",
       variant: "danger",
     });
@@ -210,16 +213,16 @@ export function ConfigHarborSection({
     }
   };
 
-  /** 拉取 Harbor 项目列表供下拉选择 */
+  /** 拉取 Harbor 项目 / Zot 命名空间列表供下拉选择 */
   const fetchHarborProjects = async () => {
     if (!envEditor) return;
-    const { url, username, password } = envEditor.draft;
+    const { url, username, password, registry_type } = envEditor.draft;
     if (!url.trim() || !username.trim() || !password) {
       setProjectsState({ status: "err", message: "请先填写地址、用户名和密码" });
       return;
     }
     if (!isTauriRuntime()) {
-      setProjectsState({ status: "err", message: "请在桌面端拉取项目列表" });
+      setProjectsState({ status: "err", message: "请在桌面端拉取仓库列表" });
       return;
     }
     setProjectsState({ status: "loading" });
@@ -228,6 +231,7 @@ export function ConfigHarborSection({
         harborUrl: url,
         username,
         password,
+        registryType: registry_type ?? "harbor",
       });
       setProjectsState({ status: "ok", names: result.names, insecure: result.insecure });
     } catch (e) {
@@ -241,7 +245,12 @@ export function ConfigHarborSection({
       setProjectsState({ status: "idle" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [envEditor?.draft.url, envEditor?.draft.username, envEditor?.draft.password]);
+  }, [
+    envEditor?.draft.url,
+    envEditor?.draft.username,
+    envEditor?.draft.password,
+    envEditor?.draft.registry_type,
+  ]);
 
   return (
     <>
@@ -249,7 +258,7 @@ export function ConfigHarborSection({
         <Stack gap="md">
           <Group justify="space-between" align="center" wrap="nowrap">
             <Text size="sm" c="var(--color-text-muted)">
-              可配置多个 Harbor 环境（开发 / 生产等），打包推送时按环境切换
+              可配置多个 Harbor / Zot 环境（开发 / 生产等），打包推送时按环境切换
             </Text>
             <Button
               size="xs"
@@ -264,7 +273,7 @@ export function ConfigHarborSection({
 
           {harborEnvs.length === 0 && (
             <Text size="sm" c="var(--color-text-muted)">
-              还没有环境，点击「添加环境」填写地址、用户名、密码和项目
+              还没有环境，点击「添加环境」填写仓库类型、地址、用户名和密码
             </Text>
           )}
 
@@ -345,7 +354,7 @@ export function ConfigHarborSection({
       <Modal
         opened={!!envEditor}
         onClose={closeHarborEnvEditor}
-        title={envEditor?.mode === "add" ? "添加 Harbor 环境" : "编辑 Harbor 环境"}
+        title={envEditor?.mode === "add" ? "添加仓库环境" : "编辑仓库环境"}
         size="sm"
         styles={{
           content: { background: "var(--color-bg-surface)" },
@@ -364,14 +373,30 @@ export function ConfigHarborSection({
               })}
               placeholder="开发 / 生产"
             />
+            <Select
+              label="仓库类型"
+              data={[
+                { value: "harbor", label: "Harbor" },
+                { value: "zot", label: "Zot（OCI 仓库）" },
+              ]}
+              value={envEditor.draft.registry_type ?? "harbor"}
+              onChange={(val) => setEnvEditor({
+                ...envEditor,
+                draft: {
+                  ...envEditor.draft,
+                  registry_type: (val as HarborEnv["registry_type"]) ?? "harbor",
+                },
+              })}
+              allowDeselect={false}
+            />
             <TextInput
-              label="Harbor 地址"
+              label={isZotDraft ? "Zot 地址" : "Harbor 地址"}
               value={envEditor.draft.url}
               onChange={(e) => setEnvEditor({
                 ...envEditor,
                 draft: { ...envEditor.draft, url: e.currentTarget.value },
               })}
-              placeholder="例如: harbor.example.com"
+              placeholder={isZotDraft ? "例如: https://zot.example.com" : "例如: harbor.example.com"}
             />
             <TextInput
               label="用户名"
@@ -380,7 +405,7 @@ export function ConfigHarborSection({
                 ...envEditor,
                 draft: { ...envEditor.draft, username: e.currentTarget.value },
               })}
-              placeholder="Harbor 登录用户名"
+              placeholder="仓库登录用户名"
             />
             <PasswordInput
               label="密码"
@@ -389,14 +414,14 @@ export function ConfigHarborSection({
                 ...envEditor,
                 draft: { ...envEditor.draft, password: e.currentTarget.value },
               })}
-              placeholder="Harbor 登录密码"
+              placeholder="仓库登录密码"
               visible={envEditorPassword}
               onVisibilityChange={(visible) => setEnvEditorPassword(visible)}
             />
             <Stack gap={4}>
               <Group justify="space-between" align="center">
                 <Text size="sm" fw={500} c="var(--color-text)">
-                  Harbor 项目
+                  {isZotDraft ? "仓库前缀（可选）" : "Harbor 项目"}
                 </Text>
                 <Button
                   size="xs"
@@ -409,7 +434,11 @@ export function ConfigHarborSection({
                   }
                   onClick={() => { void fetchHarborProjects(); }}
                 >
-                  {projectsState.status === "loading" ? "拉取中..." : "拉取项目列表"}
+                  {projectsState.status === "loading"
+                    ? "拉取中..."
+                    : isZotDraft
+                      ? "拉取仓库列表"
+                      : "拉取项目列表"}
                 </Button>
               </Group>
               {projectsState.status === "ok" && (
@@ -424,7 +453,7 @@ export function ConfigHarborSection({
                     placeholder="从列表选择或手动输入"
                     searchable
                     clearable
-                    nothingFoundMessage="无匹配项目"
+                    nothingFoundMessage={isZotDraft ? "无匹配仓库前缀" : "无匹配项目"}
                   />
                   {projectsState.insecure && (
                     <Text size="xs" c="orange">
@@ -448,8 +477,16 @@ export function ConfigHarborSection({
                     ...envEditor,
                     draft: { ...envEditor.draft, project: e.currentTarget.value },
                   })}
-                  placeholder="例如: my-project（或点击拉取选择）"
-                  description="推送时自动拼在镜像名前，最终地址为 地址/项目名/镜像名:标签"
+                  placeholder={
+                    isZotDraft
+                      ? "可留空，例如: team-a（或点击拉取选择）"
+                      : "例如: my-project（或点击拉取选择）"
+                  }
+                  description={
+                    isZotDraft
+                      ? "留空时镜像直接推到 地址/镜像名:标签；填写则拼成 地址/前缀/镜像名:标签"
+                      : "推送时自动拼在镜像名前，最终地址为 地址/项目名/镜像名:标签"
+                  }
                 />
               )}
             </Stack>
@@ -464,7 +501,7 @@ export function ConfigHarborSection({
                   !envEditor.draft.url.trim()
                   || !envEditor.draft.username.trim()
                   || !envEditor.draft.password
-                  || !envEditor.draft.project.trim()
+                  || (!isZotDraft && !envEditor.draft.project.trim())
                 }
                 onClick={saveHarborEnvEditor}
               >
@@ -537,13 +574,15 @@ function SortableHarborEnvCard({
               {env.name || env.id}
             </Text>
             <Text size="xs" c="var(--color-text-muted)" truncate>
-              {env.url || "未填地址"}
+              {env.registry_type === "zot" ? "Zot" : "Harbor"} · {env.url || "未填地址"}
             </Text>
             <Text size="xs" c="var(--color-text-muted)" truncate>
               {env.username || "未填用户"} · {env.password ? "已设密码" : "未设密码"}
             </Text>
             <Text size="xs" c="var(--color-text-muted)" truncate>
-              项目: {env.project || "未填项目"}
+              {env.registry_type === "zot"
+                ? `前缀: ${env.project || "未填（可选）"}`
+                : `项目: ${env.project || "未填项目"}`}
             </Text>
           </Stack>
 

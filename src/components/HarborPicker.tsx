@@ -37,7 +37,7 @@ export function HarborPicker({
   value,
   onChange,
   disabled,
-  label = "Harbor 环境",
+  label = "镜像仓库",
   hint,
 }: HarborPickerProps) {
   const empty = envs.length === 0;
@@ -49,10 +49,12 @@ export function HarborPicker({
       size="sm"
       label={label}
       description={hint}
-      placeholder={empty ? "请先在设置中配置 Harbor 环境" : undefined}
+      placeholder={empty ? "请先在设置中配置镜像仓库" : undefined}
       data={envs.map((env) => ({
         value: env.id,
-        label: env.project ? `${env.name || env.id} · ${env.project}` : env.name || env.id,
+        label: env.project
+          ? `${env.name || env.id} · ${env.project}`
+          : `${env.name || env.id}${env.registry_type === "zot" ? " · Zot" : ""}`,
       }))}
       value={empty ? null : currentId}
       onChange={(id) => {

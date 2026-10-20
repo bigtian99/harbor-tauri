@@ -5,7 +5,7 @@ use crate::build::push_helpers::{
     resolve_final_tag,
 };
 use crate::build::{
-    begin_cancellable_operation, docker_output, emit_progress, resolve_harbor_repository,
+    begin_cancellable_operation, docker_output, emit_progress, resolve_registry_repository,
 };
 use crate::config_cmd::load_config_sync;
 use crate::docker::{
@@ -76,7 +76,8 @@ pub async fn build_and_push(
     crate::diag::diag_log(
         "build",
         &format!(
-            "build_and_push 选中 Harbor 环境「{}」url={} project={} image={} tag={}",
+            "build_and_push 选中 {} 环境「{}」url={} project={} image={} tag={}",
+            env.registry_label(),
             env.display_name(),
             env.url,
             env.project,
@@ -92,7 +93,7 @@ pub async fn build_and_push(
 
     let final_tag = resolve_final_tag(image_tag);
     let image_name_lower = image_name.to_lowercase();
-    let repository = resolve_harbor_repository(&image_name_lower, &env.project)?;
+    let repository = resolve_registry_repository(&image_name_lower, &env.project, env.is_zot())?;
     let full_image = format!("{}/{}:{}", env.url, repository, final_tag);
 
     // 步骤1: 准备Docker构建上下文
@@ -227,7 +228,12 @@ pub async fn build_and_push(
     if CANCEL_FLAG.load(Ordering::SeqCst) {
         return Err("构建已取消".to_string());
     }
-    emit(&app, 55, "🔐 登录 Harbor 镜像仓库...", "push");
+    emit(
+        &app,
+        55,
+        &format!("🔐 登录 {} 镜像仓库...", env.registry_label()),
+        "push",
+    );
     let did_login = docker_login_harbor(
         env.url.clone(),
         env.username.clone(),
@@ -235,7 +241,12 @@ pub async fn build_and_push(
     )
     .await?;
     if !did_login {
-        emit(&app, 58, "🔐 复用已有 Harbor 登录", "push");
+        emit(
+            &app,
+            58,
+            &format!("🔐 复用已有 {} 登录", env.registry_label()),
+            "push",
+        );
     }
 
     // 步骤4: docker push（流式解析层进度，类似 FTP）
@@ -284,7 +295,8 @@ pub async fn push_local_image(
     crate::diag::diag_log(
         "docker",
         &format!(
-            "push_local_image 选中 Harbor 环境「{}」url={} project={} local_image={}",
+            "push_local_image 选中 {} 环境「{}」url={} project={} local_image={}",
+            env.registry_label(),
             env.display_name(),
             env.url,
             env.project,
@@ -302,7 +314,7 @@ pub async fn push_local_image(
         return Err("请输入目标镜像名称".to_string());
     }
 
-    let repository = resolve_harbor_repository(&image_name_lower, &env.project)?;
+    let repository = resolve_registry_repository(&image_name_lower, &env.project, env.is_zot())?;
     let final_tag = resolve_final_tag(image_tag);
     let full_image = format!("{}/{}:{}", env.url, repository, final_tag);
 
@@ -343,7 +355,12 @@ pub async fn push_local_image(
     if CANCEL_FLAG.load(Ordering::SeqCst) {
         return Err("操作已取消".to_string());
     }
-    emit_progress(&app, 35, "🔐 登录 Harbor 镜像仓库...", "push");
+    emit_progress(
+        &app,
+        35,
+        &format!("🔐 登录 {} 镜像仓库...", env.registry_label()),
+        "push",
+    );
     let did_login = docker_login_harbor(
         env.url.clone(),
         env.username.clone(),
@@ -351,7 +368,12 @@ pub async fn push_local_image(
     )
     .await?;
     if !did_login {
-        emit_progress(&app, 40, "🔐 复用已有 Harbor 登录", "push");
+        emit_progress(
+            &app,
+            40,
+            &format!("🔐 复用已有 {} 登录", env.registry_label()),
+            "push",
+        );
     }
 
     // 步骤3: docker push

@@ -66,6 +66,7 @@ fn migrate_harbors(config: &mut HarborConfig) {
             config.harbors.push(HarborEnv {
                 id: "default".to_string(),
                 name: "默认".to_string(),
+                registry_type: "harbor".to_string(),
                 url: if config.harbor_url.trim().is_empty() {
                     HarborConfig::default().harbor_url
                 } else {
@@ -83,6 +84,11 @@ fn migrate_harbors(config: &mut HarborConfig) {
         }
         if env.name.trim().is_empty() {
             env.name = format!("环境{}", idx + 1);
+        }
+        if env.registry_type.trim().is_empty() {
+            env.registry_type = "harbor".to_string();
+        } else {
+            env.registry_type = env.registry_type.trim().to_lowercase();
         }
     }
     let ids: Vec<String> = config.harbors.iter().map(|e| e.id.clone()).collect();
@@ -104,7 +110,7 @@ pub(crate) fn resolve_harbor(
     harbor_id: &str,
 ) -> Result<crate::models::HarborEnv, String> {
     if config.harbors.is_empty() {
-        return Err("请先在设置中配置 Harbor 环境".to_string());
+        return Err("请先在设置中配置镜像仓库环境".to_string());
     }
     let id = harbor_id.trim();
     if id.is_empty() {
@@ -115,7 +121,7 @@ pub(crate) fn resolve_harbor(
         .iter()
         .find(|e| e.id == id)
         .cloned()
-        .ok_or_else(|| format!("Harbor 环境不存在: {id}"))
+        .ok_or_else(|| format!("仓库环境不存在: {id}"))
 }
 
 fn migrate_ks_environments(config: &mut HarborConfig) {

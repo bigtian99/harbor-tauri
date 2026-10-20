@@ -44,7 +44,7 @@ interface ConfigPanelProps {
 }
 
 const TABS: { key: ConfigTab; label: string; icon: ReactNode }[] = [
-  { key: "connection", label: "Harbor 连接", icon: <Server size={14} /> },
+  { key: "connection", label: "仓库连接", icon: <Server size={14} /> },
   { key: "jar", label: "JAR 打包", icon: <Package size={14} /> },
   { key: "frontend", label: "前端打包", icon: <Globe size={14} /> },
   { key: "bt", label: "宝塔部署", icon: <BaotaIcon size={14} /> },
@@ -76,9 +76,9 @@ export function ConfigPanel({
       <div className="config-panel-body">
       <div className="config-panel" style={{ display: "flex", flexDirection: "column", gap: "var(--mantine-spacing-md)" }}>
       <PanelPageHeader
-        eyebrow="HARBOR · BAOTA · KUBESPHERE"
+        eyebrow="REGISTRY · BAOTA · KUBESPHERE"
         title="设置"
-        sub="配置 Harbor、宝塔、KubeSphere 等连接与偏好"
+        sub="配置 Harbor / Zot、宝塔、KubeSphere 等连接与偏好"
       />
       <Tabs
         value={activeTab}

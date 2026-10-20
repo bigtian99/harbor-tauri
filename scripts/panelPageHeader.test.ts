@@ -16,9 +16,9 @@ assert.match(read("src/styles/panel-header.css"), /\.panel-title/, "应有标题
 assert.match(read("src/components/PanelPageHeader.tsx"), /export function PanelPageHeader/, "应有共用页头组件");
 
 const panels: Array<{ file: string; title: string; eyebrow: string }> = [
-  { file: "src/components/UploadPanel.tsx", title: "上传推送", eyebrow: "JAR / DIST → DOCKER → HARBOR" },
-  { file: "src/components/BranchPanel.tsx", title: "分支打包", eyebrow: "GIT BRANCH → BUILD → HARBOR" },
-  { file: "src/components/PushImagePanel.tsx", title: "镜像推送", eyebrow: "LOCAL IMAGE → TAG → HARBOR" },
+  { file: "src/components/UploadPanel.tsx", title: "上传推送", eyebrow: "JAR / DIST → DOCKER → REGISTRY" },
+  { file: "src/components/BranchPanel.tsx", title: "分支打包", eyebrow: "GIT BRANCH → BUILD → REGISTRY" },
+  { file: "src/components/PushImagePanel.tsx", title: "镜像推送", eyebrow: "LOCAL IMAGE → TAG → REGISTRY" },
   { file: "src/components/MergePanel.tsx", title: "分支合并", eyebrow: "SOURCE → TARGET → MERGE" },
   { file: "src/components/HistoryPanel.tsx", title: "历史记录", eyebrow: "BUILD HISTORY → REPUSH" },
   { file: "src/components/landing/LandingChannelForm.tsx", title: "生成落地页", eyebrow: "CHANNEL → TEMPLATE → FTP" },
@@ -26,7 +26,7 @@ const panels: Array<{ file: string; title: string; eyebrow: string }> = [
   { file: "src/components/SettlementPanel.tsx", title: "结算单", eyebrow: "CHANNEL TABLE → SETTLEMENT → XLSX" },
   { file: "src/components/PackSpeedPanel.tsx", title: "打包加速", eyebrow: "OPS BATCH → PACK QUEUE" },
   { file: "src/components/KsPublishPanel.tsx", title: "KubeSphere 发布", eyebrow: "HARBOR IMAGE → KUBESPHERE" },
-  { file: "src/components/ConfigPanel.tsx", title: "设置", eyebrow: "HARBOR · BAOTA · KUBESPHERE" },
+  { file: "src/components/ConfigPanel.tsx", title: "设置", eyebrow: "REGISTRY · BAOTA · KUBESPHERE" },
   { file: "src/components/BtJavaProjectsPanel.tsx", title: "Java 项目", eyebrow: "JAR → BAOTA JAVA" },
   { file: "src/components/BtPhpSitesPanel.tsx", title: "PHP 项目", eyebrow: "DIST → BAOTA PHP" },
 ];

@@ -327,27 +327,55 @@ pub struct HarborEnv {
     /// 显示名，如「开发」「生产」
     #[serde(default)]
     pub name: String,
+    /// 仓库类型：`harbor`（默认）或 `zot`。Zot 为 OCI 分发规范仓库，没有 Harbor 的「项目」概念。
+    #[serde(default = "default_registry_type")]
+    pub registry_type: String,
     #[serde(default)]
     pub url: String,
     #[serde(default)]
     pub username: String,
     #[serde(default)]
     pub password: String,
+    /// Harbor 项目名；Zot 下作为可选的仓库前缀（namespace）
     #[serde(default)]
     pub project: String,
 }
 
+fn default_registry_type() -> String {
+    "harbor".to_string()
+}
+
 impl HarborEnv {
-    /// 必填项校验；返回中文提示。
+    pub(crate) fn is_zot(&self) -> bool {
+        self.registry_type.eq_ignore_ascii_case("zot")
+    }
+
+    /// 用于提示文案的仓库类型名
+    pub(crate) fn registry_label(&self) -> &'static str {
+        if self.is_zot() {
+            "Zot"
+        } else {
+            "Harbor"
+        }
+    }
+
+    /// 必填项校验；返回中文提示。Zot 没有「项目」，仓库前缀可留空。
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if self.url.trim().is_empty()
-            || self.username.trim().is_empty()
-            || self.password.is_empty()
-            || self.project.trim().is_empty()
-        {
+        let base_ok = !self.url.trim().is_empty()
+            && !self.username.trim().is_empty()
+            && !self.password.is_empty();
+        let project_ok = self.is_zot() || !self.project.trim().is_empty();
+        if !base_ok || !project_ok {
+            let req = if self.is_zot() {
+                "地址/用户名/密码"
+            } else {
+                "地址/用户名/密码/项目"
+            };
             return Err(format!(
-                "Harbor 环境「{}」未配置完整（地址/用户名/密码/项目均必填）",
-                self.display_name()
+                "{} 环境「{}」未配置完整（{}均必填）",
+                self.registry_label(),
+                self.display_name(),
+                req
             ));
         }
         Ok(())
@@ -447,6 +475,7 @@ impl Default for HarborConfig {
                 HarborEnv {
                     id: "dev".to_string(),
                     name: "开发环境".to_string(),
+                    registry_type: "harbor".to_string(),
                     url: "39.108.213.95".to_string(),
                     username: "admin".to_string(),
                     password: "Harbor@123".to_string(),
@@ -627,4 +656,41 @@ pub(crate) struct RemoteBranchListResult {
     pub(crate) repo_path: String,
     /// 远程分支列表
     pub(crate) branches: Vec<GitBranchOption>,
+}
+
+#[cfg(test)]
+mod registry_env_tests {
+    use super::HarborEnv;
+
+    #[test]
+    fn zot_env_does_not_require_project() {
+        let env = HarborEnv {
+            registry_type: "zot".to_string(),
+            url: "https://zot.example.com".to_string(),
+            username: "admin".to_string(),
+            password: "secret".to_string(),
+            ..Default::default()
+        };
+        assert!(env.validate().is_ok());
+        assert!(env.is_zot());
+    }
+
+    #[test]
+    fn harbor_env_still_requires_project() {
+        let env = HarborEnv {
+            registry_type: "harbor".to_string(),
+            url: "harbor.example.com".to_string(),
+            username: "admin".to_string(),
+            password: "secret".to_string(),
+            ..Default::default()
+        };
+        assert!(env.validate().is_err());
+    }
+
+    #[test]
+    fn env_without_type_defaults_to_harbor() {
+        let env: HarborEnv = serde_json::from_str(r#"{"url":"harbor.example.com"}"#).unwrap();
+        assert_eq!(env.registry_type, "harbor");
+        assert!(!env.is_zot());
+    }
 }

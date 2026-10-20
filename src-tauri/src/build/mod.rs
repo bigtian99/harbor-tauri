@@ -58,8 +58,16 @@ pub(crate) fn emit_progress(
     .ok();
 }
 
-/// 镜像名已含 `/` 则原样使用，否则拼接 `{project}/{image_name}`
-pub(crate) fn resolve_harbor_repository(image_name: &str, project: &str) -> Result<String, String> {
+/// 解析镜像在仓库中的路径。
+///
+/// - 镜像名已含 `/` → 原样使用
+/// - Harbor：必须拼接 `{project}/{image_name}`
+/// - Zot：没有项目概念，`project` 只作为可选前缀；留空则直接用 `{image_name}`
+pub(crate) fn resolve_registry_repository(
+    image_name: &str,
+    project: &str,
+    is_zot: bool,
+) -> Result<String, String> {
     let name = image_name.trim().to_lowercase();
     if name.is_empty() {
         return Err("镜像名称不能为空".to_string());
@@ -69,6 +77,9 @@ pub(crate) fn resolve_harbor_repository(image_name: &str, project: &str) -> Resu
     }
     let project = project.trim().to_lowercase();
     if project.is_empty() {
+        if is_zot {
+            return Ok(name);
+        }
         return Err("请先在 Harbor 连接中配置项目名称".to_string());
     }
     Ok(format!("{}/{}", project, name))
@@ -96,7 +107,7 @@ pub(crate) fn begin_cancellable_operation() -> CancelFlagGuard {
 
 #[cfg(test)]
 mod tests {
-    use super::{begin_cancellable_operation, reset_cancel_flag};
+    use super::{begin_cancellable_operation, reset_cancel_flag, resolve_registry_repository};
     use crate::utils::{repo_root_for, run_command, CANCEL_FLAG};
     use std::path::Path;
     use std::sync::atomic::Ordering;
@@ -137,5 +148,31 @@ mod tests {
             "drop must clear cancel flag so merge/git UI can run again"
         );
         reset_cancel_flag();
+    }
+
+    #[test]
+    fn harbor_requires_project_prefix() {
+        assert_eq!(
+            resolve_registry_repository("my-app", "tksy-admin", false).unwrap(),
+            "tksy-admin/my-app"
+        );
+        assert!(resolve_registry_repository("my-app", "", false).is_err());
+    }
+
+    #[test]
+    fn zot_project_prefix_is_optional() {
+        assert_eq!(
+            resolve_registry_repository("my-app", "", true).unwrap(),
+            "my-app"
+        );
+        assert_eq!(
+            resolve_registry_repository("my-app", "team-a", true).unwrap(),
+            "team-a/my-app"
+        );
+        // 已含 `/` 的名称原样保留
+        assert_eq!(
+            resolve_registry_repository("team-a/my-app", "", true).unwrap(),
+            "team-a/my-app"
+        );
     }
 }

@@ -43,6 +43,34 @@ fn harbor_login_host(raw: &str) -> String {
         .to_string()
 }
 
+/// push 失败时的可操作提示：区分「没登录上」和「登录了但没写权限」。
+fn push_error_hint(log: &str) -> String {
+    let m = log.to_lowercase();
+    if m.contains("denied")
+        || m.contains("403")
+        || m.contains("requested access to the resource is denied")
+    {
+        return "\n\n提示：仓库已通过认证但拒绝写入（403）。请确认该账号在仓库权限策略（如 Zot accessControl）中拥有目标仓库的写权限。".to_string();
+    }
+    if m.contains("unauthorized") || m.contains("authentication required") || m.contains("401") {
+        return "\n\n提示：仓库要求认证。请检查环境里的用户名/密码是否有目标仓库的推送权限。".to_string();
+    }
+    String::new()
+}
+
+/// HTTP 仓库（Zot 常见）需要 Docker 显式允许；把原因翻译成可操作的提示。
+fn docker_login_hint(host: &str, stderr: &str) -> String {
+    let m = stderr.to_lowercase();
+    if m.contains("server gave http response to https client")
+        || m.contains("http response to https client")
+    {
+        return format!(
+            "\n\n提示：{host} 可能只提供 HTTP。请把 \"{host}\" 加入 Docker 的 insecure-registries 并重启 Docker，或为仓库配置 HTTPS。"
+        );
+    }
+    String::new()
+}
+
 fn docker_login_harbor_sync(
     harbor_url: String,
     username: String,
@@ -81,7 +109,10 @@ fn docker_login_harbor_sync(
         .map_err(|e| format!("docker login 失败: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("docker login 失败:\n{stderr}"));
+        return Err(format!(
+            "docker login 失败:\n{stderr}{}",
+            docker_login_hint(&host, &stderr)
+        ));
     }
 
     *session = Some(session_key);
@@ -121,7 +152,7 @@ pub async fn test_harbor_connection(
         ),
     );
     if url.is_empty() || user.is_empty() || password.is_empty() {
-        return Err("请填写 Harbor 地址、用户名和密码".into());
+        return Err("请填写仓库地址、用户名和密码".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
         docker_login_harbor_sync(url, user, password, false)?;
@@ -213,13 +244,10 @@ fn is_cert_error(msg: &str) -> bool {
     false
 }
 
-fn harbor_get_projects(
-    base: &str,
-    user: &str,
-    password: &str,
+fn build_registry_client(
     ca: Option<&reqwest::Certificate>,
     insecure: bool,
-) -> Result<Vec<String>, String> {
+) -> Result<reqwest::blocking::Client, String> {
     let mut builder = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(HARBOR_API_TIMEOUT_SECS));
@@ -229,9 +257,74 @@ fn harbor_get_projects(
     if let Some(ca) = ca {
         builder = builder.add_root_certificate(ca.clone());
     }
-    let client = builder
+    builder
         .build()
-        .map_err(|e| format!("HTTP 客户端创建失败: {e}"))?;
+        .map_err(|e| format!("HTTP 客户端创建失败: {e}"))
+}
+
+/// 从 Zot 的 OCI 分发 API 读取仓库列表。`auth` 为 None 时匿名读取。
+///
+/// 返回完整的 repository 名（如 `library/nginx`）；上层再折算成命名空间候选。
+fn zot_get_repositories(
+    client: &reqwest::blocking::Client,
+    base: &str,
+    auth: Option<(&str, &str)>,
+) -> Result<Vec<String>, String> {
+    let mut req = client
+        .get(format!("{base}/v2/_catalog?n=1000"))
+        .header("Accept", "application/json");
+    if let Some((user, password)) = auth {
+        req = req.basic_auth(user, Some(password));
+    }
+    let resp = req
+        .send()
+        .map_err(|e| format!("连接 Zot 失败: {}", harbor_err_chain(&e)))?;
+    let status = resp.status().as_u16();
+    if status == 401 || status == 403 {
+        return Err("Zot 认证失败，请检查用户名和密码".into());
+    }
+    if !(200..300).contains(&status) {
+        return Err(format!("读取 Zot 仓库列表失败: HTTP {status}"));
+    }
+    let body = resp
+        .json::<serde_json::Value>()
+        .map_err(|e| format!("解析 Zot 仓库列表失败: {e}"))?;
+    let mut names: Vec<String> = body
+        .get("repositories")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
+/// Zot 没有 Harbor 的 project，用 repository 的第一段作为可选前缀候选。
+fn zot_namespace_candidates(repos: Vec<String>) -> Vec<String> {
+    let mut names: Vec<String> = repos
+        .into_iter()
+        .filter_map(|r| r.split('/').next().map(|s| s.trim().to_string()))
+        .filter(|s| !s.is_empty())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn harbor_get_projects(
+    base: &str,
+    user: &str,
+    password: &str,
+    ca: Option<&reqwest::Certificate>,
+    insecure: bool,
+) -> Result<Vec<String>, String> {
+    let client = build_registry_client(ca, insecure)?;
     let resp = client
         .get(format!("{base}/api/v2.0/projects?page=1&page_size=100"))
         .basic_auth(user, Some(password))
@@ -272,79 +365,123 @@ fn harbor_get_projects(
     Ok(names)
 }
 
-fn fetch_harbor_projects(
+/// 读取仓库的可选命名空间列表。
+///
+/// Harbor 走 `/api/v2.0/projects`；Zot 走 OCI `/v2/_catalog` 并折算成第一段命名空间。
+fn fetch_registry_projects(
     url: &str,
     user: &str,
     password: &str,
+    is_zot: bool,
 ) -> Result<HarborProjects, String> {
     let bases = harbor_base_candidates(url);
     if bases.is_empty() {
-        return Err("请填写 Harbor 地址、用户名和密码".into());
+        return Err("请填写仓库地址、用户名和密码".into());
     }
     let host = harbor_api_host(url);
     let ca = docker_ca_for_host(&host);
+    let auth_err = if is_zot {
+        "Zot 认证失败"
+    } else {
+        "Harbor 认证失败"
+    };
+    let fetch = |base: &str, insecure: bool| -> Result<Vec<String>, String> {
+        if is_zot {
+            let client = build_registry_client(ca.as_ref(), insecure)?;
+            let mut repos = zot_get_repositories(&client, base, Some((user, password)))?;
+            if repos.is_empty() {
+                // 某些 Zot authz 策略下账号看不到仓库（或只能匿名读公开仓库），
+                // 空结果会让下拉误以为是配置错误，补一次匿名读取。
+                if let Ok(anon) = zot_get_repositories(&client, base, None) {
+                    repos = anon;
+                }
+            }
+            Ok(zot_namespace_candidates(repos))
+        } else {
+            harbor_get_projects(base, user, password, ca.as_ref(), insecure)
+        }
+    };
     // 保留首个候选（首选协议）的错误：它比兜底协议的错误更能说明问题
     let mut first_err: Option<String> = None;
     for base in bases {
-        let (names, insecure) =
-            match harbor_get_projects(&base, user, password, ca.as_ref(), false) {
-                Ok(names) => (names, false),
-                Err(e) if e.starts_with("Harbor 认证失败") => return Err(e),
-                Err(e) if is_cert_error(&e) => {
-                    crate::diag::diag_log(
-                        "docker",
-                        &format!("list_harbor_projects {host} 证书不受信任，本次读取降级为跳过校验"),
-                    );
-                    match harbor_get_projects(&base, user, password, ca.as_ref(), true) {
-                        Ok(names) => (names, true),
-                        Err(e2) => {
-                            first_err.get_or_insert(e2);
-                            continue;
-                        }
+        let (names, insecure) = match fetch(&base, false) {
+            Ok(names) => (names, false),
+            Err(e) if e.starts_with(auth_err) => return Err(e),
+            Err(e) if is_cert_error(&e) => {
+                crate::diag::diag_log(
+                    "docker",
+                    &format!("list_harbor_projects {host} 证书不受信任，本次读取降级为跳过校验"),
+                );
+                match fetch(&base, true) {
+                    Ok(names) => (names, true),
+                    Err(e2) => {
+                        first_err.get_or_insert(e2);
+                        continue;
                     }
                 }
-                Err(e) => {
-                    first_err.get_or_insert(e);
-                    continue;
-                }
-            };
+            }
+            Err(e) => {
+                first_err.get_or_insert(e);
+                continue;
+            }
+        };
         crate::diag::diag_log(
             "docker",
             &format!(
-                "list_harbor_projects ok base={base} count={} insecure={insecure}",
+                "list_harbor_projects ok base={base} type={} count={} insecure={insecure}",
+                if is_zot { "zot" } else { "harbor" },
                 names.len()
             ),
         );
         return Ok(HarborProjects { names, insecure });
     }
-    let err = first_err.unwrap_or_else(|| "无法连接 Harbor".to_string());
+    let err = first_err.unwrap_or_else(|| "无法连接仓库".to_string());
     crate::diag::diag_log("docker", &format!("list_harbor_projects failed: {err}"));
     Err(err)
 }
 
-/// 列出 Harbor 项目名，供配置页「项目」下拉选择。
+/// Harbor 项目列表（兼容旧调用/测试）。
+#[cfg(test)]
+fn fetch_harbor_projects(
+    url: &str,
+    user: &str,
+    password: &str,
+) -> Result<HarborProjects, String> {
+    fetch_registry_projects(url, user, password, false)
+}
+
+/// 列出仓库的命名空间名，供配置页下拉选择。
+/// Harbor 返回项目名；Zot 返回 repository 的第一段（仓库前缀，可选）。
 #[tauri::command]
 pub async fn list_harbor_projects(
     harbor_url: String,
     username: String,
     password: String,
+    registry_type: Option<String>,
 ) -> Result<HarborProjects, String> {
     let url = harbor_url.trim().to_string();
     let user = username.trim().to_string();
+    let is_zot = registry_type
+        .as_deref()
+        .map(|t| t.trim().eq_ignore_ascii_case("zot"))
+        .unwrap_or(false);
     crate::diag::diag_log(
         "docker",
         &format!(
-            "list_harbor_projects host={} user={}",
+            "list_harbor_projects host={} user={} type={}",
             harbor_login_host(&url),
-            user
+            user,
+            if is_zot { "zot" } else { "harbor" }
         ),
     );
     if url.is_empty() || user.is_empty() || password.is_empty() {
-        return Err("请先填写 Harbor 地址、用户名和密码".into());
+        return Err("请先填写仓库地址、用户名和密码".into());
     }
-    tauri::async_runtime::spawn_blocking(move || fetch_harbor_projects(&url, &user, &password))
-        .await
-        .map_err(|e| format!("读取 Harbor 项目线程异常: {e}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        fetch_registry_projects(&url, &user, &password, is_zot)
+    })
+    .await
+    .map_err(|e| format!("读取仓库列表线程异常: {e}"))?
 }
 
 /// 解析 Docker 尺寸字符串：`1.024kB` / `45.23MB` / `1.2GB`
@@ -488,7 +625,7 @@ fn emit_harbor_push_progress(
         (base_pct + (layer_pct as f64 / 100.0 * span as f64).floor() as u32).min(base_pct + span);
     let msg = if total > 0 {
         format!(
-            "📤 Harbor 推送 {}% ({}/{} MB) · {}/{} 层",
+            "📤 镜像推送 {}% ({}/{} MB) · {}/{} 层",
             layer_pct,
             format_mb(sent),
             format_mb(total),
@@ -496,9 +633,9 @@ fn emit_harbor_push_progress(
             known.max(1)
         )
     } else if known > 0 {
-        format!("📤 Harbor 推送 · 已完成 {}/{} 层（复用/准备中）", done, known)
+        format!("📤 镜像推送 · 已完成 {}/{} 层（复用/准备中）", done, known)
     } else {
-        "📤 Harbor 推送中…".to_string()
+        "📤 镜像推送中…".to_string()
     };
     let text = match label {
         Some(l) if !l.is_empty() => format!("[{l}] {msg}"),
@@ -602,8 +739,8 @@ pub(crate) async fn docker_push_image(
             return Err("构建已取消".to_string());
         }
         let start_msg = match &label {
-            Some(l) if !l.is_empty() => format!("[{l}] 📤 Harbor 推送开始…"),
-            _ => "📤 Harbor 推送开始…".to_string(),
+            Some(l) if !l.is_empty() => format!("[{l}] 📤 镜像推送开始…"),
+            _ => "📤 镜像推送开始…".to_string(),
         };
         emit_progress(&app, base_pct, &start_msg, "push");
 
@@ -676,10 +813,12 @@ pub(crate) async fn docker_push_image(
         }
         emit_harbor_push_progress(&app, label.as_deref(), base_pct, &layers);
         if !status.success() {
-            return Err(if log_buf.trim().is_empty() {
-                "docker push失败".to_string()
+            let detail = log_buf.trim();
+            let hint = push_error_hint(detail);
+            return Err(if detail.is_empty() {
+                format!("docker push失败{hint}")
             } else {
-                format!("docker push失败:\n{}", log_buf.trim())
+                format!("docker push失败:\n{detail}{hint}")
             });
         }
         Ok(())

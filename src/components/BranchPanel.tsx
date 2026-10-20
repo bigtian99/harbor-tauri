@@ -230,7 +230,7 @@ export function BranchPanel({
   return (
     <Stack gap="sm" className="branch-panel">
       <PanelPageHeader
-        eyebrow="GIT BRANCH → BUILD → HARBOR"
+        eyebrow="GIT BRANCH → BUILD → REGISTRY"
         title="分支打包"
         sub="拉取指定分支，Maven / npm 构建产物，可选自动推送镜像与发布"
       />
@@ -548,14 +548,14 @@ export function BranchPanel({
             onChange={onBranchHarborChange}
             disabled={isBuilding}
             label="推送目标"
-            hint="打包后镜像推送到该 Harbor 环境的项目下"
+            hint="打包后镜像推送到该环境的项目/前缀下"
           />
 
           {(branchProjectType === "maven" || branchProjectType === "npm") && (
             <Stack gap="sm">
               <Stack gap={4}>
                 <Checkbox
-                  label="打包后联动推送镜像到 Harbor"
+                  label="打包后联动推送镜像到仓库"
                   checked={autoPushImage}
                   onChange={(e) => onAutoPushImageChange(e.currentTarget.checked)}
                   styles={{ label: { color: "var(--color-text)" } }}
@@ -566,7 +566,7 @@ export function BranchPanel({
                       ? "打包成功后将构建前端 nginx 镜像并推送"
                       : "打包成功后将自动构建并推送镜像"
                     : springProfile.trim().toLowerCase() === "test"
-                      ? "Profile=test 时默认不推 Harbor（可手动开启）"
+                      ? "Profile=test 时默认不推送镜像（可手动开启）"
                       : "勾选后打包成功会自动推送镜像"}
                 </Text>
               </Stack>

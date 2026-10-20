@@ -166,9 +166,9 @@ export function PushImagePanel({
   return (
     <Stack gap="md" className="upload-panel push-image-panel">
       <PanelPageHeader
-        eyebrow="LOCAL IMAGE → TAG → HARBOR"
+        eyebrow="LOCAL IMAGE → TAG → REGISTRY"
         title="镜像推送"
-        sub="选择本机 Docker 镜像，打标签并推送到 Harbor 仓库"
+        sub="选择本机 Docker 镜像，打标签并推送到 Harbor / Zot 仓库"
       />
       {/* 约束列：避免大窗宽下输入/按钮被拉成超宽一条 */}
       <Stack gap="md" className="push-image-column">
@@ -516,7 +516,7 @@ export function PushImagePanel({
                 label="目标镜像名称"
                 value={imageName}
                 onChange={(e) => setImageName(e.currentTarget.value)}
-                placeholder="例如: my-app（不含 Harbor 项目名）"
+                placeholder="例如: my-app（不含仓库项目/前缀）"
               />
               <TextInput
                 size="sm"
@@ -535,7 +535,7 @@ export function PushImagePanel({
           onChange={onHarborChange}
           disabled={isBuilding}
           label="推送目标"
-          hint="镜像将打标签并推送到该 Harbor 环境的项目下"
+          hint="镜像将打标签并推送到该环境的项目/前缀下"
         />
 
         <Button
@@ -551,7 +551,7 @@ export function PushImagePanel({
               : <Rocket size={18} />
           }
         >
-          {isBuilding ? "推送中..." : "推送到 Harbor"}
+          {isBuilding ? "推送中..." : "推送到仓库"}
         </Button>
 
         <BuildProgressBlock

@@ -104,15 +104,30 @@ export interface HarborConfig {
   last_auto_publish_ks?: boolean;
 }
 
+/** 仓库类型：Harbor 有「项目」；Zot 是 OCI 仓库，项目只作可选前缀 */
+export type RegistryType = "harbor" | "zot";
+
 /** Harbor 环境：只含注册表身份；base_image / expose_port / 模板仍是全局配置 */
 export interface HarborEnv {
   id: string;
   /** 显示名，如「开发」「生产」 */
   name: string;
+  /** 缺省为 harbor（兼容旧配置） */
+  registry_type?: RegistryType;
   url: string;
   username: string;
   password: string;
+  /** Harbor 项目名；Zot 下为可选的仓库前缀 */
   project: string;
+}
+
+export function isZotEnv(env: HarborEnv | null | undefined): boolean {
+  return env?.registry_type === "zot";
+}
+
+/** 环境类型名，用于提示文案 */
+export function registryEnvLabel(env: HarborEnv | null | undefined): string {
+  return isZotEnv(env) ? "Zot" : "Harbor";
 }
 
 export interface KsEnvironment {
@@ -420,22 +435,27 @@ export function resolveHarborEnv(config: HarborConfig, harborId?: string): Harbo
   return envs.find((e) => e.id === id) ?? null;
 }
 
-/** Harbor 环境是否填写完整 */
+/** 仓库环境是否填写完整：Zot 不要求项目/前缀 */
 export function isHarborEnvReady(env: HarborEnv | null): env is HarborEnv {
   return !!env
     && !!env.url.trim()
     && !!env.username.trim()
     && !!env.password
-    && !!env.project.trim();
+    && (isZotEnv(env) || !!env.project.trim());
 }
 
-/** Harbor 仓库路径须为 project/repo；镜像名已含 / 则原样使用 */
-export function resolveHarborRepository(imageName: string, project?: string) {
+/** 仓库中的镜像路径：镜像名已含 / 则原样使用；Zot 允许不带前缀 */
+export function resolveHarborRepository(
+  imageName: string,
+  project?: string,
+  registryType?: RegistryType,
+) {
   const name = imageName.trim().toLowerCase();
   if (!name) return { ok: false as const, error: "镜像名称不能为空" };
   if (name.includes("/")) return { ok: true as const, repository: name };
   const harborProject = (project ?? "").trim().toLowerCase();
   if (!harborProject) {
+    if (registryType === "zot") return { ok: true as const, repository: name };
     return {
       ok: false as const,
       error: "请先在 Harbor 连接中配置项目名称，或在镜像名中填写 项目名/镜像名",

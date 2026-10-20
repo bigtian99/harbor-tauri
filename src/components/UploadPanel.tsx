@@ -71,9 +71,9 @@ export function UploadPanel({
   return (
     <div className="upload-shell">
       <PanelPageHeader
-        eyebrow="JAR / DIST → DOCKER → HARBOR"
+        eyebrow="JAR / DIST → DOCKER → REGISTRY"
         title="上传推送"
-        sub="选择构建产物，按需调整镜像参数，一键打包并推送到 Harbor 仓库"
+        sub="选择构建产物，按需调整镜像参数，一键打包并推送到 Harbor / Zot 仓库"
       >
         <ol className="upload-steps" aria-label="构建流程">
           <li className={`upload-step ${hasArtifact ? "done" : "active"}`}>
@@ -169,8 +169,8 @@ export function UploadPanel({
               label="镜像名称"
               value={imageName}
               onChange={(e) => setImageName(e.currentTarget.value)}
-              placeholder="例如: my-app（不含 Harbor 项目名）"
-              description="Harbor 项目名取自所选环境，推送时自动拼接"
+              placeholder="例如: my-app（不含仓库项目/前缀）"
+              description="项目/前缀取自所选环境，推送时自动拼接（Zot 可留空前缀）"
             />
             <TextInput
               size="sm"
@@ -199,7 +199,7 @@ export function UploadPanel({
         onChange={onHarborChange}
         disabled={isBuilding}
         label="推送目标"
-        hint="镜像将推送到该 Harbor 环境的项目下"
+        hint="镜像将推送到该环境的项目/前缀下"
       />
 
       <Button

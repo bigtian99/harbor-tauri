@@ -253,8 +253,8 @@ export function ConfigAboutSection({
         <Stack gap={6} component="ul" className="config-tip-list">
           {[
             "配置保存后无需重复填写",
-            "Harbor 地址不需要带 https:// 前缀",
-            "Harbor 项目为仓库中的项目名，会与镜像名称拼接",
+            "Harbor / Zot 地址可带或不带协议前缀（docker 会忽略协议）",
+            "Harbor 项目为仓库中的项目名；Zot 的前缀可选，留空则直接推到 地址/镜像名",
             "JAR 模式使用 JAR 基础镜像和 JAR 暴露端口",
             "前端 dist 模式会把所选 dist 目录的内容复制为 nginx 站点根目录，不会在镜像里嵌套 dist 目录",
             "默认 nginx.conf 的 /index.html 回退路径对应 /usr/share/nginx/html/index.html",

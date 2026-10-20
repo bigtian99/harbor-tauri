@@ -30,6 +30,8 @@ import type { HarborConfig, TabType, BuildRecord } from "./types";
 import {
   isHarborEnvReady,
   isTauriRuntime,
+  isZotEnv,
+  registryEnvLabel,
   resolveHarborEnv,
   resolveHarborRepository,
 } from "./types";
@@ -211,14 +213,22 @@ function App() {
         showToast("该记录没有可推送的 JAR");
         return;
       }
-      // 历史记录无环境选择器：默认取第一个 Harbor 环境
+      // 历史记录无环境选择器：默认取第一个仓库环境
       const harborEnv = resolveHarborEnv(app.config);
       if (!isHarborEnvReady(harborEnv)) {
-        showToast("请先在配置中完善 Harbor 环境（地址 / 用户名 / 密码 / 项目）");
+        showToast(
+          `请先在配置中完善${registryEnvLabel(harborEnv)}环境（地址 / 用户名 / 密码${
+            isZotEnv(harborEnv) ? "" : " / 项目"
+          }）`,
+        );
         setActiveTab("config");
         return;
       }
-      const repoCheck = resolveHarborRepository(resolved.imageName, harborEnv.project);
+      const repoCheck = resolveHarborRepository(
+        resolved.imageName,
+        harborEnv.project,
+        harborEnv.registry_type,
+      );
       if (!repoCheck.ok) {
         showToast(repoCheck.error);
         return;

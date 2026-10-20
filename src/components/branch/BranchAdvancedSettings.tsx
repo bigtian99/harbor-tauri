@@ -67,11 +67,11 @@ export function BranchAdvancedSettings({
               placeholder={
                 branchProjectType === "npm"
                   ? "例如: my-frontend（小写）"
-                  : "例如: sdk（小写，不含项目名）"
+                  : "例如: sdk（小写，不含项目/前缀）"
               }
             />
             <p className="template-hint">
-              留空则自动推断；Harbor 项目名在配置中填写，推送时自动拼接
+              留空则自动推断；仓库项目/前缀在配置中填写，推送时自动拼接（Zot 可留空）
             </p>
           </div>
           <div className="form-group">
