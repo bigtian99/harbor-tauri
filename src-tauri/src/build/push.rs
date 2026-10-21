@@ -1,8 +1,8 @@
 //! 镜像构建与推送 Tauri 命令：`build_and_push` / `push_local_image` / `list_local_images` / `remove_local_image`。
 
 use crate::build::push_helpers::{
-    docker_login_harbor, docker_push_image, docker_rmi_best_effort, require_harbor_env,
-    resolve_final_tag,
+    docker_login_harbor, docker_push_image, docker_rmi_best_effort, harbor_api_host,
+    require_harbor_env, resolve_final_tag,
 };
 use crate::build::{
     begin_cancellable_operation, docker_output, emit_progress, resolve_registry_repository,
@@ -94,7 +94,11 @@ pub async fn build_and_push(
     let final_tag = resolve_final_tag(image_tag);
     let image_name_lower = image_name.to_lowercase();
     let repository = resolve_registry_repository(&image_name_lower, &env.project, env.is_zot())?;
-    let full_image = format!("{}/{}:{}", env.url, repository, final_tag);
+    let registry_host = harbor_api_host(&env.url);
+    if registry_host.is_empty() {
+        return Err("仓库地址无效，请在设置里检查该环境的 URL".to_string());
+    }
+    let full_image = format!("{}/{}:{}", registry_host, repository, final_tag);
 
     // 步骤1: 准备Docker构建上下文
     emit(&app, 10, "📝 准备 Docker 构建上下文...", "build");
@@ -316,7 +320,11 @@ pub async fn push_local_image(
 
     let repository = resolve_registry_repository(&image_name_lower, &env.project, env.is_zot())?;
     let final_tag = resolve_final_tag(image_tag);
-    let full_image = format!("{}/{}:{}", env.url, repository, final_tag);
+    let registry_host = harbor_api_host(&env.url);
+    if registry_host.is_empty() {
+        return Err("仓库地址无效，请在设置里检查该环境的 URL".to_string());
+    }
+    let full_image = format!("{}/{}:{}", registry_host, repository, final_tag);
 
     // 步骤1: docker tag <local_image> <full_image>
     emit_progress(&app, 10, "🏷️ 镜像打标签...", "build");

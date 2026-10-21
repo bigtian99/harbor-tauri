@@ -173,8 +173,8 @@ pub struct HarborProjects {
     pub insecure: bool,
 }
 
-/// Harbor 网页地址常被填成 `https://host/harbor`，而 API 与 docker 用的都是裸主机名。
-fn harbor_api_host(raw: &str) -> String {
+/// Harbor 网页地址常被填成 `https://host/harbor`，而 API、docker login 与镜像引用用的都是裸主机名。
+pub(crate) fn harbor_api_host(raw: &str) -> String {
     harbor_login_host(raw)
         .split('/')
         .next()
