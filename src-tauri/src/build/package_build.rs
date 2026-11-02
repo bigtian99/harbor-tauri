@@ -4,8 +4,8 @@ use crate::build::emit_progress;
 use crate::git::{find_maven_artifact, find_npm_artifact};
 use crate::models::PackageProjectType;
 use crate::utils::{
-    detect_npm_build_script, lock_file_hash, run_command, run_maven, save_node_modules_to_cache,
-    try_restore_node_modules,
+    detect_npm_build_script, lock_file_hash, npm_script_exists, run_command, run_maven,
+    save_node_modules_to_cache, try_restore_node_modules,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -179,15 +179,31 @@ fn run_npm_build(
             )
         };
         emit_progress(app, 55, install_msg, "build");
-        // 支持自定义 registry
-        if params.npm_registry.trim().is_empty() {
-            logs.push(run_command(worktree_for_build, pm, &["install"])?);
-        } else {
-            logs.push(run_command(
-                worktree_for_build,
-                pm,
-                &["install", "--registry", params.npm_registry.trim()],
-            )?);
+        let install_args = npm_install_args(&params.npm_registry, false);
+        let install_refs: Vec<&str> = install_args.iter().map(String::as_str).collect();
+        match run_command(worktree_for_build, pm, &install_refs) {
+            Ok(log) => logs.push(log),
+            // npm 7+ 严格校验 peer 依赖，老项目常因历史依赖树直接 ERESOLVE 失败；
+            // 按 npm 自身建议回退 --legacy-peer-deps 重试一次，避免整批部署被依赖冲突卡死。
+            Err(err) if pm == "npm" && is_eresolve_error(&err) => {
+                let msg =
+                    "⚠️ npm install 遇到 peer 依赖冲突 (ERESOLVE)，改用 --legacy-peer-deps 重试"
+                        .to_string();
+                emit_progress(app, 56, &msg, "build");
+                logs.push(msg);
+                logs.push(format!("ERESOLVE 原始错误:\n{}", truncate_log(&err, 20)));
+                crate::diag::diag_log(
+                    "build",
+                    &format!(
+                        "npm install ERESOLVE, retry with --legacy-peer-deps dir={}",
+                        worktree_for_build.display()
+                    ),
+                );
+                let retry_args = npm_install_args(&params.npm_registry, true);
+                let retry_refs: Vec<&str> = retry_args.iter().map(String::as_str).collect();
+                logs.push(run_command(worktree_for_build, pm, &retry_refs)?);
+            }
+            Err(err) => return Err(err),
         }
         if let Some(key) = lock_file_hash(worktree_for_build) {
             emit_progress(
@@ -200,15 +216,32 @@ fn run_npm_build(
             logs.push(format!("💾 node_modules 已缓存 (hash={})", key));
         }
     }
-    // 使用用户选择的构建命令，如果没有则自动检测
-    let script_name = if let Some(ref s) = params.user_build_script {
-        if !s.trim().is_empty() {
-            s.trim().to_string()
-        } else {
-            detect_npm_build_script(worktree_for_build)?
+    // 使用用户选择的构建命令，如果没有则自动检测；
+    // 保存的脚本可能来自别的仓库（如 build:test），当前 package.json 没有时按检测结果回退
+    let requested_script = params
+        .user_build_script
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let script_name = match requested_script {
+        Some(s) if npm_script_exists(worktree_for_build, s)? => s.to_string(),
+        Some(s) => {
+            let fallback = detect_npm_build_script(worktree_for_build)?;
+            let msg = format!("⚠️ package.json 中没有脚本「{}」，改用「{}」", s, fallback);
+            crate::diag::diag_log(
+                "build",
+                &format!(
+                    "npm script fallback requested={} used={} dir={}",
+                    s,
+                    fallback,
+                    worktree_for_build.display()
+                ),
+            );
+            emit_progress(app, 64, &msg, "build");
+            logs.push(msg);
+            fallback
         }
-    } else {
-        detect_npm_build_script(worktree_for_build)?
+        None => detect_npm_build_script(worktree_for_build)?,
     };
     let build_script_used = format!("{} run {}", pm, script_name);
     let build_msg = if backend_handle.is_some() {
@@ -260,4 +293,59 @@ fn run_npm_build(
         logs.clone(),
         backend_artifact,
     ))
+}
+
+fn npm_install_args(registry: &str, legacy_peer_deps: bool) -> Vec<String> {
+    let mut args = vec!["install".to_string()];
+    if !registry.trim().is_empty() {
+        args.push("--registry".to_string());
+        args.push(registry.trim().to_string());
+    }
+    if legacy_peer_deps {
+        args.push("--legacy-peer-deps".to_string());
+    }
+    args
+}
+
+fn is_eresolve_error(err: &str) -> bool {
+    err.contains("ERESOLVE")
+}
+
+fn truncate_log(text: &str, max_lines: usize) -> String {
+    let mut out = text.lines().take(max_lines).collect::<Vec<_>>().join("\n");
+    if text.lines().count() > max_lines {
+        out.push_str("\n... (已截断)");
+    }
+    out
+}
+
+#[cfg(test)]
+mod npm_install_tests {
+    use super::{is_eresolve_error, npm_install_args};
+
+    #[test]
+    fn legacy_peer_deps_appended_after_registry() {
+        assert_eq!(
+            npm_install_args("https://registry.npmmirror.com", true),
+            vec![
+                "install",
+                "--registry",
+                "https://registry.npmmirror.com",
+                "--legacy-peer-deps"
+            ]
+        );
+    }
+
+    #[test]
+    fn blank_registry_is_omitted() {
+        assert_eq!(npm_install_args("  ", false), vec!["install"]);
+    }
+
+    #[test]
+    fn detects_eresolve_only() {
+        assert!(is_eresolve_error(
+            "npm error code ERESOLVE\nnpm error ERESOLVE unable to resolve dependency tree"
+        ));
+        assert!(!is_eresolve_error("npm error code ENOENT"));
+    }
 }

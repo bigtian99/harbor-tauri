@@ -58,6 +58,26 @@ pub(crate) fn detect_npm_build_script(project_dir: &Path) -> Result<String, Stri
     ))
 }
 
+/// 判断 package.json 是否声明了指定 script（用户保存的脚本可能来自别的仓库）。
+pub(crate) fn npm_script_exists(project_dir: &Path, script: &str) -> Result<bool, String> {
+    let package_json_path = project_dir.join("package.json");
+    if !package_json_path.is_file() {
+        return Err("package.json 不存在".to_string());
+    }
+
+    let content = fs::read_to_string(&package_json_path)
+        .map_err(|e| format!("读取 package.json 失败: {}", e))?;
+
+    let package_json: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("解析 package.json 失败: {}", e))?;
+
+    Ok(package_json
+        .get("scripts")
+        .and_then(|s| s.as_object())
+        .map(|scripts| scripts.contains_key(script))
+        .unwrap_or(false))
+}
+
 // ── node_modules 缓存 ──────────────────────────────────────────────
 
 pub(crate) fn npm_cache_dir() -> PathBuf {
