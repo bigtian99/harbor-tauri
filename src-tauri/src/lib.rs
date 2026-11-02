@@ -9,6 +9,7 @@ mod history;
 mod landing;
 mod kubesphere;
 mod models;
+mod ngrok;
 mod ops;
 mod preview_server;
 mod privacy;
@@ -27,6 +28,7 @@ use build::{
     stop_bt_php_site, test_harbor_connection, upload_and_restart_bt_java_project, upload_bt_java_jar, upload_bt_php_site,
     warmup_bt_ftp,
 };
+use ngrok::{ngrok_info, ngrok_running, ngrok_start, ngrok_status, ngrok_stop, ngrok_stop_all};
 use commit::{
     get_branch_diff, get_commit_authors, get_commit_diff, get_commit_list, get_last_commit,
     list_branch_diff_commits,
@@ -212,7 +214,19 @@ pub fn run() {
             download_and_install,
             get_app_version,
             open_external_url,
+            ngrok_info,
+            ngrok_start,
+            ngrok_stop,
+            ngrok_stop_all,
+            ngrok_running,
+            ngrok_status,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            // 退出时务必停掉 ngrok，别把公网隧道留在后台
+            if let tauri::RunEvent::Exit = event {
+                ngrok::shutdown();
+            }
+        });
 }

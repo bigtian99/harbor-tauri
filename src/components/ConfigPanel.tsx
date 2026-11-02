@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Tabs } from "@mantine/core";
 import {
-  Settings, CheckCircle, Server, Package, Globe, FolderOutput, Info,
+  Settings, CheckCircle, Server, Package, Globe, FolderOutput, Info, Waypoints,
 } from "lucide-react";
 import type { HarborConfig } from "../types";
 import { BaotaIcon, KubeSphereIcon } from "./icons/BrandIcons";
@@ -12,6 +12,7 @@ import { ConfigFrontendSection } from "./config/ConfigFrontendSection";
 import { ConfigBtSection } from "./config/ConfigBtSection";
 import { ConfigOutputSection } from "./config/ConfigOutputSection";
 import { ConfigKsSection } from "./config/ConfigKsSection";
+import { ConfigNgrokSection } from "./config/ConfigNgrokSection";
 import {
   ConfigAboutSection,
   type CheckUpdateResult,
@@ -19,7 +20,7 @@ import {
 
 export type { CheckUpdateResult };
 
-export type ConfigTab = "connection" | "jar" | "frontend" | "bt" | "output" | "ks" | "about";
+export type ConfigTab = "connection" | "jar" | "frontend" | "bt" | "output" | "ks" | "ngrok" | "about";
 
 interface ConfigPanelProps {
   config: HarborConfig;
@@ -50,6 +51,7 @@ const TABS: { key: ConfigTab; label: string; icon: ReactNode }[] = [
   { key: "bt", label: "宝塔部署", icon: <BaotaIcon size={14} /> },
   { key: "output", label: "输出设置", icon: <FolderOutput size={14} /> },
   { key: "ks", label: "KubeSphere", icon: <KubeSphereIcon size={14} /> },
+  { key: "ngrok", label: "端口映射", icon: <Waypoints size={14} /> },
   { key: "about", label: "关于", icon: <Info size={14} /> },
 ];
 
@@ -142,6 +144,10 @@ export function ConfigPanel({
               flushKsMapsRef.current = flush;
             }}
           />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="ngrok" pt="md">
+          <ConfigNgrokSection />
         </Tabs.Panel>
 
         <Tabs.Panel value="jar" pt="md">
