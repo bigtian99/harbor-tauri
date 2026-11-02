@@ -51,6 +51,7 @@ export function useKsBatchActions({
   namespace,
   selectedEnv,
   envs,
+  harborId,
   selectedDeploys,
   getConfigSnapshot,
   onPublishMapsChange,
@@ -62,6 +63,8 @@ export function useKsBatchActions({
   namespace: string | null;
   selectedEnv: KsEnvironment | null | undefined;
   envs: KsEnvironment[];
+  /** 打包推送使用的镜像仓库 id（发布页选择，默认取 KS 环境配置） */
+  harborId: string;
   selectedDeploys: Array<{ name: string; containers: string[] }>;
   getConfigSnapshot?: () => HarborConfig;
   onPublishMapsChange?: (maps: KsPublishMap[]) => void;
@@ -245,10 +248,13 @@ export function useKsBatchActions({
       containers: d.containers,
     }));
     startTransition(() => {
+      const harborName =
+        config.harbors?.find((env) => env.id === harborId)?.name || harborId;
       setBatchMeta({
         branch: batchBranch.trim(),
         namespace,
         envName: selectedEnv?.name ?? envId,
+        harborName,
         deployNames,
         deployRoles: resolveKsBatchDeployRoles(config, envId, namespace, deployNames),
       });
@@ -356,6 +362,7 @@ export function useKsBatchActions({
         config,
         envId,
         namespace,
+        harborId,
         branchName: branch,
         concurrency: batchConcurrencyPref === KS_BATCH_CONCURRENCY_AUTO
           ? KS_BATCH_CONCURRENCY_AUTO

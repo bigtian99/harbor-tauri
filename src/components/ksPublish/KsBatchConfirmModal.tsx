@@ -369,6 +369,17 @@ export function KsBatchConfirmModal({
                 {meta?.envName ?? "—"}
               </Text>
             </Stack>
+            <Stack gap={4}>
+              <Group gap={6}>
+                <Layers3 size={14} className="ks-batch-meta-icon" />
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+                  镜像仓库
+                </Text>
+              </Group>
+              <Text size="sm" fw={600} className="ks-batch-meta-value">
+                {meta?.harborName ?? "—"}
+              </Text>
+            </Stack>
           </SimpleGrid>
         </Paper>
 

@@ -1,4 +1,4 @@
-import type { HarborConfig, KsEnvironment } from "../types";
+import type { HarborConfig, HarborEnv, KsEnvironment } from "../types";
 
 const DEFAULT_KS_CONSOLE = "";
 const SUGGESTED_NAMES = ["dev", "test", "prod"];
@@ -31,14 +31,29 @@ export function nextKsEnvName(existing: KsEnvironment[]): string {
   return `env-${i}`;
 }
 
-export function createKsEnvironment(existing: KsEnvironment[]): KsEnvironment {
+export function createKsEnvironment(
+  existing: KsEnvironment[],
+  harbors: HarborEnv[] = [],
+): KsEnvironment {
   return {
     id: `ks-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     name: nextKsEnvName(existing),
     console: existing[0]?.console || DEFAULT_KS_CONSOLE,
     username: existing[0]?.username || "admin",
     password: "",
+    harbor_env_id: harbors[0]?.id || "",
   };
+}
+
+/** K8s 环境生效的镜像仓库 id：显式配置优先，失效/为空回退第一个 */
+export function resolveKsEnvHarborId(
+  env: KsEnvironment | null | undefined,
+  harbors: HarborEnv[],
+): string {
+  if (harbors.length === 0) return "";
+  const linked = env?.harbor_env_id?.trim() || "";
+  if (linked && harbors.some((h) => h.id === linked)) return linked;
+  return harbors[0].id;
 }
 
 export function pickKsEnvironment(

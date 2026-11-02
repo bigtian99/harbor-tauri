@@ -406,6 +406,9 @@ pub struct KsEnvironment {
     /// 默认命名空间（可选，发布时自动填充）
     #[serde(default)]
     pub default_namespace: String,
+    /// 该 K8s 环境默认使用的镜像仓库（config.harbors 的 id）；空则回退第一个
+    #[serde(default)]
+    pub harbor_env_id: String,
 }
 
 impl Default for HarborConfig {
@@ -493,6 +496,7 @@ impl Default for HarborConfig {
                     username: "kunlunchuangjie".to_string(),
                     password: "Kunlunchuangjie888666..".to_string(),
                     default_namespace: String::new(),
+                    harbor_env_id: "dev".to_string(),
                 },
             ],
             ks_last_env_id: "dev".to_string(),

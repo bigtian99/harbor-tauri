@@ -6,6 +6,7 @@ import {
   Modal,
   Paper,
   PasswordInput,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -37,6 +38,13 @@ export function ConfigKsSection({
   const [envEditorPassword, setEnvEditorPassword] = useState(false);
 
   const ksEnvs = resolveKsEnvironments(config);
+  const harborEnvs = config.harbors ?? [];
+
+  const harborLabel = (id?: string): string => {
+    const hit = harborEnvs.find((env) => env.id === id);
+    if (!hit) return "未指定";
+    return `${hit.name || hit.id}${hit.registry_type === "zot" ? " · Zot" : " · Harbor"}`;
+  };
 
   const setKsEnvs = (next: KsEnvironment[]) => {
     onConfigChange("ks_environments", next);
@@ -54,12 +62,22 @@ export function ConfigKsSection({
 
   const openAddKsEnv = () => {
     setEnvEditorPassword(false);
-    setEnvEditor({ mode: "add", draft: createKsEnvironment(ksEnvs) });
+    setEnvEditor({
+      mode: "add",
+      draft: createKsEnvironment(ksEnvs, harborEnvs),
+    });
   };
 
   const openEditKsEnv = (env: KsEnvironment) => {
     setEnvEditorPassword(false);
-    setEnvEditor({ mode: "edit", draft: { ...env } });
+    setEnvEditor({
+      mode: "edit",
+      draft: {
+        ...env,
+        // 旧配置没有关联仓库：打开编辑时默认带出第一个，保存即完成迁移
+        harbor_env_id: env.harbor_env_id || harborEnvs[0]?.id || "",
+      },
+    });
   };
 
   const closeKsEnvEditor = () => {
@@ -76,9 +94,14 @@ export function ConfigKsSection({
       username: envEditor.draft.username.trim(),
       password: envEditor.draft.password ?? "",
       default_namespace: envEditor.draft.default_namespace?.trim() || "",
+      harbor_env_id: envEditor.draft.harbor_env_id?.trim() || "",
     };
     if (!draft.name.trim() || !draft.console.trim() || !draft.username.trim() || !draft.password) {
       void showSystemAlert("无法保存环境", "请填写环境名、控制台地址、用户名和密码");
+      return;
+    }
+    if (harborEnvs.length > 0 && !draft.harbor_env_id) {
+      void showSystemAlert("无法保存环境", "请选择该环境默认使用的镜像仓库");
       return;
     }
     const nextEnvs =
@@ -154,6 +177,9 @@ export function ConfigKsSection({
                             默认命名空间: {env.default_namespace}
                           </Text>
                         )}
+                        <Text size="xs" c="var(--color-text-muted)" truncate>
+                          镜像仓库: {harborLabel(env.harbor_env_id)}
+                        </Text>
                       </Stack>
                       <Group gap={6} style={{ flexShrink: 0 }}>
                         <ActionIcon
@@ -259,6 +285,24 @@ export function ConfigKsSection({
               placeholder="例如: tksy-system（选填）"
               description="发布时自动填充到命名空间字段"
             />
+            <Select
+              label="镜像仓库"
+              value={envEditor.draft.harbor_env_id || null}
+              onChange={(id) => setEnvEditor({
+                ...envEditor,
+                draft: { ...envEditor.draft, harbor_env_id: id ?? "" },
+              })}
+              data={harborEnvs.map((env) => ({
+                value: env.id,
+                label: `${env.name || env.id} · ${env.registry_type === "zot" ? "Zot" : "Harbor"}`,
+              }))}
+              placeholder={harborEnvs.length ? "选择镜像仓库" : "请先在「镜像仓库」中配置"}
+              description="打包推送默认使用该仓库；发布页可临时切换"
+              searchable
+              allowDeselect={false}
+              disabled={harborEnvs.length === 0}
+              nothingFoundMessage="没有匹配的镜像仓库"
+            />
             <Group justify="flex-end" gap="sm" mt="xs">
               <Button variant="default" onClick={closeKsEnvEditor}>
                 取消
@@ -271,6 +315,7 @@ export function ConfigKsSection({
                   || !envEditor.draft.console.trim()
                   || !envEditor.draft.username.trim()
                   || !envEditor.draft.password
+                  || (harborEnvs.length > 0 && !envEditor.draft.harbor_env_id)
                 }
                 onClick={saveKsEnvEditor}
               >

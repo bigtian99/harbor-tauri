@@ -139,6 +139,8 @@ export interface KsEnvironment {
   password: string;
   /** 默认命名空间（可选，发布时自动填充） */
   default_namespace?: string;
+  /** 该环境默认使用的镜像仓库 id（config.harbors）；空则回退第一个 */
+  harbor_env_id?: string;
 }
 
 export type KsPublishMapRole = "frontend" | "backend" | "any";

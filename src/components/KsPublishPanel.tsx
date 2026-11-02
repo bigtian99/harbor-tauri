@@ -29,6 +29,8 @@ import { useKsPodLogs } from "./ksPublish/useKsPodLogs";
 import { useKsConfigMaps } from "./ksPublish/useKsConfigMaps";
 import { useKsDeployMutations } from "./ksPublish/useKsDeployMutations";
 import { useKsConnection } from "./ksPublish/useKsConnection";
+import { HarborPicker } from "./HarborPicker";
+import { resolveKsEnvHarborId } from "../utils/ksEnvironments";
 
 export function KsPublishPanel({
   config,
@@ -61,6 +63,18 @@ export function KsPublishPanel({
     resetCmsOnNamespaceChange: () => resetCmsRef.current(),
   });
 
+  const harborEnvs = config.harbors ?? [];
+  /** 本次会话内手动切换的镜像仓库（按 KS 环境隔离，默认跟随环境配置） */
+  const [harborOverride, setHarborOverride] = useState<{
+    envId: string;
+    harborId: string;
+  } | null>(null);
+  const defaultHarborId = resolveKsEnvHarborId(conn.selectedEnv, harborEnvs);
+  const harborId =
+    harborOverride?.envId === conn.envId
+      ? harborOverride.harborId
+      : defaultHarborId;
+
   const deploy = useKsDeployMutations({
     namespace: conn.namespace,
     connected: conn.connected,
@@ -70,6 +84,7 @@ export function KsPublishPanel({
     confirm,
     config,
     envId: conn.envId,
+    harborId,
     onPublishMapsChange,
     getConfigSnapshot,
   });
@@ -114,6 +129,7 @@ export function KsPublishPanel({
     namespace: conn.namespace,
     selectedEnv: conn.selectedEnv,
     envs: conn.envs,
+    harborId,
     selectedDeploys,
     getConfigSnapshot,
     onPublishMapsChange,
@@ -172,6 +188,17 @@ export function KsPublishPanel({
                 styles={panelFieldStyles}
                 style={{ flex: "1 1 200px", minWidth: 200 }}
               />
+              <div style={{ flex: "1 1 200px", minWidth: 200 }}>
+                <HarborPicker
+                  envs={harborEnvs}
+                  value={harborId}
+                  onChange={(id) =>
+                    setHarborOverride({ envId: conn.envId ?? "", harborId: id })
+                  }
+                  disabled={conn.connecting}
+                  hint="默认取 K8s 环境配置"
+                />
+              </div>
               <Select
                 label="命名空间"
                 data={conn.namespaces}

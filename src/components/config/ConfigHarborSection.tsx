@@ -129,11 +129,26 @@ export function ConfigHarborSection({
    */
   const setHarborEnvs = (next: HarborEnv[]) => {
     onConfigChange("harbors", next);
+    const ids = new Set(next.map((env) => env.id));
+    const fallback = next[0]?.id || "";
+    // K8s 环境关联的仓库被删除时同步回退，避免保存悬空 id
+    const ksEnvs = config.ks_environments ?? [];
+    if (ksEnvs.length > 0) {
+      const patched = ksEnvs.map((env) => ({
+        ...env,
+        harbor_env_id:
+          env.harbor_env_id && ids.has(env.harbor_env_id)
+            ? env.harbor_env_id
+            : fallback,
+      }));
+      if (patched.some((env, i) => env.harbor_env_id !== ksEnvs[i].harbor_env_id)) {
+        onConfigChange("ks_environments", patched);
+      }
+    }
     if (next.length === 0) {
       for (const field of HARBOR_LAST_FIELDS) onConfigChange(field, "");
       return;
     }
-    const ids = new Set(next.map((env) => env.id));
     for (const field of HARBOR_LAST_FIELDS) {
       const remembered = config[field];
       if (remembered && !ids.has(remembered)) onConfigChange(field, next[0].id);

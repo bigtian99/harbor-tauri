@@ -6,7 +6,12 @@ import type {
   KsPublishMapRole,
   NginxLocationBlock,
 } from "../types";
-import { isTauriRuntime } from "../types";
+import {
+  isHarborEnvReady,
+  isTauriRuntime,
+  registryEnvLabel,
+  resolveHarborEnv,
+} from "../types";
 import { getRememberedBranchAdvancedSettings } from "../branchSettings";
 import { buildScriptAfterMerge, preferNpmBuildScript } from "../mergeSyncPackage";
 import {
@@ -61,6 +66,8 @@ export interface KsBatchPackOptions {
   config: HarborConfig;
   envId: string;
   namespace: string;
+  /** 推送镜像仓库 id；空则取第一个 */
+  harborId?: string;
   branchName: string;
   deployments: KsBatchDeployItem[];
   /** 并行度；0/省略 = 按 CPU·任务·仓库数自动算 */
@@ -706,6 +713,7 @@ export async function runKsBatchPackPublish(
     onProgress,
   } = opts;
   const npmScript = opts.npmScript ?? { mode: "auto", customScript: "" };
+  const harborEnv = resolveHarborEnv(config, opts.harborId);
 
   const summary: KsBatchPackSummary = {
     total: deployments.length,
@@ -722,6 +730,16 @@ export async function runKsBatchPackPublish(
   }
   if (!branchName.trim()) {
     note(summary, appendLog, "❌ 请填写目标分支");
+    summary.skipped = summary.total;
+    return summary;
+  }
+  if (!isHarborEnvReady(harborEnv)) {
+    const label = harborEnv ? registryEnvLabel(harborEnv) : "Harbor / Zot";
+    note(
+      summary,
+      appendLog,
+      `❌ ${label} 镜像仓库未配置完整，请到系统设置 → 镜像仓库检查地址 / 账号 / 项目`,
+    );
     summary.skipped = summary.total;
     return summary;
   }
@@ -777,7 +795,8 @@ export async function runKsBatchPackPublish(
     appendLog,
     `批量开始：${targets.length} 个部署，并发=${concurrency}`
       + `${!concurrencyPref || concurrencyPref <= 0 ? "（自动）" : ""}`
-      + `，不同仓库=${uniqueRepos}，CPU≈${detectCpuCores()}，分支=${branchName.trim()}，命名空间=${namespace}`,
+      + `，不同仓库=${uniqueRepos}，CPU≈${detectCpuCores()}，分支=${branchName.trim()}，命名空间=${namespace}`
+      + `，镜像仓库=${harborEnv.name || harborEnv.id}（${harborEnv.url}）`,
   );
   if (targets.some((t) => t.projectType === "npm")) {
     note(summary, appendLog, `  ${describeKsBatchNpmScriptPref(npmScript)}`);
@@ -848,6 +867,7 @@ export async function runKsBatchPackPublish(
           branchExposePort: target.exposePort,
           nginxLocations: target.nginxLocations,
           autoPushImage: true,
+          harborId: harborEnv.id,
           progressLabel: target.deployment,
           deploymentHint: target.deployment,
           mavenModule: target.mavenModule,

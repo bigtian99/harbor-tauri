@@ -25,6 +25,7 @@ pub(crate) fn normalize_config(mut config: HarborConfig) -> HarborConfig {
     }
     migrate_ks_environments(&mut config);
     migrate_harbors(&mut config);
+    normalize_ks_harbor_links(&mut config);
     if matches_default_template(
         &config.frontend_dockerfile_template,
         LEGACY_FRONTEND_DOCKERFILE_TEMPLATE,
@@ -49,6 +50,20 @@ pub(crate) fn normalize_config(mut config: HarborConfig) -> HarborConfig {
         config.maven_local_repo = crate::utils::derive_maven_local_repo(&config.maven_home);
     }
     config
+}
+
+/// K8s 环境 → 镜像仓库：未指定或指向已删除仓库时回退到第一个，
+/// 保证发布页默认值和打包推送始终有确定目标。
+fn normalize_ks_harbor_links(config: &mut HarborConfig) {
+    let first_id = config.harbors.first().map(|env| env.id.clone());
+    let valid_ids: std::collections::HashSet<&str> =
+        config.harbors.iter().map(|env| env.id.as_str()).collect();
+    for env in &mut config.ks_environments {
+        let current = env.harbor_env_id.trim().to_string();
+        if current.is_empty() || !valid_ids.contains(current.as_str()) {
+            env.harbor_env_id = first_id.clone().unwrap_or_default();
+        }
+    }
 }
 
 /// 旧版单 Harbor 字段 → harbors 列表；并修正三个面板的记忆位。
@@ -144,6 +159,7 @@ fn migrate_ks_environments(config: &mut HarborConfig) {
                 },
                 password: config.ks_password.clone(),
                 default_namespace: String::new(),
+                harbor_env_id: String::new(),
             });
         }
     }
@@ -238,12 +254,42 @@ mod tests {
             username: "ops".to_string(),
             password: "p".to_string(),
             default_namespace: String::new(),
+            harbor_env_id: String::new(),
         }];
         config.ks_last_env_id = "prod".to_string();
         let config = normalize_config(config);
         assert_eq!(config.ks_environments.len(), 1);
         assert_eq!(config.ks_environments[0].name, "prod");
         assert_eq!(config.ks_username, "ops");
+    }
+
+    #[test]
+    fn ks_environment_defaults_to_first_harbor() {
+        let mut config = HarborConfig::default();
+        config.ks_environments[0].harbor_env_id.clear();
+        let config = normalize_config(config);
+        assert_eq!(config.ks_environments[0].harbor_env_id, "dev");
+    }
+
+    #[test]
+    fn ks_environment_keeps_valid_harbor_and_fixes_dangling() {
+        let mut config = HarborConfig::default();
+        config.harbors.push(crate::models::HarborEnv {
+            id: "prod".to_string(),
+            name: "生产".to_string(),
+            registry_type: "zot".to_string(),
+            url: "zot.example.com".to_string(),
+            username: "u".to_string(),
+            password: "p".to_string(),
+            project: String::new(),
+        });
+        config.ks_environments[0].harbor_env_id = "prod".to_string();
+        let mut config = normalize_config(config);
+        assert_eq!(config.ks_environments[0].harbor_env_id, "prod");
+
+        config.ks_environments[0].harbor_env_id = "gone".to_string();
+        let config = normalize_config(config);
+        assert_eq!(config.ks_environments[0].harbor_env_id, "dev");
     }
 
     #[test]

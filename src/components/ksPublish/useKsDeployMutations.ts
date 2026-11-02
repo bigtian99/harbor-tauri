@@ -100,6 +100,8 @@ export function useKsDeployMutations(opts: {
   config: HarborConfig;
   /** 当前 KubeSphere 环境 id（Git 构建后确保连接再创建） */
   envId: string | null;
+  /** Git 构建推送使用的镜像仓库 id（默认取 KS 环境配置） */
+  harborId?: string;
   /** 创建部署成功后写回发布映射（便于之后批量打包） */
   onPublishMapsChange?: (maps: NonNullable<HarborConfig["ks_publish_maps"]>) => void;
   /** 局部写盘前取最新整表 */
@@ -107,7 +109,7 @@ export function useKsDeployMutations(opts: {
 }) {
   const {
     namespace, connected, sel, setSel, load, confirm,
-    config, envId, onPublishMapsChange, getConfigSnapshot,
+    config, envId, harborId, onPublishMapsChange, getConfigSnapshot,
   } = opts;
 
   const [image, setImage] = useState("");
@@ -466,6 +468,7 @@ export function useKsDeployMutations(opts: {
         branchExposePort: effectivePort,
         nginxLocations: target.nginxLocations,
         autoPushImage: true,
+        harborId,
         progressLabel: depName,
         deploymentHint: depName,
         mavenModule: createGit.mavenModule || undefined,

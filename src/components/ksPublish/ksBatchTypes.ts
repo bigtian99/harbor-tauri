@@ -5,6 +5,8 @@ export interface KsBatchMeta {
   branch: string;
   namespace: string;
   envName: string;
+  /** 本次打包推送使用的镜像仓库（显示名） */
+  harborName?: string;
   deployNames: string[];
   deployRoles?: Record<string, KsPublishMapRole>;
   npmScript?: KsBatchNpmScriptPref;
