@@ -19,11 +19,11 @@ export function LandingPanel({
   landingIds, landingMode, vestAuthorization,
   landingPreviewData, landingGenerated, ftpUploadResults,
   templateIndices, setTemplateIndices,
-  isFetchingPreview, isGenerating, isUploadingToFtp,
+  isFetchingPreview, isGenerating, isUploadingToFtp, isOpeningAuthorization,
   progress, progressMessage,
   landingOutputDir, previewBaseUrl,
   setLandingIds, setLandingMode, setVestAuthorization,
-  onPreview, onFtpUpload, onCopyAllLinks,
+  onPreview, onFtpUpload, onCopyAllLinks, onOpenAuthorization,
 }: LandingPanelProps) {
   const [animatingCards, setAnimatingCards] = useState<Record<string, string>>({});
   const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,6 +158,7 @@ export function LandingPanel({
           isFetchingPreview={isFetchingPreview}
           isGenerating={isGenerating}
           isUploadingToFtp={isUploadingToFtp}
+          isOpeningAuthorization={isOpeningAuthorization}
           hasGeneratedResults={hasGeneratedResults}
           hasFtpResults={hasFtpResults}
           setLandingIds={setLandingIds}
@@ -166,6 +167,7 @@ export function LandingPanel({
           onPreview={onPreview}
           onFtpUpload={onFtpUpload}
           onCopyAllLinks={onCopyAllLinks}
+          onOpenAuthorization={onOpenAuthorization}
           onOpenTemplateManager={handleOpenTemplateManager}
         />
 

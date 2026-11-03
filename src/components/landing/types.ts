@@ -5,6 +5,7 @@ export interface LandingPanelProps {
   landingIds: string;
   landingMode: LandingMode;
   vestAuthorization: string;
+  isOpeningAuthorization: boolean;
   landingPreviewData: SubChannelData[];
   landingGenerated: Record<string, LandingPageResult>;
   ftpUploadResults: Record<string, FtpUploadResult>;
@@ -25,6 +26,8 @@ export interface LandingPanelProps {
   onPreview: () => void;
   onFtpUpload: () => void;
   onCopyAllLinks: () => void;
+  /** 打开内嵌运营后台登录页，自动获取落地页 Authorization。 */
+  onOpenAuthorization: () => void;
 }
 
 export interface PreviewOverlayState {

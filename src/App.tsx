@@ -141,6 +141,7 @@ function App() {
     setProgress: build.setProgress,
     setProgressMessage: build.setProgressMessage,
     opsAuthorization: app.config.ops_authorization,
+    onOpsAuthorizationSave: app.handleOpsAuthorizationSave,
   });
 
   // 进入历史 tab 时刷新记录
@@ -516,6 +517,7 @@ function App() {
             isFetchingPreview={landing.isFetchingPreview}
             isGenerating={landing.isGenerating}
             isUploadingToFtp={landing.isUploadingToFtp}
+            isOpeningAuthorization={landing.isOpeningAuthorization}
             progress={build.progress}
             progressMessage={build.progressMessage}
             landingOutputDir={landing.landingOutputDir}
@@ -527,6 +529,7 @@ function App() {
             onPreview={landing.handleLandingPreview}
             onFtpUpload={landing.handleFtpUpload}
             onCopyAllLinks={landing.handleCopyAllLinks}
+            onOpenAuthorization={landing.handleOpenAuthorizationLogin}
           />
         )}
 

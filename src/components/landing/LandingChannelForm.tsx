@@ -1,5 +1,6 @@
 import {
   TextInput,
+  PasswordInput,
   Button,
   Group,
   Paper,
@@ -12,6 +13,8 @@ import {
   Copy,
   Loader2,
   Package,
+  KeyRound,
+  LogIn,
 } from "lucide-react";
 import type { LandingMode } from "../../hooks/useLanding";
 import { panelSegmentedStyles } from "../../theme/panelStyles";
@@ -24,6 +27,7 @@ interface LandingChannelFormProps {
   isFetchingPreview: boolean;
   isGenerating: boolean;
   isUploadingToFtp: boolean;
+  isOpeningAuthorization: boolean;
   hasGeneratedResults: boolean;
   hasFtpResults: boolean;
   setLandingIds: (value: string) => void;
@@ -32,6 +36,7 @@ interface LandingChannelFormProps {
   onPreview: () => void;
   onFtpUpload: () => void;
   onCopyAllLinks: () => void;
+  onOpenAuthorization: () => void;
   onOpenTemplateManager: () => void;
 }
 
@@ -42,6 +47,7 @@ export function LandingChannelForm({
   isFetchingPreview,
   isGenerating,
   isUploadingToFtp,
+  isOpeningAuthorization,
   hasGeneratedResults,
   hasFtpResults,
   setLandingIds,
@@ -50,6 +56,7 @@ export function LandingChannelForm({
   onPreview,
   onFtpUpload,
   onCopyAllLinks,
+  onOpenAuthorization,
   onOpenTemplateManager,
 }: LandingChannelFormProps) {
   return (
@@ -84,12 +91,36 @@ export function LandingChannelForm({
           />
 
           {landingMode === "vest" && (
-            <TextInput
+            <PasswordInput
               value={vestAuthorization}
               onChange={(e) => setVestAuthorization(e.currentTarget.value)}
               placeholder="Bearer token 或 Authorization 值"
-              label="Authorization"
-              type="password"
+              label={
+                <Group gap={6}>
+                  <KeyRound size={14} />
+                  <span>Authorization</span>
+                </Group>
+              }
+              autoComplete="off"
+              rightSectionWidth={112}
+              rightSection={
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={onOpenAuthorization}
+                  disabled={isOpeningAuthorization}
+                  leftSection={
+                    isOpeningAuthorization
+                      ? <Loader2 size={14} className="spin" />
+                      : <LogIn size={14} />
+                  }
+                  className="ops-btn-secondary"
+                  style={{ marginRight: 4 }}
+                >
+                  自动获取
+                </Button>
+              }
+              description="自动获取会打开内嵌运营后台登录页，登录后自动填入；该值仅本次运行内保留，不会写入本地配置。"
             />
           )}
 

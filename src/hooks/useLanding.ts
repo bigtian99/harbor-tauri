@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { notifications } from "@mantine/notifications";
 import type { SubChannelData, LandingPageResult, FtpUploadResult, TabType } from "../types";
 import { isTauriRuntime } from "../types";
+
+/** 运营后台登录窗捕获到的 token 事件载荷（与打包加速共用同一事件）。 */
+interface OpsAuthTokenCapturedPayload {
+  token?: string;
+}
 
 const LANDING_API_URL = "https://tksyadmin.tiankongshuyu.cn";
 
@@ -14,6 +20,8 @@ interface UseLandingDeps {
   setProgress: (value: number) => void;
   setProgressMessage: (value: string) => void;
   opsAuthorization?: string;
+  /** 自动获取 Authorization 时同步给应用级配置（打包加速共用同一 token）。 */
+  onOpsAuthorizationSave?: (value: string) => Promise<void> | void;
 }
 
 /**
@@ -21,7 +29,7 @@ interface UseLandingDeps {
  * 支持子渠道 (sub_channel) 和马甲包 (vest) 两种模式。
  */
 export function useLanding(deps: UseLandingDeps) {
-  const { activeTab, setLog, setProgress, setProgressMessage, opsAuthorization } = deps;
+  const { activeTab, setLog, setProgress, setProgressMessage, opsAuthorization, onOpsAuthorizationSave } = deps;
 
   const [landingTemplateBase, setLandingTemplateBase] = useState("");
   const [landingIds, setLandingIds] = useState("");
@@ -36,8 +44,19 @@ export function useLanding(deps: UseLandingDeps) {
   const [ftpUploadResults, setFtpUploadResults] = useState<Record<string, FtpUploadResult>>({});
   const [isUploadingToFtp, setIsUploadingToFtp] = useState(false);
   const [templateIndices, setTemplateIndices] = useState<Record<string, number>>({});
+  const [isOpeningAuthorization, setIsOpeningAuthorization] = useState(false);
   const landingDebounceRef = useRef<number | null>(null);
   const landingGenSeqRef = useRef(0);
+  const activeTabRef = useRef(activeTab);
+  const onOpsAuthorizationSaveRef = useRef(onOpsAuthorizationSave);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    onOpsAuthorizationSaveRef.current = onOpsAuthorizationSave;
+  }, [onOpsAuthorizationSave]);
 
   // 同步 opsAuthorization 到 vestAuthorization
   useEffect(() => {
@@ -45,6 +64,89 @@ export function useLanding(deps: UseLandingDeps) {
       setVestAuthorization(opsAuthorization);
     }
   }, [opsAuthorization]);
+
+  // 自动获取 Authorization：打开内嵌运营后台登录页，捕获登录 token 后回填。
+  // 只处理落地页页签内的捕获，避免与「打包加速」页重复提示与重复关窗。
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    getCurrentWindow()
+      .listen<OpsAuthTokenCapturedPayload>("ops-auth-token-captured", async (event) => {
+        if (activeTabRef.current !== "landing") {
+          return;
+        }
+        const token = event.payload?.token?.trim();
+        if (!token) {
+          return;
+        }
+
+        setVestAuthorization(token);
+        try {
+          await onOpsAuthorizationSaveRef.current?.(token);
+        } catch (e) {
+          console.error("[Landing] 同步 Authorization 失败:", e);
+        }
+        await invoke("close_ops_login_window").catch(() => {
+          /* 登录窗可能已被用户关闭 */
+        });
+        notifications.show({
+          title: "Authorization 已获取",
+          message: "登录 token 已填入落地页 Authorization",
+          color: "cyan",
+          autoClose: 3000,
+        });
+      })
+      .then((handler) => {
+        if (disposed) {
+          handler();
+        } else {
+          unlisten = handler;
+        }
+      })
+      .catch((e) => {
+        notifications.show({
+          title: "监听登录 token 失败",
+          message: String(e),
+          color: "red",
+          autoClose: 6000,
+        });
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  async function handleOpenAuthorizationLogin() {
+    if (!isTauriRuntime()) {
+      notifications.show({
+        title: "无法打开登录窗口",
+        message: "请在 Tauri 桌面窗口中使用自动获取",
+        color: "yellow",
+        autoClose: 4000,
+      });
+      return;
+    }
+
+    setIsOpeningAuthorization(true);
+    try {
+      await invoke("open_ops_login_window");
+    } catch (e) {
+      notifications.show({
+        title: "打开登录窗口失败",
+        message: String(e),
+        color: "red",
+        autoClose: 6000,
+      });
+    } finally {
+      setIsOpeningAuthorization(false);
+    }
+  }
 
   // 拉取子渠道并生成落地页
   async function runSubChannelGeneration(showDoneToast: boolean) {
@@ -303,6 +405,8 @@ export function useLanding(deps: UseLandingDeps) {
     setLandingMode,
     vestAuthorization,
     setVestAuthorization,
+    isOpeningAuthorization,
+    handleOpenAuthorizationLogin,
     landingPreviewData,
     landingGenerated,
     ftpUploadResults,
