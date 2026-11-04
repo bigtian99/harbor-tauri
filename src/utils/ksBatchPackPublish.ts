@@ -31,6 +31,7 @@ import {
   buildGitUrlRepoPathIndex,
   resolveRepoPathFromIndex,
 } from "./resolveRepoPath";
+import { resolveBatchSpringProfile } from "./ksBatchSpringProfile";
 
 export interface KsBatchDeployItem {
   name: string;
@@ -76,6 +77,8 @@ export interface KsBatchPackOptions {
   npmScript?: KsBatchNpmScriptPref;
   /** 手选 Maven 子模块：deployment → rel_path（"" = 自动匹配） */
   moduleOverrides?: Record<string, string>;
+  /** Spring Profile 覆盖（undefined=沿用各仓库记忆；空串=不加）；仅作用于 Maven 后端 */
+  springProfile?: string;
   appendLog: (line: string) => void;
   onProgress: (
     pct: number,
@@ -571,6 +574,7 @@ export async function resolveKsBatchTargets(
   branchName = "",
   npmScript: KsBatchNpmScriptPref = { mode: "auto", customScript: "" },
   sourceOverrides?: Record<string, KsBatchSourceOverride>,
+  springProfileOverride?: string,
 ): Promise<{ targets: KsBatchTarget[]; skips: string[] }> {
   const maps = config.ks_publish_maps ?? [];
   const targets: KsBatchTarget[] = [];
@@ -633,7 +637,9 @@ export async function resolveKsBatchTargets(
       ),
       repoPath,
       projectType,
-      springProfile: remembered.springProfile,
+      springProfile: projectType === "maven"
+        ? resolveBatchSpringProfile(remembered.springProfile, springProfileOverride)
+        : remembered.springProfile,
       frontendDir: npmSettings.frontendDir,
       selectedBuildScript: npmSettings.selectedBuildScript || "build:prod",
       packageWithBackend: false,
@@ -755,6 +761,7 @@ export async function runKsBatchPackPublish(
     branchName.trim(),
     npmScript,
     buildModuleOverrides(opts.moduleOverrides),
+    opts.springProfile,
   );
   for (const skip of skips) {
     summary.skipped += 1;
@@ -800,6 +807,16 @@ export async function runKsBatchPackPublish(
   );
   if (targets.some((t) => t.projectType === "npm")) {
     note(summary, appendLog, `  ${describeKsBatchNpmScriptPref(npmScript)}`);
+  }
+  const mavenProfiles = Array.from(
+    new Set(targets.filter((t) => t.projectType === "maven").map((t) => t.springProfile.trim())),
+  );
+  if (mavenProfiles.length > 0) {
+    note(
+      summary,
+      appendLog,
+      `  Spring Profile: ${mavenProfiles.map((p) => p || "(不指定)").join(", ")}`,
+    );
   }
 
   const ksConnectPromise = ensureKsConnected(config, envId)

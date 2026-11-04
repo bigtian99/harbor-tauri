@@ -730,6 +730,9 @@ pub struct DeployInfo {
     pub status: DeployStatus,
     pub pods: PodsGroup,
     pub revision: String,
+    /// 最后更新时间（RFC3339）：取最新 ReplicaSet 的 creationTimestamp，
+    /// 无 RS 时回落 Deployment 自身 / status 条件的最后更新时间；列表按此倒序
+    pub updated_at: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -1153,6 +1156,8 @@ fn ks_list_deployments_sync(namespace: String) -> Result<Vec<DeployInfo>, String
     // rs_name → revision；deploy_name → [(rs_name, revision)]
     let mut rs_rev: HashMap<String, String> = HashMap::new();
     let mut rs_by_deploy: HashMap<String, Vec<String>> = HashMap::new();
+    // rs_name → creationTimestamp；用于推算部署的「最后更新时间」
+    let mut rs_created: HashMap<String, String> = HashMap::new();
     for rs in rs_items {
         let Some(rs_name) = rs
             .pointer("/metadata/name")
@@ -1171,6 +1176,14 @@ fn ks_list_deployments_sync(namespace: String) -> Result<Vec<DeployInfo>, String
             .to_string();
         if !rev.is_empty() {
             rs_rev.insert(rs_name.clone(), rev);
+        }
+        if let Some(ts) = rs
+            .pointer("/metadata/creationTimestamp")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            rs_created.insert(rs_name.clone(), ts.to_string());
         }
         rs_by_deploy.entry(dep_name).or_default().push(rs_name);
     }
@@ -1267,6 +1280,42 @@ fn ks_list_deployments_sync(namespace: String) -> Result<Vec<DeployInfo>, String
         old_pods.sort_by(|a, b| b.start_time.cmp(&a.start_time));
 
         let status = deploy_status(prog_reason.as_deref(), desired, &new_pods, &old_pods);
+        // 最后更新时间：最新 ReplicaSet 的 creationTimestamp（滚动发布即新 RS 创建时间）
+        let mut updated_at = String::new();
+        if let Some(rs_names) = rs_by_deploy.get(&name) {
+            for rs_name in rs_names {
+                if let Some(ts) = rs_created.get(rs_name) {
+                    if ts.as_str() > updated_at.as_str() {
+                        updated_at = ts.clone();
+                    }
+                }
+            }
+        }
+        // 无 RS（例如刚创建 / 全新命名空间）时回落 Deployment 自身与状态条件时间
+        if let Some(ts) = it
+            .pointer("/metadata/creationTimestamp")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if ts > updated_at.as_str() {
+                updated_at = ts.to_string();
+            }
+        }
+        if let Some(conds) = it.pointer("/status/conditions").and_then(|v| v.as_array()) {
+            for c in conds {
+                if let Some(ts) = c
+                    .get("lastUpdateTime")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    if ts > updated_at.as_str() {
+                        updated_at = ts.to_string();
+                    }
+                }
+            }
+        }
         out.push(DeployInfo {
             name,
             alias,
@@ -1276,17 +1325,28 @@ fn ks_list_deployments_sync(namespace: String) -> Result<Vec<DeployInfo>, String
             status,
             pods: PodsGroup { new_pods, old_pods },
             revision: cur_rev.unwrap_or_default(),
+            updated_at,
         });
     }
-    out.sort_by(|a, b| a.name.cmp(&b.name));
+    // 列表按更新时间倒序（最新的发布在最前）；无时间的排最后，同时间按名称保证稳定
+    out.sort_by(|a, b| {
+        let ta = a.updated_at.trim();
+        let tb = b.updated_at.trim();
+        match (ta.is_empty(), tb.is_empty()) {
+            (true, false) => std::cmp::Ordering::Greater,
+            (false, true) => std::cmp::Ordering::Less,
+            _ => tb.cmp(ta).then_with(|| a.name.cmp(&b.name)),
+        }
+    });
     crate::diag::diag_log(
         "kubesphere",
         &format!(
-            "ks_list_deployments ok ns={namespace} deps={} rs={} pods={} elapsed_ms={}",
+            "ks_list_deployments ok ns={namespace} deps={} rs={} pods={} elapsed_ms={} newest={}",
             out.len(),
             rs_items.len(),
             pod_items.len(),
-            t0.elapsed().as_millis()
+            t0.elapsed().as_millis(),
+            out.first().map(|d| d.updated_at.as_str()).unwrap_or("-"),
         ),
     );
     Ok(out)

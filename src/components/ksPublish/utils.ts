@@ -58,7 +58,7 @@ export function deployListFingerprint(list: DeployInfo[]): string {
   for (const d of list) {
     const headNew = d.pods.new[0];
     const headOld = d.pods.old[0];
-    s += `|${d.name}:${d.alias ?? ""}:${d.revision}:${d.image}:${d.status.state}:${d.status.detail}:${d.ports.join(",")}:${d.pods.new.length}:${d.pods.old.length}:${headNew?.reason ?? headNew?.state ?? ""}:${headOld?.reason ?? headOld?.state ?? ""}`;
+    s += `|${d.name}:${d.alias ?? ""}:${d.revision}:${d.image}:${d.updatedAt ?? ""}:${d.status.state}:${d.status.detail}:${d.ports.join(",")}:${d.pods.new.length}:${d.pods.old.length}:${headNew?.reason ?? headNew?.state ?? ""}:${headOld?.reason ?? headOld?.state ?? ""}`;
   }
   return s;
 }

@@ -3,6 +3,7 @@ import { Table, Badge, ActionIcon, Checkbox, Group, Text, Tooltip } from "@manti
 import { Pencil, GitBranch } from "lucide-react";
 import type { DeployInfo } from "./types";
 import { STATUS_DOT, STATUS_COLOR } from "./types";
+import { fmtTime } from "./utils";
 
 export const DeployRow = memo(function DeployRow({
   d,
@@ -58,6 +59,11 @@ export const DeployRow = memo(function DeployRow({
         {d.image || "-"}
       </Table.Td>
       <Table.Td>{s.detail.split(" · ")[0]}{s.old && <Text span size="xs" c="dimmed">{s.old}</Text>}</Table.Td>
+      <Table.Td>
+        <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+          {fmtTime(d.updatedAt) || "-"}
+        </Text>
+      </Table.Td>
       <Table.Td>{d.revision}</Table.Td>
       <Table.Td onClick={(e) => e.stopPropagation()}>
         <Tooltip label="修改镜像" withArrow openDelay={300}>

@@ -299,6 +299,10 @@ export function KsPublishPanel({
           mergeRepoPaths={batch.batchMergeRepoPaths}
           moduleOptions={batch.batchModuleOptions}
           moduleDefaults={batch.batchModuleDefaults}
+          initialSpringProfile={batch.batchSpringProfileDefault}
+          springProfiles={batch.batchSpringProfiles}
+          springProfilesLoading={batch.batchSpringProfilesLoading}
+          onRefreshSpringProfiles={batch.refreshBatchSpringProfiles}
         />
       )}
       {(batch.batchOpen || batch.batchRunning) && (
