@@ -10,6 +10,8 @@ export interface KsBatchMeta {
   deployNames: string[];
   deployRoles?: Record<string, KsPublishMapRole>;
   npmScript?: KsBatchNpmScriptPref;
+  /** 本次批量使用的 Spring Profile（Maven 后端构建；空 = 不加 -Dspring.profiles.active） */
+  springProfile?: string;
 }
 
 export interface KsBatchConfirmValues {
@@ -20,6 +22,8 @@ export interface KsBatchConfirmValues {
   sourceBranch: string;
   /** 手选 Maven 子模块：deployment → rel_path（"" = 按部署名自动匹配） */
   moduleOverrides: Record<string, string>;
+  /** Spring Profile：所有 Maven 后端部署统一使用；空 = 不加 -Dspring.profiles.active */
+  springProfile: string;
 }
 
 export interface KsBatchSummary {

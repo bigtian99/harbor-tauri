@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { notifications } from "@mantine/notifications";
 import type { HarborConfig, KsEnvironment, KsPublishMap } from "../../types";
 import { isTauriRuntime } from "../../types";
@@ -27,6 +28,7 @@ import {
 } from "../../utils/ksBatchPackPublish";
 import { listMavenModules, type MavenModuleInfo } from "../../utils/ksMavenModules";
 import { lookupKsPublishMapByDeployment } from "../../utils/ksPublishMap";
+import { getRememberedBranchAdvancedSettings } from "../../branchSettings";
 import { mergeKsBatchReposSequential } from "../../utils/ksBatchMerge";
 import { runKsBatchCloneToEnv } from "../../utils/ksBatchCloneDeploy";
 import {
@@ -101,6 +103,12 @@ export function useKsBatchActions({
   const [batchMessage, setBatchMessage] = useState("");
   const [batchModuleOptions, setBatchModuleOptions] = useState<Record<string, MavenModuleInfo[]>>({});
   const [batchModuleDefaults, setBatchModuleDefaults] = useState<Record<string, string>>({});
+  // Spring Profile：后端仓库可探测的 profile，及默认值（沿用各仓库分支打包记忆）
+  const [batchSpringProfiles, setBatchSpringProfiles] = useState<string[]>([]);
+  const [batchSpringProfilesLoading, setBatchSpringProfilesLoading] = useState(false);
+  const [batchSpringProfileDefault, setBatchSpringProfileDefault] = useState("");
+  const [batchBackendRepoPaths, setBatchBackendRepoPaths] = useState<string[]>([]);
+  const batchSpringProfileSeq = useRef(0);
   const batchStepLabelRef = useRef("");
   const batchItemIndexRef = useRef(0);
   const batchItemTotalRef = useRef(1);
@@ -199,13 +207,28 @@ export function useKsBatchActions({
           defaults[name] =
             lookupKsPublishMapByDeployment(maps, envId, namespace, name)?.maven_module?.trim() ?? "";
         }
+        // 后端（Maven）仓库：Spring Profile 只作用于后端部署
+        const roles = resolveKsBatchDeployRoles(config, envId, namespace, names);
+        const backendRepos = Array.from(new Set(
+          names
+            .filter((name) => (roles[name] ?? "backend") !== "frontend")
+            .map((name) => (repoPathByDeploy[name] ?? "").trim())
+            .filter(Boolean),
+        ));
+        const rememberedProfile = backendRepos[0]
+          ? getRememberedBranchAdvancedSettings(config, backendRepos[0]).springProfile
+          : "";
         if (cancelled) return;
         setBatchModuleOptions(options);
         setBatchModuleDefaults(defaults);
+        setBatchBackendRepoPaths(backendRepos);
+        setBatchSpringProfileDefault(rememberedProfile);
       } catch {
         if (!cancelled) {
           setBatchModuleOptions({});
           setBatchModuleDefaults({});
+          setBatchBackendRepoPaths([]);
+          setBatchSpringProfileDefault("");
         }
       }
     })();
@@ -213,6 +236,32 @@ export function useKsBatchActions({
       cancelled = true;
     };
   }, [batchConfirmOpen, batchDeployNamesKey, config, envId, namespace]);
+
+  // 按所选分支探测后端仓库可用 Spring Profile（仅提示，仍可手输）
+  const refreshBatchSpringProfiles = useCallback(async (branch: string) => {
+    const repos = batchBackendRepoPaths;
+    const b = branch.trim();
+    const seq = ++batchSpringProfileSeq.current;
+    if (!isTauriRuntime() || repos.length === 0 || !b) {
+      setBatchSpringProfiles([]);
+      setBatchSpringProfilesLoading(false);
+      return;
+    }
+    setBatchSpringProfilesLoading(true);
+    try {
+      const results = await Promise.all(
+        repos.slice(0, 4).map((p) =>
+          invoke<string[]>("detect_spring_profiles", { repoPath: p, branch: b })
+            .catch(() => [] as string[]),
+        ),
+      );
+      if (seq !== batchSpringProfileSeq.current) return;
+      const merged = Array.from(new Set(results.flat())).sort();
+      setBatchSpringProfiles(merged);
+    } finally {
+      if (seq === batchSpringProfileSeq.current) setBatchSpringProfilesLoading(false);
+    }
+  }, [batchBackendRepoPaths]);
 
   useEffect(() => {
     if (!batchRunning || !isTauriRuntime()) return;
@@ -285,6 +334,7 @@ export function useKsBatchActions({
       ...batchMeta,
       branch,
       npmScript: values.npmScript,
+      springProfile: values.springProfile.trim(),
     });
 
     setBatchConfirmOpen(false);
@@ -369,6 +419,7 @@ export function useKsBatchActions({
           : batchConcurrencyPref,
         npmScript: values.npmScript,
         moduleOverrides: values.moduleOverrides,
+        springProfile: values.springProfile,
         deployments: selectedDeploys.map((d) => ({
           name: d.name,
           containers: d.containers,
@@ -513,6 +564,10 @@ export function useKsBatchActions({
     batchGitRepoCount,
     batchModuleOptions,
     batchModuleDefaults,
+    batchSpringProfiles,
+    batchSpringProfilesLoading,
+    batchSpringProfileDefault,
+    refreshBatchSpringProfiles,
     refreshBatchGitBranches,
     beginBatchPack,
     startBatchPack,

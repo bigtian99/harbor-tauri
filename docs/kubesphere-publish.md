@@ -12,7 +12,7 @@
 |---|---|
 | 连接 | 打开面板自动 `ks_connect`：优先复用本地会话缓存 → `refreshToken` 续期 → 密码登录；会话按环境落盘到 `~/.config/jarporter/ks-sessions.json`；API 遇到 401 会再尝试续期一次。**控制台 5xx/网络不通时保留会话并直接报错，不强制重登**（避免连环超时卡死） |
 | 命名空间 | 下拉选择（可搜索），切换即加载该命名空间的部署列表 |
-| 部署状态表 | 状态徽章（运行中/更新中/拉取失败/崩溃重启/创建中/已停止）、容器、镜像Tag、就绪、版本、Pod 原因 |
+| 部署状态表 | 状态徽章（运行中/更新中/拉取失败/崩溃重启/创建中/已停止）、容器、镜像Tag、就绪、版本、**更新时间**（最新 ReplicaSet 创建时间）、Pod 原因；**列表按更新时间倒序**（最新发布在最前，无时间的排最后） |
 | 新/旧版本 Pod | **新版本（当前 revision）Pod 优先**，旧版本灰显——发布中即使旧 Pod 运行，新 Pod 异常也会标红 |
 | 只看异常 | 过滤出非运行中部署 |
 | 筛选 | 四组条件叠加：**部署名称**（模糊，匹配部署名/别名）、部署（下拉精确）、状态（含「只看异常」）、镜像（地址或 tag）；筛选时状态栏显示「筛选自 N」 |
@@ -20,6 +20,7 @@
 | 导出 CSV | 全部部署状态导出（BOM+CRLF，Excel 中文正常） |
 | 修改镜像发布 | 选部署 → 填新镜像 → `ks_update_image`（strategic-merge-patch）→ 回读验证 revision |
 | 创建部署 | 「创建部署」按钮 → 弹窗填必传项（部署名/镜像/端口/副本/健康检查路径/引用配置字典/环境变量）；ConfigMap 按 key 展开为 `configMapKeyRef`；**`SW_AGENT_NAME` 固定取部署名称**（不走 ConfigMap）。**镜像来源二选一**：`已有镜像地址` 直接填 Harbor 镜像；`Git 构建镜像` 填 Git 地址 → **失焦自动 `git ls-remote` 拉取分支并用下拉选择**（可点「拉取分支」刷新）+ 构建类型（后端/前端）+ **可选 Maven 子模块**，点「构建并创建」先按该分支打包推送镜像，再用产出的镜像创建部署，成功后自动写入「发布映射」（含手选模块）便于之后批量打包（适合首次、Harbor 上还没有镜像的部署） |
+| 批量打包 Spring Profile | 「批量打包并发布」弹框新增 **Spring Profile** 构建选项（仅后端/Maven 部署显示）：按所选分支 `detect_spring_profiles` 探测候选、可手输；默认沿用该仓库在分支打包页记忆的 Profile，留空则不加 `-Dspring.profiles.active`。本次批量内所有 Maven 后端统一使用该值（与分支打包的 `-Dspring.profiles.active` 一致） |
 | 微服务（多模块 Maven） | 一个 Git 仓库多个 Spring Boot 模块：后端扫描 `pom.xml` 可执行模块（含 `spring-boot-maven-plugin`），按 **K8s Deployment 名**自动匹配子模块并只构建该模块（`mvn -pl <module> -am`）；**手选兜底**：创建部署弹窗、批量确认弹窗（按部署逐项）、系统设置→发布映射新增「Maven 模块」列，三处都可用下拉/输入指定 `rel_path`（留空=自动）。**手选模块后自动读该模块（指定分支）的 `server.port` 回填容器端口**，镜像以 `--server.port=<容器端口>` 启动，避免被全局默认端口（8181）强制。自动匹配失败会列候选并拒绝，不会打错服务 |
 | ConfigMap 列表 | 「🗂 ConfigMap」卡片：名称/别名/键数/键列表；切 NS / 手动刷新部署时加载，自动刷新不重复拉 |
 | ConfigMap 创建 | 两种模式：**表单**（名称 + `K=V` 行，`ks_create_configmap` 后端拼接）或 **YAML**（粘贴完整 YAML，`ks_create_configmap_yaml`）；均支持「预览 YAML + 📋复制」「校验 (dryRun)」 |
@@ -35,7 +36,7 @@
 - `ks_login(...)`：兼容封装（落到 `_default` 环境键）
 - `ks_logout(env_id?)`：清内存；传 env_id 时同时清该环境落盘缓存
 - `ks_list_namespaces()`：`GET /api/v1/namespaces?limit=100`
-- `ks_list_deployments(namespace)`：命名空间级 **3 次并行**拉取（deployments + replicasets + pods），内存按 ownerReference / revision 分组新/旧 Pod；旧实现按部署各打 2 次 API（1+2N）易卡死
+- `ks_list_deployments(namespace)`：命名空间级 **3 次并行**拉取（deployments + replicasets + pods），内存按 ownerReference / revision 分组新/旧 Pod；旧实现按部署各打 2 次 API（1+2N）易卡死。返回项含 `updatedAt`（最新 ReplicaSet 的 `creationTimestamp`，缺失时回落 Deployment 自身 / status 条件时间），结果按 `updatedAt` 倒序返回
 - 前端：默认关闭自动刷新（可选手动开 60s）；静默刷新无变化时跳过 setState；搜索用 `useDeferredValue`；ConfigMap 页签 `keepMounted={false}` 懒加载；StrictMode 下连接短防抖避免双打超时
 - `ks_list_deployment_revisions(namespace, deployment)`：按 Deployment 列出 ReplicaSet 历史 revision 与镜像
 - `ks_get_pod_logs(namespace, pod, container?, tail_lines?, previous?)`：纯文本 Pod 日志（独立于 JSON `ks_api`，避免非 JSON 被误判 401）

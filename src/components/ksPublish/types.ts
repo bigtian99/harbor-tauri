@@ -10,6 +10,8 @@ export interface DeployInfo {
   containers: string[];
   ports: number[];
   status: DeployStatus; pods: { new: PodInfo[]; old: PodInfo[] }; revision: string;
+  /** 最后更新时间（RFC3339，最新 ReplicaSet 创建时间；后端缺失时前端回落） */
+  updatedAt?: string;
   /** 是否配置了 Git 地址（用于批量打包） */
   hasGitConfig?: boolean;
 }

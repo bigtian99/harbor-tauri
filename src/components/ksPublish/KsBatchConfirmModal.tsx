@@ -43,6 +43,7 @@ import {
 import { KsBatchMergeConflictFilesModal } from "../KsBatchMergeConflictFilesModal";
 import {
   Check,
+  Coffee,
   GitBranch,
   GitMerge,
   Layers3,
@@ -51,6 +52,8 @@ import {
   Rocket,
   Server,
 } from "lucide-react";
+import { SearchableDropdown } from "../SearchableDropdown";
+import { describeBatchMavenCommand } from "../../utils/ksBatchSpringProfile";
 import type { KsBatchConfirmValues, KsBatchMeta } from "./ksBatchTypes";
 
 function deployRoleLabel(role: KsPublishMapRole | undefined): string {
@@ -95,6 +98,13 @@ interface KsBatchConfirmModalProps {
   moduleOptions?: Record<string, MavenModuleInfo[]>;
   /** 各部署默认选中的 Maven 模块 rel_path（取自发布映射，"" = 自动） */
   moduleDefaults?: Record<string, string>;
+  /** 后端部署默认 Spring Profile（沿用分支打包记忆） */
+  initialSpringProfile?: string;
+  /** 按所选分支探测到的可用 profile 候选 */
+  springProfiles?: string[];
+  springProfilesLoading?: boolean;
+  /** 分支变化时重新探测后端仓库可用 profile */
+  onRefreshSpringProfiles?: (branch: string) => void;
 }
 
 export function KsBatchConfirmModal({
@@ -116,6 +126,10 @@ export function KsBatchConfirmModal({
   mergeRepoPaths = [],
   moduleOptions = {},
   moduleDefaults = {},
+  initialSpringProfile = "",
+  springProfiles = [],
+  springProfilesLoading = false,
+  onRefreshSpringProfiles,
 }: KsBatchConfirmModalProps) {
   const [branch, setBranch] = useState(initialBranch);
   const [npmMode, setNpmMode] = useState<KsBatchNpmScriptMode>(initialNpmScript.mode);
@@ -124,6 +138,7 @@ export function KsBatchConfirmModal({
   const [sourceBranch, setSourceBranch] = useState("");
   const [mergeRows, setMergeRows] = useState<KsBatchMergeRow[]>([]);
   const [moduleOverrides, setModuleOverrides] = useState<Record<string, string>>({});
+  const [springProfile, setSpringProfile] = useState(initialSpringProfile);
   const [mergeChecking, setMergeChecking] = useState(false);
   const [mergeCheckDone, setMergeCheckDone] = useState(false);
   const [conflictViewRow, setConflictViewRow] = useState<KsBatchMergeRow | null>(null);
@@ -161,6 +176,7 @@ export function KsBatchConfirmModal({
       return;
     }
     didAutoPickBranch.current = false;
+    setSpringProfile(initialSpringProfile);
     setNpmMode(initialNpmScript.mode);
     setNpmCustom(initialNpmScript.customScript);
     setMergeBeforePack(false);
@@ -172,7 +188,7 @@ export function KsBatchConfirmModal({
     const preferred = initialBranch.trim();
     setBranch(preferred);
     if (preferred) didAutoPickBranch.current = true;
-  }, [opened, initialBranch, initialNpmScript, mergeRepoPaths]);
+  }, [opened, initialBranch, initialNpmScript, mergeRepoPaths, initialSpringProfile]);
 
   // 打开后若无初始分支，列表就绪时只自动补一次，不清空用户手动清除
   useEffect(() => {
@@ -216,6 +232,21 @@ export function KsBatchConfirmModal({
     () => Object.values(meta?.deployRoles ?? {}).some((r) => r === "frontend"),
     [meta?.deployRoles],
   );
+
+  // 是否存在后端（Maven）部署：只有它们才受 Spring Profile 影响
+  const hasBackendDeploys = useMemo(
+    () => (meta?.deployNames ?? []).some(
+      (name) => (meta?.deployRoles?.[name] ?? "backend") !== "frontend",
+    ),
+    [meta?.deployNames, meta?.deployRoles],
+  );
+
+  // 分支变化时刷新后端仓库可探测的 Spring Profile 候选
+  useEffect(() => {
+    if (!opened || !onRefreshSpringProfiles) return;
+    const t = setTimeout(() => onRefreshSpringProfiles(branch), 250);
+    return () => clearTimeout(t);
+  }, [opened, branch, onRefreshSpringProfiles]);
 
   const npmScriptPref = useMemo<KsBatchNpmScriptPref>(
     () => ({ mode: npmMode, customScript: npmCustom }),
@@ -289,6 +320,7 @@ export function KsBatchConfirmModal({
       mergeBeforePack,
       sourceBranch: mergeBeforePack ? sourceBranch.trim() : "",
       moduleOverrides,
+      springProfile: springProfile.trim(),
     });
   };
 
@@ -666,6 +698,39 @@ export function KsBatchConfirmModal({
             </Stack>
           )}
         </Stack>
+
+        {hasBackendDeploys && (
+          <Stack gap={6}>
+            <Group gap={6}>
+              <Coffee size={14} className="ks-batch-meta-icon" />
+              <Text size="sm" fw={600}>
+                Spring Profile
+              </Text>
+            </Group>
+            <SearchableDropdown
+              value={springProfile}
+              options={springProfiles}
+              commitOnInput={false}
+              onChange={(value) => setSpringProfile(value.trim())}
+              onBlur={(value) => setSpringProfile(value.trim())}
+              placeholder={
+                springProfilesLoading
+                  ? "扫描中，也可直接手输…"
+                  : springProfiles.length === 0
+                    ? "手输 profile，如 test / prod（空 = 不指定）"
+                    : "选择或手输 profile…"
+              }
+              loading={springProfilesLoading}
+            />
+            <Text size="xs" c="dimmed" style={{ wordBreak: "break-all" }}>
+              {springProfile.trim()
+                ? `后端将执行: ${describeBatchMavenCommand(springProfile)}`
+                : springProfiles.length > 0
+                  ? `可选已检测 profile：${springProfiles.join(", ")}；留空则不加 -Dspring.profiles.active`
+                  : "留空则不加 -Dspring.profiles.active；默认沿用分支打包记忆的 Profile"}
+            </Text>
+          </Stack>
+        )}
 
         {hasFrontendDeploys && (
           <Stack gap={6}>

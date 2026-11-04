@@ -14,6 +14,8 @@ import {
   PAGE_SIZE_OPTIONS,
 } from "./types";
 import { DeployRow } from "./DeployRow";
+import { sortDeploysByUpdatedDesc } from "../../utils/ksDeploySort";
+import { fmtTime } from "./utils";
 import { KsRefreshIcon } from "./KsRefreshIcon";
 import { KsDeployDetail, type KsDeployDetailMutations } from "./KsDeployDetail";
 import type { KsDeployMutationsApi } from "./useKsDeployMutations";
@@ -146,7 +148,8 @@ export function KsDeployTab({
         return d.image.toLowerCase().includes(q) || tag.toLowerCase().includes(q);
       });
     }
-    return list;
+    // 列表按更新时间倒序（最新发布在最前）
+    return sortDeploysByUpdatedDesc(list);
   }, [deploys, deferredName, filterDeploy, filterStatus, deferredImage]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -184,9 +187,9 @@ export function KsDeployTab({
     }
     const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = [
-      ["状态", "部署", "别名", "容器", "端口", "镜像", "就绪", "版本"].map(esc).join(","),
+      ["状态", "部署", "别名", "容器", "端口", "镜像", "就绪", "版本", "更新时间"].map(esc).join(","),
       ...filtered.map((d) => {
-        return [d.status.label, d.name, d.alias ?? "", d.containers.join("/"), (d.ports ?? []).join("/"), d.image, d.status.detail.split(" · ")[0], d.revision].map(esc).join(",");
+        return [d.status.label, d.name, d.alias ?? "", d.containers.join("/"), (d.ports ?? []).join("/"), d.image, d.status.detail.split(" · ")[0], d.revision, fmtTime(d.updatedAt)].map(esc).join(",");
       }),
     ].join("\r\n");
     const content = `\ufeff${rows}`;
@@ -398,12 +401,13 @@ export function KsDeployTab({
                 </Table.Th>
                 <Table.Th>状态</Table.Th><Table.Th>部署</Table.Th><Table.Th>别名</Table.Th><Table.Th>容器</Table.Th>
                 <Table.Th>端口</Table.Th><Table.Th>镜像地址</Table.Th><Table.Th>就绪</Table.Th><Table.Th>版本</Table.Th>
+                <Table.Th>更新时间</Table.Th>
                 <Table.Th>操作</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {pageRows.length === 0 && (
-                <Table.Tr><Table.Td colSpan={10} align="center" c="dimmed">没有匹配的部署</Table.Td></Table.Tr>
+                <Table.Tr><Table.Td colSpan={11} align="center" c="dimmed">没有匹配的部署</Table.Td></Table.Tr>
               )}
               {pageRows.map((d) => (
                 <DeployRow
