@@ -15,6 +15,7 @@ import {
   Popover,
   Progress,
   SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Switch,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 
 import type {
+  HonorAccountInfo,
   HonorCheckParams,
   HonorDeviceCheckResult,
   HonorProgressPayload,
@@ -43,6 +45,9 @@ import { PanelPageHeader } from "./PanelPageHeader";
 import "../styles/ops-panel.css";
 
 type DateMode = "today" | "date" | "all";
+
+/** 记住上次选的投放账户，重开面板仍是同一账户 */
+const HONOR_ACCOUNT_KEY = "jarporter.honor.accountPk";
 
 type HonorProgress = {
   percent: number;
@@ -198,6 +203,12 @@ function numberFrom(value: number | string, fallback: number) {
 }
 
 export function HonorReportPanel() {
+  // 投放账户：点击表只存 account_pk，必须先选账户才能查点击
+  const [accounts, setAccounts] = useState<HonorAccountInfo[]>([]);
+  const [accountPk, setAccountPk] = useState<string | null>(null);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<HonorDeviceCheckResult | null>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
@@ -224,6 +235,38 @@ export function HonorReportPanel() {
   const [summary, setSummary] = useState<HonorReportSummary | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const logBoxRef = useRef<HTMLDivElement | null>(null);
+
+  // 记住选择，重开面板沿用
+  useEffect(() => {
+    if (accountPk) window.localStorage.setItem(HONOR_ACCOUNT_KEY, accountPk);
+  }, [accountPk]);
+
+  // 进面板即拉账户列表；只有一个账户时自动选中，省一次点击
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let disposed = false;
+    setAccountsLoading(true);
+    setAccountsError(null);
+    invoke<HonorAccountInfo[]>("honor_list_accounts", { db: {}, platform: "honor" })
+      .then((list) => {
+        if (disposed) return;
+        setAccounts(list);
+        const stored = window.localStorage.getItem(HONOR_ACCOUNT_KEY);
+        const pick =
+          list.find((a) => a.pk === stored)?.pk ??
+          (list.length === 1 ? list[0].pk : null);
+        setAccountPk((prev) => prev ?? pick);
+      })
+      .catch((e) => {
+        if (!disposed) setAccountsError(String(e));
+      })
+      .finally(() => {
+        if (!disposed) setAccountsLoading(false);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -274,6 +317,7 @@ export function HonorReportPanel() {
   // 预检结论只在参数未变时有效：数量/日期/去重一旦改动必须重新查询，防止拿旧结论发送
   function checkSignature() {
     return JSON.stringify({
+      accountPk,
       activate,
       register,
       pay,
@@ -284,12 +328,16 @@ export function HonorReportPanel() {
   }
   const checkFresh = checkSig !== null && checkSig === checkSignature();
   const checkEnough = checkFresh && checkResult?.enough === true;
-  const canRun = !funnelInvalid && !dateInvalid && !running && checkEnough;
+  const canRun = Boolean(accountPk) && !funnelInvalid && !dateInvalid && !running && checkEnough;
 
   /** 设备预检：按当前数量/日期/去重口径只读查库，不发送任何回传 */
   async function handleCheck() {
     if (!isTauriRuntime()) {
       setCheckError("请在桌面端查询设备");
+      return;
+    }
+    if (!accountPk) {
+      setCheckError("请先选择投放账户");
       return;
     }
     if (funnelInvalid) {
@@ -307,6 +355,7 @@ export function HonorReportPanel() {
     try {
       const params: HonorCheckParams = {
         db: {},
+        account_pk: accountPk,
         activate,
         register,
         pay,
@@ -339,6 +388,7 @@ export function HonorReportPanel() {
     const date = dateMode === "all" ? null : dateMode === "today" ? todayStr() : customDate.trim();
     const params: HonorReportParams = {
       db: {},
+      account_pk: accountPk,
       activate,
       register,
       pay,
@@ -384,6 +434,33 @@ export function HonorReportPanel() {
               同一设备复用同一条点击的 trackId / oaid / advertiserId；conversionTime 从点击时间上限
               +1s 起步逐条递增；付费事件的金额与订单号由系统内部生成。先「查询设备」确认有数据再回传，没数据会提示且不会发送。
             </Text>
+            <Select
+              label="投放账户（media_account）"
+              description="点击表按 account_pk 归档，必须先选账户再查点击"
+              placeholder={accountsLoading ? "读取账户中..." : "选择荣耀投放账户"}
+              data={accounts.map((a) => ({
+                value: a.pk,
+                label: `${a.account_id} · ${a.account_name}${
+                  a.account_alias ? `（${a.account_alias}）` : ""
+                }（可回传 ${a.click_rows}）`,
+              }))}
+              value={accountPk}
+              onChange={setAccountPk}
+              disabled={accountsLoading || accounts.length === 0}
+              searchable
+              clearable={false}
+              nothingFoundMessage={accountsLoading ? "读取中..." : "没有可用的荣耀账户"}
+            />
+            {accountsError && (
+              <Alert color="red" variant="light" title="读取投放账户失败" withCloseButton onClose={() => setAccountsError(null)}>
+                {accountsError}
+              </Alert>
+            )}
+            {!accountsLoading && !accountsError && accounts.length === 0 && (
+              <Alert color="yellow" variant="light" title="没有可用账户">
+                投流库 media_account 里没有 platform=honor 的账户，请先在投放系统里同步荣耀账户。
+              </Alert>
+            )}
             <Grid>
               <Grid.Col span={{ base: 4, xs: 3, md: 2 }}>
                 <NumberInput

@@ -349,9 +349,27 @@ export interface HonorDbTestResult {
   message: string;
 }
 
+/**
+ * 投放账户（media_account）。
+ * id 是 bigint，超出 JS 安全整数，后端按字符串下发（pk）。
+ */
+export interface HonorAccountInfo {
+  pk: string;
+  platform: string;
+  /** 平台侧账户号，如荣耀 670523 */
+  account_id: string;
+  account_name: string;
+  account_alias: string;
+  status: string;
+  /** 该账户下三件套齐全的点击行数 */
+  click_rows: number;
+}
+
 /** 设备预检入参：与回传同一套口径，但只读查库、不发送 */
 export interface HonorCheckParams {
   db: HonorDbConfig;
+  /** media_account.id，必填：点击表只存 account_pk */
+  account_pk: string | null;
   activate: number;
   register: number;
   pay: number;
@@ -378,6 +396,8 @@ export interface HonorDeviceCheckResult {
 
 export interface HonorReportParams {
   db: HonorDbConfig;
+  /** media_account.id，必填：点击表只存 account_pk */
+  account_pk: string | null;
   activate: number;
   register: number;
   pay: number;

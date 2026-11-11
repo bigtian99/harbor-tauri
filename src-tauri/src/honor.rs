@@ -5,7 +5,7 @@
 //!     保证同设备内 激活 < 注册 < 付费
 //!   - trackId / advertiserId / oaid 三件套齐全的设备才可回传；默认按 trackId 去重（保留最新一条点击）
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use chrono::{DateTime, Local};
@@ -97,10 +97,39 @@ fn default_db_port() -> u16 {
     DEFAULT_DB_PORT
 }
 
+/// 投放账户（media_account）：点击表里只存 account_pk，必须先选账户再查点击。
+#[derive(Debug, Serialize, Clone)]
+pub struct HonorAccountInfo {
+    /// media_account.id，bigint 超出 JS 安全整数范围，统一按字符串传前端
+    pub pk: String,
+    pub platform: String,
+    /// 平台侧的 account_id（荣耀后台的账户号）
+    pub account_id: String,
+    pub account_name: String,
+    pub account_alias: String,
+    pub status: String,
+    /// 该账户下三件套齐全的点击行数（全量，不限日期），用于下拉里区分账户
+    pub click_rows: u64,
+}
+
+/// 把前端传回的账户主键解析成 u64；空值直接报可读错误。
+fn parse_account_pk(raw: Option<&str>) -> Result<u64, String> {
+    let value = raw.map(str::trim).unwrap_or_default();
+    if value.is_empty() {
+        return Err("请先选择投放账户（media_account）再查询".to_string());
+    }
+    value
+        .parse::<u64>()
+        .map_err(|_| format!("投放账户主键非法: {value}（应为 media_account.id）"))
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct HonorReportParams {
     #[serde(default)]
     pub db: HonorDbConfig,
+    /// media_account.id：点击表只能按投放账户查，必填
+    #[serde(default)]
+    pub account_pk: Option<String>,
     pub activate: u32,
     pub register: u32,
     pub pay: u32,
@@ -157,6 +186,9 @@ pub struct HonorDbTestResult {
 pub struct HonorCheckParams {
     #[serde(default)]
     pub db: HonorDbConfig,
+    /// media_account.id：点击表只能按投放账户查，必填
+    #[serde(default)]
+    pub account_pk: Option<String>,
     pub activate: u32,
     pub register: u32,
     pub pay: u32,
@@ -257,6 +289,90 @@ pub async fn honor_batch_report(
         .map_err(|e| format!("回传任务失败: {e}"))?
 }
 
+/// 列出投流库里的投放账户（media_account）。
+///
+/// 点击表只存 account_pk，无法直接按「荣耀」笼统查：必须先在 media_account 里
+/// 选一个账户，再用它的 id 去过滤 media_click_log.account_pk。
+#[tauri::command]
+pub async fn honor_list_accounts(
+    db: HonorDbConfig,
+    platform: Option<String>,
+) -> Result<Vec<HonorAccountInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || honor_list_accounts_inner(db, platform))
+        .await
+        .map_err(|e| format!("读取投放账户任务失败: {e}"))?
+}
+
+fn honor_list_accounts_inner(
+    db: HonorDbConfig,
+    platform: Option<String>,
+) -> Result<Vec<HonorAccountInfo>, String> {
+    let db = db.normalized();
+    let platform = platform
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| "honor".to_string());
+    let mut conn = connect_db(&db)?;
+
+    let has_account_table: Option<String> = conn
+        .exec_first(
+            "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME='media_account'",
+            (db.database.trim(),),
+        )
+        .map_err(|e| format!("查询 information_schema 失败: {e}"))?;
+    if has_account_table.is_none() {
+        return Err(format!(
+            "库 `{}` 中没有 media_account 表，无法按投放账户查询",
+            db.database.trim()
+        ));
+    }
+
+    let rows: Vec<(u64, String, String, String, Option<String>, String)> = conn
+        .exec(
+            "SELECT id, platform, account_id, account_name, account_alias, status              FROM media_account WHERE platform=? ORDER BY account_id",
+            (platform.as_str(),),
+        )
+        .map_err(|e| format!("读取 media_account 失败: {e}"))?;
+
+    // 每个账户下三件套齐全的点击行数，用于下拉里区分同名账户
+    let mut counts: HashMap<u64, u64> = HashMap::new();
+    if let Ok(rt) = resolve_table(&mut conn, &db) {
+        if rt.has_account_pk {
+            let sql = format!(
+                "SELECT account_pk, COUNT(*) FROM `{}`                  WHERE account_pk IS NOT NULL AND track_id IS NOT NULL AND track_id<>''                  AND advertiser_id IS NOT NULL AND advertiser_id<>''                  AND oaid IS NOT NULL AND oaid<>'' AND click_time_ms IS NOT NULL                  GROUP BY account_pk",
+                rt.name
+            );
+            let pairs: Vec<(u64, u64)> = conn.exec(sql, ()).unwrap_or_default();
+            counts.extend(pairs);
+        }
+    }
+
+    let accounts: Vec<HonorAccountInfo> = rows
+        .into_iter()
+        .map(
+            |(pk, platform, account_id, account_name, account_alias, status)| HonorAccountInfo {
+                click_rows: counts.get(&pk).copied().unwrap_or(0),
+                pk: pk.to_string(),
+                platform,
+                account_id,
+                account_name,
+                account_alias: account_alias.unwrap_or_default(),
+                status,
+            },
+        )
+        .collect();
+
+    diag_log(
+        "honor",
+        &format!(
+            "honor_list_accounts db={} platform={platform} count={}",
+            db.database.trim(),
+            accounts.len()
+        ),
+    );
+    Ok(accounts)
+}
+
 /// 设备预检：按当前数量/日期/去重口径只读查库，报告够不够；不足时给出缺口与建议，不发送任何回传。
 #[tauri::command]
 pub async fn honor_check_devices(params: HonorCheckParams) -> Result<HonorDeviceCheckResult, String> {
@@ -282,10 +398,11 @@ fn honor_check_devices_inner(params: HonorCheckParams) -> Result<HonorDeviceChec
             return Err(format!("日期格式错误: {d}（应为 YYYY-MM-DD）"));
         }
     }
+    let account_pk = parse_account_pk(params.account_pk.as_deref())?;
     diag_log(
         "honor",
         &format!(
-            "honor_check_devices db={}@{}:{} activate={activate} register={register} pay={pay} date={} dedupe={}",
+            "honor_check_devices db={}@{}:{} account_pk={account_pk} activate={activate} register={register} pay={pay} date={} dedupe={}",
             params.db.database.trim(),
             params.db.host.trim(),
             params.db.port,
@@ -296,9 +413,15 @@ fn honor_check_devices_inner(params: HonorCheckParams) -> Result<HonorDeviceChec
 
     let mut conn = connect_db(&params.db)?;
     let rt = resolve_table(&mut conn, &params.db)?;
-    let click_rows = count_devices(&mut conn, &rt, date)?;
+    if !rt.has_account_pk {
+        return Err(format!(
+            "点击表 `{}` 没有 account_pk 列，无法按投放账户过滤；请确认走的是 media_click_log",
+            rt.name
+        ));
+    }
+    let click_rows = count_devices(&mut conn, &rt, date, Some(account_pk))?;
     let fetch_limit = (activate as usize).saturating_mul(20).clamp(200, 2000);
-    let devices = load_devices(&mut conn, &rt, date, fetch_limit, params.dedupe)?;
+    let devices = load_devices(&mut conn, &rt, date, Some(account_pk), fetch_limit, params.dedupe)?;
     let advertiser_id = devices
         .first()
         .map(|d| d.advertiser_id.clone())
@@ -361,8 +484,13 @@ fn honor_test_db_inner(db: HonorDbConfig) -> Result<HonorDbTestResult, String> {
     let mut conn = connect_db(&db)?;
     let rt = resolve_table(&mut conn, &db)?;
     let table_name = rt.name.clone();
-    let all = count_devices(&mut conn, &rt, None)?;
-    let today = count_devices(&mut conn, &rt, Some(&Local::now().format("%Y-%m-%d").to_string()))?;
+    let all = count_devices(&mut conn, &rt, None, None)?;
+    let today = count_devices(
+        &mut conn,
+        &rt,
+        Some(&Local::now().format("%Y-%m-%d").to_string()),
+        None,
+    )?;
     diag_log(
         "honor",
         &format!("honor_test_db ok table={table_name} all={all} today={today}"),
@@ -423,14 +551,35 @@ fn honor_batch_report_inner(
         ),
     );
 
+    let account_pk = parse_account_pk(params.account_pk.as_deref())?;
     emit_progress(app, 1, "连接投流库...", 0, 0, None);
     let mut conn = connect_db(&params.db)?;
     let rt = resolve_table(&mut conn, &params.db)?;
-    emit_progress(app, 5, &format!("读取荣耀点击（表 `{}`）...", rt.name), 0, 0, None);
+    if !rt.has_account_pk {
+        return Err(format!(
+            "点击表 `{}` 没有 account_pk 列，无法按投放账户过滤；请确认走的是 media_click_log",
+            rt.name
+        ));
+    }
+    emit_progress(
+        app,
+        5,
+        &format!("读取荣耀点击（表 `{}`，账户 {account_pk}）...", rt.name),
+        0,
+        0,
+        None,
+    );
 
     // 多取一些行再在内存里按 trackId 去重，保证能凑够 activate 个不同设备
     let fetch_limit = (activate as usize).saturating_mul(20).clamp(200, 2000);
-    let devices = load_devices(&mut conn, &rt, date, fetch_limit, params.dedupe)?;
+    let devices = load_devices(
+        &mut conn,
+        &rt,
+        date,
+        Some(account_pk),
+        fetch_limit,
+        params.dedupe,
+    )?;
     if devices.len() < activate as usize {
         let hint = date.map(|d| format!("（日期 {d}）")).unwrap_or_default();
         diag_log(
@@ -643,6 +792,8 @@ struct ResolvedTable {
     name: String,
     has_platform: bool,
     has_package: bool,
+    /// 点击表按 account_pk 关联 media_account；缺失时无法按账户过滤
+    has_account_pk: bool,
 }
 
 fn ensure_identifier(name: &str) -> Result<(), String> {
@@ -700,6 +851,7 @@ fn resolve_table(conn: &mut Conn, db: &HonorDbConfig) -> Result<ResolvedTable, S
             name: name.clone(),
             has_platform: columns.iter().any(|c| c.eq_ignore_ascii_case("platform")),
             has_package: columns.iter().any(|c| c.eq_ignore_ascii_case("package_name")),
+            has_account_pk: columns.iter().any(|c| c.eq_ignore_ascii_case("account_pk")),
         });
         break;
     }
@@ -723,16 +875,25 @@ fn resolve_table(conn: &mut Conn, db: &HonorDbConfig) -> Result<ResolvedTable, S
     Ok(rt)
 }
 
-/// 统计三件套齐全的荣耀设备数（platform 列存在时限定 platform='honor'）
-fn count_devices(conn: &mut Conn, rt: &ResolvedTable, date: Option<&str>) -> Result<u64, String> {
-    let (sql, params) = device_count_sql(rt, date);
+/// 统计三件套齐全的荣耀设备数（platform 列存在时限定 platform='honor'，并按投放账户过滤）
+fn count_devices(
+    conn: &mut Conn,
+    rt: &ResolvedTable,
+    date: Option<&str>,
+    account_pk: Option<u64>,
+) -> Result<u64, String> {
+    let (sql, params) = device_count_sql(rt, date, account_pk);
     let count: Option<u64> = conn
         .exec_first(&sql, params)
         .map_err(|e| format!("统计可用设备失败: {e}"))?;
     Ok(count.unwrap_or(0))
 }
 
-fn device_count_sql(rt: &ResolvedTable, date: Option<&str>) -> (String, Params) {
+fn device_count_sql(
+    rt: &ResolvedTable,
+    date: Option<&str>,
+    account_pk: Option<u64>,
+) -> (String, Params) {
     let mut sql = format!(
         "SELECT COUNT(*) FROM `{}` WHERE track_id IS NOT NULL AND track_id<>'' AND advertiser_id IS NOT NULL AND advertiser_id<>'' AND oaid IS NOT NULL AND oaid<>'' AND click_time_ms IS NOT NULL",
         rt.name
@@ -740,6 +901,12 @@ fn device_count_sql(rt: &ResolvedTable, date: Option<&str>) -> (String, Params) 
     let mut params: Vec<Value> = Vec::new();
     if rt.has_platform {
         sql.push_str(" AND platform='honor'");
+    }
+    if rt.has_account_pk {
+        if let Some(pk) = account_pk {
+            sql.push_str(" AND account_pk=?");
+            params.push(Value::UInt(pk));
+        }
     }
     if let Some(d) = date {
         sql.push_str(" AND DATE(create_time)=?");
@@ -753,6 +920,7 @@ fn load_devices(
     conn: &mut Conn,
     rt: &ResolvedTable,
     date: Option<&str>,
+    account_pk: Option<u64>,
     limit: usize,
     dedupe: bool,
 ) -> Result<Vec<Device>, String> {
@@ -764,6 +932,12 @@ fn load_devices(
     let mut params: Vec<Value> = Vec::new();
     if rt.has_platform {
         sql.push_str(" AND platform='honor'");
+    }
+    if rt.has_account_pk {
+        if let Some(pk) = account_pk {
+            sql.push_str(" AND account_pk=?");
+            params.push(Value::UInt(pk));
+        }
     }
     if let Some(d) = date {
         sql.push_str(" AND DATE(create_time)=?");
