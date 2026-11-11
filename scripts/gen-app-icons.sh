@@ -2,11 +2,12 @@
 # 从设计稿 app-icon.png 生成各平台图标资产。
 #
 # macOS 与其它平台规格不同，不能混用：
-#   macOS（icon.icns）：母版按约 85% 内缩居中、四周留透明，保留设计稿自带的圆角。
-#     实测反例：把四角填成不透明底色做成「满幅 1024」后，macOS 26 Dock 会把图标
-#     当成普通图片再套一层玻璃背板并内缩，四角的填充色与设计稿渐变边缘错位，
-#     Dock 里就出现「双层边框 / logo 没铺满」的观感（见 issue：Dock 图标异常）。
-#     保持内缩 + 透明四角，Dock 直接按图像自身的 alpha 呈现，颜色与设计稿一致。
+#   macOS（icon.icns）：必须是「满幅、不透明、无自带圆角」的 1024 方形。
+#     实测（macOS 26/27）：留透明边距的旧式图标会被系统判定为 legacy，
+#     外面自动补一层玻璃/浅色圆角背板，图标被缩到中间——就是 Dock / Finder 里
+#     看到的「双层边框」。做法：设计稿铺满画布后，把四角透明区合成到一条与
+#     设计稿背景一致的竖直渐变上，再交不透明 PNG 给 iconutil。
+#     设计稿自带的圆角会被系统 squircle 掩膜盖掉，不会再出现第二条边。
 #   Windows / Linux / 网页：系统不替图标套圆角，必须保留自带的圆角与透明角。
 #
 # 因此不要用 `pnpm tauri icon` 全量重生成：它会用同一套规则覆盖两个平台，
@@ -39,26 +40,34 @@ fi
 #    设计稿裁边后约 1065x1063，拉成 1024 正方形的形变 <0.2%，可忽略。
 magick "$SRC" -trim +repage -filter Lanczos -resize '1024x1024!' "$TMP/rounded.png"
 
-# 2. macOS 母版：按 85.5% 内缩居中（1024 → 876），保留透明四角与自带圆角，
-#    与历史上 Dock 表现正常的版本一致；不做「满幅不透明」处理（原因见文件头）。
-magick "$TMP/rounded.png" -filter Lanczos -resize '876x876!' \
-  -background none -gravity center -extent 1024x1024 "$TMP/macos.png"
+# 2. macOS 母版：设计稿铺满画布，四角透明区用「与背景同色的竖直渐变」补满，
+#    得到不透明、无透明边距的满幅方形（原因见文件头）。
+#    渐变端点取自设计稿左右边缘背景（顶部 #0d3a6b → 底部 #04162e）。
+magick -size 1024x1024 gradient:'#0d3a6b'-'#04162e' "$TMP/mac_bg.png"
+magick "$TMP/mac_bg.png" "$TMP/rounded.png" -composite -alpha off "$TMP/macos.png"
 
-# 2.1 校验：内缩后不透明区域应明显小于画布，否则说明又被改成了满幅
+# 2.1 校验：必须是满幅且无 alpha，否则 macOS 又会把图标套进背板
 OPAQUE="$(magick "$TMP/macos.png" -format '%@' info:)"
+ALPHA="$(magick "$TMP/macos.png" -format '%A' info:)"
 case "$OPAQUE" in
-  1024x1024+0+0)
-    echo "✗ macOS 母版仍是满幅不透明（$OPAQUE），Dock 会被套背板，请检查第 2 步" >&2
+  1024x1024+0+0) ;;
+  *)
+    echo "✗ macOS 母版不是满幅（$OPAQUE），Dock 会被套玻璃背板，请检查第 2 步" >&2
     exit 1
     ;;
 esac
-echo "macOS 母版不透明区域: $OPAQUE"
+if [ "$ALPHA" = "Blend" ] || [ "$ALPHA" = "Yes" ]; then
+  echo "✗ macOS 母版仍带 alpha（$ALPHA），会被判定为 legacy 图标并补背板" >&2
+  exit 1
+fi
+echo "macOS 母版: 满幅 1024 不透明（$OPAQUE）"
 
 # 3. 用 iconset 生成 icon.icns（iconutil 会补齐 16/32 的 legacy 条目与 mask）。
 ICONSET="$TMP/icon.iconset"
 mkdir -p "$ICONSET"
 for s in 16 32 64 128 256 512 1024; do
-  magick "$TMP/macos.png" -filter Lanczos -resize "${s}x${s}!" "$ICONSET/_${s}.png"
+  # PNG24：强制不带 alpha，16px 下也不会被量化成调色板（iconutil 会判非法）
+  magick "$TMP/macos.png" -filter Lanczos -resize "${s}x${s}!" "PNG24:$ICONSET/_${s}.png"
 done
 cp "$ICONSET/_16.png"   "$ICONSET/icon_16x16.png"
 cp "$ICONSET/_32.png"   "$ICONSET/icon_16x16@2x.png"
@@ -103,6 +112,6 @@ open(svg_path, "w").write(svg)
 PY
 
 echo "已生成："
-echo "  $ICONS/icon.icns        macOS 内缩 85.5% + 透明四角"
+echo "  $ICONS/icon.icns        macOS 满幅不透明（系统套 squircle）"
 echo "  $PUB/*.png + brandmark.svg   网页圆角无留白"
 echo "未改动：icon.ico / Square*Logo.png / StoreLogo.png / 32x32.png / 128x128*.png（Windows、Linux 资产）"
