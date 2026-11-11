@@ -363,6 +363,8 @@ export interface HonorAccountInfo {
   status: string;
   /** 该账户下三件套齐全的点击行数 */
   click_rows: number;
+  /** 同口径按设备（oaid）去重后的台数 */
+  devices: number;
 }
 
 /** 设备预检入参：与回传同一套口径，但只读查库、不发送 */

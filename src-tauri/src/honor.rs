@@ -108,8 +108,10 @@ pub struct HonorAccountInfo {
     pub account_name: String,
     pub account_alias: String,
     pub status: String,
-    /// 该账户下三件套齐全的点击行数（全量，不限日期），用于下拉里区分账户
+    /// 该账户下三件套齐全的点击行数（全量，不限日期）
     pub click_rows: u64,
+    /// 同口径按设备（oaid）去重后的台数——面板展示这个，行数不等于台数
+    pub devices: u64,
 }
 
 /// 把前端传回的账户主键解析成 u64；空值直接报可读错误。
@@ -370,15 +372,25 @@ fn honor_list_accounts_inner(
         .map_err(|e| format!("读取 media_account 失败: {e}"))?;
 
     // 每个账户下三件套齐全的点击行数，用于下拉里区分同名账户
-    let mut counts: HashMap<u64, u64> = HashMap::new();
+    let mut counts: HashMap<u64, (u64, u64)> = HashMap::new();
     if let Ok(rt) = resolve_table(&mut conn, &db) {
         if rt.has_account_pk {
+            // 一次取两个口径：点击行数（COUNT(*)）与去重设备数（COUNT(DISTINCT oaid)）。
+            // 面板展示设备数——行数会被同设备的多次点击放大，不能当台数用。
             let sql = format!(
-                "SELECT account_pk, COUNT(*) FROM `{}`                  WHERE account_pk IS NOT NULL AND track_id IS NOT NULL AND track_id<>''                  AND advertiser_id IS NOT NULL AND advertiser_id<>''                  AND oaid IS NOT NULL AND oaid<>'' AND click_time_ms IS NOT NULL                  GROUP BY account_pk",
+                "SELECT account_pk, COUNT(*), COUNT(DISTINCT oaid) FROM `{}` \
+                 WHERE account_pk IS NOT NULL AND track_id IS NOT NULL AND track_id<>'' \
+                 AND advertiser_id IS NOT NULL AND advertiser_id<>'' \
+                 AND oaid IS NOT NULL AND oaid<>'' AND click_time_ms IS NOT NULL \
+                 GROUP BY account_pk",
                 rt.name
             );
-            let pairs: Vec<(u64, u64)> = conn.exec(sql, ()).unwrap_or_default();
-            counts.extend(pairs);
+            let triples: Vec<(u64, u64, u64)> = conn.exec(sql, ()).unwrap_or_default();
+            counts.extend(
+                triples
+                    .into_iter()
+                    .map(|(pk, rows, devices)| (pk, (rows, devices))),
+            );
         }
     }
 
@@ -386,7 +398,8 @@ fn honor_list_accounts_inner(
         .into_iter()
         .map(
             |(pk, platform, account_id, account_name, account_alias, status)| HonorAccountInfo {
-                click_rows: counts.get(&pk).copied().unwrap_or(0),
+                click_rows: counts.get(&pk).map(|(rows, _)| *rows).unwrap_or(0),
+                devices: counts.get(&pk).map(|(_, devices)| *devices).unwrap_or(0),
                 pk: pk.to_string(),
                 platform,
                 account_id,

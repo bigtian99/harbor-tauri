@@ -218,7 +218,8 @@ export function HonorReportPanel() {
   const [register, setRegister] = useState<number>(25);
   const [pay, setPay] = useState<number>(15);
   const [intervalSec, setIntervalSec] = useState<number>(0.3);
-  const [dateMode, setDateMode] = useState<DateMode>("all");
+  // 默认看今日点击：回传按天分批次，绝大多数场景都是当天数据
+  const [dateMode, setDateMode] = useState<DateMode>("today");
   const [customDate, setCustomDate] = useState("");
   const [dedupe, setDedupe] = useState(true);
   const [dryRun, setDryRun] = useState(false);
@@ -443,7 +444,7 @@ export function HonorReportPanel() {
                 value: a.pk,
                 label: `${a.account_id} · ${a.account_name}${
                   a.account_alias ? `（${a.account_alias}）` : ""
-                }（可回传 ${a.click_rows}）`,
+                }（累计 ${a.devices} 台可回传）`,
               }))}
               value={accountPk}
               onChange={setAccountPk}
