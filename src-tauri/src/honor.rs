@@ -5,7 +5,7 @@
 //!     保证同设备内 激活 < 注册 < 付费
 //!   - trackId / advertiserId / oaid 三件套齐全的设备才可回传；默认按 trackId 去重（保留最新一条点击）
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::time::Duration;
 
 use chrono::{DateTime, Local};
@@ -334,8 +334,9 @@ pub async fn honor_batch_report(
 pub async fn honor_list_accounts(
     db: HonorDbConfig,
     platform: Option<String>,
+    date: Option<String>,
 ) -> Result<Vec<HonorAccountInfo>, String> {
-    tauri::async_runtime::spawn_blocking(move || honor_list_accounts_inner(db, platform))
+    tauri::async_runtime::spawn_blocking(move || honor_list_accounts_inner(db, platform, date))
         .await
         .map_err(|e| format!("读取投放账户任务失败: {e}"))?
 }
@@ -343,8 +344,13 @@ pub async fn honor_list_accounts(
 fn honor_list_accounts_inner(
     db: HonorDbConfig,
     platform: Option<String>,
+    date: Option<String>,
 ) -> Result<Vec<HonorAccountInfo>, String> {
     let db = db.normalized();
+    // 与预检/回传同一口径：同一套日期过滤，下拉里的台数才能和结论对得上
+    let date = date.map(|d| d.trim().to_string()).filter(|d| !d.is_empty());
+    let today = today_local();
+    let scoped_today = date.as_deref() == Some(today.as_str());
     let platform = platform
         .map(|p| p.trim().to_string())
         .filter(|p| !p.is_empty())
@@ -366,55 +372,109 @@ fn honor_list_accounts_inner(
 
     let rows: Vec<(u64, String, String, String, Option<String>, String)> = conn
         .exec(
-            "SELECT id, platform, account_id, account_name, account_alias, status              FROM media_account WHERE platform=? ORDER BY account_id",
+            "SELECT id, platform, account_id, account_name, account_alias, status FROM media_account WHERE platform=? ORDER BY account_id",
             (platform.as_str(),),
         )
         .map_err(|e| format!("读取 media_account 失败: {e}"))?;
 
-    // 每个账户下三件套齐全的点击行数，用于下拉里区分同名账户
-    let mut counts: HashMap<u64, (u64, u64)> = HashMap::new();
-    if let Ok(rt) = resolve_table(&mut conn, &db) {
-        if rt.has_account_pk {
-            // 一次取两个口径：点击行数（COUNT(*)）与去重设备数（COUNT(DISTINCT oaid)）。
-            // 面板展示设备数——行数会被同设备的多次点击放大，不能当台数用。
-            let sql = format!(
-                "SELECT account_pk, COUNT(*), COUNT(DISTINCT oaid) FROM `{}` \
-                 WHERE account_pk IS NOT NULL AND track_id IS NOT NULL AND track_id<>'' \
-                 AND advertiser_id IS NOT NULL AND advertiser_id<>'' \
-                 AND oaid IS NOT NULL AND oaid<>'' AND click_time_ms IS NOT NULL \
-                 GROUP BY account_pk",
-                rt.name
-            );
-            let triples: Vec<(u64, u64, u64)> = conn.exec(sql, ()).unwrap_or_default();
-            counts.extend(
-                triples
-                    .into_iter()
-                    .map(|(pk, rows, devices)| (pk, (rows, devices))),
-            );
-        }
-    }
-
-    let accounts: Vec<HonorAccountInfo> = rows
+    let mut accounts: Vec<HonorAccountInfo> = rows
         .into_iter()
         .map(
             |(pk, platform, account_id, account_name, account_alias, status)| HonorAccountInfo {
-                click_rows: counts.get(&pk).map(|(rows, _)| *rows).unwrap_or(0),
-                devices: counts.get(&pk).map(|(_, devices)| *devices).unwrap_or(0),
                 pk: pk.to_string(),
                 platform,
                 account_id,
                 account_name,
                 account_alias: account_alias.unwrap_or_default(),
                 status,
+                click_rows: 0,
+                devices: 0,
             },
         )
         .collect();
 
+    // 设备筛选条件：与预检/回传完全一致，否则两处数字必然对不上
+    const DEVICE_WHERE: &str = "track_id IS NOT NULL AND track_id<>'' \
+         AND advertiser_id IS NOT NULL AND advertiser_id<>'' \
+         AND oaid IS NOT NULL AND oaid<>'' AND click_time_ms IS NOT NULL";
+
+    let rt = resolve_table(&mut conn, &db).ok();
+    if let Some(rt) = rt {
+        if !rt.has_account_pk {
+            return Ok(accounts);
+        }
+        // 1) 行数与去重台数（同一日期口径）
+        let mut sql = format!(
+            "SELECT account_pk, COUNT(*), COUNT(DISTINCT LOWER(oaid)) FROM `{}` \
+             WHERE {DEVICE_WHERE} AND account_pk IS NOT NULL",
+            rt.name
+        );
+        let mut params: Vec<Value> = Vec::new();
+        if let Some(d) = date.as_deref() {
+            sql.push_str(" AND DATE(create_time)=?");
+            params.push(Value::from(d));
+        }
+        sql.push_str(" GROUP BY account_pk");
+        let triples: Vec<(u64, u64, u64)> = conn
+            .exec(sql, Params::Positional(params))
+            .unwrap_or_default();
+        for acc in accounts.iter_mut() {
+            if let Some((_, rows_n, dev_n)) = triples
+                .iter()
+                .find(|(pk, _, _)| pk.to_string() == acc.pk)
+                .copied()
+            {
+                acc.click_rows = rows_n;
+                acc.devices = dev_n;
+            }
+        }
+
+        // 2) 今日口径再扣掉台账里已回传过的设备（这批不会再发）
+        if scoped_today {
+            for acc in accounts.iter_mut() {
+                let Ok(reported) = crate::db::honor_reported_oaids(&acc.pk, &today) else {
+                    continue;
+                };
+                if reported.is_empty() {
+                    continue;
+                }
+                let set: Vec<String> = reported
+                    .into_iter()
+                    .map(|s| s.trim().to_lowercase())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if set.is_empty() {
+                    continue;
+                }
+                let placeholders = vec!["?"; set.len()].join(",");
+                let sql = format!(
+                    "SELECT COUNT(*), COUNT(DISTINCT LOWER(oaid)) FROM `{}` \
+                     WHERE {DEVICE_WHERE} AND DATE(create_time)=? AND account_pk=? \
+                     AND LOWER(oaid) NOT IN ({placeholders})",
+                    rt.name
+                );
+                let mut params: Vec<Value> = vec![
+                    Value::from(today.as_str()),
+                    Value::from(acc.pk.as_str()),
+                ];
+                params.extend(set.iter().map(|s| Value::from(s.as_str())));
+                let counted: Option<(u64, u64)> = conn
+                    .exec_first(sql, Params::Positional(params))
+                    .unwrap_or(None);
+                if let Some((rows_n, dev_n)) = counted {
+                    acc.click_rows = rows_n;
+                    acc.devices = dev_n;
+                }
+            }
+        }
+    }
+
     diag_log(
         "honor",
         &format!(
-            "honor_list_accounts db={} platform={platform} count={}",
+            "honor_list_accounts db={} platform={platform} date={} count={}",
             db.database.trim(),
+            date.as_deref().unwrap_or("all"),
             accounts.len()
         ),
     );

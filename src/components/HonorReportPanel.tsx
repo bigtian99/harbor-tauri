@@ -237,18 +237,28 @@ export function HonorReportPanel() {
   const [runError, setRunError] = useState<string | null>(null);
   const logBoxRef = useRef<HTMLDivElement | null>(null);
 
+  // 当前日期口径：与预检/回传/账户统计共用同一份，避免三处数字各算各的
+  const dateParam =
+    dateMode === "all" ? null : dateMode === "today" ? todayStr() : customDate.trim() || null;
+  const dateScopeLabel =
+    dateMode === "all" ? "全部点击" : dateMode === "today" ? "今日点击" : customDate.trim();
+
   // 记住选择，重开面板沿用
   useEffect(() => {
     if (accountPk) window.localStorage.setItem(HONOR_ACCOUNT_KEY, accountPk);
   }, [accountPk]);
 
-  // 进面板即拉账户列表；只有一个账户时自动选中，省一次点击
+  // 拉账户列表；日期口径变化时重拉，保证下拉里的台数与预检结论同一口径
   useEffect(() => {
     if (!isTauriRuntime()) return;
     let disposed = false;
     setAccountsLoading(true);
     setAccountsError(null);
-    invoke<HonorAccountInfo[]>("honor_list_accounts", { db: {}, platform: "honor" })
+    invoke<HonorAccountInfo[]>("honor_list_accounts", {
+      db: {},
+      platform: "honor",
+      date: dateParam,
+    })
       .then((list) => {
         if (disposed) return;
         setAccounts(list);
@@ -267,7 +277,7 @@ export function HonorReportPanel() {
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [dateParam]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -351,7 +361,7 @@ export function HonorReportPanel() {
     }
     setChecking(true);
     setCheckError(null);
-    const date = dateMode === "all" ? null : dateMode === "today" ? todayStr() : customDate.trim();
+    const date = dateParam;
     const sig = checkSignature();
     try {
       const params: HonorCheckParams = {
@@ -386,7 +396,7 @@ export function HonorReportPanel() {
     setRunError(null);
     setLines([]);
     setProgress({ percent: 1, message: "准备回传...", current: 0, total: 0 });
-    const date = dateMode === "all" ? null : dateMode === "today" ? todayStr() : customDate.trim();
+    const date = dateParam;
     const params: HonorReportParams = {
       db: {},
       account_pk: accountPk,
@@ -444,7 +454,7 @@ export function HonorReportPanel() {
                 value: a.pk,
                 label: `${a.account_id} · ${a.account_name}${
                   a.account_alias ? `（${a.account_alias}）` : ""
-                }（累计 ${a.devices} 台可回传）`,
+                }（${dateScopeLabel} ${a.devices} 台 · ${a.click_rows} 条点击）`,
               }))}
               value={accountPk}
               onChange={setAccountPk}
