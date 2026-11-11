@@ -33,25 +33,73 @@ const TRACK_DISPLAY_LEN: usize = 32;
 
 // ==================== 入参 / 出参 ====================
 
+/// 投流库默认连接（备份实例）。设置面板已移除，面板只发空对象，由这里兜底。
+const DEFAULT_DB_HOST: &str = "rm-852q7lhl.mysql.rds.aliyuncs.com";
+const DEFAULT_DB_PORT: u16 = 3306;
+const DEFAULT_DB_USER: &str = "daijunxiong001";
+const DEFAULT_DB_PASS: &str = "&EZY0E4Y";
+const DEFAULT_DB_NAME: &str = "tksy_media_backup";
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct HonorDbConfig {
+    #[serde(default)]
     pub host: String,
     #[serde(default = "default_db_port")]
     pub port: u16,
+    #[serde(default)]
     pub user: String,
+    #[serde(default)]
     pub password: String,
+    #[serde(default)]
     pub database: String,
     /// 留空自动识别候选表
     #[serde(default)]
     pub table: String,
 }
 
+impl Default for HonorDbConfig {
+    fn default() -> Self {
+        Self {
+            host: DEFAULT_DB_HOST.to_string(),
+            port: DEFAULT_DB_PORT,
+            user: DEFAULT_DB_USER.to_string(),
+            password: DEFAULT_DB_PASS.to_string(),
+            database: DEFAULT_DB_NAME.to_string(),
+            table: String::new(),
+        }
+    }
+}
+
+impl HonorDbConfig {
+    /// 空字段回落到内置默认：老 config.json 里存的是空串（面板填写时代），
+    /// 面板移除后统一走这里，保证不改配置文件也能连上投流库。
+    fn normalized(mut self) -> Self {
+        if self.host.trim().is_empty() {
+            self.host = DEFAULT_DB_HOST.to_string();
+        }
+        if self.port == 0 {
+            self.port = DEFAULT_DB_PORT;
+        }
+        if self.user.trim().is_empty() {
+            self.user = DEFAULT_DB_USER.to_string();
+        }
+        if self.password.is_empty() {
+            self.password = DEFAULT_DB_PASS.to_string();
+        }
+        if self.database.trim().is_empty() {
+            self.database = DEFAULT_DB_NAME.to_string();
+        }
+        self
+    }
+}
+
 fn default_db_port() -> u16 {
-    3306
+    DEFAULT_DB_PORT
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HonorReportParams {
+    #[serde(default)]
     pub db: HonorDbConfig,
     pub activate: u32,
     pub register: u32,
@@ -69,6 +117,13 @@ pub struct HonorReportParams {
     pub dedupe: bool,
     #[serde(default)]
     pub dry_run: bool,
+}
+
+impl HonorReportParams {
+    fn normalized(mut self) -> Self {
+        self.db = self.db.normalized();
+        self
+    }
 }
 
 fn default_pay_amount() -> String {
@@ -100,6 +155,7 @@ pub struct HonorDbTestResult {
 /// 设备预检入参：与回传同一套数量/日期/去重口径，但只读查库、绝不发送
 #[derive(Debug, Clone, Deserialize)]
 pub struct HonorCheckParams {
+    #[serde(default)]
     pub db: HonorDbConfig,
     pub activate: u32,
     pub register: u32,
@@ -108,6 +164,13 @@ pub struct HonorCheckParams {
     pub date: Option<String>,
     #[serde(default = "default_true")]
     pub dedupe: bool,
+}
+
+impl HonorCheckParams {
+    fn normalized(mut self) -> Self {
+        self.db = self.db.normalized();
+        self
+    }
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -203,6 +266,7 @@ pub async fn honor_check_devices(params: HonorCheckParams) -> Result<HonorDevice
 }
 
 fn honor_check_devices_inner(params: HonorCheckParams) -> Result<HonorDeviceCheckResult, String> {
+    let params = params.normalized();
     let activate = params.activate;
     let register = params.register;
     let pay = params.pay;
@@ -221,7 +285,10 @@ fn honor_check_devices_inner(params: HonorCheckParams) -> Result<HonorDeviceChec
     diag_log(
         "honor",
         &format!(
-            "honor_check_devices activate={activate} register={register} pay={pay} date={} dedupe={}",
+            "honor_check_devices db={}@{}:{} activate={activate} register={register} pay={pay} date={} dedupe={}",
+            params.db.database.trim(),
+            params.db.host.trim(),
+            params.db.port,
             date.unwrap_or("all"),
             params.dedupe,
         ),
@@ -280,6 +347,7 @@ fn honor_check_devices_inner(params: HonorCheckParams) -> Result<HonorDeviceChec
 }
 
 fn honor_test_db_inner(db: HonorDbConfig) -> Result<HonorDbTestResult, String> {
+    let db = db.normalized();
     diag_log(
         "honor",
         &format!(
@@ -313,6 +381,7 @@ fn honor_batch_report_inner(
     app: &tauri::AppHandle,
     params: HonorReportParams,
 ) -> Result<HonorReportSummary, String> {
+    let params = params.normalized();
     let activate = params.activate;
     let register = params.register;
     let pay = params.pay;

@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # 从设计稿 app-icon.png 生成各平台图标资产。
 #
-# 两套规格不能混用：
-#   macOS 26+：icon.icns 必须是「满幅、不透明、方形」，圆角由系统统一套用。
-#     自带圆角/透明留白的旧式图标会被系统判定为普通图片，套一层银色/玻璃
-#     背板并把内容缩小居中（Dock 里看起来「logo 没铺满」）。
+# macOS 与其它平台规格不同，不能混用：
+#   macOS（icon.icns）：母版按约 85% 内缩居中、四周留透明，保留设计稿自带的圆角。
+#     实测反例：把四角填成不透明底色做成「满幅 1024」后，macOS 26 Dock 会把图标
+#     当成普通图片再套一层玻璃背板并内缩，四角的填充色与设计稿渐变边缘错位，
+#     Dock 里就出现「双层边框 / logo 没铺满」的观感（见 issue：Dock 图标异常）。
+#     保持内缩 + 透明四角，Dock 直接按图像自身的 alpha 呈现，颜色与设计稿一致。
 #   Windows / Linux / 网页：系统不替图标套圆角，必须保留自带的圆角与透明角。
 #
-# 因此不要用 `pnpm tauri icon` 全量重生成：它会从同一张源图产出 icns，
-# 把 macOS 的满幅处理覆盖掉，也会让 Windows 图标变成直角方块。
-# 改动设计稿后只需重跑本脚本。
+# 因此不要用 `pnpm tauri icon` 全量重生成：它会用同一套规则覆盖两个平台，
+# 让 Windows 图标变成直角方块。改动设计稿后只需重跑本脚本。
 #
 # 依赖：ImageMagick (magick)、iconutil（macOS）、python3。
 
@@ -38,9 +39,20 @@ fi
 #    设计稿裁边后约 1065x1063，拉成 1024 正方形的形变 <0.2%，可忽略。
 magick "$SRC" -trim +repage -filter Lanczos -resize '1024x1024!' "$TMP/rounded.png"
 
-# 2. macOS 母版：把透明四角填成图标底色，得到完全不透明的满幅方形。
-#    系统随后自行套圆角，被裁掉的四角不会露出。
-magick "$TMP/rounded.png" -background '#011634' -alpha remove -alpha off "$TMP/macos.png"
+# 2. macOS 母版：按 85.5% 内缩居中（1024 → 876），保留透明四角与自带圆角，
+#    与历史上 Dock 表现正常的版本一致；不做「满幅不透明」处理（原因见文件头）。
+magick "$TMP/rounded.png" -filter Lanczos -resize '876x876!' \
+  -background none -gravity center -extent 1024x1024 "$TMP/macos.png"
+
+# 2.1 校验：内缩后不透明区域应明显小于画布，否则说明又被改成了满幅
+OPAQUE="$(magick "$TMP/macos.png" -format '%@' info:)"
+case "$OPAQUE" in
+  1024x1024+0+0)
+    echo "✗ macOS 母版仍是满幅不透明（$OPAQUE），Dock 会被套背板，请检查第 2 步" >&2
+    exit 1
+    ;;
+esac
+echo "macOS 母版不透明区域: $OPAQUE"
 
 # 3. 用 iconset 生成 icon.icns（iconutil 会补齐 16/32 的 legacy 条目与 mask）。
 ICONSET="$TMP/icon.iconset"
@@ -91,6 +103,6 @@ open(svg_path, "w").write(svg)
 PY
 
 echo "已生成："
-echo "  $ICONS/icon.icns        macOS 满幅不透明"
+echo "  $ICONS/icon.icns        macOS 内缩 85.5% + 透明四角"
 echo "  $PUB/*.png + brandmark.svg   网页圆角无留白"
 echo "未改动：icon.ico / Square*Logo.png / StoreLogo.png / 32x32.png / 128x128*.png（Windows、Linux 资产）"

@@ -111,19 +111,6 @@ function App() {
     [app.setConfig],
   );
 
-  /** 荣耀回传：面板内保存数据源配置（合并进全量配置并落盘） */
-  const saveHonorDbConfig = useCallback(
-    (patch: Partial<HarborConfig>) => {
-      const next = { ...app.getConfigSnapshot(), ...patch };
-      app.setConfig(next);
-      if (!isTauriRuntime()) return;
-      void invoke("save_config", { config: next }).catch((e) => {
-        console.error("保存荣耀回传数据源失败:", e);
-      });
-    },
-    [app.getConfigSnapshot, app.setConfig],
-  );
-
   const branch = useBranchPack({
     config: app.config,
     setConfig: app.setConfig,
@@ -570,7 +557,7 @@ function App() {
           />
         )}
         {activeTab === "honorReport" && (
-          <HonorReportPanel config={app.config} onPatchConfig={saveHonorDbConfig} />
+          <HonorReportPanel />
         )}
         {activeTab === "config" && (
           <ConfigPanel

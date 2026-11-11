@@ -12,7 +12,6 @@ import {
   Grid,
   NumberInput,
   Paper,
-  PasswordInput,
   Popover,
   Progress,
   SegmentedControl,
@@ -27,18 +26,13 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Database,
   Loader2,
   Play,
-  Save,
   Search,
 } from "lucide-react";
 
 import type {
-  HarborConfig,
   HonorCheckParams,
-  HonorDbConfig,
-  HonorDbTestResult,
   HonorDeviceCheckResult,
   HonorProgressPayload,
   HonorReportParams,
@@ -48,15 +42,6 @@ import { isTauriRuntime } from "../types";
 import { PanelPageHeader } from "./PanelPageHeader";
 import "../styles/ops-panel.css";
 
-type HonorDbForm = {
-  host: string;
-  port: string;
-  user: string;
-  password: string;
-  database: string;
-  table: string;
-};
-
 type DateMode = "today" | "date" | "all";
 
 type HonorProgress = {
@@ -64,15 +49,6 @@ type HonorProgress = {
   message: string;
   current: number;
   total: number;
-};
-
-const DEFAULT_DB_FORM: HonorDbForm = {
-  host: "rm-gdy8njy6.mysql.rds.aliyuncs.com",
-  port: "3306",
-  user: "tksy_admin",
-  password: "",
-  database: "tksy_admin_2",
-  table: "",
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -92,13 +68,29 @@ const OUTCOME_COLOR: Record<string, string> = {
 const MAX_LOG_LINES = 400;
 
 /** 预检结果列表的一行：左标签右值 */
-function CheckRow({ label, value }: { label: string; value: string }) {
+function CheckRow({
+  label,
+  value,
+  tone = "normal",
+}: {
+  label: string;
+  value: string;
+  /** warn：缺口这类要紧的数，加亮加粗，别跟普通明细糊在一起 */
+  tone?: "normal" | "warn" | "ok" | "dim";
+}) {
+  const valueColor =
+    tone === "warn" ? "#ffb020" : tone === "ok" ? "#2dd4a7" : tone === "dim" ? undefined : undefined;
   return (
     <Group justify="space-between" gap="md" wrap="nowrap">
-      <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+      <Text size="xs" c={tone === "dim" ? "dimmed" : undefined} style={{ flexShrink: 0 }} fw={tone === "warn" ? 600 : undefined}>
         {label}
       </Text>
-      <Text size="xs" style={{ wordBreak: "break-all", textAlign: "right" }}>
+      <Text
+        size="xs"
+        fw={tone === "warn" || tone === "ok" ? 700 : undefined}
+        c={valueColor}
+        style={{ wordBreak: "break-all", textAlign: "right" }}
+      >
         {value}
       </Text>
     </Group>
@@ -205,21 +197,7 @@ function numberFrom(value: number | string, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export function HonorReportPanel({
-  config,
-  onPatchConfig,
-}: {
-  config: HarborConfig;
-  onPatchConfig: (patch: Partial<HarborConfig>) => void;
-}) {
-  const [db, setDb] = useState<HonorDbForm>(DEFAULT_DB_FORM);
-  const [dbTouched, setDbTouched] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<HonorDbTestResult | null>(null);
-  const [testError, setTestError] = useState<string | null>(null);
-
+export function HonorReportPanel() {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<HonorDeviceCheckResult | null>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
@@ -246,21 +224,6 @@ export function HonorReportPanel({
   const [summary, setSummary] = useState<HonorReportSummary | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const logBoxRef = useRef<HTMLDivElement | null>(null);
-
-  // 数据源字段：仅在用户未手动改过时，从加载完成的配置里补种
-  useEffect(() => {
-    if (dbTouched) return;
-    const host = config.honor_db_host ?? "";
-    if (!host && !config.honor_db_user) return;
-    setDb({
-      host,
-      port: String(config.honor_db_port ?? 3306),
-      user: config.honor_db_user ?? "",
-      password: config.honor_db_pass ?? "",
-      database: config.honor_db_name ?? "",
-      table: config.honor_db_table ?? "",
-    });
-  }, [config, dbTouched]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -305,34 +268,12 @@ export function HonorReportPanel({
     }
   }, [lines]);
 
-  function patchDb(patch: Partial<HonorDbForm>) {
-    setDbTouched(true);
-    setDb((prev) => ({ ...prev, ...patch }));
-  }
-
-  function buildDbConfig(): HonorDbConfig {
-    return {
-      host: db.host.trim(),
-      port: numberFrom(db.port, 3306),
-      user: db.user.trim(),
-      password: db.password,
-      database: db.database.trim(),
-      table: db.table.trim(),
-    };
-  }
-
-  const dbReady = Boolean(db.host.trim() && db.user.trim() && db.database.trim());
   const funnelInvalid = activate < register || register < pay;
   const dateInvalid = dateMode === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(customDate.trim());
 
-  // 预检结论只在参数未变时有效：数量/日期/去重/数据源一旦改动必须重新查询，防止拿旧结论发送
+  // 预检结论只在参数未变时有效：数量/日期/去重一旦改动必须重新查询，防止拿旧结论发送
   function checkSignature() {
     return JSON.stringify({
-      host: db.host.trim(),
-      port: numberFrom(db.port, 3306),
-      user: db.user.trim(),
-      database: db.database.trim(),
-      table: db.table.trim(),
       activate,
       register,
       pay,
@@ -343,51 +284,12 @@ export function HonorReportPanel({
   }
   const checkFresh = checkSig !== null && checkSig === checkSignature();
   const checkEnough = checkFresh && checkResult?.enough === true;
-  const canRun = dbReady && !funnelInvalid && !dateInvalid && !running && checkEnough;
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      onPatchConfig({
-        honor_db_host: db.host.trim(),
-        honor_db_port: numberFrom(db.port, 3306),
-        honor_db_user: db.user.trim(),
-        honor_db_pass: db.password,
-        honor_db_name: db.database.trim(),
-        honor_db_table: db.table.trim(),
-      });
-      notifications.show({ message: "数据源已保存", color: "blue", autoClose: 2500 });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleTest() {
-    if (!isTauriRuntime()) {
-      setTestError("请在桌面端测试连接");
-      return;
-    }
-    setTesting(true);
-    setTestError(null);
-    setTestResult(null);
-    try {
-      const result = await invoke<HonorDbTestResult>("honor_test_db", { db: buildDbConfig() });
-      setTestResult(result);
-    } catch (e) {
-      setTestError(String(e));
-    } finally {
-      setTesting(false);
-    }
-  }
+  const canRun = !funnelInvalid && !dateInvalid && !running && checkEnough;
 
   /** 设备预检：按当前数量/日期/去重口径只读查库，不发送任何回传 */
   async function handleCheck() {
     if (!isTauriRuntime()) {
       setCheckError("请在桌面端查询设备");
-      return;
-    }
-    if (!dbReady) {
-      setCheckError("请先填写主机 / 用户名 / 数据库");
       return;
     }
     if (funnelInvalid) {
@@ -404,7 +306,7 @@ export function HonorReportPanel({
     const sig = checkSignature();
     try {
       const params: HonorCheckParams = {
-        db: buildDbConfig(),
+        db: {},
         activate,
         register,
         pay,
@@ -436,7 +338,7 @@ export function HonorReportPanel({
     setProgress({ percent: 1, message: "准备回传...", current: 0, total: 0 });
     const date = dateMode === "all" ? null : dateMode === "today" ? todayStr() : customDate.trim();
     const params: HonorReportParams = {
-      db: buildDbConfig(),
+      db: {},
       activate,
       register,
       pay,
@@ -471,114 +373,6 @@ export function HonorReportPanel({
           title="荣耀监测回传"
           sub="从投流库读取荣耀点击设备，按 激活 ⊇ 注册 ⊇ 付费 漏斗批量回传转化"
         />
-
-        <Paper p="md" radius="md">
-          <Stack gap="sm">
-            <Group justify="space-between" align="center">
-              <Text size="sm" fw={600}>
-                数据源（投流库 MySQL）
-              </Text>
-              <Group gap="xs">
-                <Button
-                  size="compact-sm"
-                  variant="default"
-                  className="ops-btn-secondary"
-                  leftSection={<Save size={14} />}
-                  loading={saving}
-                  onClick={handleSave}
-                >
-                  保存数据源
-                </Button>
-                <Button
-                  size="compact-sm"
-                  variant="default"
-                  className="ops-btn-secondary"
-                  leftSection={
-                    testing ? <Loader2 size={14} className="spin" /> : <Database size={14} />
-                  }
-                  loading={testing}
-                  onClick={handleTest}
-                >
-                  测试连接
-                </Button>
-              </Group>
-            </Group>
-            <Grid>
-              <Grid.Col span={{ base: 12, xs: 6, md: 5 }}>
-                <TextInput
-                  label="主机"
-                  value={db.host}
-                  onChange={(e) => patchDb({ host: e.currentTarget.value })}
-                  placeholder="rm-xxxx.mysql.rds.aliyuncs.com"
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 4, xs: 2, md: 2 }}>
-                <NumberInput
-                  label="端口"
-                  value={numberFrom(db.port, 3306)}
-                  onChange={(v) => patchDb({ port: String(v ?? 3306) })}
-                  min={1}
-                  max={65535}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 8, xs: 4, md: 5 }}>
-                <TextInput
-                  label="数据库"
-                  value={db.database}
-                  onChange={(e) => patchDb({ database: e.currentTarget.value })}
-                  placeholder="tksy-media"
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, xs: 6, md: 4 }}>
-                <TextInput
-                  label="用户名"
-                  value={db.user}
-                  onChange={(e) => patchDb({ user: e.currentTarget.value })}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, xs: 6, md: 4 }}>
-                <PasswordInput
-                  label="密码"
-                  value={db.password}
-                  onChange={(e) => patchDb({ password: e.currentTarget.value })}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <TextInput
-                  label="点击表"
-                  value={db.table}
-                  onChange={(e) => patchDb({ table: e.currentTarget.value })}
-                  placeholder="留空自动识别（click_log / media_click_log / tksy_media_click_log）"
-                />
-              </Grid.Col>
-            </Grid>
-            <Text size="xs" c="dimmed">
-              凭据保存在本机配置文件（~/.config/jarporter/config.json），源码不落明文密码。
-            </Text>
-
-            {testError && (
-              <Alert color="red" variant="light" title="连接失败" withCloseButton onClose={() => setTestError(null)}>
-                {testError}
-              </Alert>
-            )}
-            {testResult && !testError && (
-              <Alert
-                color={testResult.ok ? "teal" : "yellow"}
-                variant="light"
-                title={testResult.ok ? "测试连接成功" : "连接异常"}
-                withCloseButton
-                onClose={() => setTestResult(null)}
-              >
-                {testResult.message}
-                {testResult.missing_columns.length > 0 && (
-                  <Text size="sm" mt={4}>
-                    缺少回传必需列：{testResult.missing_columns.join(", ")}
-                  </Text>
-                )}
-              </Alert>
-            )}
-          </Stack>
-        </Paper>
 
         <Paper p="md" radius="md">
           <Stack gap="sm">
@@ -694,11 +488,6 @@ export function HonorReportPanel({
                 数量必须满足 激活 ≥ 注册 ≥ 付费
               </Alert>
             )}
-            {!dbReady && (
-              <Alert color="yellow" variant="light" title="数据源未就绪">
-                请先填写主机 / 用户名 / 数据库（可点击「测试连接」确认）
-              </Alert>
-            )}
             {runError && (
               <Alert color="red" variant="light" title="回传失败" withCloseButton onClose={() => setRunError(null)}>
                 {runError}
@@ -729,7 +518,7 @@ export function HonorReportPanel({
                 </Text>
               )}
             </Group>
-            {!running && !checkEnough && dbReady && !funnelInvalid && !dateInvalid && (
+            {!running && !checkEnough && !funnelInvalid && !dateInvalid && (
               <Text size="xs" c="dimmed">
                 先点「查询设备」按当前条件只读查库；设备充足后才能回传，设备不足不会发送。
               </Text>
@@ -741,20 +530,39 @@ export function HonorReportPanel({
             )}
             {checkResult && !checkError && (
               <Alert
+                className={
+                  checkResult.enough ? "honor-check-alert is-ok" : "honor-check-alert is-short"
+                }
                 color={checkResult.enough ? "teal" : "yellow"}
                 variant="light"
                 title={
                   <Group gap="xs">
                     <span>{checkResult.enough ? "设备充足" : "设备不足，不会回传"}</span>
-                    <Badge color={checkResult.enough ? "teal" : "yellow"} variant="filled" size="sm">
-                      {checkResult.enough ? "可回传" : `差 ${checkResult.shortfall} 个`}
+                    <Badge
+                      className={checkResult.enough ? "honor-badge-ok" : "honor-badge-short"}
+                      variant="filled"
+                      size="md"
+                      radius="sm"
+                    >
+                      {checkResult.enough ? "可回传" : `缺 ${checkResult.shortfall} 个`}
                     </Badge>
                   </Group>
                 }
               >
                 <Stack gap={4} mt={4}>
                   <CheckRow label="命中可用点击" value={`${checkResult.click_rows} 条`} />
-                  <CheckRow label="可回传设备" value={`${checkResult.devices} 个`} />
+                  <CheckRow
+                    label="可回传设备"
+                    value={`${checkResult.devices} 个`}
+                    tone={checkResult.enough ? "ok" : "dim"}
+                  />
+                  {!checkResult.enough && (
+                    <CheckRow
+                      label="缺口"
+                      value={`还差 ${checkResult.shortfall} 个（需 ${checkResult.activate}，现有 ${checkResult.devices}）`}
+                      tone="warn"
+                    />
+                  )}
                   <CheckRow
                     label="需求"
                     value={`激活 ${checkResult.activate} / 注册 ${checkResult.register} / 付费 ${checkResult.pay}`}

@@ -293,20 +293,6 @@ pub struct HarborConfig {
     pub ks_publish_maps: Vec<KsPublishMap>,
     #[serde(default)]
     pub last_auto_publish_ks: bool,
-    /// 荣耀回传：投流库（MySQL）主机/端口；密码不设默认明文，新装需在面板填写
-    #[serde(default)]
-    pub honor_db_host: String,
-    #[serde(default = "default_honor_db_port")]
-    pub honor_db_port: u16,
-    #[serde(default)]
-    pub honor_db_user: String,
-    #[serde(default)]
-    pub honor_db_pass: String,
-    #[serde(default = "default_honor_db_name")]
-    pub honor_db_name: String,
-    /// 荣耀回传点击表名；留空按候选表（click_log / media_click_log / tksy_media_click_log）自动识别
-    #[serde(default)]
-    pub honor_db_table: String,
 }
 
 /// Git 仓库 → KubeSphere 发布映射
@@ -516,26 +502,12 @@ impl Default for HarborConfig {
             ks_last_env_id: "dev".to_string(),
             ks_publish_maps: Vec::new(),
             last_auto_publish_ks: false,
-            honor_db_host: String::new(),
-            honor_db_port: 3306,
-            honor_db_user: String::new(),
-            honor_db_pass: String::new(),
-            honor_db_name: default_honor_db_name(),
-            honor_db_table: String::new(),
         }
     }
 }
 
 fn default_true() -> bool {
     true
-}
-
-fn default_honor_db_port() -> u16 {
-    3306
-}
-
-fn default_honor_db_name() -> String {
-    "tksy_admin_2".to_string()
 }
 
 fn default_bt_ftp_user() -> String {

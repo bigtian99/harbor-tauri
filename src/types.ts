@@ -102,14 +102,6 @@ export interface HarborConfig {
   ks_publish_maps?: KsPublishMap[];
   /** 分支打包是否记忆「推送后自动发布到 KubeSphere」 */
   last_auto_publish_ks?: boolean;
-  /** 荣耀回传：投流库（MySQL）连接；密码不设默认值 */
-  honor_db_host?: string;
-  honor_db_port?: number;
-  honor_db_user?: string;
-  honor_db_pass?: string;
-  honor_db_name?: string;
-  /** 点击表名；留空按候选表自动识别 */
-  honor_db_table?: string;
 }
 
 /** 仓库类型：Harbor 有「项目」；Zot 是 OCI 仓库，项目只作可选前缀 */
@@ -334,15 +326,18 @@ export interface RepoGitInfo {
 
 // ==================== 荣耀监测回传 ====================
 
-/** 投流库（MySQL）连接配置 */
+/**
+ * 投流库（MySQL）连接配置。
+ * 面板不再暴露数据源设置：前端传空对象，由后端 honor.rs 的内置默认值兜底。
+ */
 export interface HonorDbConfig {
-  host: string;
-  port: number;
-  user: string;
-  password: string;
-  database: string;
+  host?: string;
+  port?: number;
+  user?: string;
+  password?: string;
+  database?: string;
   /** 留空自动识别候选表 */
-  table: string;
+  table?: string;
 }
 
 export interface HonorDbTestResult {
