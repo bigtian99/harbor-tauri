@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Group, Paper, Stack, Text } from "@mantine/core";
 import {
-  AlertCircle, Bell, CheckCircle, ExternalLink, Loader2, RefreshCw, Trash2,
+  AlertCircle, CheckCircle, ExternalLink, Loader2, RefreshCw, Trash2,
 } from "lucide-react";
 import { showSystemAlert } from "../../systemAlert";
 import type { HarborConfig } from "../../types";
