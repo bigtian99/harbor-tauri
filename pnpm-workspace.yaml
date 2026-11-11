@@ -1,2 +1,10 @@
+# packages 字段必填：pnpm 9（CI 使用）遇到没有该字段的 workspace 文件会直接报
+# "ERROR packages field missing or empty"，导致 actions/setup-node 的 pnpm 缓存
+# 定位（pnpm store path）失败、整个 build matrix 在 Setup Node.js 步骤挂掉。
+# 本仓库是单包项目，根目录即唯一包。
+packages:
+  - "."
+
+# 允许 esbuild 执行安装脚本（本地 pnpm 12 默认拦截）
 allowBuilds:
   esbuild: true
