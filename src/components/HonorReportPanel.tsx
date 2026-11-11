@@ -431,8 +431,9 @@ export function HonorReportPanel() {
             </Text>
             <Text size="xs" c="dimmed">
               按脚本口径批量回传：三个数量共用同一批设备（激活 ⊇ 注册 ⊇ 付费 取前缀子集）；
-              同一设备复用同一条点击的 trackId / oaid / advertiserId；conversionTime 从点击时间上限
-              +1s 起步逐条递增；付费事件的金额与订单号由系统内部生成。先「查询设备」确认有数据再回传，没数据会提示且不会发送。
+              设备按 oaid 去重（同一台设备只回传一次，取最新点击），复用该条点击的
+              trackId / oaid / advertiserId；conversionTime 从点击时间上限 +1s 起步逐条递增；
+              付费事件的金额与订单号由系统内部生成。先「查询设备」确认有数据再回传，没数据会提示且不会发送。
             </Text>
             <Select
               label="投放账户（media_account）"
@@ -548,8 +549,8 @@ export function HonorReportPanel() {
             </Group>
             <Group gap="lg" wrap="wrap">
               <Switch
-                label="按 trackId 去重"
-                description="同一设备多次点击只算一次（保留最新）"
+                label="按设备去重（oaid）"
+                description="同一台设备多次点击只回传一次（保留最新那条）"
                 checked={dedupe}
                 onChange={(e) => setDedupe(e.currentTarget.checked)}
               />
@@ -633,6 +634,13 @@ export function HonorReportPanel() {
                     value={`${checkResult.devices} 个`}
                     tone={checkResult.enough ? "ok" : "dim"}
                   />
+                  {checkResult.already_reported > 0 && (
+                    <CheckRow
+                      label="今日已回传"
+                      value={`${checkResult.already_reported} 台（已排除，不会重复上报）`}
+                      tone="warn"
+                    />
+                  )}
                   {!checkResult.enough && (
                     <CheckRow
                       label="缺口"
@@ -658,7 +666,7 @@ export function HonorReportPanel() {
                 <Text size="xs" c="dimmed" mt={8}>
                   {checkResult.enough
                     ? "查询只读，未发送任何回传；可直接开始回传。"
-                    : "可放宽日期范围、关闭按 trackId 去重，或把激活数调到不超过可回传设备数后重新查询。"}
+                    : "可放宽日期范围、关闭按设备去重，或把激活数调到不超过可回传设备数后重新查询。"}
                 </Text>
               </Alert>
             )}
@@ -714,6 +722,11 @@ export function HonorReportPanel() {
               <Group gap="xs" wrap="wrap">
                 {summary.dry_run && <Badge color="blue" variant="light">试运行（未发送）</Badge>}
                 <Badge color="gray" variant="light">设备 {summary.devices} 个</Badge>
+                {summary.already_reported > 0 && (
+                  <Badge color="yellow" variant="light">
+                    今日已回传 {summary.already_reported} 台（已跳过）
+                  </Badge>
+                )}
                 <Badge color="gray" variant="light">共 {summary.total} 条</Badge>
                 <Badge color="gray" variant="light">advertiserId={summary.advertiser_id}</Badge>
                 {summary.click_time_ceiling && (

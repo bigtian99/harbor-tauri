@@ -379,6 +379,8 @@ export interface HonorCheckParams {
 
 export interface HonorDeviceCheckResult {
   resolved_table: string;
+  /** 今日已回传、被排除的设备台数 */
+  already_reported: number;
   /** 命中过滤条件的可用点击行数 */
   click_rows: number;
   /** 按当前去重口径实际可回传的设备数 */
@@ -435,6 +437,8 @@ export interface HonorEventStat {
 export interface HonorReportSummary {
   dry_run: boolean;
   devices: number;
+  /** 今日已回传、本次被剔除的设备台数 */
+  already_reported: number;
   advertiser_id: string;
   click_time_ceiling: string;
   total: number;

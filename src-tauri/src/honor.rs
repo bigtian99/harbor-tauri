@@ -113,6 +113,37 @@ pub struct HonorAccountInfo {
 }
 
 /// 把前端传回的账户主键解析成 u64；空值直接报可读错误。
+/// 当天（本地时区）日期串，回传台账按天隔离
+fn today_local() -> String {
+    Local::now().format("%Y-%m-%d").to_string()
+}
+
+/// 剔除当天已经回传过的设备，避免分批次回传时重复上报。
+///
+/// 返回 (剩余设备, 被跳过的台数)。台账按 `day + account_pk + oaid` 维度记，
+/// 同一设备当天回传过一次（success/unknown）就不再选入后续批次。
+fn exclude_reported_devices(
+    devices: Vec<Device>,
+    account_pk: u64,
+) -> Result<(Vec<Device>, usize), String> {
+    let day = today_local();
+    let reported: HashSet<String> =
+        crate::db::honor_reported_oaids(&account_pk.to_string(), &day)?
+            .into_iter()
+            .map(|s| s.trim().to_lowercase())
+            .collect();
+    if reported.is_empty() {
+        return Ok((devices, 0));
+    }
+    let before = devices.len();
+    let kept: Vec<Device> = devices
+        .into_iter()
+        .filter(|d| !reported.contains(&d.oaid.trim().to_lowercase()))
+        .collect();
+    let skipped = before - kept.len();
+    Ok((kept, skipped))
+}
+
 fn parse_account_pk(raw: Option<&str>) -> Result<u64, String> {
     let value = raw.map(str::trim).unwrap_or_default();
     if value.is_empty() {
@@ -208,6 +239,8 @@ impl HonorCheckParams {
 #[derive(Debug, Serialize, Clone)]
 pub struct HonorDeviceCheckResult {
     pub resolved_table: String,
+    /// 今日已回传、因此被排除的设备台数
+    pub already_reported: usize,
     /// 命中过滤条件的可用点击行数（platform='honor' 且三件套齐全）
     pub click_rows: u64,
     /// 按当前去重口径实际可回传的设备数（与回传取数一致）
@@ -250,6 +283,8 @@ pub struct HonorEventStat {
 pub struct HonorReportSummary {
     pub dry_run: bool,
     pub devices: usize,
+    /// 今日已回传、本次被剔除的设备台数
+    pub already_reported: usize,
     pub advertiser_id: String,
     pub click_time_ceiling: String,
     pub total: usize,
@@ -422,6 +457,14 @@ fn honor_check_devices_inner(params: HonorCheckParams) -> Result<HonorDeviceChec
     let click_rows = count_devices(&mut conn, &rt, date, Some(account_pk))?;
     let fetch_limit = (activate as usize).saturating_mul(20).clamp(200, 2000);
     let devices = load_devices(&mut conn, &rt, date, Some(account_pk), fetch_limit, params.dedupe)?;
+    // 当天已回传过的设备不重复计入，保证「可回传设备」就是还能再发的量
+    let (devices, already_reported) = exclude_reported_devices(devices, account_pk)?;
+    if already_reported > 0 {
+        diag_log(
+            "honor",
+            &format!("honor_check_devices 跳过今日已回传 {already_reported} 台"),
+        );
+    }
     let advertiser_id = devices
         .first()
         .map(|d| d.advertiser_id.clone())
@@ -435,14 +478,19 @@ fn honor_check_devices_inner(params: HonorCheckParams) -> Result<HonorDeviceChec
     };
     let enough = devices.len() >= activate as usize;
     let shortfall = if enough { 0 } else { activate - devices.len() as u32 };
+    let skip_note = if already_reported > 0 {
+        format!("（今日已回传 {already_reported} 台，已从可回传设备中扣除）")
+    } else {
+        String::new()
+    };
     let message = if enough {
         format!(
-            "设备充足：命中可用点击 {click_rows} 条 / 可回传设备 {} 个，激活 {activate} / 注册 {register} / 付费 {pay} 均可执行；本次查询只读，未发送任何回传",
+            "设备充足：命中可用点击 {click_rows} 条 / 可回传设备 {} 个{skip_note}，激活 {activate} / 注册 {register} / 付费 {pay} 均可执行；本次查询只读，未发送任何回传",
             devices.len()
         )
     } else {
         format!(
-            "设备不足：命中可用点击 {click_rows} 条 / 可回传设备仅 {} 个，激活需要 {activate}，差 {shortfall} 个；不会回传——可放宽日期范围、关闭按 trackId 去重或调小激活数量",
+            "设备不足：命中可用点击 {click_rows} 条 / 可回传设备仅 {} 个{skip_note}，激活需要 {activate}，差 {shortfall} 个；不会回传——可放宽日期范围、关闭按设备去重或调小激活数量",
             devices.len()
         )
     };
@@ -455,6 +503,7 @@ fn honor_check_devices_inner(params: HonorCheckParams) -> Result<HonorDeviceChec
     );
     Ok(HonorDeviceCheckResult {
         resolved_table: rt.name,
+        already_reported,
         click_rows,
         devices: devices.len(),
         advertiser_id,
@@ -580,14 +629,38 @@ fn honor_batch_report_inner(
         fetch_limit,
         params.dedupe,
     )?;
-    if devices.len() < activate as usize {
-        let hint = date.map(|d| format!("（日期 {d}）")).unwrap_or_default();
+    // 当天已回传过的设备整批排除，避免分批次回传重复上报
+    let (devices, already_reported) = exclude_reported_devices(devices, account_pk)?;
+    if already_reported > 0 {
         diag_log(
             "honor",
-            &format!("honor_batch_report 设备不足: need={activate} got={}", devices.len()),
+            &format!("honor_batch_report 跳过今日已回传 {already_reported} 台"),
+        );
+        emit_progress(
+            app,
+            10,
+            &format!("已跳过今日回传过的 {already_reported} 台设备"),
+            0,
+            0,
+            None,
+        );
+    }
+    if devices.len() < activate as usize {
+        let hint = date.map(|d| format!("（日期 {d}）")).unwrap_or_default();
+        let skip_note = if already_reported > 0 {
+            format!("，另有 {already_reported} 台今日已回传被排除")
+        } else {
+            String::new()
+        };
+        diag_log(
+            "honor",
+            &format!(
+                "honor_batch_report 设备不足: need={activate} got={} skipped={already_reported}",
+                devices.len()
+            ),
         );
         return Err(format!(
-            "可用荣耀设备不足{hint}：需要 {activate}，实得 {}；可放宽日期范围或关闭按 trackId 去重重试",
+            "可用荣耀设备不足{hint}：需要 {activate}，实得 {}{skip_note}；可放宽日期范围或关闭按设备去重重试",
             devices.len()
         ));
     }
@@ -666,6 +739,7 @@ fn honor_batch_report_inner(
         return Ok(HonorReportSummary {
             dry_run: true,
             devices: devices.len(),
+            already_reported,
             advertiser_id,
             click_time_ceiling: click_ceiling,
             total,
@@ -692,6 +766,21 @@ fn honor_batch_report_inner(
         let url = build_report_url(d, *conv, conversion_time, amount, order_id.as_deref());
         let (outcome, message) = send_one(&client, &url);
         bump(&mut stats, event, outcome);
+        // 台账：success / unknown（可能已到达）都记，避免下批重复；failed/error 不记，允许重试
+        if outcome == "success" || outcome == "unknown" {
+            let day = today_local();
+            if let Err(e) = crate::db::honor_log_report(
+                &account_pk.to_string(),
+                &day,
+                &d.oaid,
+                &d.track_id,
+                event,
+                conversion_time,
+                outcome,
+            ) {
+                diag_log("honor", &format!("回传台账写入失败 oaid={} event={event}: {e}", d.oaid));
+            }
+        }
         details.push(HonorSendDetail {
             event: event.to_string(),
             conversion_id: *conv,
@@ -732,6 +821,14 @@ fn honor_batch_report_inner(
     let failed = stats.iter().map(|s| s.failed).sum::<u32>();
     let unknown = stats.iter().map(|s| s.unknown).sum::<u32>();
     let error = stats.iter().map(|s| s.error).sum::<u32>();
+    if let Ok((day_devices, day_events)) =
+        crate::db::honor_report_tally(&account_pk.to_string(), &today_local())
+    {
+        diag_log(
+            "honor",
+            &format!("honor_batch_report 今日累计 account_pk={account_pk} devices={day_devices} events={day_events}"),
+        );
+    }
     diag_log(
         "honor",
         &format!(
@@ -742,6 +839,7 @@ fn honor_batch_report_inner(
     Ok(HonorReportSummary {
         dry_run: false,
         devices: devices.len(),
+        already_reported,
         advertiser_id,
         click_time_ceiling: click_ceiling,
         total,
@@ -915,7 +1013,7 @@ fn device_count_sql(
     (sql, Params::Positional(params))
 }
 
-/// 读取点击记录（最新优先），凑齐不超过 limit 个设备
+/// 读取点击记录（最新优先），按设备（oaid）去重后凑齐不超过 limit 个设备
 fn load_devices(
     conn: &mut Conn,
     rt: &ResolvedTable,
@@ -964,7 +1062,10 @@ fn load_devices(
         if track_id.trim().is_empty() || advertiser_id.trim().is_empty() || oaid.trim().is_empty() {
             continue;
         }
-        if dedupe && !seen.insert(track_id.clone()) {
+        // 去重按「设备」而不是 trackId：同一台设备点多次会拿到多个 trackId，
+        // 按 trackId 去重会把同一设备算成多台，回传后荣耀侧转化数虚高。
+        // 行按 id DESC 取，先到先留 = 保留该设备最新一次点击。
+        if dedupe && !seen.insert(oaid.trim().to_lowercase()) {
             continue;
         }
         devices.push(Device {
