@@ -2,7 +2,7 @@
 
 export type ArtifactType = "jar" | "frontend_dist";
 export type BranchProjectType = "maven" | "npm";
-export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement" | "packSpeed" | "privacy" | "btJava" | "btPhp" | "ksPublish";
+export type TabType = "upload" | "push" | "branch" | "config" | "history" | "landing" | "merge" | "settlement" | "packSpeed" | "privacy" | "btJava" | "btPhp" | "ksPublish" | "honorReport";
 
 export interface BranchRepoSettings {
   springProfile: string;
@@ -102,6 +102,14 @@ export interface HarborConfig {
   ks_publish_maps?: KsPublishMap[];
   /** 分支打包是否记忆「推送后自动发布到 KubeSphere」 */
   last_auto_publish_ks?: boolean;
+  /** 荣耀回传：投流库（MySQL）连接；密码不设默认值 */
+  honor_db_host?: string;
+  honor_db_port?: number;
+  honor_db_user?: string;
+  honor_db_pass?: string;
+  honor_db_name?: string;
+  /** 点击表名；留空按候选表自动识别 */
+  honor_db_table?: string;
 }
 
 /** 仓库类型：Harbor 有「项目」；Zot 是 OCI 仓库，项目只作可选前缀 */
@@ -322,6 +330,111 @@ export interface RepoGitInfo {
   path: string;
   name: string;
   git_url: string;
+}
+
+// ==================== 荣耀监测回传 ====================
+
+/** 投流库（MySQL）连接配置 */
+export interface HonorDbConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+  /** 留空自动识别候选表 */
+  table: string;
+}
+
+export interface HonorDbTestResult {
+  ok: boolean;
+  resolved_table: string;
+  missing_columns: string[];
+  available_all: number;
+  available_today: number;
+  message: string;
+}
+
+/** 设备预检入参：与回传同一套口径，但只读查库、不发送 */
+export interface HonorCheckParams {
+  db: HonorDbConfig;
+  activate: number;
+  register: number;
+  pay: number;
+  date: string | null;
+  dedupe: boolean;
+}
+
+export interface HonorDeviceCheckResult {
+  resolved_table: string;
+  /** 命中过滤条件的可用点击行数 */
+  click_rows: number;
+  /** 按当前去重口径实际可回传的设备数 */
+  devices: number;
+  advertiser_id: string;
+  click_time_min: string;
+  click_time_max: string;
+  activate: number;
+  register: number;
+  pay: number;
+  enough: boolean;
+  shortfall: number;
+  message: string;
+}
+
+export interface HonorReportParams {
+  db: HonorDbConfig;
+  activate: number;
+  register: number;
+  pay: number;
+  /** 付费金额（元，两位小数）；不传则后端默认 6.00 */
+  pay_amount?: string;
+  /** 付费订单号前缀；不传则后端按日期内部生成 */
+  order_prefix?: string;
+  interval_ms: number;
+  /** null = 全部；"YYYY-MM-DD" = 指定日期 */
+  date: string | null;
+  dedupe: boolean;
+  dry_run: boolean;
+}
+
+export interface HonorSendDetail {
+  event: string;
+  conversion_id: number;
+  track_id: string;
+  /** success / failed / unknown / error / dry-run */
+  outcome: string;
+  message: string;
+  url: string | null;
+}
+
+export interface HonorEventStat {
+  event: string;
+  requested: number;
+  success: number;
+  failed: number;
+  unknown: number;
+  error: number;
+  dry_run: number;
+}
+
+export interface HonorReportSummary {
+  dry_run: boolean;
+  devices: number;
+  advertiser_id: string;
+  click_time_ceiling: string;
+  total: number;
+  events: HonorEventStat[];
+  details: HonorSendDetail[];
+  /** 试运行样例 URL（前 3 条） */
+  sample_urls: string[];
+}
+
+export interface HonorProgressPayload {
+  percent: number;
+  message: string;
+  current: number;
+  total: number;
+  line: string | null;
 }
 
 // ==================== 常量 ====================

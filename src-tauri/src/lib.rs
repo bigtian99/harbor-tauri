@@ -6,6 +6,7 @@ mod diag;
 mod docker;
 mod git;
 mod history;
+mod honor;
 mod landing;
 mod kubesphere;
 mod models;
@@ -49,6 +50,7 @@ use history::{
     clear_build_history, delete_artifact_path, delete_build_record, get_build_history,
     save_build_record, update_build_record_image, update_build_record_push,
 };
+use honor::{honor_batch_report, honor_check_devices, honor_test_db};
 use utils::{init_bundled_tools, write_text_file};
 
 use kubesphere::{
@@ -208,6 +210,9 @@ pub fn run() {
             delete_privacy_uploads,
             clear_privacy_uploads,
             generate_settlement_statements,
+            honor_test_db,
+            honor_check_devices,
+            honor_batch_report,
             db::get_jar_port,
             db::save_jar_port,
             check_update,

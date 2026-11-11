@@ -22,3 +22,40 @@
   opacity: 0.45;
   color: var(--color-text-muted) !important;
 }
+
+/* 荣耀回传：自绘月历（系统原生日期弹层过小且不受主题控制） */
+.honor-calendar-day {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid transparent;
+  font-size: 13px;
+  color: var(--color-text);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.honor-calendar-day:hover:not(:disabled) {
+  background: var(--color-primary-subtle);
+}
+
+.honor-calendar-day[data-today="true"] {
+  border-color: var(--color-primary-muted);
+}
+
+.honor-calendar-day[data-selected="true"] {
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.honor-calendar-day[data-selected="true"]:hover {
+  background: var(--color-primary-hover);
+}
+
+.honor-calendar-day:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+}

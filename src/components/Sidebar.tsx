@@ -28,6 +28,7 @@ import {
   Shield,
   Coffee,
   Code2,
+  Radar,
   Sun,
   Moon,
 } from "lucide-react";
@@ -163,6 +164,7 @@ export function Sidebar({
     { tab: "privacy", icon: <Shield size={18} />, label: "隐私协议" },
     { tab: "settlement", icon: <FileText size={18} />, label: "结算单" },
     { tab: "packSpeed", icon: <Zap size={18} />, label: "打包加速" },
+    { tab: "honorReport", icon: <Radar size={18} />, label: "荣耀监测回传" },
   ];
   const publishItems: NavItem[] = [
     { tab: "ksPublish", icon: <KubeSphereIcon size={18} />, label: "KubeSphere 发布" },

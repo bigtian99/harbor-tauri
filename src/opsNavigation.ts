@@ -1,6 +1,6 @@
 import type { TabType } from "./types";
 
-export const OPS_TABS: readonly TabType[] = ["landing", "settlement", "packSpeed", "privacy"];
+export const OPS_TABS: readonly TabType[] = ["landing", "settlement", "packSpeed", "privacy", "honorReport"];
 
 export function isOpsTab(tab: TabType): boolean {
   return OPS_TABS.includes(tab);
