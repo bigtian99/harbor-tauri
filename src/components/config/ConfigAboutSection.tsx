@@ -210,27 +210,6 @@ export function ConfigAboutSection({
         </Stack>
       </Paper>
 
-      <Paper p="lg" radius="md" withBorder style={sectionCardStyle}>
-        <Stack gap="sm">
-          <Text size="md" fw={600} c="var(--color-text)">
-            系统通知测试
-          </Text>
-          <Text size="sm" c="var(--color-text-muted)">
-            点击发送一条测试通知，验证 macOS 通知中心是否正常工作。若无弹出，请前往
-            「系统设置 → 通知 → 云坞」开启允许通知。
-          </Text>
-          <Button
-            size="sm"
-            variant="default"
-            leftSection={<Bell size={16} />}
-            onClick={() => void showSystemAlert("测试通知", "云坞 系统通知正常")}
-            w="fit-content"
-          >
-            发送测试通知
-          </Button>
-        </Stack>
-      </Paper>
-
       <Paper
         p={0}
         radius="md"

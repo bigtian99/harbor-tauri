@@ -1,0 +1,188 @@
+{
+    "code": 0,
+    "message": "",
+    "data": {
+        "adPageResponse": {
+            "code": 0,
+            "message": "",
+            "totalCount": 7,
+            "pageSize": 20,
+            "pageIndex": 1,
+            "data": [
+                {
+                    "metrics": {
+                        "quickAppInvoke": 0,
+                        "honorActivateCost": "0.0000",
+                        "deepOcpxConvert": 1,
+                        "finishDownload": 2,
+                        "honorActiveEvent": 3,
+                        "adBilling": 4,
+                        "impression": 5,
+                        "convCount": 6,
+                        "click": 7
+                    },
+                    "hour": "21:00-21:59",
+                    "staticTime": "2026-09-22",
+                    "statcHour": 21,
+                    "timePeriod": 1790082000000
+                },
+                {
+                    "metrics": {
+                        "quickAppInvoke": 0,
+                        "deepOcpxConvert": 0,
+                        "finishDownload": 0,
+                        "adBilling": 0,
+                        "impression": 1,
+                        "convCount": 0,
+                        "click": 0
+                    },
+                    "hour": "19:00-19:59",
+                    "staticTime": "2026-09-22",
+                    "statcHour": 19,
+                    "timePeriod": 1790074800000
+                },
+                {
+                    "metrics": {
+                        "quickAppInvoke": 0,
+                        "deepOcpxConvert": 0,
+                        "finishDownload": 0,
+                        "adBilling": 0,
+                        "impression": 4,
+                        "convCount": 0,
+                        "click": 0
+                    },
+                    "hour": "17:00-17:59",
+                    "staticTime": "2026-09-22",
+                    "statcHour": 17,
+                    "timePeriod": 1790067600000
+                },
+                {
+                    "metrics": {
+                        "thirtyDayFirstPay": 5,
+                        "oneDayPayment": 141800000,
+                        "oneDayFirstPay": 5,
+                        "finishDownload": 0,
+                        "honorActiveEvent": 1,
+                        "adBilling": 0,
+                        "impressionActivateRate": 33.33,
+                        "paymentAmount": 141800000,
+                        "threeDayFirstPay": 5,
+                        "paymentCost": "0.0000",
+                        "payment": 5,
+                        "sevenDayFirstPay": 5,
+                        "oneDayPayCost": "0.0000",
+                        "activateCost": "0.0000",
+                        "deepOcpxConvert": 0,
+                        "oneDayPay": 5,
+                        "click": 0,
+                        "quickAppInvoke": 0,
+                        "honorActivateCost": "0.0000",
+                        "paidCost": "0.0000",
+                        "activate": 3,
+                        "paid": 5,
+                        "impression": 9,
+                        "impressionHonorActiveEventRate": 11.11,
+                        "convCount": 0
+                    },
+                    "hour": "16:00-16:59",
+                    "staticTime": "2026-09-22",
+                    "statcHour": 16,
+                    "timePeriod": 1790064000000
+                },
+                {
+                    "metrics": {
+                        "finishDownloadRate": 59.26,
+                        "deepOcpxConvert": 0,
+                        "finishDownload": 16,
+                        "honorActiveEvent": 6,
+                        "adBilling": 16000000,
+                        "click": 27,
+                        "quickAppInvoke": 0,
+                        "honorActivateCost": "2666666.6667",
+                        "downloadHonorActiveEventRate": 37.50,
+                        "impression": 650,
+                        "finishDownloadCost": "1000000.0000",
+                        "impressionHonorActiveEventRate": 0.92,
+                        "clickHonorActiveEventRate": 22.22,
+                        "convCount": 0
+                    },
+                    "hour": "15:00-15:59",
+                    "staticTime": "2026-09-22",
+                    "statcHour": 15,
+                    "timePeriod": 1790060400000
+                },
+                {
+                    "metrics": {
+                        "quickAppInvoke": 0,
+                        "deepOcpxConvert": 0,
+                        "finishDownload": 0,
+                        "adBilling": 0,
+                        "impression": 13,
+                        "convCount": 0,
+                        "click": 0
+                    },
+                    "hour": "11:00-11:59",
+                    "staticTime": "2026-09-22",
+                    "statcHour": 11,
+                    "timePeriod": 1790046000000
+                },
+                {
+                    "metrics": {
+                        "finishDownloadRate": 38.30,
+                        "deepOcpxConvert": 0,
+                        "finishDownload": 18,
+                        "honorActiveEvent": 2,
+                        "adBilling": 17999999,
+                        "click": 47,
+                        "quickAppInvoke": 0,
+                        "honorActivateCost": "8999999.5000",
+                        "downloadHonorActiveEventRate": 11.11,
+                        "impression": 1532,
+                        "finishDownloadCost": "999999.9444",
+                        "impressionHonorActiveEventRate": 0.13,
+                        "clickHonorActiveEventRate": 4.26,
+                        "convCount": 0
+                    },
+                    "hour": "10:00-10:59",
+                    "staticTime": "2026-09-22",
+                    "statcHour": 10,
+                    "timePeriod": 1790042400000
+                }
+            ]
+        },
+        "adAdvertiserStatcVo": {
+            "thirtyDayFirstPay": 5,
+            "finishDownloadRate": 45.95,
+            "oneDayPayment": 141800000,
+            "oneDayFirstPay": 5,
+            "finishDownload": 34,
+            "honorActiveEvent": 10,
+            "downloadActivateRate": 8.82,
+            "adBilling": 33999999,
+            "impressionActivateRate": 0.14,
+            "paymentAmount": 141800000,
+            "clickActivateRate": 4.05,
+            "threeDayFirstPay": 5,
+            "oneDayPayROI": 417.06,
+            "paymentCost": "6799999.8000",
+            "downloadHonorActiveEventRate": 29.41,
+            "payment": 5,
+            "finishDownloadCost": "999999.9706",
+            "sevenDayFirstPay": 5,
+            "oneDayPayCost": "6799999.8000",
+            "activateCost": "11333333.0000",
+            "deepOcpxConvert": 0,
+            "oneDayPay": 5,
+            "click": 74,
+            "quickAppInvoke": 0,
+            "honorActivateCost": "3399999.9000",
+            "paidCost": "6799999.8000",
+            "activate": 3,
+            "paid": 5,
+            "impression": 2209,
+            "impressionHonorActiveEventRate": 0.45,
+            "clickHonorActiveEventRate": 13.51,
+            "convCount": 0
+        }
+    }
+}
