@@ -457,14 +457,22 @@ pub async fn list_remote_branches(repo_path: String) -> Result<RemoteBranchListR
 fn run_git_capture_code(repo_root: &PathBuf, args: &[&str]) -> (i32, String, String) {
     let out = silent_command("git")
         .args(args)
+        // GUI 无 TTY：显式关交互，凭据缺失时立即失败并给出提示，而不是干等输入
+        .env("GIT_TERMINAL_PROMPT", "0")
         .current_dir(repo_root)
         .output();
     match out {
-        Ok(o) => (
-            o.status.code().unwrap_or(-1),
-            String::from_utf8_lossy(&o.stdout).to_string(),
-            String::from_utf8_lossy(&o.stderr).to_string(),
-        ),
+        Ok(o) => {
+            let code = o.status.code().unwrap_or(-1);
+            let stdout = String::from_utf8_lossy(&o.stdout).to_string();
+            let mut stderr = String::from_utf8_lossy(&o.stderr).to_string();
+            if code != 0 {
+                if let Some(hint) = crate::utils::git_auth_hint(&stderr) {
+                    stderr.push_str(hint);
+                }
+            }
+            (code, stdout, stderr)
+        }
         Err(e) => (-1, String::new(), format!("启动 git 失败: {e}")),
     }
 }

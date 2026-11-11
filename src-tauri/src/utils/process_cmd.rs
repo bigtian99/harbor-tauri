@@ -379,6 +379,38 @@ pub(crate) fn silent_docker_command() -> Command {
     command
 }
 
+/// git 凭据类失败的统一提示。
+///
+/// 应用是 GUI，git 子进程没有 TTY，`credential.helper` 又没配时 git 无法弹窗
+/// 索要账号密码，只会抛 `could not read Username for 'https://gitee.com':
+/// terminal prompts disabled`——用户看不出该怎么修，所以这里补上可执行的步骤。
+pub(crate) fn git_auth_hint(details: &str) -> Option<&'static str> {
+    let lower = details.to_lowercase();
+    let looks_like_auth = [
+        "could not read username",
+        "could not read password",
+        "terminal prompts disabled",
+        "authentication failed",
+        "invalid username or password",
+        "permission denied (publickey)",
+        "returned error: 403",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle));
+    if !looks_like_auth {
+        return None;
+    }
+    Some(
+        "\n\n提示: 远程仓库鉴权失败——图形界面里 git 没有终端可交互，无法弹窗索要账号密码。修复任选其一：\n\
+         1) 让 git 用系统钥匙串保存密码（macOS）：\n\
+         \x20  git config --global credential.https://gitee.com.helper osxkeychain\n\
+         \x20  （GitHub 把域名换成 github.com）\n\
+         2) 远程地址里带上私人令牌：\n\
+         \x20  git remote set-url origin https://<用户名>:<令牌>@gitee.com/<组织>/<仓库>.git\n\
+         3) 在本机终端手动跑一次 git fetch，按提示输入账号密码并让钥匙串记住，再回应用重试。",
+    )
+}
+
 pub(crate) fn run_command(current_dir: &Path, command: &str, args: &[&str]) -> Result<String, String> {
     run_command_inner(current_dir, command, args, true, "")
 }
@@ -474,6 +506,10 @@ fn run_command_inner(
     } else if is_node_pm {
         apply_node_path(&mut cmd, &actual_command);
     }
+    if command == "git" {
+        // 无 TTY：显式关掉交互，让失败快速返回而不是等待输入
+        cmd.env("GIT_TERMINAL_PROMPT", "0");
+    }
 
     let child = match cmd.spawn()
     {
@@ -544,6 +580,11 @@ fn run_command_inner(
                 "\n\n提示: Lombok 与当前 JDK 不兼容（常见于 Homebrew 默认 OpenJDK 22+）。\
 请安装 JDK 21，或设置 JAVA_HOME 指向 JDK 21/17 后重试。",
             );
+        }
+        if command == "git" {
+            if let Some(hint) = git_auth_hint(&details) {
+                msg.push_str(hint);
+            }
         }
         Err(msg)
     }
