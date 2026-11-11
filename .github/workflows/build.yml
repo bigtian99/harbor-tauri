@@ -67,7 +67,9 @@ jobs:
           while IFS= read -r f; do
             [[ -z "$f" ]] && continue
             case "$f" in
-              src-tauri/*|.github/*|templates/*|icons/*|scripts/*)
+              # pnpm-workspace.yaml / .npmrc 会改变所有 job 的安装行为（曾因缺
+              # packages 字段让 Setup Node.js 的缓存定位直接失败），按 Rust 档跑全量
+              src-tauri/*|.github/*|templates/*|icons/*|scripts/*|pnpm-workspace.yaml|.npmrc)
                 rust=true
                 ;;
               src/*|index.html|package.json|pnpm-lock.yaml|vite.config.ts|tsconfig.json|tsconfig.node.json|public/*)
