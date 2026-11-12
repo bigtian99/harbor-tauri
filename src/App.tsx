@@ -564,6 +564,7 @@ function App() {
             config={app.config}
             configSaved={app.configSaved}
             showPassword={app.showPassword}
+            opsMode={app.opsMode}
             onConfigChange={app.handleConfigChange}
             onSaveConfig={app.handleSaveConfig}
             onTogglePassword={() => app.setShowPassword(!app.showPassword)}

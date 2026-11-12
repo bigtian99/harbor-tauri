@@ -26,6 +26,8 @@ interface ConfigPanelProps {
   config: HarborConfig;
   configSaved: boolean;
   showPassword: boolean;
+  /** OPS 版：FTP 参数由构建内置，设置页只读 */
+  opsMode: boolean;
   onConfigChange: (
     field: keyof HarborConfig,
     value:
@@ -56,7 +58,7 @@ const TABS: { key: ConfigTab; label: string; icon: ReactNode }[] = [
 ];
 
 export function ConfigPanel({
-  config, configSaved, showPassword,
+  config, configSaved, showPassword, opsMode,
   onConfigChange, onSaveConfig, onTogglePassword,
   appVersion, onCheckUpdate, onClearGitRecords,
   initialSubTab,
@@ -129,6 +131,7 @@ export function ConfigPanel({
           <ConfigHarborSection
             config={config}
             showPassword={showPassword}
+            opsMode={opsMode}
             onConfigChange={onConfigChange}
             onTogglePassword={onTogglePassword}
             onSaveConfig={handleSaveConfig}

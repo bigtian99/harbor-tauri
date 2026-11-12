@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::Emitter;
 
-/// 落地页 FTP 凭证：必须从配置读取，源码不写死明文密码。
+/// 落地页 FTP 凭证：完整版从配置读取；OPS 版由 config_cmd 在加载时注入内置参数。
 pub(crate) fn require_landing_ftp(
     config: &HarborConfig,
 ) -> Result<(String, String, String, String), String> {

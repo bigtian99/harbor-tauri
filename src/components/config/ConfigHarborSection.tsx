@@ -38,6 +38,8 @@ import { panelPaperProps, sectionCardStyle } from "./configUi";
 interface ConfigHarborSectionProps {
   config: HarborConfig;
   showPassword: boolean;
+  /** OPS 版：FTP 参数由构建内置，输入框只读 */
+  opsMode: boolean;
   onConfigChange: ConfigFieldChange;
   onTogglePassword: () => void;
   /** 增删环境后立刻落盘，避免未点「保存」时新环境随关窗丢失（与 KsSection 一致） */
@@ -81,6 +83,7 @@ interface HarborProjectsResult {
 export function ConfigHarborSection({
   config,
   showPassword,
+  opsMode,
   onConfigChange,
   onTogglePassword,
   onSaveConfig,
@@ -327,19 +330,23 @@ export function ConfigHarborSection({
             落地页 / 隐私协议 FTP
           </Text>
           <Text size="xs" c="var(--color-text-muted)">
-            账号密码不再写进程序。落地页上传与隐私协议共用用户/密码；隐私主机可单独填写。
+            {opsMode
+              ? "OPS 版已内置固定 FTP 参数，不可修改。落地页上传与隐私协议共用用户/密码。"
+              : "账号密码不再写进程序。落地页上传与隐私协议共用用户/密码；隐私主机可单独填写。"}
           </Text>
           <TextInput
             label="落地页 FTP 主机"
             value={config.landing_ftp_host ?? ""}
             onChange={(e) => onConfigChange("landing_ftp_host", e.currentTarget.value)}
             placeholder="FTP 主机 IP 或域名"
+            disabled={opsMode}
           />
           <TextInput
             label="落地页 FTP 用户"
             value={config.landing_ftp_user ?? ""}
             onChange={(e) => onConfigChange("landing_ftp_user", e.currentTarget.value)}
             placeholder="FTP 用户名"
+            disabled={opsMode}
           />
           <PasswordInput
             label="落地页 FTP 密码"
@@ -348,6 +355,7 @@ export function ConfigHarborSection({
             placeholder="FTP 密码"
             visible={showPassword}
             onVisibilityChange={() => onTogglePassword()}
+            disabled={opsMode}
           />
           <TextInput
             label="落地页站点根目录"
@@ -355,6 +363,7 @@ export function ConfigHarborSection({
             onChange={(e) => onConfigChange("landing_ftp_base_dir", e.currentTarget.value)}
             placeholder="例如: common.example.com（可留空）"
             description="上传后公开 URL 用此主机名拼 https://根目录/渠道/"
+            disabled={opsMode}
           />
           <TextInput
             label="隐私协议 FTP 主机"
@@ -362,6 +371,7 @@ export function ConfigHarborSection({
             onChange={(e) => onConfigChange("privacy_ftp_host", e.currentTarget.value)}
             placeholder="与落地页不同机时填写"
             description="用户/密码复用上方落地页 FTP 账号"
+            disabled={opsMode}
           />
         </Stack>
       </Paper>

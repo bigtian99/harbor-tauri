@@ -7,6 +7,43 @@ use crate::utils::{
 };
 use serde::Serialize;
 use std::fs;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// OPS 版内置的落地页 / 隐私协议 FTP 参数：运营版开箱即用，设置页不提供修改。
+/// 仅在 `OPS_MODE=true` 构建生效；完整版仍从配置读取。
+const OPS_LANDING_FTP_HOST: &str = "120.77.204.231";
+const OPS_LANDING_FTP_USER: &str = "admin";
+const OPS_LANDING_FTP_PASS: &str = "pcm520..";
+const OPS_LANDING_FTP_BASE_DIR: &str = "common.tiankongshuyu.fun";
+/// 隐私协议与落地页同机；用户/密码复用落地页账号
+const OPS_PRIVACY_FTP_HOST: &str = OPS_LANDING_FTP_HOST;
+
+static OPS_FTP_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// 写入 OPS 版固定 FTP 参数（不依赖编译开关，便于单测）。
+fn apply_ops_ftp_values(config: &mut HarborConfig) {
+    config.landing_ftp_host = OPS_LANDING_FTP_HOST.to_string();
+    config.landing_ftp_user = OPS_LANDING_FTP_USER.to_string();
+    config.landing_ftp_pass = OPS_LANDING_FTP_PASS.to_string();
+    config.landing_ftp_base_dir = OPS_LANDING_FTP_BASE_DIR.to_string();
+    config.privacy_ftp_host = OPS_PRIVACY_FTP_HOST.to_string();
+}
+
+/// OPS 版加载 / 保存配置时强制覆盖 FTP 字段，避免运营版依赖手工填写。
+fn apply_ops_ftp_overrides(config: &mut HarborConfig) {
+    if !crate::is_ops_build() {
+        return;
+    }
+    apply_ops_ftp_values(config);
+    if !OPS_FTP_LOGGED.swap(true, Ordering::Relaxed) {
+        diag_log(
+            "config",
+            &format!(
+                "OPS 版使用内置 FTP 参数: landing_host={OPS_LANDING_FTP_HOST} user={OPS_LANDING_FTP_USER} base={OPS_LANDING_FTP_BASE_DIR} privacy_host={OPS_PRIVACY_FTP_HOST}"
+            ),
+        );
+    }
+}
 
 /// 同步版本的 load_config，供内部调用使用
 pub(crate) fn load_config_sync() -> Result<HarborConfig, String> {
@@ -21,12 +58,16 @@ pub(crate) fn load_config_sync() -> Result<HarborConfig, String> {
     };
 
     let Some(readable_path) = readable_path else {
-        return Ok(HarborConfig::default());
+        let mut config = HarborConfig::default();
+        apply_ops_ftp_overrides(&mut config);
+        return Ok(config);
     };
 
     let content = fs::read_to_string(&readable_path).map_err(|e| e.to_string())?;
     let config = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-    Ok(normalize_config(config))
+    let mut config = normalize_config(config);
+    apply_ops_ftp_overrides(&mut config);
+    Ok(config)
 }
 
 #[tauri::command]
@@ -112,7 +153,8 @@ pub fn save_config(mut config: HarborConfig) -> Result<(), String> {
             config.build_history = existing_config.build_history;
         }
     }
-    let config = normalize_config(config);
+    let mut config = normalize_config(config);
+    apply_ops_ftp_overrides(&mut config);
     let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(&path, content).map_err(|e| e.to_string())?;
     diag_log(
@@ -159,4 +201,27 @@ pub fn clear_git_records() -> Result<HarborConfig, String> {
     );
 
     Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ops_ftp_values_fill_required_fields() {
+        let mut config = HarborConfig::default();
+        apply_ops_ftp_values(&mut config);
+
+        assert_eq!(config.landing_ftp_host, OPS_LANDING_FTP_HOST);
+        assert_eq!(config.landing_ftp_user, OPS_LANDING_FTP_USER);
+        assert_eq!(config.landing_ftp_pass, OPS_LANDING_FTP_PASS);
+        assert_eq!(config.landing_ftp_base_dir, OPS_LANDING_FTP_BASE_DIR);
+
+        // 隐私与落地页共用主机/账号，且必填项齐全（require_privacy_ftp 会校验 host/user/pass）
+        let (privacy_host, privacy_user, privacy_pass) = crate::landing::require_privacy_ftp(&config)
+            .expect("OPS 内置隐私 FTP 参数应通过校验");
+        assert_eq!(privacy_host, OPS_PRIVACY_FTP_HOST);
+        assert_eq!(privacy_user, OPS_LANDING_FTP_USER);
+        assert_eq!(privacy_pass, OPS_LANDING_FTP_PASS);
+    }
 }

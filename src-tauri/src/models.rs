@@ -256,7 +256,7 @@ pub struct HarborConfig {
     /// JAR basename → 宝塔 Java 项目 id（同名 JAR 多项目时强制消歧）
     #[serde(default)]
     pub bt_jar_project_ids: HashMap<String, String>,
-    /// 落地页 FTP（上传）— 源码不写死账号密码
+    /// 落地页 FTP（上传）— 完整版从配置读取；OPS 版由 config_cmd 注入内置参数
     #[serde(default)]
     pub landing_ftp_host: String,
     #[serde(default)]

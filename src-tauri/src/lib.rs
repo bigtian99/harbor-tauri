@@ -76,11 +76,16 @@ use privacy::{
 use settlement::generate_settlement_statements;
 use updater::{check_update, download_and_install, get_app_version};
 
+/// 编译期判定是否 OPS 构建，供命令与内部模块（配置注入）共用。
+pub(crate) fn is_ops_build() -> bool {
+    option_env!("OPS_MODE") == Some("true")
+}
+
 /// 编译时注入：`OPS_MODE=true tauri build` 构建的版本返回 true，
 /// 前端据此动态隐藏非运营菜单。
 #[tauri::command]
 fn is_ops_mode() -> bool {
-    option_env!("OPS_MODE") == Some("true")
+    is_ops_build()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
