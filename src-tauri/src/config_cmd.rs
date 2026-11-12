@@ -15,8 +15,8 @@ const OPS_LANDING_FTP_HOST: &str = "120.77.204.231";
 const OPS_LANDING_FTP_USER: &str = "admin";
 const OPS_LANDING_FTP_PASS: &str = "pcm520..";
 const OPS_LANDING_FTP_BASE_DIR: &str = "common.tiankongshuyu.fun";
-/// 隐私协议与落地页同机；用户/密码复用落地页账号
-const OPS_PRIVACY_FTP_HOST: &str = OPS_LANDING_FTP_HOST;
+/// 隐私协议 FTP 独立主机；用户/密码复用落地页账号
+const OPS_PRIVACY_FTP_HOST: &str = "60.205.155.142";
 
 static OPS_FTP_LOGGED: AtomicBool = AtomicBool::new(false);
 
@@ -217,7 +217,7 @@ mod tests {
         assert_eq!(config.landing_ftp_pass, OPS_LANDING_FTP_PASS);
         assert_eq!(config.landing_ftp_base_dir, OPS_LANDING_FTP_BASE_DIR);
 
-        // 隐私与落地页共用主机/账号，且必填项齐全（require_privacy_ftp 会校验 host/user/pass）
+        // 隐私协议独立主机，用户/密码复用落地页账号；必填项齐全（require_privacy_ftp 会校验 host/user/pass）
         let (privacy_host, privacy_user, privacy_pass) = crate::landing::require_privacy_ftp(&config)
             .expect("OPS 内置隐私 FTP 参数应通过校验");
         assert_eq!(privacy_host, OPS_PRIVACY_FTP_HOST);
