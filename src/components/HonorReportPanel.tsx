@@ -12,6 +12,7 @@ import {
   Grid,
   NumberInput,
   Paper,
+  PasswordInput,
   Popover,
   Progress,
   SegmentedControl,
@@ -39,6 +40,11 @@ import type {
   HonorProgressPayload,
   HonorReportParams,
   HonorReportSummary,
+  XiaomiAssetConfig,
+  XiaomiCheckParams,
+  XiaomiDeviceCheckResult,
+  XiaomiReportParams,
+  XiaomiReportSummary,
 } from "../types";
 import { isTauriRuntime } from "../types";
 import { PanelPageHeader } from "./PanelPageHeader";
@@ -46,14 +52,55 @@ import "../styles/ops-panel.css";
 
 type DateMode = "today" | "date" | "all";
 
-/** 记住上次选的投放账户，重开面板仍是同一账户 */
-const HONOR_ACCOUNT_KEY = "jarporter.honor.accountPk";
+/** 回传平台：荣耀走 conversionId，小米走 EMI 精准 API（callback + event + sign） */
+type ReportPlatform = "honor" | "xiaomi";
+
+/** 记住上次选的投放账户，重开面板仍是同一账户（按平台分开记） */
+const ACCOUNT_KEYS: Record<ReportPlatform, string> = {
+  honor: "jarporter.honor.accountPk",
+  xiaomi: "jarporter.xiaomi.accountPk",
+};
+const PLATFORM_KEY = "jarporter.report.platform";
+const XIAOMI_ASSET_KEY = "jarporter.xiaomi.asset";
+
+const DEFAULT_XIAOMI_ASSET: XiaomiAssetConfig = {
+  carrier_id: "",
+  capital_id: "",
+  secret_key: "",
+  is_debug: false,
+  activate_event: "APP_ACTIVE",
+  register_event: "APP_REGISTER",
+  pay_event: "PURCHASE",
+};
+
+function loadXiaomiAsset(): XiaomiAssetConfig {
+  try {
+    const raw = window.localStorage.getItem(XIAOMI_ASSET_KEY);
+    if (!raw) return DEFAULT_XIAOMI_ASSET;
+    return { ...DEFAULT_XIAOMI_ASSET, ...(JSON.parse(raw) as Partial<XiaomiAssetConfig>) };
+  } catch {
+    return DEFAULT_XIAOMI_ASSET;
+  }
+}
+
+type PlatformQty = { activate: number; register: number; pay: number };
 
 type HonorProgress = {
   percent: number;
   message: string;
   current: number;
   total: number;
+};
+
+/** 两种回传的明细字段不同，展示时按平台取对应字段 */
+type AnyDetail = {
+  event: string;
+  outcome: string;
+  message: string;
+  conversion_id?: number;
+  track_id?: string;
+  event_name?: string;
+  oaid?: string;
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -202,7 +249,18 @@ function numberFrom(value: number | string, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/** carrier_id / capital_id 只接受纯数字；否则小米直接返回 204 非法capital_id */
+function isNonNumericId(value: string) {
+  const trimmed = value.trim();
+  return trimmed !== "" && !/^\d+$/.test(trimmed);
+}
+
 export function HonorReportPanel() {
+  const [platform, setPlatform] = useState<ReportPlatform>(() =>
+    window.localStorage.getItem(PLATFORM_KEY) === "xiaomi" ? "xiaomi" : "honor",
+  );
+  const platformLabel = platform === "xiaomi" ? "小米" : "荣耀";
+
   // 投放账户：点击表只存 account_pk，必须先选账户才能查点击
   const [accounts, setAccounts] = useState<HonorAccountInfo[]>([]);
   const [accountPk, setAccountPk] = useState<string | null>(null);
@@ -210,13 +268,25 @@ export function HonorReportPanel() {
   const [accountsError, setAccountsError] = useState<string | null>(null);
 
   const [checking, setChecking] = useState(false);
-  const [checkResult, setCheckResult] = useState<HonorDeviceCheckResult | null>(null);
+  const [checkResult, setCheckResult] = useState<
+    HonorDeviceCheckResult | XiaomiDeviceCheckResult | null
+  >(null);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [checkSig, setCheckSig] = useState<string | null>(null);
 
-  const [activate, setActivate] = useState<number>(30);
-  const [register, setRegister] = useState<number>(25);
-  const [pay, setPay] = useState<number>(15);
+  // 两个平台的数量默认值不同：小米后台默认没有付费事件，付费数默认 0
+  const [quantities, setQuantities] = useState<Record<ReportPlatform, PlatformQty>>({
+    honor: { activate: 30, register: 25, pay: 15 },
+    xiaomi: { activate: 30, register: 25, pay: 0 },
+  });
+  const qty = quantities[platform];
+  const setQty = (patch: Partial<PlatformQty>) =>
+    setQuantities((prev) => ({ ...prev, [platform]: { ...prev[platform], ...patch } }));
+
+  const [xiaomiAsset, setXiaomiAsset] = useState<XiaomiAssetConfig>(loadXiaomiAsset);
+  const setAsset = (patch: Partial<XiaomiAssetConfig>) =>
+    setXiaomiAsset((prev) => ({ ...prev, ...patch }));
+
   const [intervalSec, setIntervalSec] = useState<number>(0.3);
   // 默认看今日点击：回传按天分批次，绝大多数场景都是当天数据
   const [dateMode, setDateMode] = useState<DateMode>("today");
@@ -233,7 +303,7 @@ export function HonorReportPanel() {
     total: 0,
   });
   const [lines, setLines] = useState<string[]>([]);
-  const [summary, setSummary] = useState<HonorReportSummary | null>(null);
+  const [summary, setSummary] = useState<HonorReportSummary | XiaomiReportSummary | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const logBoxRef = useRef<HTMLDivElement | null>(null);
 
@@ -245,8 +315,27 @@ export function HonorReportPanel() {
 
   // 记住选择，重开面板沿用
   useEffect(() => {
-    if (accountPk) window.localStorage.setItem(HONOR_ACCOUNT_KEY, accountPk);
-  }, [accountPk]);
+    window.localStorage.setItem(PLATFORM_KEY, platform);
+  }, [platform]);
+  useEffect(() => {
+    if (accountPk) window.localStorage.setItem(ACCOUNT_KEYS[platform], accountPk);
+  }, [accountPk, platform]);
+  useEffect(() => {
+    window.localStorage.setItem(XIAOMI_ASSET_KEY, JSON.stringify(xiaomiAsset));
+  }, [xiaomiAsset]);
+
+  // 切平台先清空上一平台的状态，避免拿荣耀账户/结论去跑小米
+  useEffect(() => {
+    setAccountPk(null);
+    setAccounts([]);
+    setCheckResult(null);
+    setCheckSig(null);
+    setCheckError(null);
+    setSummary(null);
+    setRunError(null);
+    setLines([]);
+    setProgress({ percent: 0, message: "", current: 0, total: 0 });
+  }, [platform]);
 
   // 拉账户列表；日期口径变化时重拉，保证下拉里的台数与预检结论同一口径
   useEffect(() => {
@@ -254,19 +343,22 @@ export function HonorReportPanel() {
     let disposed = false;
     setAccountsLoading(true);
     setAccountsError(null);
-    invoke<HonorAccountInfo[]>("honor_list_accounts", {
-      db: {},
-      platform: "honor",
-      date: dateParam,
-    })
+    const request =
+      platform === "xiaomi"
+        ? invoke<HonorAccountInfo[]>("xiaomi_list_accounts", { db: {}, date: dateParam })
+        : invoke<HonorAccountInfo[]>("honor_list_accounts", {
+            db: {},
+            platform: "honor",
+            date: dateParam,
+          });
+    request
       .then((list) => {
         if (disposed) return;
         setAccounts(list);
-        const stored = window.localStorage.getItem(HONOR_ACCOUNT_KEY);
+        const stored = window.localStorage.getItem(ACCOUNT_KEYS[platform]);
         const pick =
-          list.find((a) => a.pk === stored)?.pk ??
-          (list.length === 1 ? list[0].pk : null);
-        setAccountPk((prev) => prev ?? pick);
+          list.find((a) => a.pk === stored)?.pk ?? (list.length === 1 ? list[0].pk : null);
+        setAccountPk(pick);
       })
       .catch((e) => {
         if (!disposed) setAccountsError(String(e));
@@ -277,15 +369,16 @@ export function HonorReportPanel() {
     return () => {
       disposed = true;
     };
-  }, [dateParam]);
+  }, [dateParam, platform]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
 
     let disposed = false;
     let unlisten: (() => void) | null = null;
+    const channel = platform === "xiaomi" ? "xiaomi-report-progress" : "honor-report-progress";
     getCurrentWindow()
-      .listen<HonorProgressPayload>("honor-report-progress", (event) => {
+      .listen<HonorProgressPayload>(channel, (event) => {
         const payload = event.payload;
         setProgress({
           percent: payload.percent,
@@ -313,7 +406,7 @@ export function HonorReportPanel() {
       disposed = true;
       if (unlisten) unlisten();
     };
-  }, []);
+  }, [platform]);
 
   useEffect(() => {
     // 新日志滚动到底部
@@ -322,24 +415,37 @@ export function HonorReportPanel() {
     }
   }, [lines]);
 
-  const funnelInvalid = activate < register || register < pay;
+  const funnelInvalid = qty.activate < qty.register || qty.register < qty.pay;
   const dateInvalid = dateMode === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(customDate.trim());
+  const carrierIdInvalid = platform === "xiaomi" && isNonNumericId(xiaomiAsset.carrier_id);
+  const capitalIdInvalid = platform === "xiaomi" && isNonNumericId(xiaomiAsset.capital_id);
+  const assetInvalid =
+    platform === "xiaomi" &&
+    (!xiaomiAsset.carrier_id.trim() ||
+      !xiaomiAsset.capital_id.trim() ||
+      carrierIdInvalid ||
+      capitalIdInvalid ||
+      !xiaomiAsset.secret_key.trim() ||
+      (qty.activate > 0 && !xiaomiAsset.activate_event.trim()) ||
+      (qty.register > 0 && !xiaomiAsset.register_event.trim()) ||
+      (qty.pay > 0 && !xiaomiAsset.pay_event.trim()));
 
-  // 预检结论只在参数未变时有效：数量/日期/去重一旦改动必须重新查询，防止拿旧结论发送
+  // 预检结论只在参数未变时有效：数量/日期/去重/资产一旦改动必须重新查询，防止拿旧结论发送
   function checkSignature() {
     return JSON.stringify({
+      platform,
       accountPk,
-      activate,
-      register,
-      pay,
+      qty,
       dateMode,
       date: dateMode === "date" ? customDate.trim() : null,
       dedupe,
+      asset: platform === "xiaomi" ? xiaomiAsset : null,
     });
   }
   const checkFresh = checkSig !== null && checkSig === checkSignature();
   const checkEnough = checkFresh && checkResult?.enough === true;
-  const canRun = Boolean(accountPk) && !funnelInvalid && !dateInvalid && !running && checkEnough;
+  const canRun =
+    Boolean(accountPk) && !funnelInvalid && !dateInvalid && !assetInvalid && !running && checkEnough;
 
   /** 设备预检：按当前数量/日期/去重口径只读查库，不发送任何回传 */
   async function handleCheck() {
@@ -359,22 +465,43 @@ export function HonorReportPanel() {
       setCheckError("日期格式应为 YYYY-MM-DD");
       return;
     }
+    if (assetInvalid) {
+      setCheckError(
+        "请先填写小米资产配置：carrier_id / capital_id 必须是纯数字，密钥与事件名齐全",
+      );
+      return;
+    }
     setChecking(true);
     setCheckError(null);
     const date = dateParam;
     const sig = checkSignature();
     try {
-      const params: HonorCheckParams = {
-        db: {},
-        account_pk: accountPk,
-        activate,
-        register,
-        pay,
-        date,
-        dedupe,
-      };
-      const result = await invoke<HonorDeviceCheckResult>("honor_check_devices", { params });
-      setCheckResult(result);
+      if (platform === "xiaomi") {
+        const params: XiaomiCheckParams = {
+          db: {},
+          account_pk: accountPk,
+          activate: qty.activate,
+          register: qty.register,
+          pay: qty.pay,
+          asset: xiaomiAsset,
+          date,
+          dedupe,
+        };
+        const result = await invoke<XiaomiDeviceCheckResult>("xiaomi_check_devices", { params });
+        setCheckResult(result);
+      } else {
+        const params: HonorCheckParams = {
+          db: {},
+          account_pk: accountPk,
+          activate: qty.activate,
+          register: qty.register,
+          pay: qty.pay,
+          date,
+          dedupe,
+        };
+        const result = await invoke<HonorDeviceCheckResult>("honor_check_devices", { params });
+        setCheckResult(result);
+      }
       setCheckSig(sig);
     } catch (e) {
       setCheckResult(null);
@@ -397,24 +524,43 @@ export function HonorReportPanel() {
     setLines([]);
     setProgress({ percent: 1, message: "准备回传...", current: 0, total: 0 });
     const date = dateParam;
-    const params: HonorReportParams = {
-      db: {},
-      account_pk: accountPk,
-      activate,
-      register,
-      pay,
-      interval_ms: Math.round(intervalSec * 1000),
-      date,
-      dedupe,
-      dry_run: dryRun,
-    };
+    const interval_ms = Math.round(intervalSec * 1000);
+    let total = 0;
     try {
-      const result = await invoke<HonorReportSummary>("honor_batch_report", { params });
-      setSummary(result);
+      if (platform === "xiaomi") {
+        const params: XiaomiReportParams = {
+          db: {},
+          account_pk: accountPk,
+          activate: qty.activate,
+          register: qty.register,
+          pay: qty.pay,
+          asset: xiaomiAsset,
+          interval_ms,
+          date,
+          dedupe,
+          dry_run: dryRun,
+        };
+        const result = await invoke<XiaomiReportSummary>("xiaomi_batch_report", { params });
+        setSummary(result);
+        total = result.total;
+      } else {
+        const params: HonorReportParams = {
+          db: {},
+          account_pk: accountPk,
+          activate: qty.activate,
+          register: qty.register,
+          pay: qty.pay,
+          interval_ms,
+          date,
+          dedupe,
+          dry_run: dryRun,
+        };
+        const result = await invoke<HonorReportSummary>("honor_batch_report", { params });
+        setSummary(result);
+        total = result.total;
+      }
       notifications.show({
-        message: dryRun
-          ? `试运行完成：共 ${result.total} 条（未发送）`
-          : `回传完成：共 ${result.total} 条`,
+        message: dryRun ? `试运行完成：共 ${total} 条（未发送）` : `回传完成：共 ${total} 条`,
         color: "blue",
         autoClose: 4000,
       });
@@ -426,14 +572,41 @@ export function HonorReportPanel() {
     }
   }
 
+  const summaryDetails = (summary?.details ?? []) as AnyDetail[];
+  const noCallbackRows =
+    checkResult && "no_callback_rows" in checkResult ? checkResult.no_callback_rows : 0;
+
   return (
     <Box className="honor-report-panel">
       <Stack gap="md">
         <PanelPageHeader
-          eyebrow="HONOR ADS CONVERSION POSTBACK"
-          title="荣耀监测回传"
-          sub="从投流库读取荣耀点击设备，按 激活 ⊇ 注册 ⊇ 付费 漏斗批量回传转化"
+          eyebrow={
+            platform === "xiaomi"
+              ? "XIAOMI EMI CONVERSION POSTBACK"
+              : "HONOR ADS CONVERSION POSTBACK"
+          }
+          title={platform === "xiaomi" ? "小米监测回传" : "荣耀监测回传"}
+          sub={
+            platform === "xiaomi"
+              ? "从投流库读取小米点击设备，按 激活 ⊇ 注册 ⊇ 付费 漏斗调用 EMI 精准 API 批量回传"
+              : "从投流库读取荣耀点击设备，按 激活 ⊇ 注册 ⊇ 付费 漏斗批量回传转化"
+          }
         />
+
+        <Group justify="space-between" gap="sm" wrap="wrap">
+          <SegmentedControl
+            value={platform}
+            onChange={(v) => setPlatform(v as ReportPlatform)}
+            disabled={running}
+            data={[
+              { label: "荣耀", value: "honor" },
+              { label: "小米", value: "xiaomi" },
+            ]}
+          />
+          <Text size="xs" c="dimmed">
+            回传台账按天隔离，同一设备当天只回传一次
+          </Text>
+        </Group>
 
         <Paper p="md" radius="md">
           <Stack gap="sm">
@@ -441,15 +614,94 @@ export function HonorReportPanel() {
               回传计划
             </Text>
             <Text size="xs" c="dimmed">
-              按脚本口径批量回传：三个数量共用同一批设备（激活 ⊇ 注册 ⊇ 付费 取前缀子集）；
-              设备按 oaid 去重（同一台设备只回传一次，取最新点击），复用该条点击的
-              trackId / oaid / advertiserId；conversionTime 从点击时间上限 +1s 起步逐条递增；
-              付费事件的金额与订单号由系统内部生成。先「查询设备」确认有数据再回传，没数据会提示且不会发送。
+              {platform === "xiaomi"
+                ? "按脚本口径批量回传：三个数量共用同一批设备（激活 ⊇ 注册 ⊇ 付费 取前缀子集）；设备按 oaid 去重（同一台设备只回传一次，取最新点击），复用该条点击落库的 callback 串与 oaid；事件名、carrier_id / capital_id / 密钥由下方资产配置提供；sign 按 EMI 规则用密钥签名；缺少 callback 的点击无法回传，会被排除；event_time 从点击时间上限 +1s 起步逐条递增。先「查询设备」确认有数据再回传。"
+                : "按脚本口径批量回传：三个数量共用同一批设备（激活 ⊇ 注册 ⊇ 付费 取前缀子集）；设备按 oaid 去重（同一台设备只回传一次，取最新点击），复用该条点击的 trackId / oaid / advertiserId；conversionTime 从点击时间上限 +1s 起步逐条递增；付费事件的金额与订单号由系统内部生成。先「查询设备」确认有数据再回传，没数据会提示且不会发送。"}
             </Text>
+
+            {platform === "xiaomi" && (
+              <Paper p="sm" radius="md" withBorder>
+                <Stack gap="sm">
+                  <Text size="sm" fw={600}>
+                    小米资产配置
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    carrier_id / capital_id / 资产密钥来自 EMI 后台「资产 → 联调工具」；carrier_id / capital_id
+                    必须是纯数字 ID（capital_id 非数字会报 204），事件名必须与后台资产内创建的一致（否则
+                    207 非法event）。密钥只保存在本机 localStorage。
+                  </Text>
+                  <Grid>
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <TextInput
+                        label="carrier_id（载体id）"
+                        placeholder="纯数字，如 1776184"
+                        value={xiaomiAsset.carrier_id}
+                        onChange={(e) => setAsset({ carrier_id: e.currentTarget.value })}
+                        error={carrierIdInvalid ? "必须是纯数字 ID" : undefined}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <TextInput
+                        label="capital_id（资产id）"
+                        placeholder="纯数字，如 94219"
+                        value={xiaomiAsset.capital_id}
+                        onChange={(e) => setAsset({ capital_id: e.currentTarget.value })}
+                        error={capitalIdInvalid ? "必须是纯数字 ID（否则小米报 204）" : undefined}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <PasswordInput
+                        label="资产密钥 secret_key"
+                        placeholder="EMI「联调工具」页获取"
+                        value={xiaomiAsset.secret_key}
+                        onChange={(e) => setAsset({ secret_key: e.currentTarget.value })}
+                      />
+                    </Grid.Col>
+                  </Grid>
+                  <Grid>
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <TextInput
+                        label="激活事件名"
+                        placeholder="APP_ACTIVE"
+                        value={xiaomiAsset.activate_event}
+                        onChange={(e) => setAsset({ activate_event: e.currentTarget.value })}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <TextInput
+                        label="注册事件名"
+                        placeholder="APP_REGISTER"
+                        value={xiaomiAsset.register_event}
+                        onChange={(e) => setAsset({ register_event: e.currentTarget.value })}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <TextInput
+                        label="付费事件名"
+                        placeholder="PURCHASE"
+                        value={xiaomiAsset.pay_event}
+                        onChange={(e) => setAsset({ pay_event: e.currentTarget.value })}
+                      />
+                    </Grid.Col>
+                  </Grid>
+                  <Switch
+                    label="联调模式（is_debug=1）"
+                    description="联调时打开；正式投放请关闭（is_debug=0）"
+                    checked={xiaomiAsset.is_debug}
+                    onChange={(e) => setAsset({ is_debug: e.currentTarget.checked })}
+                  />
+                </Stack>
+              </Paper>
+            )}
+
             <Select
               label="投放账户（media_account）"
-              description="点击表按 account_pk 归档，必须先选账户再查点击"
-              placeholder={accountsLoading ? "读取账户中..." : "选择荣耀投放账户"}
+              description={
+                platform === "xiaomi"
+                  ? "点击表按 account_pk 归档；只统计带 callback 的小米点击"
+                  : "点击表按 account_pk 归档，必须先选账户再查点击"
+              }
+              placeholder={accountsLoading ? "读取账户中..." : `选择${platformLabel}投放账户`}
               data={accounts.map((a) => ({
                 value: a.pk,
                 label: `${a.account_id} · ${a.account_name}${
@@ -461,7 +713,7 @@ export function HonorReportPanel() {
               disabled={accountsLoading || accounts.length === 0}
               searchable
               clearable={false}
-              nothingFoundMessage={accountsLoading ? "读取中..." : "没有可用的荣耀账户"}
+              nothingFoundMessage={accountsLoading ? "读取中..." : `没有可用的${platformLabel}账户`}
             />
             {accountsError && (
               <Alert color="red" variant="light" title="读取投放账户失败" withCloseButton onClose={() => setAccountsError(null)}>
@@ -470,31 +722,32 @@ export function HonorReportPanel() {
             )}
             {!accountsLoading && !accountsError && accounts.length === 0 && (
               <Alert color="yellow" variant="light" title="没有可用账户">
-                投流库 media_account 里没有 platform=honor 的账户，请先在投放系统里同步荣耀账户。
+                投流库 media_account 里没有 platform={platform} 的账户，请先在投放系统里同步
+                {platformLabel}账户。
               </Alert>
             )}
             <Grid>
               <Grid.Col span={{ base: 4, xs: 3, md: 2 }}>
                 <NumberInput
                   label="激活数"
-                  value={activate}
-                  onChange={(v) => setActivate(numberFrom(v, 1))}
+                  value={qty.activate}
+                  onChange={(v) => setQty({ activate: numberFrom(v, 1) })}
                   min={1}
                 />
               </Grid.Col>
               <Grid.Col span={{ base: 4, xs: 3, md: 2 }}>
                 <NumberInput
                   label="注册数"
-                  value={register}
-                  onChange={(v) => setRegister(numberFrom(v, 0))}
+                  value={qty.register}
+                  onChange={(v) => setQty({ register: numberFrom(v, 0) })}
                   min={0}
                 />
               </Grid.Col>
               <Grid.Col span={{ base: 4, xs: 3, md: 2 }}>
                 <NumberInput
                   label="付费数"
-                  value={pay}
-                  onChange={(v) => setPay(numberFrom(v, 0))}
+                  value={qty.pay}
+                  onChange={(v) => setQty({ pay: numberFrom(v, 0) })}
                   min={0}
                 />
               </Grid.Col>
@@ -577,6 +830,12 @@ export function HonorReportPanel() {
                 数量必须满足 激活 ≥ 注册 ≥ 付费
               </Alert>
             )}
+            {assetInvalid && (
+              <Alert color="yellow" variant="light" title="小米资产配置不完整或不合法">
+                请填写 carrier_id / capital_id / 资产密钥；其中 carrier_id 和 capital_id 必须是纯数字
+                ID（非数字会被小米判为 204 非法capital_id）；数量大于 0 的事件必须填写事件名。
+              </Alert>
+            )}
             {runError && (
               <Alert color="red" variant="light" title="回传失败" withCloseButton onClose={() => setRunError(null)}>
                 {runError}
@@ -607,7 +866,7 @@ export function HonorReportPanel() {
                 </Text>
               )}
             </Group>
-            {!running && !checkEnough && !funnelInvalid && !dateInvalid && (
+            {!running && !checkEnough && !funnelInvalid && !dateInvalid && !assetInvalid && (
               <Text size="xs" c="dimmed">
                 先点「查询设备」按当前条件只读查库；设备充足后才能回传，设备不足不会发送。
               </Text>
@@ -652,6 +911,13 @@ export function HonorReportPanel() {
                       tone="warn"
                     />
                   )}
+                  {noCallbackRows > 0 && (
+                    <CheckRow
+                      label="缺少 callback"
+                      value={`${noCallbackRows} 条（无法回传，已排除）`}
+                      tone="warn"
+                    />
+                  )}
                   {!checkResult.enough && (
                     <CheckRow
                       label="缺口"
@@ -664,7 +930,10 @@ export function HonorReportPanel() {
                     value={`激活 ${checkResult.activate} / 注册 ${checkResult.register} / 付费 ${checkResult.pay}`}
                   />
                   <CheckRow label="点击表" value={checkResult.resolved_table} />
-                  <CheckRow label="advertiserId" value={checkResult.advertiser_id || "—"} />
+                  <CheckRow
+                    label={platform === "xiaomi" ? "customerId" : "advertiserId"}
+                    value={checkResult.advertiser_id || "—"}
+                  />
                   <CheckRow
                     label="点击时间"
                     value={
@@ -739,7 +1008,9 @@ export function HonorReportPanel() {
                   </Badge>
                 )}
                 <Badge color="gray" variant="light">共 {summary.total} 条</Badge>
-                <Badge color="gray" variant="light">advertiserId={summary.advertiser_id}</Badge>
+                <Badge color="gray" variant="light">
+                  {platform === "xiaomi" ? "customerId" : "advertiserId"}={summary.advertiser_id}
+                </Badge>
                 {summary.click_time_ceiling && (
                   <Badge color="gray" variant="light">点击时间上限 {summary.click_time_ceiling}</Badge>
                 )}
@@ -775,7 +1046,9 @@ export function HonorReportPanel() {
                 </Box>
               )}
 
-              {summary.details.some((d) => d.outcome === "failed" || d.outcome === "error" || d.outcome === "unknown") && (
+              {summaryDetails.some(
+                (d) => d.outcome === "failed" || d.outcome === "error" || d.outcome === "unknown",
+              ) && (
                 <Box
                   style={{
                     maxHeight: 320,
@@ -787,8 +1060,11 @@ export function HonorReportPanel() {
                   <Text size="sm" fw={600} mb={4}>
                     需要关注（失败 / 异常 / 未知）
                   </Text>
-                  {summary.details
-                    .filter((d) => d.outcome === "failed" || d.outcome === "error" || d.outcome === "unknown")
+                  {summaryDetails
+                    .filter(
+                      (d) =>
+                        d.outcome === "failed" || d.outcome === "error" || d.outcome === "unknown",
+                    )
                     .map((d, idx) => (
                       <Text key={idx} size="xs" c="var(--color-text-muted)" style={{ wordBreak: "break-all" }}>
                         <Badge size="xs" color="gray" variant="light" mr={6}>
@@ -798,7 +1074,9 @@ export function HonorReportPanel() {
                           {d.outcome}
                         </span>
                         {" · "}
-                        conv={d.conversion_id} · track={d.track_id}
+                        {platform === "xiaomi"
+                          ? `${d.event_name} · oaid=${d.oaid}`
+                          : `conv=${d.conversion_id} · track=${d.track_id}`}
                         {d.message ? ` · ${d.message}` : ""}
                       </Text>
                     ))}

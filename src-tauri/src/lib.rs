@@ -17,6 +17,7 @@ mod privacy;
 mod settlement;
 mod updater;
 mod utils;
+mod xiaomi;
 
 use build::{
     build_and_push, cancel_build, cancel_bt_java_deploy, cancel_bt_php_deploy, check_dockerfile,
@@ -51,6 +52,7 @@ use history::{
     save_build_record, update_build_record_image, update_build_record_push,
 };
 use honor::{honor_batch_report, honor_check_devices, honor_list_accounts, honor_test_db};
+use xiaomi::{xiaomi_batch_report, xiaomi_check_devices, xiaomi_list_accounts};
 use utils::{init_bundled_tools, write_text_file};
 
 use kubesphere::{
@@ -219,6 +221,9 @@ pub fn run() {
             honor_list_accounts,
             honor_check_devices,
             honor_batch_report,
+            xiaomi_list_accounts,
+            xiaomi_check_devices,
+            xiaomi_batch_report,
             db::get_jar_port,
             db::save_jar_port,
             check_update,

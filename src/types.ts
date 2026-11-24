@@ -458,6 +458,85 @@ export interface HonorProgressPayload {
   line: string | null;
 }
 
+// ==================== 小米监测回传 ====================
+
+/** 小米 EMI 资产配置：carrier_id / capital_id / 密钥来自 EMI 后台；事件名须与后台创建一致 */
+export interface XiaomiAssetConfig {
+  /** 载体id（应用id），如 1776184 */
+  carrier_id: string;
+  /** 资产id，如 94219 */
+  capital_id: string;
+  /** 资产密钥（EMI 后台「联调工具」页面获取），仅用于本地签名 */
+  secret_key: string;
+  /** 联调 true（is_debug=1）；正式投放 false（is_debug=0） */
+  is_debug: boolean;
+  activate_event: string;
+  register_event: string;
+  pay_event: string;
+}
+
+export interface XiaomiCheckParams {
+  db: HonorDbConfig;
+  /** media_account.id，必填：点击表只存 account_pk */
+  account_pk: string | null;
+  activate: number;
+  register: number;
+  pay: number;
+  asset: XiaomiAssetConfig;
+  date: string | null;
+  dedupe: boolean;
+}
+
+export interface XiaomiReportParams extends XiaomiCheckParams {
+  interval_ms: number;
+  dry_run: boolean;
+}
+
+export interface XiaomiDeviceCheckResult {
+  resolved_table: string;
+  /** 今日已回传、被排除的设备台数 */
+  already_reported: number;
+  /** 命中过滤条件、且带 callback 的可用点击行数 */
+  click_rows: number;
+  /** 小米点击里 callback 缺失、无法回传的行数 */
+  no_callback_rows: number;
+  /** 按当前去重口径实际可回传的设备数 */
+  devices: number;
+  advertiser_id: string;
+  click_time_min: string;
+  click_time_max: string;
+  activate: number;
+  register: number;
+  pay: number;
+  enough: boolean;
+  shortfall: number;
+  message: string;
+}
+
+export interface XiaomiSendDetail {
+  event: string;
+  /** 实际回传给小米的事件英文名 */
+  event_name: string;
+  oaid: string;
+  /** success / failed / unknown / error / dry-run */
+  outcome: string;
+  message: string;
+  url: string | null;
+}
+
+export interface XiaomiReportSummary {
+  dry_run: boolean;
+  devices: number;
+  already_reported: number;
+  advertiser_id: string;
+  click_time_ceiling: string;
+  total: number;
+  events: HonorEventStat[];
+  details: XiaomiSendDetail[];
+  /** 试运行样例 URL（前 3 条） */
+  sample_urls: string[];
+}
+
 // ==================== 常量 ====================
 
 export const DEFAULT_FRONTEND_DOCKERFILE_TEMPLATE = `FROM {{BASE_IMAGE}}

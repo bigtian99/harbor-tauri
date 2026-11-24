@@ -73,7 +73,7 @@ impl Default for HonorDbConfig {
 impl HonorDbConfig {
     /// 空字段回落到内置默认：老 config.json 里存的是空串（面板填写时代），
     /// 面板移除后统一走这里，保证不改配置文件也能连上投流库。
-    fn normalized(mut self) -> Self {
+    pub(crate) fn normalized(mut self) -> Self {
         if self.host.trim().is_empty() {
             self.host = DEFAULT_DB_HOST.to_string();
         }
@@ -116,7 +116,7 @@ pub struct HonorAccountInfo {
 
 /// 把前端传回的账户主键解析成 u64；空值直接报可读错误。
 /// 当天（本地时区）日期串，回传台账按天隔离
-fn today_local() -> String {
+pub(crate) fn today_local() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
 
@@ -146,7 +146,7 @@ fn exclude_reported_devices(
     Ok((kept, skipped))
 }
 
-fn parse_account_pk(raw: Option<&str>) -> Result<u64, String> {
+pub(crate) fn parse_account_pk(raw: Option<&str>) -> Result<u64, String> {
     let value = raw.map(str::trim).unwrap_or_default();
     if value.is_empty() {
         return Err("请先选择投放账户（media_account）再查询".to_string());
@@ -924,7 +924,7 @@ fn honor_batch_report_inner(
 
 // ==================== DB ====================
 
-fn connect_db(db: &HonorDbConfig) -> Result<Conn, String> {
+pub(crate) fn connect_db(db: &HonorDbConfig) -> Result<Conn, String> {
     let host = db.host.trim();
     if host.is_empty() || db.user.trim().is_empty() || db.database.trim().is_empty() {
         return Err("请先填写数据源（主机 / 用户名 / 数据库）并保存".to_string());
@@ -967,7 +967,7 @@ struct ResolvedTable {
     has_account_pk: bool,
 }
 
-fn ensure_identifier(name: &str) -> Result<(), String> {
+pub(crate) fn ensure_identifier(name: &str) -> Result<(), String> {
     if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
         return Err(format!("非法标识符: {name}"));
     }
@@ -1216,7 +1216,7 @@ fn classify(status: u16, body: &str) -> (&'static str, String) {
     ("unknown", format!("HTTP {status} body={body_short}"))
 }
 
-fn build_http_client() -> Result<reqwest::blocking::Client, String> {
+pub(crate) fn build_http_client() -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
         .timeout(HTTP_TIMEOUT)
         .connect_timeout(Duration::from_secs(10))
@@ -1291,11 +1291,11 @@ fn event_label(event: &str) -> &'static str {
     }
 }
 
-fn is_valid_date(s: &str) -> bool {
+pub(crate) fn is_valid_date(s: &str) -> bool {
     s.len() == 10 && chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
 }
 
-fn truncate_str(s: &str, max: usize) -> String {
+pub(crate) fn truncate_str(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_string()
     } else {
